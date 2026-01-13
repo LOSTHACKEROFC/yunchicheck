@@ -14,7 +14,9 @@ import {
   CheckCircle,
   FileText,
   ExternalLink,
-  Loader2
+  Loader2,
+  Bot,
+  CheckCircle2
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -34,6 +36,7 @@ const Support = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState("");
   const [userName, setUserName] = useState("");
+  const [telegramChatId, setTelegramChatId] = useState<string | null>(null);
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -41,6 +44,7 @@ const Support = () => {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [botUsername, setBotUsername] = useState("YunchiSupportBot"); // Replace with your bot username
 
   useEffect(() => {
     const fetchUserInfo = async () => {
@@ -52,13 +56,37 @@ const Support = () => {
         console.log("Set user email to:", user.email);
         const { data } = await supabase
           .from("profiles")
-          .select("username, name")
+          .select("username, name, telegram_chat_id")
           .eq("user_id", user.id)
           .maybeSingle();
         setUserName(data?.name || data?.username || "");
+        setTelegramChatId(data?.telegram_chat_id || null);
       }
     };
     fetchUserInfo();
+
+    // Subscribe to profile changes to detect when user adds chat ID
+    const profileChannel = supabase
+      .channel('profile-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles'
+        },
+        (payload) => {
+          console.log("Profile updated:", payload);
+          if (payload.new && 'telegram_chat_id' in payload.new) {
+            setTelegramChatId((payload.new as any).telegram_chat_id || null);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profileChannel);
+    };
   }, []);
 
   // Fetch tickets and set up realtime subscription
@@ -124,6 +152,10 @@ const Support = () => {
       toast.error("You must be logged in to submit a ticket");
       return;
     }
+    if (!telegramChatId) {
+      toast.error("Please start the Telegram bot first to receive notifications");
+      return;
+    }
     setLoading(true);
     
     try {
@@ -180,6 +212,56 @@ const Support = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {/* Telegram Bot Connection Status */}
+            {!telegramChatId ? (
+              <div className="mb-6 p-4 rounded-lg border-2 border-dashed border-yellow-500/50 bg-yellow-500/10">
+                <div className="flex items-start gap-3">
+                  <Bot className="h-6 w-6 text-yellow-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-yellow-500">Start Telegram Bot First</h4>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      To receive ticket notifications on Telegram, you need to start our bot and add your Chat ID to your profile.
+                    </p>
+                    <div className="mt-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold">1</span>
+                        <a 
+                          href={`https://t.me/${botUsername}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline text-sm font-medium"
+                        >
+                          Start @{botUsername} on Telegram →
+                        </a>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold">2</span>
+                        <span className="text-sm text-muted-foreground">
+                          Message <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@userinfobot</a> to get your Chat ID
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold">3</span>
+                        <a 
+                          href="/dashboard/profile"
+                          className="text-primary hover:underline text-sm font-medium"
+                        >
+                          Add your Chat ID in Profile Settings →
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mb-6 p-3 rounded-lg border border-green-500/50 bg-green-500/10">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                  <span className="text-sm text-green-500 font-medium">Telegram connected! You'll receive notifications on Telegram.</span>
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Your Email <span className="text-red-500">*</span></Label>
