@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wallet, CreditCard, Activity } from "lucide-react";
+import { Wallet, CreditCard, Activity, ArrowUpCircle, History, HeadphonesIcon, ChevronRight } from "lucide-react";
+
+const quickLinks = [
+  { title: "Topup Balance", description: "Add funds to your account", icon: ArrowUpCircle, url: "/dashboard/topup", color: "text-green-500" },
+  { title: "View History", description: "Check your transaction history", icon: History, url: "/dashboard/balance", color: "text-primary" },
+  { title: "Get Support", description: "Contact our support team", icon: HeadphonesIcon, url: "/dashboard/support", color: "text-yellow-500" },
+];
 
 const DashboardHome = () => {
   const [profile, setProfile] = useState<{ username: string | null; balance: number } | null>(null);
@@ -71,6 +78,35 @@ const DashboardHome = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Quick Links */}
+      <Card className="bg-card border-border">
+        <CardHeader>
+          <CardTitle className="text-lg">Quick Actions</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {quickLinks.map((link, index) => (
+            <Link
+              key={link.title}
+              to={link.url}
+              className={`flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors ${
+                index !== quickLinks.length - 1 ? "border-b border-border" : ""
+              }`}
+            >
+              <div className="flex items-center gap-4">
+                <div className={`w-10 h-10 rounded-lg bg-secondary flex items-center justify-center`}>
+                  <link.icon className={`h-5 w-5 ${link.color}`} />
+                </div>
+                <div>
+                  <p className="font-medium text-foreground">{link.title}</p>
+                  <p className="text-sm text-muted-foreground">{link.description}</p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            </Link>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 };
