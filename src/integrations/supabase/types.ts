@@ -43,6 +43,9 @@ export type Database = {
           balance: number
           created_at: string
           id: string
+          name: string | null
+          telegram_chat_id: string | null
+          telegram_username: string | null
           updated_at: string
           user_id: string
           username: string | null
@@ -51,6 +54,9 @@ export type Database = {
           balance?: number
           created_at?: string
           id?: string
+          name?: string | null
+          telegram_chat_id?: string | null
+          telegram_username?: string | null
           updated_at?: string
           user_id: string
           username?: string | null
@@ -59,6 +65,9 @@ export type Database = {
           balance?: number
           created_at?: string
           id?: string
+          name?: string | null
+          telegram_chat_id?: string | null
+          telegram_username?: string | null
           updated_at?: string
           user_id?: string
           username?: string | null
