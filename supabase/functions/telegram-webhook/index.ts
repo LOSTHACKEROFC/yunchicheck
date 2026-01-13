@@ -436,7 +436,7 @@ const handler = async (req: Request): Promise<Response> => {
       // Fetch ticket by ticket_id
       const { data: ticket, error: ticketError } = await supabase
         .from("support_tickets")
-        .select("id, ticket_id, subject, message, status, user_email, user_id, created_at")
+        .select("id, ticket_id, subject, message, status, priority, user_email, user_id, created_at")
         .eq("ticket_id", inputTicketId)
         .single();
       
@@ -484,8 +484,16 @@ const handler = async (req: Request): Promise<Response> => {
         solved: "SOLVED",
         closed: "CLOSED"
       };
+
+      const priorityEmoji: Record<string, string> = {
+        low: "🔵",
+        medium: "🟡",
+        high: "🟠",
+        urgent: "🔴"
+      };
       
       const emoji = statusEmoji[ticket.status] || "⚪";
+      const pEmoji = priorityEmoji[ticket.priority] || "🟡";
       const createdDate = new Date(ticket.created_at).toLocaleString();
       
       const ticketDetails = `
@@ -493,6 +501,7 @@ const handler = async (req: Request): Promise<Response> => {
 
 <b>ID:</b> ${ticket.ticket_id}
 <b>Subject:</b> ${ticket.subject}
+<b>Priority:</b> ${pEmoji} ${(ticket.priority || 'medium').toUpperCase()}
 <b>Status:</b> ${emoji} ${statusLabel[ticket.status] || ticket.status.toUpperCase()}
 <b>Email:</b> ${ticket.user_email}
 <b>Created:</b> ${createdDate}

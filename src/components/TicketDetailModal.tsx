@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Clock, CheckCircle, User, Headphones, Loader2, RotateCcw } from "lucide-react";
+import { Send, Clock, CheckCircle, User, Headphones, Loader2, RotateCcw, ArrowDown, AlertCircle, ArrowUp, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -19,6 +19,7 @@ interface Ticket {
   subject: string;
   message: string;
   status: string;
+  priority: string;
   created_at: string;
   user_email: string;
 }
@@ -292,9 +293,26 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId, onTicketUpdate }: 
     }
   };
 
+  const getPriorityConfig = (priority: string) => {
+    switch (priority) {
+      case 'low':
+        return { bg: 'bg-slate-500/20', text: 'text-slate-400', border: 'border-slate-500/50', icon: ArrowDown };
+      case 'medium':
+        return { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/50', icon: AlertCircle };
+      case 'high':
+        return { bg: 'bg-orange-500/20', text: 'text-orange-400', border: 'border-orange-500/50', icon: ArrowUp };
+      case 'urgent':
+        return { bg: 'bg-red-500/20', text: 'text-red-500', border: 'border-red-500/50', icon: AlertTriangle };
+      default:
+        return { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/50', icon: AlertCircle };
+    }
+  };
+
   if (!currentTicket) return null;
 
   const statusColors = getStatusColor(currentTicket.status);
+  const priorityConfig = getPriorityConfig(currentTicket.priority);
+  const PriorityIcon = priorityConfig.icon;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -302,12 +320,21 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId, onTicketUpdate }: 
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="text-lg font-bold">{currentTicket.ticket_id}</DialogTitle>
-            <Badge
-              variant="outline"
-              className={`capitalize ${statusColors.border} ${statusColors.text}`}
-            >
-              {currentTicket.status === 'open' ? 'Live' : currentTicket.status.replace('_', ' ')}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge
+                variant="outline"
+                className={`capitalize ${priorityConfig.border} ${priorityConfig.text}`}
+              >
+                <PriorityIcon className="h-3 w-3 mr-1" />
+                {currentTicket.priority}
+              </Badge>
+              <Badge
+                variant="outline"
+                className={`capitalize ${statusColors.border} ${statusColors.text}`}
+              >
+                {currentTicket.status === 'open' ? 'Live' : currentTicket.status.replace('_', ' ')}
+              </Badge>
+            </div>
           </div>
           <p className="text-sm text-muted-foreground mt-1">{currentTicket.subject}</p>
         </DialogHeader>
