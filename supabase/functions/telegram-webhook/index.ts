@@ -105,7 +105,7 @@ async function editMessageReplyMarkup(
 
   // Create keyboard with current status highlighted
   const statusButtons = [
-    { text: currentStatus === "open" ? "✓ 🟡 Open" : "🟡 Open", callback_data: `open_${ticketUuid}` },
+    { text: currentStatus === "open" ? "✓ 🟡 Live" : "🟡 Live", callback_data: `open_${ticketUuid}` },
     { text: currentStatus === "processing" ? "✓ 🔵 Processing" : "🔵 Processing", callback_data: `processing_${ticketUuid}` },
   ];
   const statusButtons2 = [
@@ -478,6 +478,13 @@ const handler = async (req: Request): Promise<Response> => {
         closed: "⚫"
       };
       
+      const statusLabel: Record<string, string> = {
+        open: "LIVE",
+        processing: "PROCESSING",
+        solved: "SOLVED",
+        closed: "CLOSED"
+      };
+      
       const emoji = statusEmoji[ticket.status] || "⚪";
       const createdDate = new Date(ticket.created_at).toLocaleString();
       
@@ -486,7 +493,7 @@ const handler = async (req: Request): Promise<Response> => {
 
 <b>ID:</b> ${ticket.ticket_id}
 <b>Subject:</b> ${ticket.subject}
-<b>Status:</b> ${emoji} ${ticket.status.toUpperCase()}
+<b>Status:</b> ${emoji} ${statusLabel[ticket.status] || ticket.status.toUpperCase()}
 <b>Email:</b> ${ticket.user_email}
 <b>Created:</b> ${createdDate}
 
@@ -500,7 +507,7 @@ ${ticket.message.substring(0, 500)}${ticket.message.length > 500 ? "..." : ""}${
       const inlineKeyboard = {
         inline_keyboard: [
           [
-            { text: "🟡 Open", callback_data: `open_${ticket.id}` },
+            { text: "🟡 Live", callback_data: `open_${ticket.id}` },
             { text: "🔵 Processing", callback_data: `processing_${ticket.id}` },
           ],
           [

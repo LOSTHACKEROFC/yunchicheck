@@ -412,7 +412,7 @@ const Support = () => {
                       variant="outline"
                       className={`capitalize ${statusColors.border} ${statusColors.text}`}
                     >
-                      {ticket.status.replace('_', ' ')}
+                      {ticket.status === 'open' ? 'Live' : ticket.status.replace('_', ' ')}
                     </Badge>
                   </div>
                 );

@@ -306,7 +306,7 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId, onTicketUpdate }: 
               variant="outline"
               className={`capitalize ${statusColors.border} ${statusColors.text}`}
             >
-              {currentTicket.status.replace('_', ' ')}
+              {currentTicket.status === 'open' ? 'Live' : currentTicket.status.replace('_', ' ')}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground mt-1">{currentTicket.subject}</p>
