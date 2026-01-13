@@ -175,15 +175,13 @@ const Support = () => {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Your Email <span className="text-red-500">*</span></Label>
+                <Label htmlFor="email">Your Email</Label>
                 <Input
                   id="email"
                   type="email"
                   value={userEmail}
-                  onChange={(e) => setUserEmail(e.target.value)}
-                  placeholder="Enter your email address"
-                  className="bg-secondary border-border"
-                  required
+                  disabled
+                  className="bg-secondary border-border opacity-70"
                 />
               </div>
 
