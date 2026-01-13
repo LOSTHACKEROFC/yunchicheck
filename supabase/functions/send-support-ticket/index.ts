@@ -39,7 +39,7 @@ const handler = async (req: Request): Promise<Response> => {
       },
       body: JSON.stringify({
         from: "Support Ticket <onboarding@resend.dev>",
-        to: ["losthack11@gmail.com"],
+        to: ["losthackerofc@gmail.com"],
         subject: `[${ticketId}] New Support Ticket: ${subject}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
