@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Clock, CheckCircle, User, Headphones, Loader2 } from "lucide-react";
+import { Send, Clock, CheckCircle, User, Headphones, Loader2, RotateCcw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -104,6 +104,7 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId, onTicketUpdate }: 
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [reopening, setReopening] = useState(false);
   const [currentTicket, setCurrentTicket] = useState<Ticket | null>(ticket);
   const scrollRef = useRef<HTMLDivElement>(null);
   const isInitialLoadRef = useRef(true);
@@ -234,6 +235,40 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId, onTicketUpdate }: 
     setSending(false);
   };
 
+  const handleReopenTicket = async () => {
+    if (!currentTicket) return;
+
+    setReopening(true);
+    try {
+      // Update ticket status to open
+      const { error: updateError } = await supabase
+        .from("support_tickets")
+        .update({ status: "open", updated_at: new Date().toISOString() })
+        .eq("id", currentTicket.id);
+
+      if (updateError) {
+        console.error("Error reopening ticket:", updateError);
+        toast.error("Failed to reopen ticket");
+        return;
+      }
+
+      // Add a system message about reopening
+      await supabase.from("ticket_messages").insert({
+        ticket_id: currentTicket.id,
+        user_id: userId,
+        message: "🔄 User requested to reopen this ticket.",
+        is_admin: false,
+      });
+
+      toast.success("Ticket reopened successfully");
+    } catch (error) {
+      console.error("Error reopening ticket:", error);
+      toast.error("Failed to reopen ticket");
+    } finally {
+      setReopening(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
   };
@@ -361,12 +396,25 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId, onTicketUpdate }: 
             </Button>
           </form>
         ) : (
-          <div className="bg-secondary/50 rounded-lg p-3 text-center">
-            <p className="text-sm text-muted-foreground">
+          <div className="bg-secondary/50 rounded-lg p-4 space-y-3">
+            <p className="text-sm text-muted-foreground text-center">
               {currentTicket.status === 'closed' 
                 ? "This ticket is closed and cannot receive new messages." 
-                : "This ticket has been solved. Contact support to reopen if needed."}
+                : "This ticket has been solved."}
             </p>
+            <Button
+              onClick={handleReopenTicket}
+              disabled={reopening}
+              variant="outline"
+              className="w-full"
+            >
+              {reopening ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <RotateCcw className="h-4 w-4 mr-2" />
+              )}
+              Reopen Ticket
+            </Button>
           </div>
         )}
       </DialogContent>
