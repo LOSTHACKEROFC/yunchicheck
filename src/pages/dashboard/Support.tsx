@@ -50,7 +50,7 @@ const Support = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!subject || !message) {
+    if (!userEmail || !subject || !message) {
       toast.error("Please fill in all fields");
       return;
     }
@@ -93,24 +93,39 @@ const Support = () => {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="subject">Subject</Label>
+                <Label htmlFor="email">Your Email <span className="text-red-500">*</span></Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={userEmail}
+                  onChange={(e) => setUserEmail(e.target.value)}
+                  placeholder="Enter your email address"
+                  className="bg-secondary border-border"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="subject">Subject <span className="text-red-500">*</span></Label>
                 <Input
                   id="subject"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   placeholder="Brief description of your issue"
                   className="bg-secondary border-border"
+                  required
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="message">Message</Label>
+                <Label htmlFor="message">Message <span className="text-red-500">*</span></Label>
                 <Textarea
                   id="message"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Please describe your issue in detail..."
                   className="bg-secondary border-border min-h-[150px]"
+                  required
                 />
               </div>
 
