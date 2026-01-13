@@ -338,29 +338,36 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId, onTicketUpdate }: 
           </ScrollArea>
         </div>
 
-        {/* Send Message */}
-        <form onSubmit={handleSendMessage} className="flex gap-2">
-          <Input
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type your message..."
-            className="flex-1 bg-secondary"
-            disabled={sending || currentTicket.status === 'closed'}
-          />
-          <Button 
-            type="submit" 
-            disabled={sending || !newMessage.trim() || currentTicket.status === 'closed'}
-            className="btn-primary"
-          >
-            {sending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </Button>
-        </form>
-        {currentTicket.status === 'closed' && (
-          <p className="text-xs text-muted-foreground text-center">This ticket is closed and cannot receive new messages.</p>
+        {/* Send Message - Hidden for closed/solved tickets */}
+        {currentTicket.status !== 'closed' && currentTicket.status !== 'solved' ? (
+          <form onSubmit={handleSendMessage} className="flex gap-2">
+            <Input
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              placeholder="Type your message..."
+              className="flex-1 bg-secondary"
+              disabled={sending}
+            />
+            <Button 
+              type="submit" 
+              disabled={sending || !newMessage.trim()}
+              className="btn-primary"
+            >
+              {sending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </form>
+        ) : (
+          <div className="bg-secondary/50 rounded-lg p-3 text-center">
+            <p className="text-sm text-muted-foreground">
+              {currentTicket.status === 'closed' 
+                ? "This ticket is closed and cannot receive new messages." 
+                : "This ticket has been solved. Contact support to reopen if needed."}
+            </p>
+          </div>
         )}
       </DialogContent>
     </Dialog>
