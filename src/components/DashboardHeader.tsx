@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Menu, Wallet, Bell, Check, Trash2, CheckCheck, MessageSquare } from "lucide-react";
+import { Menu, Wallet, Bell, Check, Trash2, CheckCheck, MessageSquare, DollarSign, Megaphone, ArrowUpCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -23,12 +23,20 @@ import { format } from "date-fns";
 
 interface Notification {
   id: string;
+  type: "ticket_reply" | "balance_update" | "system" | "topup";
+  title: string;
   message: string;
-  ticket_id: string;
-  ticket_subject: string;
-  created_at: string;
+  metadata: Record<string, unknown>;
   is_read: boolean;
+  created_at: string;
 }
+
+const notificationConfig: Record<string, { icon: typeof MessageSquare; color: string; bgColor: string }> = {
+  ticket_reply: { icon: MessageSquare, color: "text-blue-500", bgColor: "bg-blue-500/20" },
+  balance_update: { icon: DollarSign, color: "text-green-500", bgColor: "bg-green-500/20" },
+  system: { icon: Megaphone, color: "text-amber-500", bgColor: "bg-amber-500/20" },
+  topup: { icon: ArrowUpCircle, color: "text-purple-500", bgColor: "bg-purple-500/20" },
+};
 
 const DashboardHeader = () => {
   const navigate = useNavigate();
@@ -43,57 +51,15 @@ const DashboardHeader = () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Fetch user's tickets
-    const { data: tickets } = await supabase
-      .from("support_tickets")
-      .select("id, subject")
-      .eq("user_id", user.id);
-
-    if (!tickets || tickets.length === 0) {
-      setNotifications([]);
-      return;
-    }
-
-    const ticketIds = tickets.map(t => t.id);
-    const ticketMap = new Map(tickets.map(t => [t.id, t.subject]));
-
-    // Fetch read message IDs
-    const { data: readMessages } = await supabase
-      .from("notification_reads")
-      .select("message_id")
-      .eq("user_id", user.id);
-
-    const readMessageIds = new Set(readMessages?.map(r => r.message_id) || []);
-
-    // Fetch deleted message IDs
-    const { data: deletedMessages } = await supabase
-      .from("deleted_notifications")
-      .select("message_id")
-      .eq("user_id", user.id);
-
-    const deletedMessageIds = new Set(deletedMessages?.map(d => d.message_id) || []);
-
-    // Fetch admin messages
-    const { data: adminMessages } = await supabase
-      .from("ticket_messages")
+    const { data } = await supabase
+      .from("notifications")
       .select("*")
-      .in("ticket_id", ticketIds)
-      .eq("is_admin", true)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(30);
 
-    if (adminMessages) {
-      const notifs: Notification[] = adminMessages
-        .filter(msg => !deletedMessageIds.has(msg.id))
-        .map(msg => ({
-          id: msg.id,
-          message: msg.message,
-          ticket_id: msg.ticket_id,
-          ticket_subject: ticketMap.get(msg.ticket_id) || "Support Ticket",
-          created_at: msg.created_at,
-          is_read: readMessageIds.has(msg.id),
-        }));
-      setNotifications(notifs);
+    if (data) {
+      setNotifications(data as Notification[]);
     }
   };
 
@@ -127,12 +93,16 @@ const DashboardHeader = () => {
         {
           event: "INSERT",
           schema: "public",
-          table: "ticket_messages",
+          table: "notifications",
         },
         async (payload) => {
-          if (payload.new && payload.new.is_admin) {
-            await fetchNotifications();
-          }
+          const newNotif = payload.new as Notification;
+          setNotifications(prev => [newNotif, ...prev]);
+          
+          // Show toast for new notification
+          toast.info(newNotif.title, {
+            description: newNotif.message.substring(0, 50) + (newNotif.message.length > 50 ? "..." : ""),
+          });
         }
       )
       .on(
@@ -156,12 +126,10 @@ const DashboardHeader = () => {
   }, []);
 
   const markAsRead = async (notificationId: string) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
     await supabase
-      .from("notification_reads")
-      .upsert({ user_id: user.id, message_id: notificationId });
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("id", notificationId);
 
     setNotifications(prev =>
       prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
@@ -172,27 +140,23 @@ const DashboardHeader = () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const unreadNotifs = notifications.filter(n => !n.is_read);
-    if (unreadNotifs.length === 0) return;
+    const unreadIds = notifications.filter(n => !n.is_read).map(n => n.id);
+    if (unreadIds.length === 0) return;
 
-    const inserts = unreadNotifs.map(n => ({
-      user_id: user.id,
-      message_id: n.id,
-    }));
-
-    await supabase.from("notification_reads").upsert(inserts);
+    await supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .in("id", unreadIds);
 
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     toast.success("All notifications marked as read");
   };
 
   const deleteNotification = async (notificationId: string) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
     await supabase
-      .from("deleted_notifications")
-      .upsert({ user_id: user.id, message_id: notificationId });
+      .from("notifications")
+      .delete()
+      .eq("id", notificationId);
 
     setNotifications(prev => prev.filter(n => n.id !== notificationId));
     toast.success("Notification deleted");
@@ -203,7 +167,23 @@ const DashboardHeader = () => {
       await markAsRead(notification.id);
     }
     setOpen(false);
-    navigate("/dashboard/support");
+
+    // Navigate based on notification type
+    switch (notification.type) {
+      case "ticket_reply":
+        navigate("/dashboard/support");
+        break;
+      case "balance_update":
+      case "topup":
+        navigate("/dashboard/balance");
+        break;
+      default:
+        break;
+    }
+  };
+
+  const getNotificationConfig = (type: string) => {
+    return notificationConfig[type] || notificationConfig.system;
   };
 
   return (
@@ -250,7 +230,7 @@ const DashboardHeader = () => {
               </button>
             </PopoverTrigger>
             <PopoverContent 
-              className="w-80 p-0 bg-card border border-border shadow-lg" 
+              className="w-96 p-0 bg-card border border-border shadow-lg" 
               align="end"
               sideOffset={8}
             >
@@ -269,7 +249,7 @@ const DashboardHeader = () => {
                 )}
               </div>
 
-              <ScrollArea className="max-h-80">
+              <ScrollArea className="max-h-96">
                 {notifications.length === 0 ? (
                   <div className="p-6 text-center text-muted-foreground">
                     <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
@@ -277,43 +257,64 @@ const DashboardHeader = () => {
                   </div>
                 ) : (
                   <div className="divide-y divide-border">
-                    {notifications.map((notification) => (
-                      <div
-                        key={notification.id}
-                        className={`p-3 hover:bg-secondary/50 transition-colors ${
-                          !notification.is_read ? "bg-primary/5" : ""
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div 
-                            className={`mt-0.5 p-1.5 rounded-full ${
-                              notification.is_read 
-                                ? "bg-muted" 
-                                : "bg-primary/20"
-                            }`}
-                          >
-                            <MessageSquare className={`h-3.5 w-3.5 ${
-                              notification.is_read 
-                                ? "text-muted-foreground" 
-                                : "text-primary"
-                            }`} />
-                          </div>
-                          <div 
-                            className="flex-1 min-w-0 cursor-pointer"
-                            onClick={() => handleNotificationClick(notification)}
-                          >
-                            <p className="text-xs font-medium text-primary truncate">
-                              {notification.ticket_subject}
-                            </p>
-                            <p className="text-sm text-foreground line-clamp-2 mt-0.5">
-                              {notification.message}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {format(new Date(notification.created_at), "MMM d, h:mm a")}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {!notification.is_read && (
+                    {notifications.map((notification) => {
+                      const config = getNotificationConfig(notification.type);
+                      const IconComponent = config.icon;
+                      
+                      return (
+                        <div
+                          key={notification.id}
+                          className={`p-3 hover:bg-secondary/50 transition-colors ${
+                            !notification.is_read ? "bg-primary/5" : ""
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={`mt-0.5 p-1.5 rounded-full ${config.bgColor}`}>
+                              <IconComponent className={`h-3.5 w-3.5 ${config.color}`} />
+                            </div>
+                            <div 
+                              className="flex-1 min-w-0 cursor-pointer"
+                              onClick={() => handleNotificationClick(notification)}
+                            >
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs font-medium text-foreground truncate">
+                                  {notification.title}
+                                </p>
+                                {!notification.is_read && (
+                                  <span className="h-2 w-2 rounded-full bg-primary flex-shrink-0" />
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground line-clamp-2 mt-0.5">
+                                {notification.message}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 capitalize">
+                                  {notification.type.replace("_", " ")}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {format(new Date(notification.created_at), "MMM d, h:mm a")}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {!notification.is_read && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        markAsRead(notification.id);
+                                      }}
+                                    >
+                                      <Check className="h-3.5 w-3.5 text-primary" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Mark as read</TooltipContent>
+                                </Tooltip>
+                              )}
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button
@@ -322,35 +323,19 @@ const DashboardHeader = () => {
                                     className="h-7 w-7"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      markAsRead(notification.id);
+                                      deleteNotification(notification.id);
                                     }}
                                   >
-                                    <Check className="h-3.5 w-3.5 text-primary" />
+                                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>Mark as read</TooltipContent>
+                                <TooltipContent>Delete</TooltipContent>
                               </Tooltip>
-                            )}
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    deleteNotification(notification.id);
-                                  }}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Delete</TooltipContent>
-                            </Tooltip>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </ScrollArea>
