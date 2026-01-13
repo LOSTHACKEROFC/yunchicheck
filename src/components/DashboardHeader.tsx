@@ -21,6 +21,7 @@ import {
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
+import SettingsDropdown from "@/components/SettingsDropdown";
 
 interface Notification {
   id: string;
@@ -44,10 +45,20 @@ const DashboardHeader = () => {
   const [balance, setBalance] = useState<number>(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    const saved = localStorage.getItem("notification-sound-enabled");
+    return saved !== null ? saved === "true" : true;
+  });
   const { playNotificationSound } = useNotificationSound();
   const [open, setOpen] = useState(false);
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  const handleSoundToggle = (enabled: boolean) => {
+    setSoundEnabled(enabled);
+    localStorage.setItem("notification-sound-enabled", String(enabled));
+    toast.success(enabled ? "Notification sound enabled" : "Notification sound disabled");
+  };
 
   const fetchNotifications = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -101,8 +112,10 @@ const DashboardHeader = () => {
           const newNotif = payload.new as Notification;
           setNotifications(prev => [newNotif, ...prev]);
           
-          // Play notification sound
-          playNotificationSound();
+          // Play notification sound if enabled
+          if (soundEnabled) {
+            playNotificationSound();
+          }
           
           // Show toast for new notification
           toast.info(newNotif.title, {
@@ -364,6 +377,12 @@ const DashboardHeader = () => {
               )}
             </PopoverContent>
           </Popover>
+
+          {/* Settings */}
+          <SettingsDropdown 
+            soundEnabled={soundEnabled} 
+            onSoundToggle={handleSoundToggle} 
+          />
         </TooltipProvider>
       </div>
     </header>
