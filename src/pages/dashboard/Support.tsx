@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,31 +16,62 @@ import {
   ExternalLink
 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
-// Mock tickets
-const tickets = [
+// Mock tickets (will be replaced with real data later)
+const mockTickets = [
   { id: "TKT-001", subject: "Payment not received", status: "open", date: "2024-01-10" },
   { id: "TKT-002", subject: "Account verification", status: "resolved", date: "2024-01-08" },
 ];
 
 const Support = () => {
+  const [userEmail, setUserEmail] = useState("");
+  const [userName, setUserName] = useState("");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [tickets] = useState(mockTickets);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserEmail(user.email || "");
+        const { data } = await supabase
+          .from("profiles")
+          .select("username, name")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        setUserName(data?.name || data?.username || "");
+      }
+    };
+    fetchUserInfo();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!subject || !message) {
       toast.error("Please fill in all fields");
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      toast.success("Support ticket submitted successfully!");
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('send-support-ticket', {
+        body: { subject, message, userEmail, userName }
+      });
+
+      if (error) throw error;
+      
+      toast.success(`Ticket ${data.ticketId} submitted successfully!`);
       setSubject("");
       setMessage("");
+    } catch (error: any) {
+      console.error("Error submitting ticket:", error);
+      toast.error("Failed to submit ticket. Please try again.");
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -101,23 +132,31 @@ const Support = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary">
+              <a 
+                href="mailto:losthack11@gmail.com"
+                className="flex items-center gap-3 p-3 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors cursor-pointer"
+              >
                 <Mail className="h-5 w-5 text-primary" />
                 <div className="flex-1">
                   <p className="font-medium text-sm">Email</p>
-                  <p className="text-xs text-muted-foreground">support@yunchichecker.com</p>
+                  <p className="text-xs text-muted-foreground">losthack11@gmail.com</p>
                 </div>
                 <ExternalLink className="h-4 w-4 text-muted-foreground" />
-              </div>
+              </a>
 
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary">
+              <a 
+                href="https://t.me/YunchiSupport"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors cursor-pointer"
+              >
                 <MessageSquare className="h-5 w-5 text-primary" />
                 <div className="flex-1">
                   <p className="font-medium text-sm">Telegram</p>
                   <p className="text-xs text-muted-foreground">@YunchiSupport</p>
                 </div>
                 <ExternalLink className="h-4 w-4 text-muted-foreground" />
-              </div>
+              </a>
             </CardContent>
           </Card>
 

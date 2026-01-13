@@ -1,1 +1,4 @@
 project_id = "joboegjaowcwulqitchu"
+
+[functions.send-support-ticket]
+verify_jwt = false
