@@ -38,6 +38,29 @@ interface TicketDetailModalProps {
   onTicketUpdate?: (updatedTicket: Ticket) => void;
 }
 
+// Play notification sound using Web Audio API
+const playNotificationSound = () => {
+  try {
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+    oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1);
+    
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.3);
+  } catch (error) {
+    console.log("Could not play notification sound:", error);
+  }
+};
+
 const TicketDetailModal = ({ ticket, isOpen, onClose, userId, onTicketUpdate }: TicketDetailModalProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -45,6 +68,7 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId, onTicketUpdate }: 
   const [sending, setSending] = useState(false);
   const [currentTicket, setCurrentTicket] = useState<Ticket | null>(ticket);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isInitialLoadRef = useRef(true);
 
   // Sync currentTicket with prop
   useEffect(() => {
@@ -52,10 +76,14 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId, onTicketUpdate }: 
   }, [ticket]);
 
   useEffect(() => {
-    if (!ticket || !isOpen) return;
+    if (!ticket || !isOpen) {
+      isInitialLoadRef.current = true;
+      return;
+    }
 
     const fetchMessages = async () => {
       setLoading(true);
+      isInitialLoadRef.current = true;
       const { data, error } = await supabase
         .from("ticket_messages")
         .select("id, message, is_admin, created_at")
@@ -68,6 +96,10 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId, onTicketUpdate }: 
         setMessages(data || []);
       }
       setLoading(false);
+      // Allow sounds after initial load
+      setTimeout(() => {
+        isInitialLoadRef.current = false;
+      }, 500);
     };
 
     fetchMessages();
@@ -85,7 +117,13 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId, onTicketUpdate }: 
         },
         (payload) => {
           console.log("New message received:", payload);
-          setMessages(prev => [...prev, payload.new as Message]);
+          const newMsg = payload.new as Message;
+          setMessages(prev => [...prev, newMsg]);
+          
+          // Play sound for admin messages only (not user's own messages)
+          if (newMsg.is_admin && !isInitialLoadRef.current) {
+            playNotificationSound();
+          }
         }
       )
       .subscribe();
