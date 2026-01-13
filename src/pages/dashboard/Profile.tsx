@@ -5,11 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { User, Mail, Calendar, Shield, Key } from "lucide-react";
+import { User, Mail, Calendar, Shield, Key, MessageCircle } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const Profile = () => {
   const [username, setUsername] = useState("");
+  const [name, setName] = useState("");
+  const [telegramChatId, setTelegramChatId] = useState("");
+  const [telegramUsername, setTelegramUsername] = useState("");
   const [email, setEmail] = useState("");
   const [balance, setBalance] = useState(0);
   const [createdAt, setCreatedAt] = useState("");
@@ -23,10 +26,13 @@ const Profile = () => {
         setCreatedAt(new Date(user.created_at).toLocaleDateString());
         const { data } = await supabase
           .from("profiles")
-          .select("username, balance")
+          .select("username, name, telegram_chat_id, telegram_username, balance")
           .eq("user_id", user.id)
           .maybeSingle();
         setUsername(data?.username || "");
+        setName(data?.name || "");
+        setTelegramChatId(data?.telegram_chat_id || "");
+        setTelegramUsername(data?.telegram_username || "");
         setBalance(data?.balance || 0);
       }
     };
@@ -39,7 +45,12 @@ const Profile = () => {
     if (user) {
       const { error } = await supabase
         .from("profiles")
-        .update({ username })
+        .update({ 
+          username,
+          name,
+          telegram_chat_id: telegramChatId,
+          telegram_username: telegramUsername
+        })
         .eq("user_id", user.id);
       
       if (error) {
@@ -105,6 +116,48 @@ const Profile = () => {
                   onChange={(e) => setUsername(e.target.value)}
                   className="bg-secondary border-border"
                   placeholder="Enter username"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="name" className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  Full Name
+                </Label>
+                <Input
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="bg-secondary border-border"
+                  placeholder="Enter your full name"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="telegramUsername" className="flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4 text-muted-foreground" />
+                  Telegram Username
+                </Label>
+                <Input
+                  id="telegramUsername"
+                  value={telegramUsername}
+                  onChange={(e) => setTelegramUsername(e.target.value)}
+                  className="bg-secondary border-border"
+                  placeholder="@username"
+                />
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="telegramChatId" className="flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4 text-muted-foreground" />
+                  Telegram Chat ID
+                </Label>
+                <Input
+                  id="telegramChatId"
+                  value={telegramChatId}
+                  onChange={(e) => setTelegramChatId(e.target.value)}
+                  className="bg-secondary border-border"
+                  placeholder="Enter your Telegram Chat ID"
                 />
               </div>
             </div>
