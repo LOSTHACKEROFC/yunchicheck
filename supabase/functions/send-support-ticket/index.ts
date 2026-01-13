@@ -1,6 +1,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,6 +16,7 @@ interface SupportTicketRequest {
   message: string;
   userEmail: string;
   userName: string;
+  userId: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -24,13 +28,35 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { subject, message, userEmail, userName }: SupportTicketRequest = await req.json();
+    const { subject, message, userEmail, userName, userId }: SupportTicketRequest = await req.json();
     
     console.log(`Processing ticket from ${userEmail}: ${subject}`);
 
     // Generate a simple ticket ID
     const ticketId = `TKT-${Date.now().toString(36).toUpperCase()}`;
 
+    // Save ticket to database using service role
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    
+    const { error: dbError } = await supabase
+      .from("support_tickets")
+      .insert({
+        ticket_id: ticketId,
+        user_id: userId,
+        user_email: userEmail,
+        subject,
+        message,
+        status: "open"
+      });
+
+    if (dbError) {
+      console.error("Database error:", dbError);
+      throw new Error("Failed to save ticket to database");
+    }
+
+    console.log("Ticket saved to database:", ticketId);
+
+    // Send email notification
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -64,11 +90,11 @@ const handler = async (req: Request): Promise<Response> => {
     if (!res.ok) {
       const errorData = await res.json();
       console.error("Resend API error:", errorData);
-      throw new Error(errorData.message || "Failed to send email");
+      // Don't throw - ticket is saved, just email failed
+      console.log("Email failed but ticket was saved");
+    } else {
+      console.log("Email sent successfully");
     }
-
-    const emailResponse = await res.json();
-    console.log("Email sent successfully:", emailResponse);
 
     return new Response(JSON.stringify({ success: true, ticketId }), {
       status: 200,
