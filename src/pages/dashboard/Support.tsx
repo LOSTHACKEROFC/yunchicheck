@@ -18,13 +18,16 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import TicketDetailModal from "@/components/TicketDetailModal";
 
 interface Ticket {
   id: string;
   ticket_id: string;
   subject: string;
+  message: string;
   status: string;
   created_at: string;
+  user_email: string;
 }
 
 const Support = () => {
@@ -36,6 +39,8 @@ const Support = () => {
   const [loading, setLoading] = useState(false);
   const [ticketsLoading, setTicketsLoading] = useState(true);
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchUserInfo = async () => {
@@ -64,7 +69,7 @@ const Support = () => {
       setTicketsLoading(true);
       const { data, error } = await supabase
         .from("support_tickets")
-        .select("id, ticket_id, subject, status, created_at")
+        .select("id, ticket_id, subject, message, status, created_at, user_email")
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
@@ -302,7 +307,11 @@ const Support = () => {
                 return (
                   <div
                     key={ticket.id}
-                    className="flex items-center justify-between p-4 rounded-lg bg-secondary/50 border border-border"
+                    onClick={() => {
+                      setSelectedTicket(ticket);
+                      setIsModalOpen(true);
+                    }}
+                    className="flex items-center justify-between p-4 rounded-lg bg-secondary/50 border border-border cursor-pointer hover:bg-secondary/80 transition-colors"
                   >
                     <div className="flex items-center gap-4">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center ${statusColors.bg}`}>
@@ -332,6 +341,18 @@ const Support = () => {
           )}
         </CardContent>
       </Card>
+      {/* Ticket Detail Modal */}
+      {userId && (
+        <TicketDetailModal
+          ticket={selectedTicket}
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setSelectedTicket(null);
+          }}
+          userId={userId}
+        />
+      )}
     </div>
   );
 };
