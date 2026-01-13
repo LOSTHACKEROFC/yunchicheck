@@ -17,6 +17,11 @@ const Index = () => {
             </span>
           </div>
           <div className="flex items-center gap-4">
+            <Link to="/pricing">
+              <Button variant="ghost" className="text-foreground hover:text-primary">
+                Pricing
+              </Button>
+            </Link>
             <Link to="/auth">
               <Button variant="ghost" className="text-foreground hover:text-primary">
                 Login
@@ -43,11 +48,16 @@ const Index = () => {
             Fast, reliable, and secure checking service. 
             Join thousands of users worldwide.
           </p>
-          <div className="flex gap-4 justify-center">
+          <div className="flex gap-4 justify-center flex-wrap">
             <Link to="/auth">
               <Button size="lg" className="btn-primary">
                 Start Now
                 <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </Link>
+            <Link to="/pricing">
+              <Button size="lg" variant="outline" className="border-primary text-primary hover:bg-primary/10">
+                View Pricing
               </Button>
             </Link>
           </div>
