@@ -229,7 +229,7 @@ const Support = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-display font-bold text-foreground">Contract Support</h1>
+        <h1 className="text-3xl font-display font-bold text-foreground">Yunchi Supports</h1>
         <p className="text-muted-foreground mt-1">Get help with your account and services</p>
       </div>
 
