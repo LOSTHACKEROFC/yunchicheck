@@ -27,10 +27,10 @@ import { toast } from "sonner";
 const menuItems = [
   { title: "Home", url: "/dashboard", icon: Home },
   { title: "Profile", url: "/dashboard/profile", icon: User },
-  { title: "Balance", url: "/dashboard/balance", icon: Wallet },
-  { title: "Gateways", url: "/dashboard/gateways", icon: CreditCard },
   { title: "Topup", url: "/dashboard/topup", icon: ArrowUpCircle },
-  { title: "Support", url: "/dashboard/support", icon: HeadphonesIcon },
+  { title: "Balance & History", url: "/dashboard/balance", icon: Wallet },
+  { title: "Gateways", url: "/dashboard/gateways", icon: CreditCard },
+  { title: "Contract Support", url: "/dashboard/support", icon: HeadphonesIcon },
 ];
 
 const DashboardSidebar = () => {
