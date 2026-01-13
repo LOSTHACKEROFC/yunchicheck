@@ -361,8 +361,111 @@ const handler = async (req: Request): Promise<Response> => {
       const chatId = update.message.chat.id.toString();
       await sendTelegramMessage(
         chatId,
-        `👋 <b>Welcome to Yunchi Support Bot</b>\n\nThis bot notifies you about new support tickets and allows you to:\n• Reply to tickets directly\n• Change ticket status\n\nYour Chat ID: <code>${chatId}</code>\n\nReply to ticket notifications to respond to users.`
+        `👋 <b>Welcome to Yunchi Support Bot</b>\n\nThis bot notifies you about new support tickets and allows you to:\n• Reply to tickets directly\n• Change ticket status\n\n<b>Commands:</b>\n/ticket [ticket_id] - View and manage a ticket\n/start - Show this message\n\nYour Chat ID: <code>${chatId}</code>\n\nReply to ticket notifications to respond to users.`
       );
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Handle /ticket command
+    if (update.message?.text?.startsWith("/ticket")) {
+      const chatId = update.message.chat.id.toString();
+      const parts = update.message.text.split(" ");
+      
+      if (parts.length < 2) {
+        await sendTelegramMessage(
+          chatId,
+          "❌ Please provide a ticket ID.\n\n<b>Usage:</b> /ticket TKT-XXXXXX\n<b>Example:</b> /ticket TKT-M1ABC2"
+        );
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+      
+      const inputTicketId = parts[1].trim().toUpperCase();
+      
+      // Fetch ticket by ticket_id
+      const { data: ticket, error: ticketError } = await supabase
+        .from("support_tickets")
+        .select("id, ticket_id, subject, message, status, user_email, user_id, created_at")
+        .eq("ticket_id", inputTicketId)
+        .single();
+      
+      if (ticketError || !ticket) {
+        await sendTelegramMessage(
+          chatId,
+          `❌ Ticket not found: <code>${inputTicketId}</code>\n\nMake sure you entered the correct ticket ID.`
+        );
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+      
+      // Fetch conversation messages
+      const { data: messages } = await supabase
+        .from("ticket_messages")
+        .select("message, is_admin, created_at")
+        .eq("ticket_id", ticket.id)
+        .order("created_at", { ascending: true });
+      
+      // Build conversation text
+      let conversationText = "";
+      if (messages && messages.length > 0) {
+        const recentMessages = messages.slice(-5); // Show last 5 messages
+        conversationText = "\n\n<b>📝 Recent Messages:</b>\n" + recentMessages.map(m => 
+          `${m.is_admin ? "👨‍💼 Admin" : "👤 User"}: ${m.message.substring(0, 100)}${m.message.length > 100 ? "..." : ""}`
+        ).join("\n\n");
+        
+        if (messages.length > 5) {
+          conversationText = `\n<i>(Showing last 5 of ${messages.length} messages)</i>` + conversationText;
+        }
+      }
+      
+      // Status emoji mapping
+      const statusEmoji: Record<string, string> = {
+        open: "🟡",
+        processing: "🔵",
+        solved: "🟢",
+        closed: "⚫"
+      };
+      
+      const emoji = statusEmoji[ticket.status] || "⚪";
+      const createdDate = new Date(ticket.created_at).toLocaleString();
+      
+      const ticketDetails = `
+🎫 <b>Ticket Details</b>
+
+<b>ID:</b> ${ticket.ticket_id}
+<b>Subject:</b> ${ticket.subject}
+<b>Status:</b> ${emoji} ${ticket.status.toUpperCase()}
+<b>Email:</b> ${ticket.user_email}
+<b>Created:</b> ${createdDate}
+
+<b>Original Message:</b>
+${ticket.message.substring(0, 500)}${ticket.message.length > 500 ? "..." : ""}${conversationText}
+
+[${ticket.id}]
+<i>💡 Reply to this message to respond to the user.</i>
+`;
+      
+      const inlineKeyboard = {
+        inline_keyboard: [
+          [
+            { text: "🟡 Open", callback_data: `open_${ticket.id}` },
+            { text: "🔵 Processing", callback_data: `processing_${ticket.id}` },
+          ],
+          [
+            { text: "🟢 Solved", callback_data: `solved_${ticket.id}` },
+            { text: "⚫ Closed", callback_data: `closed_${ticket.id}` },
+          ],
+        ],
+      };
+      
+      await sendTelegramMessage(chatId, ticketDetails, inlineKeyboard);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
     }
 
     return new Response(JSON.stringify({ ok: true }), {
