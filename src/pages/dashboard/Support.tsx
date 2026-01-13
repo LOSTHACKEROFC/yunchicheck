@@ -16,7 +16,9 @@ import {
   ExternalLink,
   Loader2,
   Bot,
-  CheckCircle2
+  CheckCircle2,
+  Cog,
+  XCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -183,15 +185,15 @@ const Support = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'open':
-        return { bg: 'bg-yellow-500/20', text: 'text-yellow-500', border: 'border-yellow-500/50' };
-      case 'in_progress':
-        return { bg: 'bg-blue-500/20', text: 'text-blue-500', border: 'border-blue-500/50' };
-      case 'resolved':
-        return { bg: 'bg-green-500/20', text: 'text-green-500', border: 'border-green-500/50' };
+        return { bg: 'bg-yellow-500/20', text: 'text-yellow-500', border: 'border-yellow-500/50', icon: Clock };
+      case 'processing':
+        return { bg: 'bg-blue-500/20', text: 'text-blue-500', border: 'border-blue-500/50', icon: Cog };
+      case 'solved':
+        return { bg: 'bg-green-500/20', text: 'text-green-500', border: 'border-green-500/50', icon: CheckCircle };
       case 'closed':
-        return { bg: 'bg-gray-500/20', text: 'text-gray-500', border: 'border-gray-500/50' };
+        return { bg: 'bg-gray-500/20', text: 'text-gray-500', border: 'border-gray-500/50', icon: XCircle };
       default:
-        return { bg: 'bg-yellow-500/20', text: 'text-yellow-500', border: 'border-yellow-500/50' };
+        return { bg: 'bg-yellow-500/20', text: 'text-yellow-500', border: 'border-yellow-500/50', icon: Clock };
     }
   };
 
@@ -397,11 +399,7 @@ const Support = () => {
                   >
                     <div className="flex items-center gap-4">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center ${statusColors.bg}`}>
-                        {ticket.status === "open" || ticket.status === "in_progress" ? (
-                          <Clock className={`h-5 w-5 ${statusColors.text}`} />
-                        ) : (
-                          <CheckCircle className={`h-5 w-5 ${statusColors.text}`} />
-                        )}
+                        <statusColors.icon className={`h-5 w-5 ${statusColors.text}`} />
                       </div>
                       <div>
                         <p className="font-medium">{ticket.subject}</p>
