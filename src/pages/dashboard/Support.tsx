@@ -39,10 +39,12 @@ const Support = () => {
 
   useEffect(() => {
     const fetchUserInfo = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error } = await supabase.auth.getUser();
+      console.log("Fetched user:", user, "Error:", error);
       if (user) {
         setUserId(user.id);
         setUserEmail(user.email || "");
+        console.log("Set user email to:", user.email);
         const { data } = await supabase
           .from("profiles")
           .select("username, name")
