@@ -95,6 +95,44 @@ async function answerCallbackQuery(callbackQueryId: string, text: string): Promi
   }
 }
 
+async function editMessageReplyMarkup(
+  chatId: number,
+  messageId: number,
+  ticketUuid: string,
+  currentStatus: string
+): Promise<void> {
+  if (!TELEGRAM_BOT_TOKEN) return;
+
+  // Create keyboard with current status highlighted
+  const statusButtons = [
+    { text: currentStatus === "open" ? "✓ 🟡 Open" : "🟡 Open", callback_data: `open_${ticketUuid}` },
+    { text: currentStatus === "processing" ? "✓ 🔵 Processing" : "🔵 Processing", callback_data: `processing_${ticketUuid}` },
+  ];
+  const statusButtons2 = [
+    { text: currentStatus === "solved" ? "✓ 🟢 Solved" : "🟢 Solved", callback_data: `solved_${ticketUuid}` },
+    { text: currentStatus === "closed" ? "✓ ⚫ Closed" : "⚫ Closed", callback_data: `closed_${ticketUuid}` },
+  ];
+
+  try {
+    await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          message_id: messageId,
+          reply_markup: {
+            inline_keyboard: [statusButtons, statusButtons2],
+          },
+        }),
+      }
+    );
+  } catch (error) {
+    console.error("Error editing message reply markup:", error);
+  }
+}
+
 async function sendEmailNotification(
   userEmail: string,
   ticketId: string,
@@ -223,6 +261,16 @@ const handler = async (req: Request): Promise<Response> => {
         update.callback_query.id,
         `✅ Ticket status updated to: ${newStatus.toUpperCase()}`
       );
+
+      // Update the inline keyboard to show current status (keep buttons visible)
+      if (update.callback_query.message) {
+        await editMessageReplyMarkup(
+          update.callback_query.message.chat.id,
+          update.callback_query.message.message_id,
+          ticketUuid,
+          newStatus
+        );
+      }
 
       // Notify admin in chat
       await sendTelegramMessage(
