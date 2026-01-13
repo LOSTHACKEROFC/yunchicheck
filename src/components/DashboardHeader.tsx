@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/popover";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { useNotificationSound } from "@/hooks/useNotificationSound";
 
 interface Notification {
   id: string;
@@ -43,6 +44,7 @@ const DashboardHeader = () => {
   const [balance, setBalance] = useState<number>(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const { playNotificationSound } = useNotificationSound();
   const [open, setOpen] = useState(false);
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
@@ -98,6 +100,9 @@ const DashboardHeader = () => {
         async (payload) => {
           const newNotif = payload.new as Notification;
           setNotifications(prev => [newNotif, ...prev]);
+          
+          // Play notification sound
+          playNotificationSound();
           
           // Show toast for new notification
           toast.info(newNotif.title, {
