@@ -35,14 +35,21 @@ interface TicketDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   userId: string;
+  onTicketUpdate?: (updatedTicket: Ticket) => void;
 }
 
-const TicketDetailModal = ({ ticket, isOpen, onClose, userId }: TicketDetailModalProps) => {
+const TicketDetailModal = ({ ticket, isOpen, onClose, userId, onTicketUpdate }: TicketDetailModalProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [currentTicket, setCurrentTicket] = useState<Ticket | null>(ticket);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Sync currentTicket with prop
+  useEffect(() => {
+    setCurrentTicket(ticket);
+  }, [ticket]);
 
   useEffect(() => {
     if (!ticket || !isOpen) return;
@@ -66,7 +73,7 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId }: TicketDetailModa
     fetchMessages();
 
     // Subscribe to realtime messages
-    const channel = supabase
+    const messagesChannel = supabase
       .channel(`ticket-messages-${ticket.id}`)
       .on(
         'postgres_changes',
@@ -77,16 +84,38 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId }: TicketDetailModa
           filter: `ticket_id=eq.${ticket.id}`
         },
         (payload) => {
-          console.log("New message:", payload);
+          console.log("New message received:", payload);
           setMessages(prev => [...prev, payload.new as Message]);
         }
       )
       .subscribe();
 
+    // Subscribe to ticket status updates
+    const ticketChannel = supabase
+      .channel(`ticket-status-${ticket.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'support_tickets',
+          filter: `id=eq.${ticket.id}`
+        },
+        (payload) => {
+          console.log("Ticket updated:", payload);
+          const updatedTicket = payload.new as Ticket;
+          setCurrentTicket(updatedTicket);
+          onTicketUpdate?.(updatedTicket);
+          toast.info(`Ticket status changed to ${updatedTicket.status.toUpperCase()}`);
+        }
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(ticketChannel);
     };
-  }, [ticket, isOpen]);
+  }, [ticket, isOpen, onTicketUpdate]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -130,9 +159,9 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId }: TicketDetailModa
     switch (status) {
       case 'open':
         return { bg: 'bg-yellow-500/20', text: 'text-yellow-500', border: 'border-yellow-500/50' };
-      case 'in_progress':
+      case 'processing':
         return { bg: 'bg-blue-500/20', text: 'text-blue-500', border: 'border-blue-500/50' };
-      case 'resolved':
+      case 'solved':
         return { bg: 'bg-green-500/20', text: 'text-green-500', border: 'border-green-500/50' };
       case 'closed':
         return { bg: 'bg-gray-500/20', text: 'text-gray-500', border: 'border-gray-500/50' };
@@ -141,24 +170,24 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId }: TicketDetailModa
     }
   };
 
-  if (!ticket) return null;
+  if (!currentTicket) return null;
 
-  const statusColors = getStatusColor(ticket.status);
+  const statusColors = getStatusColor(currentTicket.status);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[600px] max-h-[80vh] flex flex-col">
         <DialogHeader>
           <div className="flex items-center justify-between">
-            <DialogTitle className="text-lg font-bold">{ticket.ticket_id}</DialogTitle>
+            <DialogTitle className="text-lg font-bold">{currentTicket.ticket_id}</DialogTitle>
             <Badge
               variant="outline"
               className={`capitalize ${statusColors.border} ${statusColors.text}`}
             >
-              {ticket.status.replace('_', ' ')}
+              {currentTicket.status.replace('_', ' ')}
             </Badge>
           </div>
-          <p className="text-sm text-muted-foreground mt-1">{ticket.subject}</p>
+          <p className="text-sm text-muted-foreground mt-1">{currentTicket.subject}</p>
         </DialogHeader>
 
         {/* Ticket Details */}
@@ -166,11 +195,11 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId }: TicketDetailModa
           <div className="flex items-center gap-2 text-sm">
             <Clock className="h-4 w-4 text-muted-foreground" />
             <span className="text-muted-foreground">Created:</span>
-            <span>{formatDate(ticket.created_at)}</span>
+            <span>{formatDate(currentTicket.created_at)}</span>
           </div>
           <div className="text-sm">
             <p className="text-muted-foreground mb-1">Original Message:</p>
-            <p className="bg-background/50 rounded p-2">{ticket.message}</p>
+            <p className="bg-background/50 rounded p-2">{currentTicket.message}</p>
           </div>
         </div>
 
@@ -229,11 +258,11 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId }: TicketDetailModa
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Type your message..."
             className="flex-1 bg-secondary"
-            disabled={sending || ticket.status === 'closed'}
+            disabled={sending || currentTicket.status === 'closed'}
           />
           <Button 
             type="submit" 
-            disabled={sending || !newMessage.trim() || ticket.status === 'closed'}
+            disabled={sending || !newMessage.trim() || currentTicket.status === 'closed'}
             className="btn-primary"
           >
             {sending ? (
@@ -243,7 +272,7 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId }: TicketDetailModa
             )}
           </Button>
         </form>
-        {ticket.status === 'closed' && (
+        {currentTicket.status === 'closed' && (
           <p className="text-xs text-muted-foreground text-center">This ticket is closed and cannot receive new messages.</p>
         )}
       </DialogContent>

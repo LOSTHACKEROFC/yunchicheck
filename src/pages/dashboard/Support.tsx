@@ -431,6 +431,12 @@ const Support = () => {
             setSelectedTicket(null);
           }}
           userId={userId}
+          onTicketUpdate={(updatedTicket) => {
+            setTickets(prev => prev.map(t => 
+              t.id === updatedTicket.id ? updatedTicket : t
+            ));
+            setSelectedTicket(updatedTicket);
+          }}
         />
       )}
     </div>
