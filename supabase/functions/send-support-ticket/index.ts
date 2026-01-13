@@ -2,6 +2,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
+const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -17,6 +19,72 @@ interface SupportTicketRequest {
   userEmail: string;
   userName: string;
   userId: string;
+}
+
+async function sendAdminTelegramNotification(
+  ticketUuid: string,
+  ticketId: string,
+  userName: string,
+  userEmail: string,
+  subject: string,
+  message: string
+): Promise<void> {
+  if (!TELEGRAM_BOT_TOKEN || !ADMIN_TELEGRAM_CHAT_ID) {
+    console.log("Telegram not configured for admin notifications");
+    return;
+  }
+
+  try {
+    const telegramMessage = `
+🎫 <b>New Support Ticket</b>
+
+<b>Ticket ID:</b> ${ticketId}
+<b>From:</b> ${userName || 'Unknown'} (${userEmail})
+<b>Subject:</b> ${subject}
+
+<b>Message:</b>
+${message}
+
+[${ticketUuid}]
+<i>Reply to this message to respond to the user.</i>
+`;
+
+    const inlineKeyboard = {
+      inline_keyboard: [
+        [
+          { text: "🔄 Processing", callback_data: `processing_${ticketUuid}` },
+          { text: "✅ Solved", callback_data: `solved_${ticketUuid}` },
+        ],
+        [
+          { text: "📂 Open", callback_data: `open_${ticketUuid}` },
+          { text: "🔒 Closed", callback_data: `closed_${ticketUuid}` },
+        ],
+      ],
+    };
+
+    const response = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: ADMIN_TELEGRAM_CHAT_ID,
+          text: telegramMessage,
+          parse_mode: "HTML",
+          reply_markup: inlineKeyboard,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("Telegram API error:", errorData);
+    } else {
+      console.log("Admin Telegram notification sent successfully");
+    }
+  } catch (error) {
+    console.error("Error sending admin Telegram notification:", error);
+  }
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -54,7 +122,26 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("Failed to save ticket to database");
     }
 
+    // Get the ticket UUID for Telegram notification
+    const { data: ticketData } = await supabase
+      .from("support_tickets")
+      .select("id")
+      .eq("ticket_id", ticketId)
+      .single();
+
     console.log("Ticket saved to database:", ticketId);
+
+    // Send Telegram notification to admin
+    if (ticketData?.id) {
+      await sendAdminTelegramNotification(
+        ticketData.id,
+        ticketId,
+        userName,
+        userEmail,
+        subject,
+        message
+      );
+    }
 
     // Send email notification
     const res = await fetch("https://api.resend.com/emails", {
