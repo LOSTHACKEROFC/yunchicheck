@@ -19,6 +19,7 @@ interface SupportTicketRequest {
   userEmail: string;
   userName: string;
   userId: string;
+  priority: string;
 }
 
 async function sendAdminTelegramNotification(
@@ -27,7 +28,8 @@ async function sendAdminTelegramNotification(
   userName: string,
   userEmail: string,
   subject: string,
-  message: string
+  message: string,
+  priority: string
 ): Promise<void> {
   if (!TELEGRAM_BOT_TOKEN || !ADMIN_TELEGRAM_CHAT_ID) {
     console.log("Telegram not configured for admin notifications");
@@ -35,10 +37,19 @@ async function sendAdminTelegramNotification(
   }
 
   try {
+    const priorityEmoji: Record<string, string> = {
+      low: "🔵",
+      medium: "🟡",
+      high: "🟠",
+      urgent: "🔴"
+    };
+    const emoji = priorityEmoji[priority] || "🟡";
+
     const telegramMessage = `
 🎫 <b>New Support Ticket</b>
 
 <b>Ticket ID:</b> ${ticketId}
+<b>Priority:</b> ${emoji} ${priority.toUpperCase()}
 <b>From:</b> ${userName || 'Unknown'} (${userEmail})
 <b>Subject:</b> ${subject}
 
@@ -96,9 +107,9 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { subject, message, userEmail, userName, userId }: SupportTicketRequest = await req.json();
+    const { subject, message, userEmail, userName, userId, priority }: SupportTicketRequest = await req.json();
     
-    console.log(`Processing ticket from ${userEmail}: ${subject}`);
+    console.log(`Processing ticket from ${userEmail}: ${subject} (Priority: ${priority})`);
 
     // Generate a simple ticket ID
     const ticketId = `TKT-${Date.now().toString(36).toUpperCase()}`;
@@ -114,7 +125,8 @@ const handler = async (req: Request): Promise<Response> => {
         user_email: userEmail,
         subject,
         message,
-        status: "open"
+        status: "open",
+        priority: priority || "medium"
       });
 
     if (dbError) {
@@ -139,7 +151,8 @@ const handler = async (req: Request): Promise<Response> => {
         userName,
         userEmail,
         subject,
-        message
+        message,
+        priority || "medium"
       );
     }
 

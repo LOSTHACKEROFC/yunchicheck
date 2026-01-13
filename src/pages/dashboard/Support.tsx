@@ -6,6 +6,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { 
   HeadphonesIcon, 
   MessageSquare, 
   Mail, 
@@ -18,7 +25,11 @@ import {
   Bot,
   CheckCircle2,
   Cog,
-  XCircle
+  XCircle,
+  AlertTriangle,
+  AlertCircle,
+  ArrowDown,
+  ArrowUp
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,6 +41,7 @@ interface Ticket {
   subject: string;
   message: string;
   status: string;
+  priority: string;
   created_at: string;
   user_email: string;
 }
@@ -41,6 +53,7 @@ const Support = () => {
   const [telegramChatId, setTelegramChatId] = useState<string | null>(null);
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+  const [priority, setPriority] = useState("medium");
   const [loading, setLoading] = useState(false);
   const [ticketsLoading, setTicketsLoading] = useState(true);
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -99,7 +112,7 @@ const Support = () => {
       setTicketsLoading(true);
       const { data, error } = await supabase
         .from("support_tickets")
-        .select("id, ticket_id, subject, message, status, created_at, user_email")
+        .select("id, ticket_id, subject, message, status, priority, created_at, user_email")
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
@@ -162,7 +175,7 @@ const Support = () => {
     
     try {
       const { data, error } = await supabase.functions.invoke('send-support-ticket', {
-        body: { subject, message, userEmail, userName, userId }
+        body: { subject, message, userEmail, userName, userId, priority }
       });
 
       if (error) throw error;
@@ -170,6 +183,7 @@ const Support = () => {
       toast.success(`Ticket ${data.ticketId} submitted successfully!`);
       setSubject("");
       setMessage("");
+      setPriority("medium");
     } catch (error: any) {
       console.error("Error submitting ticket:", error);
       toast.error("Failed to submit ticket. Please try again.");
@@ -194,6 +208,21 @@ const Support = () => {
         return { bg: 'bg-gray-500/20', text: 'text-gray-500', border: 'border-gray-500/50', icon: XCircle };
       default:
         return { bg: 'bg-yellow-500/20', text: 'text-yellow-500', border: 'border-yellow-500/50', icon: Clock };
+    }
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'low':
+        return { bg: 'bg-slate-500/20', text: 'text-slate-400', border: 'border-slate-500/50', icon: ArrowDown };
+      case 'medium':
+        return { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/50', icon: AlertCircle };
+      case 'high':
+        return { bg: 'bg-orange-500/20', text: 'text-orange-400', border: 'border-orange-500/50', icon: ArrowUp };
+      case 'urgent':
+        return { bg: 'bg-red-500/20', text: 'text-red-500', border: 'border-red-500/50', icon: AlertTriangle };
+      default:
+        return { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/50', icon: AlertCircle };
     }
   };
 
@@ -288,6 +317,41 @@ const Support = () => {
                   className="bg-secondary border-border"
                   required
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="priority">Priority</Label>
+                <Select value={priority} onValueChange={setPriority}>
+                  <SelectTrigger className="bg-secondary border-border">
+                    <SelectValue placeholder="Select priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">
+                      <div className="flex items-center gap-2">
+                        <ArrowDown className="h-4 w-4 text-slate-400" />
+                        <span>Low</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="medium">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 text-blue-400" />
+                        <span>Medium</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="high">
+                      <div className="flex items-center gap-2">
+                        <ArrowUp className="h-4 w-4 text-orange-400" />
+                        <span>High</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="urgent">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-red-500" />
+                        <span>Urgent</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
@@ -388,6 +452,8 @@ const Support = () => {
             <div className="space-y-3">
               {tickets.map((ticket) => {
                 const statusColors = getStatusColor(ticket.status);
+                const priorityColors = getPriorityColor(ticket.priority);
+                const PriorityIcon = priorityColors.icon;
                 return (
                   <div
                     key={ticket.id}
@@ -408,12 +474,21 @@ const Support = () => {
                         </p>
                       </div>
                     </div>
-                    <Badge
-                      variant="outline"
-                      className={`capitalize ${statusColors.border} ${statusColors.text}`}
-                    >
-                      {ticket.status === 'open' ? 'Live' : ticket.status.replace('_', ' ')}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className={`capitalize ${priorityColors.border} ${priorityColors.text}`}
+                      >
+                        <PriorityIcon className="h-3 w-3 mr-1" />
+                        {ticket.priority}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className={`capitalize ${statusColors.border} ${statusColors.text}`}
+                      >
+                        {ticket.status === 'open' ? 'Live' : ticket.status.replace('_', ' ')}
+                      </Badge>
+                    </div>
                   </div>
                 );
               })}

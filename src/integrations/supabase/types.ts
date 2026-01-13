@@ -100,6 +100,7 @@ export type Database = {
           created_at: string
           id: string
           message: string
+          priority: string
           status: string
           subject: string
           ticket_id: string
@@ -111,6 +112,7 @@ export type Database = {
           created_at?: string
           id?: string
           message: string
+          priority?: string
           status?: string
           subject: string
           ticket_id: string
@@ -122,6 +124,7 @@ export type Database = {
           created_at?: string
           id?: string
           message?: string
+          priority?: string
           status?: string
           subject?: string
           ticket_id?: string
