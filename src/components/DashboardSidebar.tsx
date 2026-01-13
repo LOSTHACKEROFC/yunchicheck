@@ -30,7 +30,7 @@ const menuItems = [
   { title: "Topup", url: "/dashboard/topup", icon: ArrowUpCircle },
   { title: "Balance & History", url: "/dashboard/balance", icon: Wallet },
   { title: "Gateways", url: "/dashboard/gateways", icon: CreditCard },
-  { title: "Contract Support", url: "/dashboard/support", icon: HeadphonesIcon },
+  { title: "Contact Support", url: "/dashboard/support", icon: HeadphonesIcon },
 ];
 
 const DashboardSidebar = () => {
