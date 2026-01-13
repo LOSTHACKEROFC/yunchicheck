@@ -1,0 +1,254 @@
+import { useState, useEffect, useRef } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Send, Clock, CheckCircle, User, Headphones, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+
+interface Ticket {
+  id: string;
+  ticket_id: string;
+  subject: string;
+  message: string;
+  status: string;
+  created_at: string;
+  user_email: string;
+}
+
+interface Message {
+  id: string;
+  message: string;
+  is_admin: boolean;
+  created_at: string;
+}
+
+interface TicketDetailModalProps {
+  ticket: Ticket | null;
+  isOpen: boolean;
+  onClose: () => void;
+  userId: string;
+}
+
+const TicketDetailModal = ({ ticket, isOpen, onClose, userId }: TicketDetailModalProps) => {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!ticket || !isOpen) return;
+
+    const fetchMessages = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("ticket_messages")
+        .select("id, message, is_admin, created_at")
+        .eq("ticket_id", ticket.id)
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error("Error fetching messages:", error);
+      } else {
+        setMessages(data || []);
+      }
+      setLoading(false);
+    };
+
+    fetchMessages();
+
+    // Subscribe to realtime messages
+    const channel = supabase
+      .channel(`ticket-messages-${ticket.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'ticket_messages',
+          filter: `ticket_id=eq.${ticket.id}`
+        },
+        (payload) => {
+          console.log("New message:", payload);
+          setMessages(prev => [...prev, payload.new as Message]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [ticket, isOpen]);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !ticket) return;
+
+    setSending(true);
+    const { error } = await supabase
+      .from("ticket_messages")
+      .insert({
+        ticket_id: ticket.id,
+        user_id: userId,
+        message: newMessage.trim(),
+        is_admin: false
+      });
+
+    if (error) {
+      console.error("Error sending message:", error);
+      toast.error("Failed to send message");
+    } else {
+      setNewMessage("");
+    }
+    setSending(false);
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString();
+  };
+
+  const formatTime = (dateString: string) => {
+    return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'open':
+        return { bg: 'bg-yellow-500/20', text: 'text-yellow-500', border: 'border-yellow-500/50' };
+      case 'in_progress':
+        return { bg: 'bg-blue-500/20', text: 'text-blue-500', border: 'border-blue-500/50' };
+      case 'resolved':
+        return { bg: 'bg-green-500/20', text: 'text-green-500', border: 'border-green-500/50' };
+      case 'closed':
+        return { bg: 'bg-gray-500/20', text: 'text-gray-500', border: 'border-gray-500/50' };
+      default:
+        return { bg: 'bg-yellow-500/20', text: 'text-yellow-500', border: 'border-yellow-500/50' };
+    }
+  };
+
+  if (!ticket) return null;
+
+  const statusColors = getStatusColor(ticket.status);
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[600px] max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-lg font-bold">{ticket.ticket_id}</DialogTitle>
+            <Badge
+              variant="outline"
+              className={`capitalize ${statusColors.border} ${statusColors.text}`}
+            >
+              {ticket.status.replace('_', ' ')}
+            </Badge>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">{ticket.subject}</p>
+        </DialogHeader>
+
+        {/* Ticket Details */}
+        <div className="bg-secondary/50 rounded-lg p-4 space-y-2">
+          <div className="flex items-center gap-2 text-sm">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <span className="text-muted-foreground">Created:</span>
+            <span>{formatDate(ticket.created_at)}</span>
+          </div>
+          <div className="text-sm">
+            <p className="text-muted-foreground mb-1">Original Message:</p>
+            <p className="bg-background/50 rounded p-2">{ticket.message}</p>
+          </div>
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 min-h-0">
+          <p className="text-sm font-medium mb-2">Conversation</p>
+          <ScrollArea className="h-[200px] border rounded-lg p-3" ref={scrollRef}>
+            {loading ? (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                <p className="text-sm">No messages yet. Start the conversation!</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex gap-2 ${msg.is_admin ? 'justify-start' : 'justify-end'}`}
+                  >
+                    {msg.is_admin && (
+                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                        <Headphones className="h-4 w-4 text-primary" />
+                      </div>
+                    )}
+                    <div
+                      className={`max-w-[75%] rounded-lg p-3 ${
+                        msg.is_admin
+                          ? 'bg-secondary'
+                          : 'bg-primary text-primary-foreground'
+                      }`}
+                    >
+                      <p className="text-sm">{msg.message}</p>
+                      <p className={`text-xs mt-1 ${msg.is_admin ? 'text-muted-foreground' : 'text-primary-foreground/70'}`}>
+                        {formatTime(msg.created_at)}
+                      </p>
+                    </div>
+                    {!msg.is_admin && (
+                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                        <User className="h-4 w-4 text-primary" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        </div>
+
+        {/* Send Message */}
+        <form onSubmit={handleSendMessage} className="flex gap-2">
+          <Input
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder="Type your message..."
+            className="flex-1 bg-secondary"
+            disabled={sending || ticket.status === 'closed'}
+          />
+          <Button 
+            type="submit" 
+            disabled={sending || !newMessage.trim() || ticket.status === 'closed'}
+            className="btn-primary"
+          >
+            {sending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+          </Button>
+        </form>
+        {ticket.status === 'closed' && (
+          <p className="text-xs text-muted-foreground text-center">This ticket is closed and cannot receive new messages.</p>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default TicketDetailModal;
