@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      card_checks: {
+        Row: {
+          created_at: string
+          gateway: string
+          id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          gateway: string
+          id?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          gateway?: string
+          id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           balance: number
@@ -38,6 +62,27 @@ export type Database = {
           updated_at?: string
           user_id?: string
           username?: string | null
+        }
+        Relationships: []
+      }
+      site_stats: {
+        Row: {
+          id: string
+          total_checks: number
+          total_users: number
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          total_checks?: number
+          total_users?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          total_checks?: number
+          total_users?: number
+          updated_at?: string
         }
         Relationships: []
       }
