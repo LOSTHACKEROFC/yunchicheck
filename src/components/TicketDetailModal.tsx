@@ -38,6 +38,44 @@ interface TicketDetailModalProps {
   onTicketUpdate?: (updatedTicket: Ticket) => void;
 }
 
+// Request notification permission
+const requestNotificationPermission = async () => {
+  if (!("Notification" in window)) {
+    console.log("This browser does not support notifications");
+    return false;
+  }
+  
+  if (Notification.permission === "granted") {
+    return true;
+  }
+  
+  if (Notification.permission !== "denied") {
+    const permission = await Notification.requestPermission();
+    return permission === "granted";
+  }
+  
+  return false;
+};
+
+// Show browser notification
+const showBrowserNotification = (title: string, body: string) => {
+  if (Notification.permission === "granted" && document.hidden) {
+    const notification = new Notification(title, {
+      body,
+      icon: "/favicon.ico",
+      tag: "ticket-message", // Prevents duplicate notifications
+    });
+    
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+    
+    // Auto-close after 5 seconds
+    setTimeout(() => notification.close(), 5000);
+  }
+};
+
 // Play notification sound using Web Audio API
 const playNotificationSound = () => {
   try {
@@ -69,6 +107,13 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId, onTicketUpdate }: 
   const [currentTicket, setCurrentTicket] = useState<Ticket | null>(ticket);
   const scrollRef = useRef<HTMLDivElement>(null);
   const isInitialLoadRef = useRef(true);
+
+  // Request notification permission when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      requestNotificationPermission();
+    }
+  }, [isOpen]);
 
   // Sync currentTicket with prop
   useEffect(() => {
@@ -120,9 +165,13 @@ const TicketDetailModal = ({ ticket, isOpen, onClose, userId, onTicketUpdate }: 
           const newMsg = payload.new as Message;
           setMessages(prev => [...prev, newMsg]);
           
-          // Play sound for admin messages only (not user's own messages)
+          // Notify for admin messages only (not user's own messages)
           if (newMsg.is_admin && !isInitialLoadRef.current) {
             playNotificationSound();
+            showBrowserNotification(
+              "New Support Reply",
+              newMsg.message.substring(0, 100) + (newMsg.message.length > 100 ? "..." : "")
+            );
           }
         }
       )
