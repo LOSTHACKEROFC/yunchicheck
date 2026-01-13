@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Settings, Volume2, VolumeX, UserX } from "lucide-react";
+import { Settings, Volume2, VolumeX, UserX, Sun, Moon, Monitor, Bell, MessageSquare, DollarSign, Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -22,20 +22,50 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toast } from "sonner";
+import { useTheme } from "next-themes";
+
+interface NotificationPreferences {
+  ticket_reply: boolean;
+  balance_update: boolean;
+  system: boolean;
+  topup: boolean;
+}
 
 interface SettingsDropdownProps {
   soundEnabled: boolean;
   onSoundToggle: (enabled: boolean) => void;
 }
 
+const defaultNotificationPrefs: NotificationPreferences = {
+  ticket_reply: true,
+  balance_update: true,
+  system: true,
+  topup: true,
+};
+
 const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps) => {
   const navigate = useNavigate();
+  const { theme, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const [confirmStep, setConfirmStep] = useState(0);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferences>(() => {
+    const saved = localStorage.getItem("notification-preferences");
+    return saved ? JSON.parse(saved) : defaultNotificationPrefs;
+  });
+
+  // Save notification preferences to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem("notification-preferences", JSON.stringify(notificationPrefs));
+  }, [notificationPrefs]);
 
   const resetDeactivation = () => {
     setConfirmStep(0);
@@ -53,6 +83,11 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
 
   const handleSecondConfirm = () => {
     setConfirmStep(3);
+  };
+
+  const handleNotificationPrefChange = (key: keyof NotificationPreferences, value: boolean) => {
+    setNotificationPrefs(prev => ({ ...prev, [key]: value }));
+    toast.success(`${key.replace("_", " ")} notifications ${value ? "enabled" : "disabled"}`);
   };
 
   const handleFinalDeactivation = async () => {
@@ -108,6 +143,12 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
     }
   };
 
+  const themeOptions = [
+    { value: "light", icon: Sun, label: "Light" },
+    { value: "dark", icon: Moon, label: "Dark" },
+    { value: "system", icon: Monitor, label: "System" },
+  ];
+
   return (
     <>
       <Popover open={open} onOpenChange={(isOpen) => {
@@ -120,7 +161,7 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
           </button>
         </PopoverTrigger>
         <PopoverContent 
-          className="w-64 p-0 bg-card border border-border shadow-lg" 
+          className="w-72 p-0 bg-card border border-border shadow-lg" 
           align="end"
           sideOffset={8}
         >
@@ -128,30 +169,126 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
             <h4 className="font-semibold text-sm">Settings</h4>
           </div>
 
-          <div className="p-3 space-y-4">
-            {/* Sound Settings */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {soundEnabled ? (
-                  <Volume2 className="h-4 w-4 text-primary" />
-                ) : (
-                  <VolumeX className="h-4 w-4 text-muted-foreground" />
-                )}
-                <Label htmlFor="sound-toggle" className="text-sm cursor-pointer">
-                  Notification Sound
-                </Label>
+          <div className="p-3 space-y-4 max-h-[70vh] overflow-y-auto">
+            {/* Theme Settings */}
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Theme
+              </Label>
+              <div className="flex gap-1">
+                {themeOptions.map((option) => {
+                  const Icon = option.icon;
+                  const isActive = theme === option.value;
+                  return (
+                    <Tooltip key={option.value}>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => {
+                            setTheme(option.value);
+                            toast.success(`Theme set to ${option.label}`);
+                          }}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-md text-sm transition-colors ${
+                            isActive
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-secondary hover:bg-secondary/80 text-foreground"
+                          }`}
+                        >
+                          <Icon className="h-4 w-4" />
+                          <span className="text-xs">{option.label}</span>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>{option.label} mode</TooltipContent>
+                    </Tooltip>
+                  );
+                })}
               </div>
-              <Switch
-                id="sound-toggle"
-                checked={soundEnabled}
-                onCheckedChange={onSoundToggle}
-              />
+            </div>
+
+            <Separator />
+
+            {/* Sound Settings */}
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Sound
+              </Label>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {soundEnabled ? (
+                    <Volume2 className="h-4 w-4 text-primary" />
+                  ) : (
+                    <VolumeX className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  <span className="text-sm">Notification Sound</span>
+                </div>
+                <Switch
+                  checked={soundEnabled}
+                  onCheckedChange={onSoundToggle}
+                />
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Notification Preferences */}
+            <div className="space-y-3">
+              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Notification Types
+              </Label>
+              
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4 text-blue-500" />
+                    <span className="text-sm">Ticket Replies</span>
+                  </div>
+                  <Switch
+                    checked={notificationPrefs.ticket_reply}
+                    onCheckedChange={(v) => handleNotificationPrefChange("ticket_reply", v)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-green-500" />
+                    <span className="text-sm">Balance Updates</span>
+                  </div>
+                  <Switch
+                    checked={notificationPrefs.balance_update}
+                    onCheckedChange={(v) => handleNotificationPrefChange("balance_update", v)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Megaphone className="h-4 w-4 text-amber-500" />
+                    <span className="text-sm">System Announcements</span>
+                  </div>
+                  <Switch
+                    checked={notificationPrefs.system}
+                    onCheckedChange={(v) => handleNotificationPrefChange("system", v)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bell className="h-4 w-4 text-purple-500" />
+                    <span className="text-sm">Topup Alerts</span>
+                  </div>
+                  <Switch
+                    checked={notificationPrefs.topup}
+                    onCheckedChange={(v) => handleNotificationPrefChange("topup", v)}
+                  />
+                </div>
+              </div>
             </div>
 
             <Separator />
 
             {/* Deactivate Account */}
             <div className="space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Danger Zone
+              </Label>
               <Button
                 variant="destructive"
                 size="sm"
@@ -162,7 +299,7 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
                 Deactivate Account
               </Button>
               <p className="text-xs text-muted-foreground text-center">
-                This will permanently delete your account and all data.
+                Permanently delete your account and all data.
               </p>
             </div>
           </div>

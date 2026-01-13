@@ -49,6 +49,15 @@ const DashboardHeader = () => {
     const saved = localStorage.getItem("notification-sound-enabled");
     return saved !== null ? saved === "true" : true;
   });
+  const [notificationPrefs, setNotificationPrefs] = useState(() => {
+    const saved = localStorage.getItem("notification-preferences");
+    return saved ? JSON.parse(saved) : {
+      ticket_reply: true,
+      balance_update: true,
+      system: true,
+      topup: true,
+    };
+  });
   const { playNotificationSound } = useNotificationSound();
   const [open, setOpen] = useState(false);
 
@@ -59,6 +68,19 @@ const DashboardHeader = () => {
     localStorage.setItem("notification-sound-enabled", String(enabled));
     toast.success(enabled ? "Notification sound enabled" : "Notification sound disabled");
   };
+
+  // Sync notification preferences from localStorage
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const saved = localStorage.getItem("notification-preferences");
+      if (saved) {
+        setNotificationPrefs(JSON.parse(saved));
+      }
+    };
+    
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
 
   const fetchNotifications = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -110,10 +132,18 @@ const DashboardHeader = () => {
         },
         async (payload) => {
           const newNotif = payload.new as Notification;
+          
+          // Check if this notification type is enabled
+          const prefs = JSON.parse(localStorage.getItem("notification-preferences") || "{}");
+          const isEnabled = prefs[newNotif.type] !== false;
+          
+          if (!isEnabled) return;
+          
           setNotifications(prev => [newNotif, ...prev]);
           
           // Play notification sound if enabled
-          if (soundEnabled) {
+          const soundPref = localStorage.getItem("notification-sound-enabled");
+          if (soundPref !== "false") {
             playNotificationSound();
           }
           
