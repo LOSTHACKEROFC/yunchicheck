@@ -85,12 +85,14 @@ async function setBotCommands(): Promise<void> {
   const publicCommands = [
     { command: "start", description: "Start the bot and get your Chat ID" },
     { command: "help", description: "View bot features and how to connect" },
+    { command: "mystatus", description: "Check your account connection status" },
   ];
 
   // Admin commands (only visible to admin)
   const adminCommands = [
     { command: "start", description: "Start the bot" },
     { command: "help", description: "View bot features" },
+    { command: "mystatus", description: "Check account status" },
     { command: "admincmd", description: "View admin command panel" },
     { command: "ticket", description: "View/manage a support ticket" },
     { command: "banuser", description: "Ban a user" },
@@ -1455,6 +1457,7 @@ Get notified about account status changes
 
 /start - Get your Chat ID
 /help - View this help message
+/mystatus - Check your account status
 ${isAdminUser ? "/admincmd - Admin commands" : ""}
 
 ━━━━━━━━━━━━━━━━━━━━━━
@@ -1463,6 +1466,110 @@ ${isAdminUser ? "/admincmd - Admin commands" : ""}
 `;
 
       await sendTelegramMessage(chatId, helpMessage);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Handle /mystatus command
+    if (update.message?.text === "/mystatus") {
+      const chatId = update.message.chat.id.toString();
+
+      // Check if user is connected
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("user_id, username, name, balance, is_banned, ban_reason, banned_until, created_at, telegram_username")
+        .eq("telegram_chat_id", chatId)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error fetching profile:", error);
+        await sendTelegramMessage(chatId, "❌ Error checking your status. Please try again.");
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      if (!profile) {
+        const notConnectedMessage = `
+❌ <b>Account Not Connected</b>
+
+Your Telegram is not linked to any Yunchi account.
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>🔗 HOW TO CONNECT</b>
+
+1️⃣ Copy your Chat ID:
+   <code>${chatId}</code>
+
+2️⃣ Go to the Yunchi website
+
+3️⃣ Sign up with your Chat ID
+
+4️⃣ Verify when prompted
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<i>Use /help for more information.</i>
+`;
+        await sendTelegramMessage(chatId, notConnectedMessage);
+      } else {
+        // Format account status
+        let accountStatus = "✅ Active";
+        let banInfo = "";
+        
+        if (profile.is_banned) {
+          if (profile.banned_until) {
+            const expiryDate = new Date(profile.banned_until);
+            const now = new Date();
+            if (expiryDate > now) {
+              const diffMs = expiryDate.getTime() - now.getTime();
+              const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+              const diffDays = Math.floor(diffHours / 24);
+              accountStatus = diffDays > 0 
+                ? `🚫 Banned (${diffDays}d ${diffHours % 24}h left)`
+                : `🚫 Banned (${diffHours}h left)`;
+            }
+          } else {
+            accountStatus = "🚫 Permanently Banned";
+          }
+          banInfo = `\n<b>Ban Reason:</b> ${profile.ban_reason || "Not specified"}`;
+        }
+
+        const memberSince = new Date(profile.created_at).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+
+        const connectedMessage = `
+✅ <b>Account Connected</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>👤 PROFILE INFO</b>
+
+<b>Username:</b> ${profile.username || "Not set"}
+<b>Name:</b> ${profile.name || "Not set"}
+<b>Telegram:</b> @${profile.telegram_username || "Not linked"}
+<b>Balance:</b> $${Number(profile.balance).toFixed(2)}
+<b>Status:</b> ${accountStatus}${banInfo}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>📅 ACCOUNT</b>
+
+<b>Member Since:</b> ${memberSince}
+<b>Chat ID:</b> <code>${chatId}</code>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<i>Manage your profile at yunchi.app/dashboard</i>
+`;
+        await sendTelegramMessage(chatId, connectedMessage);
+      }
+
       return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
