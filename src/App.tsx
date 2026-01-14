@@ -15,6 +15,7 @@ import Balance from "./pages/dashboard/Balance";
 import Gateways from "./pages/dashboard/Gateways";
 import Topup from "./pages/dashboard/Topup";
 import Support from "./pages/dashboard/Support";
+import AdminTopups from "./pages/dashboard/AdminTopups";
 import BannedAccount from "./pages/BannedAccount";
 import VerifyDeactivation from "./pages/VerifyDeactivation";
 import NotFound from "./pages/NotFound";
@@ -42,6 +43,7 @@ const App = () => (
               <Route path="gateways" element={<Gateways />} />
               <Route path="topup" element={<Topup />} />
               <Route path="support" element={<Support />} />
+              <Route path="admin/topups" element={<AdminTopups />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
