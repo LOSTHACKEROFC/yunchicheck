@@ -7,11 +7,20 @@ import DashboardHeader from "@/components/DashboardHeader";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Outlet } from "react-router-dom";
 import { useSessionTracker } from "@/hooks/useSessionTracker";
-import { toast } from "sonner";
+import { Ban, MessageCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const Dashboard = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showBannedDialog, setShowBannedDialog] = useState(false);
   const navigate = useNavigate();
   
   // Track user session for security
@@ -27,8 +36,7 @@ const Dashboard = () => {
     
     if (profile?.is_banned) {
       await supabase.auth.signOut();
-      toast.error("Your account has been banned. Please contact support.");
-      navigate("/auth");
+      setShowBannedDialog(true);
       return true;
     }
     return false;
@@ -85,6 +93,47 @@ const Dashboard = () => {
           </main>
         </div>
       </div>
+
+      {/* Banned User Dialog */}
+      <Dialog open={showBannedDialog} onOpenChange={setShowBannedDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader className="text-center">
+            <div className="mx-auto w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
+              <Ban className="h-8 w-8 text-red-500" />
+            </div>
+            <DialogTitle className="text-xl text-center">Account Banned</DialogTitle>
+            <DialogDescription className="text-center space-y-2">
+              <p className="text-base">
+                Your account has been banned by Support.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                You need to contact support to unban your account.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 mt-4">
+            <Button
+              className="w-full"
+              onClick={() => {
+                window.open("https://t.me/8496943061", "_blank");
+              }}
+            >
+              <MessageCircle className="mr-2 h-4 w-4" />
+              Contact Support
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setShowBannedDialog(false);
+                navigate("/auth");
+              }}
+            >
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </SidebarProvider>
   );
 };
