@@ -84,11 +84,13 @@ async function setBotCommands(): Promise<void> {
   // Public commands (visible to all users)
   const publicCommands = [
     { command: "start", description: "Start the bot and get your Chat ID" },
+    { command: "help", description: "View bot features and how to connect" },
   ];
 
   // Admin commands (only visible to admin)
   const adminCommands = [
     { command: "start", description: "Start the bot" },
+    { command: "help", description: "View bot features" },
     { command: "admincmd", description: "View admin command panel" },
     { command: "ticket", description: "View/manage a support ticket" },
     { command: "banuser", description: "Ban a user" },
@@ -1400,6 +1402,67 @@ const handler = async (req: Request): Promise<Response> => {
       }
       
       await sendTelegramMessage(chatId, welcomeMessage);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Handle /help command
+    if (update.message?.text === "/help") {
+      const chatId = update.message.chat.id.toString();
+      const isAdminUser = isAdmin(chatId);
+
+      const helpMessage = `
+📚 <b>Yunchi Bot Help</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>🔗 HOW TO CONNECT YOUR ACCOUNT</b>
+
+1️⃣ Copy your Chat ID:
+   <code>${chatId}</code>
+
+2️⃣ Go to the Yunchi website and sign up
+
+3️⃣ Paste your Chat ID in the registration form
+
+4️⃣ Click the verification button sent here
+
+5️⃣ Complete your registration ✅
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>✨ BOT FEATURES</b>
+
+🔐 <b>Account Verification</b>
+Verify your identity during registration
+
+🎫 <b>Ticket Notifications</b>
+Receive support ticket updates instantly
+
+💬 <b>Direct Replies</b>
+Get notified when support responds
+
+📢 <b>Announcements</b>
+Stay updated with platform news
+
+🔔 <b>Ban Notifications</b>
+Get notified about account status changes
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>📋 COMMANDS</b>
+
+/start - Get your Chat ID
+/help - View this help message
+${isAdminUser ? "/admincmd - Admin commands" : ""}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<i>Need help? Contact support through the website.</i>
+`;
+
+      await sendTelegramMessage(chatId, helpMessage);
       return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
