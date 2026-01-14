@@ -356,6 +356,42 @@ export type Database = {
         }
         Relationships: []
       }
+      spending_alert_settings: {
+        Row: {
+          created_at: string
+          daily_threshold: number | null
+          enabled: boolean | null
+          id: string
+          last_daily_alert: string | null
+          last_weekly_alert: string | null
+          updated_at: string
+          user_id: string
+          weekly_threshold: number | null
+        }
+        Insert: {
+          created_at?: string
+          daily_threshold?: number | null
+          enabled?: boolean | null
+          id?: string
+          last_daily_alert?: string | null
+          last_weekly_alert?: string | null
+          updated_at?: string
+          user_id: string
+          weekly_threshold?: number | null
+        }
+        Update: {
+          created_at?: string
+          daily_threshold?: number | null
+          enabled?: boolean | null
+          id?: string
+          last_daily_alert?: string | null
+          last_weekly_alert?: string | null
+          updated_at?: string
+          user_id?: string
+          weekly_threshold?: number | null
+        }
+        Relationships: []
+      }
       support_tickets: {
         Row: {
           created_at: string

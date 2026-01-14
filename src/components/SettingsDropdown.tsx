@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Settings, Volume2, VolumeX, UserX, Sun, Moon, Monitor, Bell, MessageSquare, DollarSign, Megaphone, Globe, Radio } from "lucide-react";
+import { Settings, Volume2, VolumeX, UserX, Sun, Moon, Monitor, Bell, MessageSquare, DollarSign, Megaphone, Globe, Radio, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -42,6 +42,7 @@ interface NotificationPreferences {
   system: boolean;
   topup: boolean;
   announcement: boolean;
+  spending_alert: boolean;
 }
 
 interface SettingsDropdownProps {
@@ -55,6 +56,7 @@ const defaultNotificationPrefs: NotificationPreferences = {
   system: true,
   topup: true,
   announcement: true,
+  spending_alert: true,
 };
 
 const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps) => {
@@ -260,6 +262,17 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
                   <Switch
                     checked={notificationPrefs.announcement}
                     onCheckedChange={(v) => handleNotificationPrefChange("announcement", v)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-red-500" />
+                    <span className="text-sm">Spending Alerts</span>
+                  </div>
+                  <Switch
+                    checked={notificationPrefs.spending_alert}
+                    onCheckedChange={(v) => handleNotificationPrefChange("spending_alert", v)}
                   />
                 </div>
               </div>
