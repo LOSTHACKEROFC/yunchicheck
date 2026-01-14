@@ -7,11 +7,18 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { MessageCircle } from "lucide-react";
 
-const authSchema = z.object({
+const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
-  username: z.string().min(3, "Username must be at least 3 characters").optional(),
+});
+
+const signupSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  telegramChatId: z.string().min(1, "Telegram Chat ID is required"),
 });
 
 const Auth = () => {
@@ -20,6 +27,7 @@ const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
+  const [telegramChatId, setTelegramChatId] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -46,13 +54,9 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      const validationData = isLogin 
-        ? { email, password }
-        : { email, password, username };
-      
-      authSchema.parse(validationData);
-
       if (isLogin) {
+        loginSchema.parse({ email, password });
+        
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -60,7 +64,9 @@ const Auth = () => {
         if (error) throw error;
         toast.success(t.loginSuccessful);
       } else {
-        const { error } = await supabase.auth.signUp({
+        signupSchema.parse({ email, password, username, telegramChatId });
+        
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -69,13 +75,28 @@ const Auth = () => {
           },
         });
         if (error) throw error;
+        
+        // Update the profile with telegram_chat_id after signup
+        if (data.user) {
+          const { error: profileError } = await supabase
+            .from("profiles")
+            .update({ telegram_chat_id: telegramChatId })
+            .eq("user_id", data.user.id);
+          
+          if (profileError) {
+            console.error("Error updating profile with Telegram Chat ID:", profileError);
+          }
+        }
+        
         toast.success(t.registrationSuccessful);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof z.ZodError) {
         toast.error(error.errors[0].message);
-      } else {
+      } else if (error instanceof Error) {
         toast.error(error.message || "An error occurred");
+      } else {
+        toast.error("An error occurred");
       }
     } finally {
       setLoading(false);
@@ -106,7 +127,29 @@ const Auth = () => {
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder={t.enterUsername}
                   className="bg-secondary border-border"
+                  required
                 />
+              </div>
+            )}
+
+            {!isLogin && (
+              <div className="space-y-2">
+                <Label htmlFor="telegramChatId" className="flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4" />
+                  {t.telegramChatId} *
+                </Label>
+                <Input
+                  id="telegramChatId"
+                  type="text"
+                  value={telegramChatId}
+                  onChange={(e) => setTelegramChatId(e.target.value)}
+                  placeholder={t.enterTelegramChatId}
+                  className="bg-secondary border-border"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t.telegramChatIdRequired}
+                </p>
               </div>
             )}
 
