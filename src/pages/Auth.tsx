@@ -54,6 +54,10 @@ const Auth = () => {
   const [emailError, setEmailError] = useState<string>("");
   const emailCheckTimeout = useRef<NodeJS.Timeout | null>(null);
 
+  // Password strength state
+  const [passwordStrength, setPasswordStrength] = useState<"weak" | "medium" | "strong" | null>(null);
+  const [passwordFeedback, setPasswordFeedback] = useState<string[]>([]);
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -319,6 +323,63 @@ const Auth = () => {
         return <AlertCircle className="h-4 w-4 text-yellow-500" />;
       default:
         return null;
+    }
+  };
+
+  // Password strength calculation
+  const calculatePasswordStrength = (pwd: string): { strength: "weak" | "medium" | "strong"; feedback: string[] } => {
+    const feedback: string[] = [];
+    let score = 0;
+
+    if (pwd.length >= 8) {
+      score += 1;
+    } else {
+      feedback.push("Use at least 8 characters");
+    }
+
+    if (pwd.length >= 12) {
+      score += 1;
+    }
+
+    if (/[a-z]/.test(pwd) && /[A-Z]/.test(pwd)) {
+      score += 1;
+    } else {
+      feedback.push("Mix uppercase and lowercase letters");
+    }
+
+    if (/\d/.test(pwd)) {
+      score += 1;
+    } else {
+      feedback.push("Add at least one number");
+    }
+
+    if (/[!@#$%^&*(),.?":{}|<>]/.test(pwd)) {
+      score += 1;
+    } else {
+      feedback.push("Add a special character (!@#$%^&*)");
+    }
+
+    let strength: "weak" | "medium" | "strong";
+    if (score <= 2) {
+      strength = "weak";
+    } else if (score <= 4) {
+      strength = "medium";
+    } else {
+      strength = "strong";
+    }
+
+    return { strength, feedback };
+  };
+
+  const handlePasswordChange = (value: string) => {
+    setPassword(value);
+    if (value) {
+      const { strength, feedback } = calculatePasswordStrength(value);
+      setPasswordStrength(strength);
+      setPasswordFeedback(feedback);
+    } else {
+      setPasswordStrength(null);
+      setPasswordFeedback([]);
     }
   };
 
@@ -683,11 +744,47 @@ const Auth = () => {
               id="password"
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => handlePasswordChange(e.target.value)}
               placeholder={t.enterPassword}
               className="bg-secondary border-border"
               required
             />
+            {password && (
+              <div className="space-y-2">
+                <div className="flex gap-1">
+                  <div className={`h-1.5 flex-1 rounded-full transition-colors ${
+                    passwordStrength === "weak" ? "bg-red-500" : 
+                    passwordStrength === "medium" ? "bg-yellow-500" : 
+                    passwordStrength === "strong" ? "bg-green-500" : "bg-muted"
+                  }`} />
+                  <div className={`h-1.5 flex-1 rounded-full transition-colors ${
+                    passwordStrength === "medium" ? "bg-yellow-500" : 
+                    passwordStrength === "strong" ? "bg-green-500" : "bg-muted"
+                  }`} />
+                  <div className={`h-1.5 flex-1 rounded-full transition-colors ${
+                    passwordStrength === "strong" ? "bg-green-500" : "bg-muted"
+                  }`} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm font-medium ${
+                    passwordStrength === "weak" ? "text-red-500" : 
+                    passwordStrength === "medium" ? "text-yellow-500" : 
+                    passwordStrength === "strong" ? "text-green-500" : ""
+                  }`}>
+                    {passwordStrength === "weak" && "Weak"}
+                    {passwordStrength === "medium" && "Medium"}
+                    {passwordStrength === "strong" && "Strong"}
+                  </span>
+                </div>
+                {passwordFeedback.length > 0 && passwordStrength !== "strong" && (
+                  <ul className="text-xs text-muted-foreground space-y-0.5">
+                    {passwordFeedback.map((tip, i) => (
+                      <li key={i}>• {tip}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
 
           <Button
