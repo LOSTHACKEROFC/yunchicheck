@@ -41,13 +41,14 @@ export const useSessionTracker = () => {
 
     const trackSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
-        if (!isMounted || !session?.access_token) return;
+        // Only track if we have a valid session with access token
+        if (!isMounted || sessionError || !session?.access_token || !session?.user) return;
         
         const { browser, os, device_info } = getBrowserInfo();
         
-        await supabase.functions.invoke("track-session", {
+        const { error } = await supabase.functions.invoke("track-session", {
           body: {
             browser,
             os,
@@ -55,7 +56,11 @@ export const useSessionTracker = () => {
             session_token: session.access_token.slice(-32),
           },
         });
-        // Session tracking is non-critical, errors are silently ignored
+        
+        // Log only if there's an unexpected error (not auth-related)
+        if (error && !error.message?.includes("401") && !error.message?.includes("Invalid token")) {
+          console.warn("Session tracking error:", error.message);
+        }
       } catch {
         // Silently ignore all errors - session tracking should never block the app
       }
