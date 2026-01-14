@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { MessageCircle, CheckCircle, Clock, ExternalLink, Loader2 } from "lucide-react";
+import { MessageCircle, CheckCircle, Clock, ExternalLink, Loader2, XCircle, AlertCircle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
 const loginSchema = z.object({
@@ -18,7 +18,7 @@ const loginSchema = z.object({
 const signupSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
-  username: z.string().min(3, "Username must be at least 3 characters"),
+  username: z.string().min(3, "Username must be at least 3 characters").max(30, "Username must be at most 30 characters").regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores"),
   telegramChatId: z.string().min(1, "Telegram Chat ID is required"),
 });
 
@@ -43,6 +43,11 @@ const Auth = () => {
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [isVerified, setIsVerified] = useState(false);
   const [checkingVerification, setCheckingVerification] = useState(false);
+
+  // Username availability state
+  const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
+  const [usernameError, setUsernameError] = useState<string>("");
+  const usernameCheckTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -151,6 +156,88 @@ const Auth = () => {
     return () => clearInterval(interval);
   }, [registrationStep, isVerified, checkVerificationStatus]);
 
+  // Real-time username availability check
+  const checkUsernameAvailability = useCallback(async (usernameToCheck: string) => {
+    // Validate format first
+    const usernameRegex = /^[a-zA-Z0-9_]+$/;
+    if (!usernameRegex.test(usernameToCheck)) {
+      setUsernameStatus("invalid");
+      setUsernameError("Only letters, numbers, and underscores allowed");
+      return;
+    }
+
+    if (usernameToCheck.length < 3) {
+      setUsernameStatus("invalid");
+      setUsernameError("Username must be at least 3 characters");
+      return;
+    }
+
+    if (usernameToCheck.length > 30) {
+      setUsernameStatus("invalid");
+      setUsernameError("Username must be at most 30 characters");
+      return;
+    }
+
+    setUsernameStatus("checking");
+    setUsernameError("");
+
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("username", usernameToCheck.toLowerCase())
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error checking username:", error);
+        setUsernameStatus("idle");
+        return;
+      }
+
+      if (data) {
+        setUsernameStatus("taken");
+        setUsernameError("This username is already taken");
+      } else {
+        setUsernameStatus("available");
+        setUsernameError("");
+      }
+    } catch (error) {
+      console.error("Error checking username:", error);
+      setUsernameStatus("idle");
+    }
+  }, []);
+
+  // Debounced username check
+  const handleUsernameChange = (value: string) => {
+    setUsername(value);
+    
+    // Clear previous timeout
+    if (usernameCheckTimeout.current) {
+      clearTimeout(usernameCheckTimeout.current);
+    }
+
+    // Reset status if empty
+    if (!value.trim()) {
+      setUsernameStatus("idle");
+      setUsernameError("");
+      return;
+    }
+
+    // Debounce the check
+    usernameCheckTimeout.current = setTimeout(() => {
+      checkUsernameAvailability(value.trim());
+    }, 500);
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (usernameCheckTimeout.current) {
+        clearTimeout(usernameCheckTimeout.current);
+      }
+    };
+  }, []);
+
   const handleSendVerification = async () => {
     if (!telegramChatId.trim()) {
       toast.error("Please enter your Telegram Chat ID");
@@ -211,12 +298,19 @@ const Auth = () => {
           return;
         }
 
+        // Check username availability one more time before signup
+        if (usernameStatus !== "available") {
+          toast.error("Please choose a valid and available username");
+          setLoading(false);
+          return;
+        }
+
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: `${window.location.origin}/dashboard`,
-            data: { username },
+            data: { username: username.toLowerCase() },
           },
         });
         if (error) throw error;
@@ -268,6 +362,23 @@ const Auth = () => {
     setVerificationExpiry(null);
     setIsVerified(false);
     setTimeRemaining(0);
+    setUsernameStatus("idle");
+    setUsernameError("");
+  };
+
+  const getUsernameStatusIcon = () => {
+    switch (usernameStatus) {
+      case "checking":
+        return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
+      case "available":
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case "taken":
+        return <XCircle className="h-4 w-4 text-red-500" />;
+      case "invalid":
+        return <AlertCircle className="h-4 w-4 text-yellow-500" />;
+      default:
+        return null;
+    }
   };
 
   const handleToggleMode = () => {
@@ -415,15 +526,32 @@ const Auth = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="username">{t.username}</Label>
-            <Input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder={t.enterUsername}
-              className="bg-secondary border-border"
-              required
-            />
+            <div className="relative">
+              <Input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => handleUsernameChange(e.target.value)}
+                placeholder={t.enterUsername}
+                className={`bg-secondary border-border pr-10 ${
+                  usernameStatus === "taken" || usernameStatus === "invalid"
+                    ? "border-red-500 focus-visible:ring-red-500"
+                    : usernameStatus === "available"
+                    ? "border-green-500 focus-visible:ring-green-500"
+                    : ""
+                }`}
+                required
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                {getUsernameStatusIcon()}
+              </div>
+            </div>
+            {usernameError && (
+              <p className="text-sm text-red-500">{usernameError}</p>
+            )}
+            {usernameStatus === "available" && (
+              <p className="text-sm text-green-500">Username is available!</p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -455,7 +583,7 @@ const Auth = () => {
           <Button
             type="submit"
             className="w-full btn-primary"
-            disabled={loading}
+            disabled={loading || usernameStatus !== "available"}
           >
             {loading ? (
               <>
