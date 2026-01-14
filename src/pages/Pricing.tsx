@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import FloatingCardsBackground from "@/components/FloatingCardsBackground";
+import VolumeDiscountCalculator from "@/components/VolumeDiscountCalculator";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -223,6 +224,11 @@ const Pricing = () => {
               </CardContent>
             </Card>
           ))}
+        </div>
+
+        {/* Volume Discount Calculator */}
+        <div className="mt-12 sm:mt-16">
+          <VolumeDiscountCalculator />
         </div>
 
         {/* FAQ / Note */}
