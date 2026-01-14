@@ -8,6 +8,7 @@ import {
   Zap, 
   Crown, 
   Rocket, 
+  Layers,
   ArrowLeft,
   CreditCard
 } from "lucide-react";
@@ -88,6 +89,24 @@ const Pricing = () => {
         { text: t.priorityQueue || "Priority Queue", included: true },
       ],
     },
+    {
+      name: "Bulk",
+      credits: "2500",
+      price: "$180",
+      pricePerCredit: "$0.072",
+      description: "For high-volume users",
+      icon: Layers,
+      popular: false,
+      checksCount: "500",
+      savings: "28%",
+      features: [
+        { text: "2500 Credits", included: true },
+        { text: "500 Card Checks", included: true },
+        { text: t.allGateways || "All Gateways", included: true },
+        { text: t.vipSupport || "VIP Support", included: true },
+        { text: t.priorityQueue || "Priority Queue", included: true },
+      ],
+    },
   ];
 
   return (
@@ -136,7 +155,7 @@ const Pricing = () => {
         </div>
 
         {/* Plans Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 max-w-5xl mx-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 max-w-6xl mx-auto">
           {plans.map((plan, planIndex) => (
             <Card
               key={plan.name}
