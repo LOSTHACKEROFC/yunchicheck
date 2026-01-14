@@ -36,9 +36,10 @@ serve(async (req) => {
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
-    // Check if email exists in auth.users
+    // List users and filter by email - using pagination to handle large user bases
     const { data, error } = await supabaseAdmin.auth.admin.listUsers({
-      perPage: 1,
+      page: 1,
+      perPage: 1000,
     });
 
     if (error) {
@@ -46,18 +47,11 @@ serve(async (req) => {
       throw error;
     }
 
-    // Use getUserByEmail for more precise check
-    const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(email);
-    
-    // getUserById won't work with email, so we need a different approach
-    // Let's search through users or use a different method
-    
-    // Actually, the best approach is to try to get user by email
-    const { data: users } = await supabaseAdmin.auth.admin.listUsers();
-    
-    const emailExists = users?.users?.some(
+    const emailExists = data?.users?.some(
       (user) => user.email?.toLowerCase() === email.toLowerCase()
     );
+
+    console.log(`Email check for ${email}: ${emailExists ? "taken" : "available"}`);
 
     return new Response(
       JSON.stringify({ available: !emailExists }),
