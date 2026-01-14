@@ -37,7 +37,9 @@ import {
   DollarSign,
   Users,
   Image as ImageIcon,
-  ExternalLink
+  ExternalLink,
+  ZoomIn,
+  X
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -71,6 +73,7 @@ const AdminTopups = () => {
   const [selectedTx, setSelectedTx] = useState<TopupTransaction | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [stats, setStats] = useState({ pending: 0, completed: 0, total: 0 });
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
   // Check admin status
   useEffect(() => {
@@ -407,22 +410,37 @@ const AdminTopups = () => {
                       <ImageIcon className="h-4 w-4" />
                       Payment Proof
                     </p>
-                    <a
-                      href={selectedTx.proof_image_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary hover:underline flex items-center gap-1"
-                    >
-                      Open Full Size
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setLightboxImage(selectedTx.proof_image_url)}
+                        className="text-xs text-primary hover:underline flex items-center gap-1"
+                      >
+                        <ZoomIn className="h-3 w-3" />
+                        Zoom
+                      </button>
+                      <a
+                        href={selectedTx.proof_image_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline flex items-center gap-1"
+                      >
+                        Open Full Size
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
                   </div>
-                  <div className="relative rounded-lg overflow-hidden border border-border bg-secondary">
+                  <div 
+                    className="relative rounded-lg overflow-hidden border border-border bg-secondary cursor-zoom-in group"
+                    onClick={() => setLightboxImage(selectedTx.proof_image_url)}
+                  >
                     <img
                       src={selectedTx.proof_image_url}
                       alt="Payment proof"
-                      className="w-full max-h-64 object-contain"
+                      className="w-full max-h-64 object-contain transition-transform group-hover:scale-105"
                     />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                      <ZoomIn className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
                   </div>
                 </div>
               )}
@@ -475,6 +493,27 @@ const AdminTopups = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Lightbox Modal */}
+      {lightboxImage && (
+        <div 
+          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setLightboxImage(null)}
+        >
+          <button
+            onClick={() => setLightboxImage(null)}
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+          >
+            <X className="h-6 w-6 text-white" />
+          </button>
+          <img
+            src={lightboxImage}
+            alt="Payment proof full size"
+            className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 };
