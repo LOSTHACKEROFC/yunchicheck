@@ -7,15 +7,8 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { MessageCircle, CheckCircle, Clock, ExternalLink, Loader2, XCircle, AlertCircle, ArrowLeft, Mail, Ban, ShieldAlert } from "lucide-react";
+import { MessageCircle, CheckCircle, Clock, ExternalLink, Loader2, XCircle, AlertCircle, ArrowLeft, Mail } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -80,10 +73,6 @@ const Auth = () => {
   const [telegramIdStatus, setTelegramIdStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
   const [telegramIdError, setTelegramIdError] = useState<string>("");
   const telegramIdCheckTimeout = useRef<NodeJS.Timeout | null>(null);
-
-  // Banned user dialog state
-  const [showBannedDialog, setShowBannedDialog] = useState(false);
-  const [banReason, setBanReason] = useState<string | null>(null);
 
   // Telegram profile state
   const [telegramProfile, setTelegramProfile] = useState<{
@@ -773,8 +762,10 @@ const Auth = () => {
           if (profile?.is_banned) {
             // Sign out the banned user immediately
             await supabase.auth.signOut();
-            setBanReason(profile.ban_reason);
-            setShowBannedDialog(true);
+            // Store ban info and redirect to banned page
+            localStorage.setItem("banReason", profile.ban_reason || "");
+            localStorage.setItem("bannedEmail", email);
+            navigate(`/banned?reason=${encodeURIComponent(profile.ban_reason || "")}&email=${encodeURIComponent(email)}`);
             setLoading(false);
             return;
           }
@@ -1545,73 +1536,6 @@ const Auth = () => {
           )}
         </div>
       </div>
-
-      {/* Banned User Dialog */}
-      <Dialog open={showBannedDialog} onOpenChange={setShowBannedDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader className="text-center">
-            <div className="mx-auto w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
-              <Ban className="h-8 w-8 text-red-500" />
-            </div>
-            <DialogTitle className="text-xl text-center">Account Banned</DialogTitle>
-            <DialogDescription asChild>
-              <div className="text-center space-y-3">
-                <p className="text-base text-muted-foreground">
-                  Your account has been banned by Support.
-                </p>
-                {banReason && (
-                  <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-left">
-                    <div className="flex items-center gap-2 mb-2">
-                      <ShieldAlert className="h-4 w-4 text-red-500" />
-                      <p className="text-sm font-semibold text-red-500">Ban Reason</p>
-                    </div>
-                    <p className="text-sm text-foreground">{banReason}</p>
-                  </div>
-                )}
-                {!banReason && (
-                  <div className="bg-muted/50 border border-border rounded-lg p-4 text-left">
-                    <p className="text-sm text-muted-foreground italic">No reason provided</p>
-                  </div>
-                )}
-                <p className="text-sm text-muted-foreground">
-                  If you believe this was a mistake, you can appeal this decision.
-                </p>
-              </div>
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-3 mt-4">
-            <Button
-              className="w-full bg-primary hover:bg-primary/90"
-              onClick={() => {
-                const appealMessage = encodeURIComponent(
-                  `🔓 Ban Appeal Request\n\nI would like to appeal my account ban.\n\nReason given: ${banReason || 'No reason provided'}\n\nPlease review my case.`
-                );
-                window.open(`https://t.me/8496943061?text=${appealMessage}`, "_blank");
-              }}
-            >
-              <ShieldAlert className="mr-2 h-4 w-4" />
-              Appeal Unban
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => {
-                window.open("https://t.me/8496943061", "_blank");
-              }}
-            >
-              <MessageCircle className="mr-2 h-4 w-4" />
-              Contact Support
-            </Button>
-            <Button
-              variant="ghost"
-              className="w-full text-muted-foreground"
-              onClick={() => setShowBannedDialog(false)}
-            >
-              Close
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
