@@ -58,6 +58,43 @@ const Auth = () => {
   const [passwordStrength, setPasswordStrength] = useState<"weak" | "medium" | "strong" | null>(null);
   const [passwordFeedback, setPasswordFeedback] = useState<string[]>([]);
 
+  // Telegram ID availability state
+  const [telegramIdStatus, setTelegramIdStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
+  const [telegramIdError, setTelegramIdError] = useState<string>("");
+  const telegramIdCheckTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // Telegram profile state
+  const [telegramProfile, setTelegramProfile] = useState<{
+    first_name?: string;
+    last_name?: string;
+    username?: string;
+    photo_url?: string;
+  } | null>(null);
+  const [fetchingProfile, setFetchingProfile] = useState(false);
+
+  // Fetch Telegram profile after verification
+  const fetchTelegramProfile = useCallback(async () => {
+    if (!telegramChatId) return;
+    
+    setFetchingProfile(true);
+    try {
+      const response = await supabase.functions.invoke("get-telegram-profile", {
+        body: { chat_id: telegramChatId },
+      });
+
+      if (response.error) {
+        console.error("Error fetching Telegram profile:", response.error);
+      } else if (response.data) {
+        setTelegramProfile(response.data);
+      }
+    } catch (error) {
+      console.error("Error fetching Telegram profile:", error);
+    } finally {
+      setFetchingProfile(false);
+      setRegistrationStep("details");
+    }
+  }, [telegramChatId]);
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -114,8 +151,8 @@ const Auth = () => {
         (payload) => {
           if (payload.new && (payload.new as { verified: boolean }).verified) {
             setIsVerified(true);
-            toast.success("Telegram verified! Complete your registration.");
-            setRegistrationStep("details");
+            toast.success("Telegram verified! Fetching your profile...");
+            fetchTelegramProfile();
           }
         }
       )
@@ -145,8 +182,8 @@ const Auth = () => {
 
       if (data?.verified) {
         setIsVerified(true);
-        toast.success("Telegram verified! Complete your registration.");
-        setRegistrationStep("details");
+        toast.success("Telegram verified! Fetching your profile...");
+        fetchTelegramProfile();
       } else if (new Date(data.expires_at) < new Date()) {
         toast.error("Verification expired. Please request a new one.");
         setRegistrationStep("telegram");
@@ -308,8 +345,84 @@ const Auth = () => {
       if (emailCheckTimeout.current) {
         clearTimeout(emailCheckTimeout.current);
       }
+      if (telegramIdCheckTimeout.current) {
+        clearTimeout(telegramIdCheckTimeout.current);
+      }
     };
   }, []);
+
+  // Check if Telegram ID is already registered
+  const checkTelegramIdAvailability = useCallback(async (chatId: string) => {
+    // Only check if it looks like a valid chat ID (numeric)
+    if (!/^\d+$/.test(chatId)) {
+      setTelegramIdStatus("idle");
+      setTelegramIdError("");
+      return;
+    }
+
+    setTelegramIdStatus("checking");
+    setTelegramIdError("");
+
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("telegram_chat_id")
+        .eq("telegram_chat_id", chatId)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error checking Telegram ID:", error);
+        setTelegramIdStatus("idle");
+        return;
+      }
+
+      if (data) {
+        setTelegramIdStatus("taken");
+        setTelegramIdError("This Telegram ID is already registered");
+      } else {
+        setTelegramIdStatus("available");
+        setTelegramIdError("");
+      }
+    } catch (error) {
+      console.error("Error checking Telegram ID:", error);
+      setTelegramIdStatus("idle");
+    }
+  }, []);
+
+  // Debounced Telegram ID check
+  const handleTelegramIdChange = (value: string) => {
+    setTelegramChatId(value);
+    
+    // Clear previous timeout
+    if (telegramIdCheckTimeout.current) {
+      clearTimeout(telegramIdCheckTimeout.current);
+    }
+
+    // Reset status if empty
+    if (!value.trim()) {
+      setTelegramIdStatus("idle");
+      setTelegramIdError("");
+      return;
+    }
+
+    // Debounce the check
+    telegramIdCheckTimeout.current = setTimeout(() => {
+      checkTelegramIdAvailability(value.trim());
+    }, 500);
+  };
+
+  const getTelegramIdStatusIcon = () => {
+    switch (telegramIdStatus) {
+      case "checking":
+        return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
+      case "available":
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case "taken":
+        return <XCircle className="h-4 w-4 text-red-500" />;
+      default:
+        return null;
+    }
+  };
 
   const getEmailStatusIcon = () => {
     switch (emailStatus) {
@@ -386,6 +499,17 @@ const Auth = () => {
   const handleSendVerification = async () => {
     if (!telegramChatId.trim()) {
       toast.error("Please enter your Telegram Chat ID");
+      return;
+    }
+
+    // Check if Telegram ID is already registered
+    if (telegramIdStatus === "taken") {
+      toast.error("This Telegram ID is already registered. Please use a different one.");
+      return;
+    }
+
+    if (telegramIdStatus !== "available") {
+      toast.error("Please wait for Telegram ID verification");
       return;
     }
 
@@ -467,15 +591,32 @@ const Auth = () => {
         });
         if (error) throw error;
         
-        // Update the profile with telegram_chat_id after signup
+        // Update the profile with telegram info after signup
         if (data.user) {
+          const profileUpdate: {
+            telegram_chat_id: string;
+            telegram_username?: string;
+            name?: string;
+          } = {
+            telegram_chat_id: telegramChatId,
+          };
+
+          if (telegramProfile?.username) {
+            profileUpdate.telegram_username = telegramProfile.username;
+          }
+          if (telegramProfile?.first_name) {
+            profileUpdate.name = telegramProfile.last_name 
+              ? `${telegramProfile.first_name} ${telegramProfile.last_name}`
+              : telegramProfile.first_name;
+          }
+
           const { error: profileError } = await supabase
             .from("profiles")
-            .update({ telegram_chat_id: telegramChatId })
+            .update(profileUpdate)
             .eq("user_id", data.user.id);
           
           if (profileError) {
-            console.error("Error updating profile with Telegram Chat ID:", profileError);
+            console.error("Error updating profile with Telegram info:", profileError);
           }
 
           // Clean up the pending verification
@@ -518,6 +659,9 @@ const Auth = () => {
     setUsernameError("");
     setEmailStatus("idle");
     setEmailError("");
+    setTelegramIdStatus("idle");
+    setTelegramIdError("");
+    setTelegramProfile(null);
   };
 
   const getUsernameStatusIcon = () => {
@@ -576,22 +720,39 @@ const Auth = () => {
               <MessageCircle className="h-4 w-4" />
               {t.telegramChatId} *
             </Label>
-            <Input
-              id="telegramChatId"
-              type="text"
-              value={telegramChatId}
-              onChange={(e) => setTelegramChatId(e.target.value)}
-              placeholder={t.enterTelegramChatId}
-              className="bg-secondary border-border"
-              required
-            />
+            <div className="relative">
+              <Input
+                id="telegramChatId"
+                type="text"
+                value={telegramChatId}
+                onChange={(e) => handleTelegramIdChange(e.target.value)}
+                placeholder={t.enterTelegramChatId}
+                className={`bg-secondary border-border pr-10 ${
+                  telegramIdStatus === "taken"
+                    ? "border-red-500 focus-visible:ring-red-500"
+                    : telegramIdStatus === "available"
+                    ? "border-green-500 focus-visible:ring-green-500"
+                    : ""
+                }`}
+                required
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                {getTelegramIdStatusIcon()}
+              </div>
+            </div>
+            {telegramIdError && (
+              <p className="text-sm text-red-500">{telegramIdError}</p>
+            )}
+            {telegramIdStatus === "available" && (
+              <p className="text-sm text-green-500">Telegram ID is available!</p>
+            )}
           </div>
 
           <Button
             type="button"
             className="w-full btn-primary"
             onClick={handleSendVerification}
-            disabled={loading || !telegramChatId.trim()}
+            disabled={loading || !telegramChatId.trim() || telegramIdStatus !== "available"}
           >
             {loading ? (
               <>
@@ -672,10 +833,48 @@ const Auth = () => {
           </p>
         </div>
 
-        <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 flex items-center gap-2">
-          <CheckCircle className="h-5 w-5 text-green-500" />
-          <span className="text-sm text-green-500">Telegram verified: {telegramChatId}</span>
-        </div>
+        {/* Telegram Profile Card */}
+        {fetchingProfile ? (
+          <div className="bg-secondary/50 rounded-lg p-4 flex items-center justify-center gap-2">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <span className="text-sm">Fetching your Telegram profile...</span>
+          </div>
+        ) : telegramProfile ? (
+          <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
+            <div className="flex items-center gap-4">
+              {telegramProfile.photo_url ? (
+                <img 
+                  src={telegramProfile.photo_url} 
+                  alt="Telegram profile" 
+                  className="w-14 h-14 rounded-full object-cover border-2 border-green-500"
+                />
+              ) : (
+                <div className="w-14 h-14 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <MessageCircle className="h-7 w-7 text-green-500" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  <span className="text-sm font-medium text-green-500">Telegram Verified</span>
+                </div>
+                <p className="font-semibold truncate">
+                  {telegramProfile.first_name}
+                  {telegramProfile.last_name && ` ${telegramProfile.last_name}`}
+                </p>
+                {telegramProfile.username && (
+                  <p className="text-sm text-muted-foreground truncate">@{telegramProfile.username}</p>
+                )}
+                <p className="text-xs text-muted-foreground font-mono">ID: {telegramChatId}</p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 flex items-center gap-2">
+            <CheckCircle className="h-5 w-5 text-green-500" />
+            <span className="text-sm text-green-500">Telegram verified: {telegramChatId}</span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
