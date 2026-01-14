@@ -43,6 +43,8 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
+    let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setUser(session?.user ?? null);
@@ -65,11 +67,38 @@ const Dashboard = () => {
       } else {
         // Check ban status on initial load
         checkBanStatus(session.user.id);
+
+        // Subscribe to real-time ban status changes
+        realtimeChannel = supabase
+          .channel('ban-status-changes')
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'profiles',
+              filter: `user_id=eq.${session.user.id}`,
+            },
+            (payload) => {
+              const newProfile = payload.new as { is_banned?: boolean };
+              if (newProfile?.is_banned === true) {
+                supabase.auth.signOut().then(() => {
+                  setShowBannedDialog(true);
+                });
+              }
+            }
+          )
+          .subscribe();
       }
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      if (realtimeChannel) {
+        supabase.removeChannel(realtimeChannel);
+      }
+    };
   }, [navigate]);
 
   if (loading) {
