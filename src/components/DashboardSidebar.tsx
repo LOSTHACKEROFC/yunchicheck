@@ -23,20 +23,22 @@ import {
   LogOut 
 } from "lucide-react";
 import { toast } from "sonner";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const menuItems = [
-  { title: "Home", url: "/dashboard", icon: Home },
-  { title: "Profile", url: "/dashboard/profile", icon: User },
-  { title: "Topup", url: "/dashboard/topup", icon: ArrowUpCircle },
-  { title: "Balance & History", url: "/dashboard/balance", icon: Wallet },
-  { title: "Gateways", url: "/dashboard/gateways", icon: CreditCard },
-  { title: "Contact Support", url: "/dashboard/support", icon: HeadphonesIcon },
+  { titleKey: "home" as const, url: "/dashboard", icon: Home },
+  { titleKey: "profile" as const, url: "/dashboard/profile", icon: User },
+  { titleKey: "topup" as const, url: "/dashboard/topup", icon: ArrowUpCircle },
+  { titleKey: "balanceAndHistory" as const, url: "/dashboard/balance", icon: Wallet },
+  { titleKey: "gateways" as const, url: "/dashboard/gateways", icon: CreditCard },
+  { titleKey: "contactSupport" as const, url: "/dashboard/support", icon: HeadphonesIcon },
 ];
 
 const DashboardSidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { state } = useSidebar();
+  const { t } = useLanguage();
   const collapsed = state === "collapsed";
 
   const handleLogout = async () => {
@@ -76,7 +78,7 @@ const DashboardSidebar = () => {
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
+                <SidebarMenuItem key={item.titleKey}>
                   <SidebarMenuButton
                     asChild
                     isActive={isActive(item.url)}
@@ -88,7 +90,7 @@ const DashboardSidebar = () => {
                       activeClassName="bg-primary/20 text-primary border-l-2 border-primary"
                     >
                       <item.icon className="h-5 w-5" />
-                      {!collapsed && <span>{item.title}</span>}
+                      {!collapsed && <span>{t[item.titleKey]}</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -104,7 +106,7 @@ const DashboardSidebar = () => {
           className="flex items-center gap-3 px-3 py-2 w-full rounded-md transition-colors hover:bg-destructive/20 text-destructive"
         >
           <LogOut className="h-5 w-5" />
-          {!collapsed && <span>Logout</span>}
+          {!collapsed && <span>{t.logout}</span>}
         </button>
       </SidebarFooter>
     </Sidebar>
