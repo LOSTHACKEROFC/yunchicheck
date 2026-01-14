@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, forwardRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,7 @@ type RegistrationStep = "telegram" | "verification" | "details";
 
 const VERIFICATION_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
 
-const Auth = () => {
+const Auth = forwardRef<HTMLDivElement>((_, ref) => {
   const { t } = useLanguage();
   const [isLogin, setIsLogin] = useState(true);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -1238,7 +1238,7 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div ref={ref} className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-display font-bold text-primary mb-2">
@@ -1556,6 +1556,8 @@ const Auth = () => {
       <FloatingCardsBackground />
     </div>
   );
-};
+});
+
+Auth.displayName = "Auth";
 
 export default Auth;

@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 import { CreditCard, User, Lock, Shield, Wallet, Key, Database, Fingerprint } from "lucide-react";
 
 // Floating card component
@@ -37,7 +38,7 @@ const FloatingCard = ({
 );
 
 // Background floating cards
-const FloatingCardsBackground = () => {
+const FloatingCardsBackground = forwardRef<HTMLDivElement>((_, ref) => {
   const cards = [
     { icon: CreditCard, delay: 0, duration: 8, startX: 5, startY: 10, glowIntensity: 0.25 },
     { icon: User, delay: 1.5, duration: 10, startX: 85, startY: 15, glowIntensity: 0.3 },
@@ -54,7 +55,7 @@ const FloatingCardsBackground = () => {
   ];
 
   return (
-    <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+    <div ref={ref} className="fixed inset-0 overflow-hidden pointer-events-none z-0">
       <style>{`
         @keyframes float-card {
           0%, 100% {
@@ -88,6 +89,8 @@ const FloatingCardsBackground = () => {
       ))}
     </div>
   );
-};
+});
+
+FloatingCardsBackground.displayName = "FloatingCardsBackground";
 
 export default FloatingCardsBackground;
