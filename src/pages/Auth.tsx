@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { MessageCircle, CheckCircle, Clock, ExternalLink, Loader2, XCircle, AlertCircle, ArrowLeft, Mail, Ban } from "lucide-react";
+import { MessageCircle, CheckCircle, Clock, ExternalLink, Loader2, XCircle, AlertCircle, ArrowLeft, Mail, Ban, ShieldAlert } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
@@ -1554,23 +1554,46 @@ const Auth = () => {
               <Ban className="h-8 w-8 text-red-500" />
             </div>
             <DialogTitle className="text-xl text-center">Account Banned</DialogTitle>
-            <DialogDescription className="text-center space-y-3">
-              <p className="text-base">
-                Your account has been banned by Support.
-              </p>
-              {banReason && (
-                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
-                  <p className="text-sm font-medium text-red-500">Reason:</p>
-                  <p className="text-sm text-foreground">{banReason}</p>
-                </div>
-              )}
-              <p className="text-sm text-muted-foreground">
-                You need to contact support to unban your account.
-              </p>
+            <DialogDescription asChild>
+              <div className="text-center space-y-3">
+                <p className="text-base text-muted-foreground">
+                  Your account has been banned by Support.
+                </p>
+                {banReason && (
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-left">
+                    <div className="flex items-center gap-2 mb-2">
+                      <ShieldAlert className="h-4 w-4 text-red-500" />
+                      <p className="text-sm font-semibold text-red-500">Ban Reason</p>
+                    </div>
+                    <p className="text-sm text-foreground">{banReason}</p>
+                  </div>
+                )}
+                {!banReason && (
+                  <div className="bg-muted/50 border border-border rounded-lg p-4 text-left">
+                    <p className="text-sm text-muted-foreground italic">No reason provided</p>
+                  </div>
+                )}
+                <p className="text-sm text-muted-foreground">
+                  If you believe this was a mistake, you can appeal this decision.
+                </p>
+              </div>
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3 mt-4">
             <Button
+              className="w-full bg-primary hover:bg-primary/90"
+              onClick={() => {
+                const appealMessage = encodeURIComponent(
+                  `🔓 Ban Appeal Request\n\nI would like to appeal my account ban.\n\nReason given: ${banReason || 'No reason provided'}\n\nPlease review my case.`
+                );
+                window.open(`https://t.me/8496943061?text=${appealMessage}`, "_blank");
+              }}
+            >
+              <ShieldAlert className="mr-2 h-4 w-4" />
+              Appeal Unban
+            </Button>
+            <Button
+              variant="outline"
               className="w-full"
               onClick={() => {
                 window.open("https://t.me/8496943061", "_blank");
@@ -1580,8 +1603,8 @@ const Auth = () => {
               Contact Support
             </Button>
             <Button
-              variant="outline"
-              className="w-full"
+              variant="ghost"
+              className="w-full text-muted-foreground"
               onClick={() => setShowBannedDialog(false)}
             >
               Close
