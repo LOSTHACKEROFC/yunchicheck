@@ -17,6 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import SessionManagement from "@/components/SessionManagement";
 
 interface TelegramProfile {
   first_name?: string;
@@ -369,10 +370,14 @@ const Profile = () => {
             <CardContent>
               <p className="text-lg font-bold text-primary">${balance.toFixed(2)}</p>
             </CardContent>
-          </Card>
+        </Card>
+        </div>
+
+        {/* Session Management */}
+        <div className="lg:col-span-3">
+          <SessionManagement />
         </div>
       </div>
-
       {/* Discard Changes Confirmation Dialog */}
       <AlertDialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
         <AlertDialogContent>
