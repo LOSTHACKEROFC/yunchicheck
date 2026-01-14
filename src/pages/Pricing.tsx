@@ -13,9 +13,26 @@ import {
 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import FloatingCardsBackground from "@/components/FloatingCardsBackground";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 const Pricing = () => {
   const { t } = useLanguage();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsLoggedIn(!!session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      setIsLoggedIn(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const getCtaLink = () => isLoggedIn ? "/dashboard/topup" : "/auth";
 
   const plans = [
     {
@@ -175,13 +192,13 @@ const Pricing = () => {
                   ))}
                 </ul>
 
-                <Link to="/auth">
+                <Link to={getCtaLink()}>
                   <Button
                     className={`w-full ${plan.popular ? "btn-primary" : ""}`}
                     variant={plan.popular ? "default" : "outline"}
                     size="sm"
                   >
-                    {t.getStarted}
+                    {isLoggedIn ? "Buy Now" : t.getStarted}
                   </Button>
                 </Link>
               </CardContent>
