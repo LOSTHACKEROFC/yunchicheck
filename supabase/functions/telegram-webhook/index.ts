@@ -215,7 +215,7 @@ async function setBotCommands(): Promise<void> {
     { command: "admincmd", description: "🔐 View admin command panel" },
     { command: "ticket", description: "🎫 View/manage a support ticket" },
     { command: "topups", description: "💰 View pending top-up requests" },
-    { command: "addfund", description: "💵 Add/deduct funds from user" },
+    { command: "addfund", description: "💵 Add/deduct credits from user" },
     { command: "banuser", description: "🔨 Ban a user" },
     { command: "cancelban", description: "↩️ Cancel pending ban" },
     { command: "unbanuser", description: "✅ Unban a user" },
@@ -410,8 +410,8 @@ async function handleAdminCmd(chatId: string): Promise<void> {
 │  /topups
 │  └ 💳 View pending top-up requests
 │
-│  /addfund <code>[email] [amount]</code>
-│  └ 💵 Add/deduct funds (use -100 to deduct)
+│  /addfund <code>[email] [credits]</code>
+│  └ 💵 Add/deduct credits (use -100 to deduct)
 │
 └─────────────────────────────────┘
 
@@ -478,15 +478,15 @@ async function handleAddFund(chatId: string, args: string, supabase: any): Promi
     await sendTelegramMessage(chatId, `
 ❌ <b>Invalid Usage</b>
 
-<b>Usage:</b> /addfund <code>[email]</code> <code>[amount]</code>
+<b>Usage:</b> /addfund <code>[email]</code> <code>[credits]</code>
 
 <b>Examples:</b>
 • /addfund user@email.com 50
-  └ Adds $50 to user's balance
+  └ Adds 50 credits to user's account
 • /addfund user@email.com -100
-  └ Deducts $100 from user's balance
+  └ Deducts 100 credits from user's account
 
-<i>💡 Use negative amounts to deduct funds</i>
+<i>💡 Use negative amounts to deduct credits</i>
 `);
     return;
   }
@@ -522,7 +522,7 @@ async function handleAddFund(chatId: string, args: string, supabase: any): Promi
   // Get user profile
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("username, balance, telegram_chat_id")
+    .select("username, credits, telegram_chat_id")
     .eq("user_id", userId)
     .single();
 
@@ -531,34 +531,34 @@ async function handleAddFund(chatId: string, args: string, supabase: any): Promi
     return;
   }
 
-  const oldBalance = Number(profile.balance) || 0;
-  const newBalance = oldBalance + amount;
+  const oldCredits = Number(profile.credits) || 0;
+  const newCredits = oldCredits + amount;
 
-  // Prevent negative balance
-  if (newBalance < 0) {
+  // Prevent negative credits
+  if (newCredits < 0) {
     await sendTelegramMessage(chatId, `
-❌ <b>Insufficient Balance</b>
+❌ <b>Insufficient Credits</b>
 
-User's current balance: <b>$${oldBalance.toFixed(2)}</b>
-Requested deduction: <b>$${Math.abs(amount).toFixed(2)}</b>
+User's current credits: <b>${oldCredits}</b>
+Requested deduction: <b>${Math.abs(amount)}</b>
 
-<i>Cannot deduct more than available balance.</i>
+<i>Cannot deduct more than available credits.</i>
 `);
     return;
   }
 
-  // Update balance
+  // Update credits
   const { error: updateError } = await supabase
     .from("profiles")
     .update({ 
-      balance: newBalance,
+      credits: newCredits,
       updated_at: new Date().toISOString()
     })
     .eq("user_id", userId);
 
   if (updateError) {
-    console.error("Error updating balance:", updateError);
-    await sendTelegramMessage(chatId, "❌ Error updating balance. Please try again.");
+    console.error("Error updating credits:", updateError);
+    await sendTelegramMessage(chatId, "❌ Error updating credits. Please try again.");
     return;
   }
 
@@ -568,19 +568,19 @@ Requested deduction: <b>$${Math.abs(amount).toFixed(2)}</b>
   const statusEmoji = isAddition ? "✅" : "🔻";
 
   // Create notification for user
-  const notificationTitle = isAddition ? "Funds Added" : "Funds Deducted";
+  const notificationTitle = isAddition ? "Credits Added" : "Credits Deducted";
   const notificationMessage = isAddition 
-    ? `$${amount.toFixed(2)} has been added to your account by admin. New balance: $${newBalance.toFixed(2)}`
-    : `$${Math.abs(amount).toFixed(2)} has been deducted from your account by admin. New balance: $${newBalance.toFixed(2)}`;
+    ? `${amount} credits have been added to your account by admin. New balance: ${newCredits} credits`
+    : `${Math.abs(amount)} credits have been deducted from your account by admin. New balance: ${newCredits} credits`;
 
   await supabase.from("notifications").insert({
     user_id: userId,
-    type: "balance_admin",
+    type: "credits_admin",
     title: notificationTitle,
     message: notificationMessage,
     metadata: { 
-      old_balance: oldBalance, 
-      new_balance: newBalance, 
+      old_credits: oldCredits, 
+      new_credits: newCredits, 
       amount: amount,
       action: isAddition ? "add" : "deduct"
     }
@@ -593,10 +593,10 @@ ${actionEmoji} <b>${notificationTitle}</b>
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
-${statusEmoji} <b>${actionText}:</b> $${Math.abs(amount).toFixed(2)}
+${statusEmoji} <b>${actionText}:</b> ${Math.abs(amount)} credits
 
-<b>Previous Balance:</b> $${oldBalance.toFixed(2)}
-<b>New Balance:</b> $${newBalance.toFixed(2)}
+<b>Previous Credits:</b> ${oldCredits}
+<b>New Credits:</b> ${newCredits}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
@@ -610,8 +610,8 @@ ${statusEmoji} <b>${actionText}:</b> $${Math.abs(amount).toFixed(2)}
   if (RESEND_API_KEY && userEmail) {
     try {
       const emailSubject = isAddition 
-        ? `💰 $${amount.toFixed(2)} Added to Your Account`
-        : `💸 $${Math.abs(amount).toFixed(2)} Deducted from Your Account`;
+        ? `💰 ${amount} Credits Added to Your Account`
+        : `💸 ${Math.abs(amount)} Credits Deducted from Your Account`;
       
       const emailHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -620,16 +620,16 @@ ${statusEmoji} <b>${actionText}:</b> $${Math.abs(amount).toFixed(2)}
           </div>
           <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
             <p style="font-size: 16px;">Hello <strong>${profile.username || 'User'}</strong>,</p>
-            <p>${isAddition ? 'Funds have been added to' : 'Funds have been deducted from'} your account by an administrator.</p>
+            <p>${isAddition ? 'Credits have been added to' : 'Credits have been deducted from'} your account by an administrator.</p>
             
             <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 5px 0;"><strong>${actionText}:</strong> $${Math.abs(amount).toFixed(2)}</p>
-              <p style="margin: 5px 0;"><strong>Previous Balance:</strong> $${oldBalance.toFixed(2)}</p>
+              <p style="margin: 5px 0;"><strong>${actionText}:</strong> ${Math.abs(amount)} credits</p>
+              <p style="margin: 5px 0;"><strong>Previous Credits:</strong> ${oldCredits}</p>
             </div>
             
             <div style="background: linear-gradient(135deg, ${isAddition ? '#10b981' : '#3b82f6'}, ${isAddition ? '#059669' : '#2563eb'}); padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
-              <p style="margin: 0; font-size: 14px; color: rgba(255,255,255,0.8);">Your New Balance</p>
-              <p style="margin: 5px 0 0 0; font-size: 28px; font-weight: bold; color: white;">$${newBalance.toFixed(2)}</p>
+              <p style="margin: 0; font-size: 14px; color: rgba(255,255,255,0.8);">Your New Credits</p>
+              <p style="margin: 5px 0 0 0; font-size: 28px; font-weight: bold; color: white;">${newCredits}</p>
             </div>
             
             <p style="color: #a3a3a3; font-size: 14px; text-align: center;">
@@ -653,7 +653,7 @@ ${statusEmoji} <b>${actionText}:</b> $${Math.abs(amount).toFixed(2)}
           html: emailHtml,
         }),
       });
-      console.log("Email notification sent for fund adjustment");
+      console.log("Email notification sent for credit adjustment");
     } catch (emailError) {
       console.error("Error sending email notification:", emailError);
     }
@@ -661,7 +661,7 @@ ${statusEmoji} <b>${actionText}:</b> $${Math.abs(amount).toFixed(2)}
 
   // Confirm to admin
   const adminConfirmMessage = `
-${statusEmoji} <b>Fund ${isAddition ? 'Addition' : 'Deduction'} Successful</b>
+${statusEmoji} <b>Credit ${isAddition ? 'Addition' : 'Deduction'} Successful</b>
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
@@ -672,9 +672,9 @@ ${statusEmoji} <b>Fund ${isAddition ? 'Addition' : 'Deduction'} Successful</b>
 ━━━━━━━━━━━━━━━━━━━━━━
 
 <b>💳 TRANSACTION</b>
-<b>${actionText}:</b> $${Math.abs(amount).toFixed(2)}
-<b>Previous:</b> $${oldBalance.toFixed(2)}
-<b>New Balance:</b> $${newBalance.toFixed(2)}
+<b>${actionText}:</b> ${Math.abs(amount)} credits
+<b>Previous:</b> ${oldCredits}
+<b>New Credits:</b> ${newCredits}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
@@ -706,7 +706,7 @@ async function handleDeleteUser(chatId: string, identifier: string, supabase: an
   // First try by username or telegram_chat_id
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, user_id, username, name, telegram_chat_id, telegram_username, balance, created_at")
+    .select("id, user_id, username, name, telegram_chat_id, telegram_username, credits, created_at")
     .or(`username.ilike.${identifier},telegram_chat_id.eq.${identifier}`)
     .maybeSingle();
 
@@ -729,7 +729,7 @@ async function handleDeleteUser(chatId: string, identifier: string, supabase: an
       userEmail = foundUser.email;
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("id, user_id, username, name, telegram_chat_id, telegram_username, balance, created_at")
+        .select("id, user_id, username, name, telegram_chat_id, telegram_username, credits, created_at")
         .eq("user_id", foundUser.id)
         .maybeSingle();
       userInfo = profileData;
@@ -766,7 +766,7 @@ async function handleDeleteUser(chatId: string, identifier: string, supabase: an
 <b>Name:</b> ${userInfo?.name || "Not set"}
 <b>Email:</b> ${userEmail || "Unknown"}
 <b>Telegram:</b> ${userInfo?.telegram_chat_id ? `<code>${userInfo.telegram_chat_id}</code>` : "Not connected"}
-<b>Balance:</b> $${Number(userInfo?.balance || 0).toFixed(2)}
+<b>Credits:</b> ${Number(userInfo?.credits || 0)}
 <b>Member Since:</b> ${memberSince}
 
 ━━━━━━━━━━━━━━━━━━━━━━
@@ -1652,7 +1652,7 @@ function buildTopupsListMessage(
     const username = topup.profiles?.username || topup.profiles?.name || "Unknown";
     
     topupList += `
-${startIndex + index + 1}. <b>$${Number(topup.amount).toFixed(2)}</b>
+${startIndex + index + 1}. <b>${Number(topup.amount) * 10} credits</b>
    👤 ${username}
    💳 ${topup.payment_method}
    📅 ${createdDate}
@@ -1690,7 +1690,7 @@ ${topupList || "\n│  No pending requests\n"}
   // Add approve/reject buttons for each topup
   displayTopups.forEach((topup) => {
     buttons.push([
-      { text: `✅ Approve $${Number(topup.amount).toFixed(2)}`, callback_data: `topup_accept_${topup.id}` },
+      { text: `✅ Approve ${Number(topup.amount) * 10} credits`, callback_data: `topup_accept_${topup.id}` },
       { text: `❌ Reject`, callback_data: `topup_reject_${topup.id}` }
     ]);
   });
@@ -2929,7 +2929,7 @@ This action will:
       // Check if user is connected
       const { data: profile, error } = await supabase
         .from("profiles")
-        .select("user_id, username, name, balance, is_banned, ban_reason, banned_until, created_at, telegram_username")
+        .select("user_id, username, name, credits, is_banned, ban_reason, banned_until, created_at, telegram_username")
         .eq("telegram_chat_id", chatId)
         .maybeSingle();
 
@@ -3018,10 +3018,10 @@ Yunchi account.
 └─────────────────────────────────┘
 
 ┌─────────────────────────────────┐
-│  💰 <b>BALANCE & STATUS</b>
+│  💰 <b>CREDITS & STATUS</b>
 ├─────────────────────────────────┤
 │
-│  <b>Balance:</b> $${Number(profile.balance).toFixed(2)}
+│  <b>Credits:</b> ${Number(profile.credits)}
 │  <b>Status:</b> ${accountStatus}${banInfo}
 │
 └─────────────────────────────────┘
