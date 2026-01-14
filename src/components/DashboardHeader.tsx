@@ -303,28 +303,28 @@ const DashboardHeader = () => {
     : (username || email?.split("@")[0] || "User");
 
   return (
-    <header className="h-14 border-b border-border flex items-center justify-between px-4 bg-card">
-      <div className="flex items-center gap-4">
+    <header className="h-12 sm:h-14 border-b border-border flex items-center justify-between px-2 sm:px-4 bg-card">
+      <div className="flex items-center gap-2 sm:gap-4">
         <SidebarTrigger className="text-muted-foreground hover:text-primary transition-colors">
-          <Menu className="h-5 w-5" />
+          <Menu className="h-4 w-4 sm:h-5 sm:w-5" />
         </SidebarTrigger>
-        <span className="text-sm text-muted-foreground">{t.dashboard}</span>
+        <span className="text-xs sm:text-sm text-muted-foreground hidden sm:inline">{t.dashboard}</span>
       </div>
 
-      <div className="flex items-center gap-3">
-        {/* User Profile */}
+      <div className="flex items-center gap-1 sm:gap-3">
+        {/* User Profile - hidden on very small screens */}
         <div 
-          className="flex items-center gap-2 cursor-pointer hover:bg-secondary/50 rounded-lg px-2 py-1 transition-colors"
+          className="hidden xs:flex items-center gap-1 sm:gap-2 cursor-pointer hover:bg-secondary/50 rounded-lg px-1 sm:px-2 py-1 transition-colors"
           onClick={() => navigate("/dashboard/profile")}
         >
           {loadingTelegramProfile ? (
             <>
-              <Skeleton className="h-7 w-7 rounded-full" />
-              <Skeleton className="h-4 w-20 hidden sm:block" />
+              <Skeleton className="h-6 w-6 sm:h-7 sm:w-7 rounded-full" />
+              <Skeleton className="h-4 w-16 hidden md:block" />
             </>
           ) : (
             <>
-              <Avatar className="h-7 w-7 border border-primary/30">
+              <Avatar className="h-6 w-6 sm:h-7 sm:w-7 border border-primary/30">
                 {telegramProfile?.photo_url ? (
                   <AvatarImage 
                     src={telegramProfile.photo_url} 
@@ -336,14 +336,14 @@ const DashboardHeader = () => {
                   {displayName.charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-              <span className="text-sm font-medium text-foreground hidden sm:inline">
+              <span className="text-xs sm:text-sm font-medium text-foreground hidden md:inline max-w-[100px] truncate">
                 {displayName}
               </span>
             </>
           )}
         </div>
 
-        <Separator orientation="vertical" className="h-6" />
+        <Separator orientation="vertical" className="h-4 sm:h-6 hidden xs:block" />
 
         <TooltipProvider>
           {/* Balance */}
@@ -351,10 +351,10 @@ const DashboardHeader = () => {
             <TooltipTrigger asChild>
               <button
                 onClick={() => navigate("/dashboard/balance")}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors border border-primary/20"
+                className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors border border-primary/20"
               >
-                <Wallet className="h-4 w-4 text-primary" />
-                <span className="text-sm font-semibold text-primary">
+                <Wallet className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
+                <span className="text-xs sm:text-sm font-semibold text-primary">
                   {loading ? "..." : `$${balance.toFixed(2)}`}
                 </span>
               </button>
@@ -367,11 +367,11 @@ const DashboardHeader = () => {
           {/* Notifications */}
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-              <button className="relative p-2 rounded-lg hover:bg-secondary transition-colors">
-                <Bell className="h-5 w-5 text-muted-foreground" />
+              <button className="relative p-1.5 sm:p-2 rounded-lg hover:bg-secondary transition-colors">
+                <Bell className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
                 {unreadCount > 0 && (
                   <Badge 
-                    className="absolute -top-1 -right-1 h-5 min-w-5 flex items-center justify-center p-0 text-xs bg-destructive hover:bg-destructive"
+                    className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 h-4 sm:h-5 min-w-4 sm:min-w-5 flex items-center justify-center p-0 text-[10px] sm:text-xs bg-destructive hover:bg-destructive"
                   >
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </Badge>
@@ -379,7 +379,7 @@ const DashboardHeader = () => {
               </button>
             </PopoverTrigger>
             <PopoverContent 
-              className="w-96 p-0 bg-card border border-border shadow-lg" 
+              className="w-[calc(100vw-16px)] sm:w-96 p-0 bg-card border border-border shadow-lg max-h-[80vh] overflow-hidden" 
               align="end"
               sideOffset={8}
             >

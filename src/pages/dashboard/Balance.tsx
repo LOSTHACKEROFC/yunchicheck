@@ -237,96 +237,96 @@ const Balance = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-display font-bold text-foreground">Balance & History</h1>
-        <p className="text-muted-foreground mt-1">View your balance and transaction history</p>
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-foreground">Balance & History</h1>
+        <p className="text-sm sm:text-base text-muted-foreground mt-1">View your balance and transaction history</p>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-primary/20 to-primary/5 border-primary/30">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <Card className="bg-gradient-to-br from-primary/20 to-primary/5 border-primary/30 col-span-2 sm:col-span-1">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
               Current Balance
             </CardTitle>
-            <Wallet className="h-4 w-4 text-primary" />
+            <Wallet className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-primary">
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-2xl sm:text-3xl font-bold text-primary">
               ${balance.toFixed(2)}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Available funds</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Available funds</p>
           </CardContent>
         </Card>
 
         <Card className="bg-card border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
               Total Deposits
             </CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-500" />
+            <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-500">${totalDeposits.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground mt-1">All time</p>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-lg sm:text-2xl font-bold text-green-500">${totalDeposits.toFixed(2)}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">All time</p>
           </CardContent>
         </Card>
 
         <Card className="bg-card border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
               Total Spent
             </CardTitle>
-            <TrendingDown className="h-4 w-4 text-destructive" />
+            <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-destructive" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-destructive">${totalSpent.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground mt-1">All time</p>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-lg sm:text-2xl font-bold text-destructive">${totalSpent.toFixed(2)}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">All time</p>
           </CardContent>
         </Card>
 
         <Card className="bg-card border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
               Total Checks
             </CardTitle>
-            <CreditCard className="h-4 w-4 text-primary" />
+            <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalChecks}</div>
-            <p className="text-xs text-muted-foreground mt-1">All time</p>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-lg sm:text-2xl font-bold">{totalChecks}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">All time</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Transaction History */}
       <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <History className="h-5 w-5 text-primary" />
+        <CardHeader className="p-3 sm:p-6">
+          <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <History className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
             Transaction History
-            <Badge variant="outline" className="ml-2 text-xs">
+            <Badge variant="outline" className="ml-1 sm:ml-2 text-[10px] sm:text-xs">
               Live
             </Badge>
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
+        <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+          <div className="space-y-2 sm:space-y-3">
             {transactions.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Clock className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>No transactions yet</p>
-                <p className="text-sm mt-1">Your transaction history will appear here</p>
+              <div className="text-center py-6 sm:py-8 text-muted-foreground">
+                <Clock className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-2 sm:mb-3 opacity-50" />
+                <p className="text-sm sm:text-base">No transactions yet</p>
+                <p className="text-xs sm:text-sm mt-1">Your transaction history will appear here</p>
               </div>
             ) : (
               transactions.map((tx) => (
                 <div
                   key={tx.id}
-                  className="flex items-center justify-between p-4 rounded-lg bg-secondary/50 border border-border transition-all hover:bg-secondary/70"
+                  className="flex items-center justify-between p-2 sm:p-4 rounded-lg bg-secondary/50 border border-border transition-all hover:bg-secondary/70"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                  <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+                    <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 ${
                       tx.type === "topup" 
                         ? tx.status === "completed" 
                           ? "bg-green-500/20" 
@@ -336,7 +336,7 @@ const Balance = () => {
                         : "bg-primary/20"
                     }`}>
                       {tx.type === "topup" ? (
-                        <ArrowUpRight className={`h-5 w-5 ${
+                        <ArrowUpRight className={`h-4 w-4 sm:h-5 sm:w-5 ${
                           tx.status === "completed" 
                             ? "text-green-500" 
                             : tx.status === "pending"
@@ -344,29 +344,29 @@ const Balance = () => {
                               : "text-destructive"
                         }`} />
                       ) : (
-                        <ArrowDownRight className="h-5 w-5 text-primary" />
+                        <ArrowDownRight className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                       )}
                     </div>
-                    <div>
-                      <p className="font-medium">
+                    <div className="min-w-0">
+                      <p className="font-medium text-xs sm:text-sm truncate">
                         {tx.type === "topup" ? `Topup via ${tx.method}` : `Check - ${tx.gateway}`}
                       </p>
-                      <p className="text-sm text-muted-foreground">{formatDate(tx.date)}</p>
+                      <p className="text-[10px] sm:text-sm text-muted-foreground">{formatDate(tx.date)}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className={`font-bold ${
+                  <div className="text-right shrink-0 ml-2">
+                    <p className={`font-bold text-xs sm:text-base ${
                       tx.type === "topup" 
                         ? tx.status === "completed" 
                           ? "text-green-500" 
                           : "text-muted-foreground"
                         : "text-foreground"
                     }`}>
-                      {tx.type === "topup" ? "+" : ""}{tx.type === "topup" ? tx.amount.toFixed(2) : tx.amount.toFixed(2)} USD
+                      {tx.type === "topup" ? "+" : ""}{tx.type === "topup" ? tx.amount.toFixed(2) : tx.amount.toFixed(2)} <span className="hidden sm:inline">USD</span>
                     </p>
                     <Badge
                       variant="outline"
-                      className={`text-xs ${getStatusBadgeClass(tx.status)}`}
+                      className={`text-[10px] sm:text-xs ${getStatusBadgeClass(tx.status)}`}
                     >
                       {tx.status}
                     </Badge>
