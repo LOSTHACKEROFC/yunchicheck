@@ -17,3 +17,9 @@ verify_jwt = false
 
 [functions.verify-password-reset-otp]
 verify_jwt = false
+
+[functions.notify-user-banned]
+verify_jwt = false
+
+[functions.track-session]
+verify_jwt = false
