@@ -77,6 +77,125 @@ async function sendTelegramMessage(
   }
 }
 
+// Edit an existing Telegram message
+async function editTelegramMessage(
+  chatId: string | number,
+  messageId: number,
+  message: string,
+  replyMarkup?: object
+): Promise<boolean> {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.log("Telegram bot token not configured");
+    return false;
+  }
+
+  try {
+    const body: Record<string, unknown> = {
+      chat_id: chatId,
+      message_id: messageId,
+      text: message,
+      parse_mode: "HTML",
+    };
+
+    if (replyMarkup) {
+      body.reply_markup = replyMarkup;
+    }
+
+    const response = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("Telegram edit message API error:", errorData);
+      return false;
+    }
+
+    console.log("Telegram message edited successfully");
+    return true;
+  } catch (error) {
+    console.error("Error editing Telegram message:", error);
+    return false;
+  }
+}
+
+// Build paginated users list message
+function buildUsersListMessage(
+  users: any[],
+  page: number,
+  totalCount: number,
+  connectedCount: number,
+  bannedCount: number,
+  perPage: number
+): { message: string; keyboard: object | null } {
+  const totalPages = Math.ceil(totalCount / perPage);
+  const startIndex = page * perPage;
+  const endIndex = Math.min(startIndex + perPage, totalCount);
+  const displayUsers = users.slice(startIndex, endIndex);
+
+  let userList = "";
+  displayUsers.forEach((user, index) => {
+    const status = user.is_banned ? "🚫" : "✅";
+    const telegramId = user.telegram_chat_id ? `<code>${user.telegram_chat_id}</code>` : "❌ Not connected";
+    const username = user.username || user.name || "No username";
+    const profileLink = `https://yunchi.app/dashboard/profile?user=${user.user_id}`;
+    
+    userList += `
+${startIndex + index + 1}. ${status} <b>${username}</b>
+   📱 ${telegramId}
+   🔗 <a href="${profileLink}">View Profile</a>
+`;
+  });
+
+  const allUsersMessage = `
+👥 <b>All Users</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>📊 STATISTICS</b>
+
+<b>Total Users:</b> ${totalCount}
+<b>Telegram Connected:</b> ${connectedCount}
+<b>Banned:</b> ${bannedCount}
+<b>Active:</b> ${totalCount - bannedCount}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>📋 USER LIST</b> (Page ${page + 1}/${totalPages})
+${userList}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<i>✅ = Active | 🚫 = Banned</i>
+<i>📱 = Telegram Chat ID</i>
+`;
+
+  // Build pagination buttons
+  let keyboard: object | null = null;
+  if (totalPages > 1) {
+    const buttons = [];
+    
+    if (page > 0) {
+      buttons.push({ text: "◀️ Previous", callback_data: `allusers_page_${page - 1}` });
+    }
+    
+    buttons.push({ text: `${page + 1}/${totalPages}`, callback_data: "allusers_noop" });
+    
+    if (page < totalPages - 1) {
+      buttons.push({ text: "Next ▶️", callback_data: `allusers_page_${page + 1}` });
+    }
+    
+    keyboard = { inline_keyboard: [buttons] };
+  }
+
+  return { message: allUsersMessage, keyboard };
+}
+
 // Register bot commands with Telegram
 async function setBotCommands(): Promise<void> {
   if (!TELEGRAM_BOT_TOKEN) return;
@@ -881,6 +1000,66 @@ const handler = async (req: Request): Promise<Response> => {
       const callbackData = update.callback_query.data;
       console.log("Callback data:", callbackData);
 
+      // Handle pagination for /allusers command
+      if (callbackData.startsWith("allusers_page_")) {
+        const chatId = update.callback_query.message?.chat.id.toString();
+        const messageId = update.callback_query.message?.message_id;
+        
+        if (!chatId || !isAdmin(chatId)) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        const page = parseInt(callbackData.replace("allusers_page_", ""));
+        const perPage = 10;
+
+        // Fetch all users
+        const { data: users, error, count } = await supabase
+          .from("profiles")
+          .select("user_id, username, name, telegram_chat_id, telegram_username, is_banned, created_at", { count: "exact" })
+          .order("created_at", { ascending: false });
+
+        if (error || !users) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Error fetching users");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        const totalCount = count || 0;
+        const connectedCount = users.filter(u => u.telegram_chat_id).length;
+        const bannedCount = users.filter(u => u.is_banned).length;
+
+        const { message, keyboard } = buildUsersListMessage(
+          users,
+          page,
+          totalCount,
+          connectedCount,
+          bannedCount,
+          perPage
+        );
+
+        // Edit the message with new page
+        if (messageId) {
+          await editTelegramMessage(chatId, messageId, message, keyboard || undefined);
+        }
+
+        await answerCallbackQuery(update.callback_query.id, `Page ${page + 1}`);
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      // Handle noop callback (page indicator button)
+      if (callbackData === "allusers_noop") {
+        await answerCallbackQuery(update.callback_query.id, "Current page");
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
       // Handle verification callback
       if (callbackData.startsWith("verify_")) {
         const verificationCode = callbackData.replace("verify_", "");
@@ -1656,6 +1835,8 @@ Your Telegram is not linked to any Yunchi account.
         });
       }
 
+      const perPage = 10;
+
       // Get all users with their profile info
       const { data: users, error, count } = await supabase
         .from("profiles")
@@ -1674,50 +1855,16 @@ Your Telegram is not linked to any Yunchi account.
       const connectedCount = users?.filter(u => u.telegram_chat_id).length || 0;
       const bannedCount = users?.filter(u => u.is_banned).length || 0;
 
-      // Build user list (limit to 15 for readability)
-      let userList = "";
-      const displayUsers = users?.slice(0, 15) || [];
-      
-      displayUsers.forEach((user, index) => {
-        const status = user.is_banned ? "🚫" : "✅";
-        const telegramId = user.telegram_chat_id ? `<code>${user.telegram_chat_id}</code>` : "❌ Not connected";
-        const username = user.username || user.name || "No username";
-        const profileLink = `https://yunchi.app/dashboard/profile?user=${user.user_id}`;
-        
-        userList += `
-${index + 1}. ${status} <b>${username}</b>
-   📱 ${telegramId}
-   🔗 <a href="${profileLink}">View Profile</a>
-`;
-      });
+      const { message, keyboard } = buildUsersListMessage(
+        users || [],
+        0,
+        totalCount,
+        connectedCount,
+        bannedCount,
+        perPage
+      );
 
-      const remainingCount = totalCount - displayUsers.length;
-      const moreText = remainingCount > 0 ? `\n<i>...and ${remainingCount} more users</i>` : "";
-
-      const allUsersMessage = `
-👥 <b>All Users</b>
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>📊 STATISTICS</b>
-
-<b>Total Users:</b> ${totalCount}
-<b>Telegram Connected:</b> ${connectedCount}
-<b>Banned:</b> ${bannedCount}
-<b>Active:</b> ${totalCount - bannedCount}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>📋 USER LIST</b>
-${userList}${moreText}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<i>✅ = Active | 🚫 = Banned</i>
-<i>📱 = Telegram Chat ID</i>
-`;
-
-      await sendTelegramMessage(chatId, allUsersMessage);
+      await sendTelegramMessage(chatId, message, keyboard || undefined);
       return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
