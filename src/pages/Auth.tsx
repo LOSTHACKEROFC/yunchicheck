@@ -49,6 +49,11 @@ const Auth = () => {
   const [usernameError, setUsernameError] = useState<string>("");
   const usernameCheckTimeout = useRef<NodeJS.Timeout | null>(null);
 
+  // Email availability state
+  const [emailStatus, setEmailStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
+  const [emailError, setEmailError] = useState<string>("");
+  const emailCheckTimeout = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -229,14 +234,93 @@ const Auth = () => {
     }, 500);
   };
 
+  // Real-time email availability check
+  const checkEmailAvailability = useCallback(async (emailToCheck: string) => {
+    // Validate format first
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailToCheck)) {
+      setEmailStatus("invalid");
+      setEmailError("Please enter a valid email address");
+      return;
+    }
+
+    setEmailStatus("checking");
+    setEmailError("");
+
+    try {
+      const response = await supabase.functions.invoke("check-email-availability", {
+        body: { email: emailToCheck.toLowerCase() },
+      });
+
+      if (response.error) {
+        console.error("Error checking email:", response.error);
+        setEmailStatus("idle");
+        return;
+      }
+
+      if (response.data?.available === false) {
+        setEmailStatus("taken");
+        setEmailError("This email is already registered");
+      } else if (response.data?.available === true) {
+        setEmailStatus("available");
+        setEmailError("");
+      } else {
+        setEmailStatus("idle");
+      }
+    } catch (error) {
+      console.error("Error checking email:", error);
+      setEmailStatus("idle");
+    }
+  }, []);
+
+  // Debounced email check
+  const handleEmailChange = (value: string) => {
+    setEmail(value);
+    
+    // Clear previous timeout
+    if (emailCheckTimeout.current) {
+      clearTimeout(emailCheckTimeout.current);
+    }
+
+    // Reset status if empty
+    if (!value.trim()) {
+      setEmailStatus("idle");
+      setEmailError("");
+      return;
+    }
+
+    // Debounce the check
+    emailCheckTimeout.current = setTimeout(() => {
+      checkEmailAvailability(value.trim());
+    }, 500);
+  };
+
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
       if (usernameCheckTimeout.current) {
         clearTimeout(usernameCheckTimeout.current);
       }
+      if (emailCheckTimeout.current) {
+        clearTimeout(emailCheckTimeout.current);
+      }
     };
   }, []);
+
+  const getEmailStatusIcon = () => {
+    switch (emailStatus) {
+      case "checking":
+        return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
+      case "available":
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case "taken":
+        return <XCircle className="h-4 w-4 text-red-500" />;
+      case "invalid":
+        return <AlertCircle className="h-4 w-4 text-yellow-500" />;
+      default:
+        return null;
+    }
+  };
 
   const handleSendVerification = async () => {
     if (!telegramChatId.trim()) {
@@ -305,6 +389,13 @@ const Auth = () => {
           return;
         }
 
+        // Check email availability one more time before signup
+        if (emailStatus !== "available") {
+          toast.error("Please use a valid and available email address");
+          setLoading(false);
+          return;
+        }
+
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -364,6 +455,8 @@ const Auth = () => {
     setTimeRemaining(0);
     setUsernameStatus("idle");
     setUsernameError("");
+    setEmailStatus("idle");
+    setEmailError("");
   };
 
   const getUsernameStatusIcon = () => {
@@ -556,15 +649,32 @@ const Auth = () => {
 
           <div className="space-y-2">
             <Label htmlFor="email">{t.email}</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={t.enterEmail}
-              className="bg-secondary border-border"
-              required
-            />
+            <div className="relative">
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => handleEmailChange(e.target.value)}
+                placeholder={t.enterEmail}
+                className={`bg-secondary border-border pr-10 ${
+                  emailStatus === "taken" || emailStatus === "invalid"
+                    ? "border-red-500 focus-visible:ring-red-500"
+                    : emailStatus === "available"
+                    ? "border-green-500 focus-visible:ring-green-500"
+                    : ""
+                }`}
+                required
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                {getEmailStatusIcon()}
+              </div>
+            </div>
+            {emailError && (
+              <p className="text-sm text-red-500">{emailError}</p>
+            )}
+            {emailStatus === "available" && (
+              <p className="text-sm text-green-500">Email is available!</p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -583,7 +693,7 @@ const Auth = () => {
           <Button
             type="submit"
             className="w-full btn-primary"
-            disabled={loading || usernameStatus !== "available"}
+            disabled={loading || usernameStatus !== "available" || emailStatus !== "available"}
           >
             {loading ? (
               <>
