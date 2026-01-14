@@ -200,7 +200,7 @@ Hello <b>${username}</b>,
 
 Unfortunately, your topup request has been rejected.
 
-💰 <b>Amount:</b> ${formattedAmount}
+💰 <b>Credits:</b> ${formattedCredits}
 💳 <b>Method:</b> ${methodLabel}
 📝 <b>Transaction ID:</b> <code>${transaction_id.slice(0, 8)}...</code>${reasonText}
 
@@ -221,7 +221,7 @@ If you believe this was a mistake, please contact support with your transaction 
           <p>Unfortunately, your topup request has been rejected.</p>
           
           <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p style="margin: 5px 0;"><strong>Amount:</strong> ${formattedAmount}</p>
+            <p style="margin: 5px 0;"><strong>Credits:</strong> ${formattedCredits}</p>
             <p style="margin: 5px 0;"><strong>Method:</strong> ${methodLabel}</p>
             <p style="margin: 5px 0;"><strong>Transaction ID:</strong> ${transaction_id.slice(0, 8)}...</p>
           </div>
@@ -246,8 +246,8 @@ If you believe this was a mistake, please contact support with your transaction 
 
     // Create notification in database
     const notificationMessage = rejection_reason 
-      ? `Your ${formattedAmount} topup via ${methodLabel} has been rejected. Reason: ${rejection_reason}`
-      : `Your ${formattedAmount} topup via ${methodLabel} has been rejected. Please contact support if you need assistance.`;
+      ? `Your ${formattedCredits} topup via ${methodLabel} has been rejected. Reason: ${rejection_reason}`
+      : `Your ${formattedCredits} topup via ${methodLabel} has been rejected. Please contact support if you need assistance.`;
     
     const { error: notifError } = await supabaseAdmin.from("notifications").insert({
       user_id,
