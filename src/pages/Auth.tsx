@@ -755,7 +755,7 @@ const Auth = () => {
         if (signInData.user) {
           const { data: profile } = await supabase
             .from("profiles")
-            .select("is_banned, ban_reason")
+            .select("is_banned, ban_reason, banned_until")
             .eq("user_id", signInData.user.id)
             .maybeSingle();
           
@@ -765,7 +765,8 @@ const Auth = () => {
             // Store ban info and redirect to banned page
             localStorage.setItem("banReason", profile.ban_reason || "");
             localStorage.setItem("bannedEmail", email);
-            navigate(`/banned?reason=${encodeURIComponent(profile.ban_reason || "")}&email=${encodeURIComponent(email)}`);
+            localStorage.setItem("bannedUntil", profile.banned_until || "");
+            navigate(`/banned?reason=${encodeURIComponent(profile.ban_reason || "")}&email=${encodeURIComponent(email)}&until=${encodeURIComponent(profile.banned_until || "")}`);
             setLoading(false);
             return;
           }

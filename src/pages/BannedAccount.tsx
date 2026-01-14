@@ -13,6 +13,7 @@ const BannedAccount = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [banReason, setBanReason] = useState<string | null>(null);
+  const [bannedUntil, setBannedUntil] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [appealMessage, setAppealMessage] = useState("");
@@ -24,9 +25,11 @@ const BannedAccount = () => {
     const reason = searchParams.get("reason") || localStorage.getItem("banReason");
     const user = searchParams.get("username") || localStorage.getItem("bannedUsername");
     const userEmail = searchParams.get("email") || localStorage.getItem("bannedEmail");
+    const until = searchParams.get("until") || localStorage.getItem("bannedUntil");
     
     setBanReason(reason);
     setUsername(user);
+    setBannedUntil(until);
     if (userEmail) setEmail(userEmail);
   }, [searchParams]);
 
@@ -78,8 +81,16 @@ const BannedAccount = () => {
     localStorage.removeItem("banReason");
     localStorage.removeItem("bannedUsername");
     localStorage.removeItem("bannedEmail");
+    localStorage.removeItem("bannedUntil");
     navigate("/auth");
   };
+
+  const formatBanExpiry = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleString();
+  };
+
+  const isPermanent = !bannedUntil;
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -102,15 +113,28 @@ const BannedAccount = () => {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-red-500 text-base">
               <ShieldAlert className="h-5 w-5" />
-              Ban Reason
+              Ban Details
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            {banReason ? (
-              <p className="text-foreground">{banReason}</p>
-            ) : (
-              <p className="text-muted-foreground italic">No reason was provided for this ban.</p>
-            )}
+          <CardContent className="space-y-3">
+            <div>
+              <p className="text-sm text-muted-foreground mb-1">Reason:</p>
+              {banReason ? (
+                <p className="text-foreground">{banReason}</p>
+              ) : (
+                <p className="text-muted-foreground italic">No reason was provided.</p>
+              )}
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground mb-1">Duration:</p>
+              {isPermanent ? (
+                <p className="text-red-500 font-medium">Permanent Ban</p>
+              ) : (
+                <p className="text-foreground">
+                  Expires: <span className="font-medium">{formatBanExpiry(bannedUntil!)}</span>
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
 

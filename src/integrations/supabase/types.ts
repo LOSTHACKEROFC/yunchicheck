@@ -194,8 +194,10 @@ export type Database = {
       pending_bans: {
         Row: {
           admin_chat_id: string
+          ban_reason: string | null
           created_at: string
           id: string
+          step: string | null
           user_email: string | null
           user_id: string
           user_telegram_chat_id: string | null
@@ -203,8 +205,10 @@ export type Database = {
         }
         Insert: {
           admin_chat_id: string
+          ban_reason?: string | null
           created_at?: string
           id?: string
+          step?: string | null
           user_email?: string | null
           user_id: string
           user_telegram_chat_id?: string | null
@@ -212,8 +216,10 @@ export type Database = {
         }
         Update: {
           admin_chat_id?: string
+          ban_reason?: string | null
           created_at?: string
           id?: string
+          step?: string | null
           user_email?: string | null
           user_id?: string
           user_telegram_chat_id?: string | null
@@ -256,6 +262,7 @@ export type Database = {
           balance: number
           ban_reason: string | null
           banned_at: string | null
+          banned_until: string | null
           created_at: string
           id: string
           is_banned: boolean
@@ -270,6 +277,7 @@ export type Database = {
           balance?: number
           ban_reason?: string | null
           banned_at?: string | null
+          banned_until?: string | null
           created_at?: string
           id?: string
           is_banned?: boolean
@@ -284,6 +292,7 @@ export type Database = {
           balance?: number
           ban_reason?: string | null
           banned_at?: string | null
+          banned_until?: string | null
           created_at?: string
           id?: string
           is_banned?: boolean

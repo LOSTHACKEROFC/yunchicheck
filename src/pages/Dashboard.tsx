@@ -20,7 +20,7 @@ const Dashboard = () => {
   const checkBanStatus = async (userId: string) => {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("is_banned, ban_reason, username")
+      .select("is_banned, ban_reason, username, banned_until")
       .eq("user_id", userId)
       .maybeSingle();
     
@@ -29,7 +29,8 @@ const Dashboard = () => {
       // Store ban info and redirect to banned page
       localStorage.setItem("banReason", profile.ban_reason || "");
       localStorage.setItem("bannedUsername", profile.username || "");
-      navigate(`/banned?reason=${encodeURIComponent(profile.ban_reason || "")}&username=${encodeURIComponent(profile.username || "")}`);
+      localStorage.setItem("bannedUntil", profile.banned_until || "");
+      navigate(`/banned?reason=${encodeURIComponent(profile.ban_reason || "")}&username=${encodeURIComponent(profile.username || "")}&until=${encodeURIComponent(profile.banned_until || "")}`);
       return true;
     }
     return false;
@@ -73,12 +74,13 @@ const Dashboard = () => {
               filter: `user_id=eq.${session.user.id}`,
             },
             (payload) => {
-              const newProfile = payload.new as { is_banned?: boolean; ban_reason?: string | null; username?: string | null };
+              const newProfile = payload.new as { is_banned?: boolean; ban_reason?: string | null; username?: string | null; banned_until?: string | null };
               if (newProfile?.is_banned === true) {
                 supabase.auth.signOut().then(() => {
                   localStorage.setItem("banReason", newProfile.ban_reason || "");
                   localStorage.setItem("bannedUsername", newProfile.username || "");
-                  navigate(`/banned?reason=${encodeURIComponent(newProfile.ban_reason || "")}&username=${encodeURIComponent(newProfile.username || "")}`);
+                  localStorage.setItem("bannedUntil", newProfile.banned_until || "");
+                  navigate(`/banned?reason=${encodeURIComponent(newProfile.ban_reason || "")}&username=${encodeURIComponent(newProfile.username || "")}&until=${encodeURIComponent(newProfile.banned_until || "")}`);
                 });
               }
             }

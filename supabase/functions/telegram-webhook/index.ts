@@ -307,6 +307,8 @@ async function handleBanUser(chatId: string, identifier: string, supabase: any):
       user_email: userEmail,
       user_telegram_chat_id: userInfo.telegram_chat_id,
       created_at: new Date().toISOString(),
+      step: "reason",
+      ban_reason: null,
     }, { onConflict: "admin_chat_id" });
 
   if (pendingError) {
@@ -317,11 +319,11 @@ async function handleBanUser(chatId: string, identifier: string, supabase: any):
 
   await sendTelegramMessage(
     chatId,
-    `🚫 <b>Ban User Confirmation</b>\n\n<b>User:</b> ${userInfo.username || userInfo.name || identifier}\n<b>User ID:</b> <code>${userId}</code>\n\n<b>Please reply with the ban reason:</b>\n\n<i>Type the reason for banning this user, or send /cancelban to cancel.</i>`
+    `🚫 <b>Ban User - Step 1/2</b>\n\n<b>User:</b> ${userInfo.username || userInfo.name || identifier}\n<b>User ID:</b> <code>${userId}</code>\n\n<b>Please type the ban reason:</b>\n\n<i>Or send /cancelban to cancel.</i>`
   );
 }
 
-async function handleBanReason(chatId: string, reason: string, supabase: any): Promise<void> {
+async function handleBanReason(chatId: string, text: string, supabase: any): Promise<boolean> {
   // Get pending ban for this admin
   const { data: pendingBan, error: pendingError } = await supabase
     .from("pending_bans")
@@ -330,7 +332,88 @@ async function handleBanReason(chatId: string, reason: string, supabase: any): P
     .maybeSingle();
 
   if (!pendingBan) {
-    return; // No pending ban, ignore
+    return false; // No pending ban
+  }
+
+  // Step 1: Reason - save it and ask for duration
+  if (pendingBan.step === "reason") {
+    await supabase
+      .from("pending_bans")
+      .update({ ban_reason: text, step: "duration" })
+      .eq("admin_chat_id", chatId);
+
+    // Send duration selection with inline buttons
+    const durationKeyboard = {
+      inline_keyboard: [
+        [
+          { text: "1 Hour", callback_data: `ban_duration_1h_${pendingBan.user_id}` },
+          { text: "6 Hours", callback_data: `ban_duration_6h_${pendingBan.user_id}` },
+          { text: "24 Hours", callback_data: `ban_duration_24h_${pendingBan.user_id}` },
+        ],
+        [
+          { text: "3 Days", callback_data: `ban_duration_3d_${pendingBan.user_id}` },
+          { text: "7 Days", callback_data: `ban_duration_7d_${pendingBan.user_id}` },
+          { text: "30 Days", callback_data: `ban_duration_30d_${pendingBan.user_id}` },
+        ],
+        [
+          { text: "🔴 Permanent", callback_data: `ban_duration_permanent_${pendingBan.user_id}` },
+        ],
+      ],
+    };
+
+    await sendTelegramMessage(
+      chatId,
+      `🚫 <b>Ban User - Step 2/2</b>\n\n<b>User:</b> ${pendingBan.username}\n<b>Reason:</b> ${text}\n\n<b>Select ban duration:</b>`,
+      durationKeyboard
+    );
+
+    return true;
+  }
+
+  return false;
+}
+
+async function executeBan(
+  chatId: string,
+  pendingBan: any,
+  duration: string,
+  supabase: any
+): Promise<void> {
+  // Calculate banned_until based on duration
+  let bannedUntil: string | null = null;
+  let durationText = "Permanent";
+
+  const now = new Date();
+  switch (duration) {
+    case "1h":
+      bannedUntil = new Date(now.getTime() + 1 * 60 * 60 * 1000).toISOString();
+      durationText = "1 Hour";
+      break;
+    case "6h":
+      bannedUntil = new Date(now.getTime() + 6 * 60 * 60 * 1000).toISOString();
+      durationText = "6 Hours";
+      break;
+    case "24h":
+      bannedUntil = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+      durationText = "24 Hours";
+      break;
+    case "3d":
+      bannedUntil = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString();
+      durationText = "3 Days";
+      break;
+    case "7d":
+      bannedUntil = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      durationText = "7 Days";
+      break;
+    case "30d":
+      bannedUntil = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      durationText = "30 Days";
+      break;
+    case "permanent":
+    default:
+      bannedUntil = null;
+      durationText = "Permanent";
+      break;
   }
 
   // Delete pending ban
@@ -339,13 +422,14 @@ async function handleBanReason(chatId: string, reason: string, supabase: any): P
     .delete()
     .eq("admin_chat_id", chatId);
 
-  // Ban the user with the provided reason
+  // Ban the user
   const { error: banError } = await supabase
     .from("profiles")
-    .update({ 
-      is_banned: true, 
+    .update({
+      is_banned: true,
       banned_at: new Date().toISOString(),
-      ban_reason: reason
+      ban_reason: pendingBan.ban_reason,
+      banned_until: bannedUntil,
     })
     .eq("user_id", pendingBan.user_id);
 
@@ -355,21 +439,33 @@ async function handleBanReason(chatId: string, reason: string, supabase: any): P
     return;
   }
 
+  const expiryText = bannedUntil 
+    ? `\n<b>Expires:</b> ${new Date(bannedUntil).toLocaleString()}`
+    : "";
+
   await sendTelegramMessage(
-    chatId, 
-    `✅ <b>User Banned</b>\n\n<b>User:</b> ${pendingBan.username}\n<b>Reason:</b> ${reason}`
+    chatId,
+    `✅ <b>User Banned</b>\n\n<b>User:</b> ${pendingBan.username}\n<b>Reason:</b> ${pendingBan.ban_reason}\n<b>Duration:</b> ${durationText}${expiryText}`
   );
 
-  // Notify user via Telegram if they have a chat ID
+  // Notify user via Telegram
   if (pendingBan.user_telegram_chat_id) {
+    const userExpiryText = bannedUntil
+      ? `\n\n<b>Ban expires:</b> ${new Date(bannedUntil).toLocaleString()}`
+      : "\n\nThis is a <b>permanent</b> ban.";
+
     await sendTelegramMessage(
       pendingBan.user_telegram_chat_id,
-      `🚫 <b>Account Banned</b>\n\nYour account has been banned from the platform.\n\n<b>Reason:</b> ${reason}\n\nIf you believe this is a mistake, please contact support.`
+      `🚫 <b>Account Banned</b>\n\nYour account has been banned from the platform.\n\n<b>Reason:</b> ${pendingBan.ban_reason}\n<b>Duration:</b> ${durationText}${userExpiryText}\n\nIf you believe this is a mistake, please contact support.`
     );
   }
 
-  // Send email notification if we have user email
+  // Send email notification
   if (pendingBan.user_email && RESEND_API_KEY) {
+    const emailExpiryText = bannedUntil
+      ? `<p><strong>Ban expires:</strong> ${new Date(bannedUntil).toLocaleString()}</p>`
+      : `<p>This is a <strong>permanent</strong> ban.</p>`;
+
     try {
       await fetch("https://api.resend.com/emails", {
         method: "POST",
@@ -380,14 +476,15 @@ async function handleBanReason(chatId: string, reason: string, supabase: any): P
         body: JSON.stringify({
           from: "Yunchi Support <onboarding@resend.dev>",
           to: [pendingBan.user_email],
-          subject: "Account Banned - Yunchi",
+          subject: `Account Banned (${durationText}) - Yunchi`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2 style="color: #dc2626;">🚫 Account Banned</h2>
               <p>Your Yunchi account has been banned.</p>
               <div style="background: #fef2f2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
-                <p><strong>Reason:</strong></p>
-                <p>${reason}</p>
+                <p><strong>Reason:</strong> ${pendingBan.ban_reason}</p>
+                <p><strong>Duration:</strong> ${durationText}</p>
+                ${emailExpiryText}
               </div>
               <p>If you believe this was a mistake, you can submit an appeal through our website or contact support directly.</p>
               <p style="color: #6c757d; font-size: 14px; margin-top: 20px;">— Yunchi Team</p>
@@ -476,7 +573,8 @@ async function handleUnbanUser(chatId: string, identifier: string, supabase: any
     .update({ 
       is_banned: false, 
       banned_at: null,
-      ban_reason: null
+      ban_reason: null,
+      banned_until: null
     })
     .eq("user_id", userId);
 
@@ -717,6 +815,66 @@ const handler = async (req: Request): Promise<Response> => {
         });
       }
 
+      // Handle ban duration callback
+      if (callbackData.startsWith("ban_duration_")) {
+        const callbackChatId = update.callback_query.message?.chat.id.toString();
+
+        if (!callbackChatId || callbackChatId !== ADMIN_CHAT_ID) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can set ban duration");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        // Parse: ban_duration_1h_uuid or ban_duration_permanent_uuid
+        const parts = callbackData.replace("ban_duration_", "").split("_");
+        const duration = parts[0];
+        const userId = parts.slice(1).join("_"); // Handle UUID with underscores
+
+        // Get pending ban
+        const { data: pendingBan } = await supabase
+          .from("pending_bans")
+          .select("*")
+          .eq("admin_chat_id", callbackChatId)
+          .eq("user_id", userId)
+          .maybeSingle();
+
+        if (!pendingBan) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Ban operation expired or cancelled");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        // Execute the ban
+        await executeBan(callbackChatId, pendingBan, duration, supabase);
+        await answerCallbackQuery(update.callback_query.id, "✅ User banned successfully");
+
+        // Remove the duration selection buttons
+        if (update.callback_query.message?.message_id) {
+          try {
+            await fetch(
+              `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  chat_id: callbackChatId,
+                  message_id: update.callback_query.message.message_id,
+                  reply_markup: { inline_keyboard: [] },
+                }),
+              }
+            );
+          } catch (error) {
+            console.error("Error removing buttons:", error);
+          }
+        }
+
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
       // Handle ban appeal callbacks
       if (callbackData.startsWith("unban_appeal_") || callbackData.startsWith("reject_appeal_")) {
         const callbackChatId = update.callback_query.message?.chat.id.toString();
@@ -765,7 +923,8 @@ const handler = async (req: Request): Promise<Response> => {
               .update({ 
                 is_banned: false, 
                 banned_at: null,
-                ban_reason: null
+                ban_reason: null,
+                banned_until: null
               })
               .eq("user_id", authUser.id);
           }
