@@ -1,4 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Sidebar,
@@ -20,7 +21,8 @@ import {
   CreditCard, 
   ArrowUpCircle, 
   HeadphonesIcon,
-  LogOut 
+  LogOut,
+  Shield
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -34,12 +36,35 @@ const menuItems = [
   { titleKey: "contactSupport" as const, url: "/dashboard/support", icon: HeadphonesIcon },
 ];
 
+const adminItems = [
+  { title: "Manage Topups", url: "/dashboard/admin/topups", icon: Shield },
+];
+
 const DashboardSidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { state } = useSidebar();
   const { t } = useLanguage();
   const collapsed = state === "collapsed";
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .maybeSingle();
+
+      setIsAdmin(!!data);
+    };
+
+    checkAdmin();
+  }, []);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -98,6 +123,38 @@ const DashboardSidebar = () => {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Admin Section */}
+        {isAdmin && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              {!collapsed && (
+                <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Admin
+                </div>
+              )}
+              <SidebarMenu>
+                {adminItems.map((item) => (
+                  <SidebarMenuItem key={item.url}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive(item.url)}
+                    >
+                      <NavLink
+                        to={item.url}
+                        className="flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-secondary"
+                        activeClassName="bg-primary/20 text-primary border-l-2 border-primary"
+                      >
+                        <item.icon className="h-5 w-5 text-yellow-500" />
+                        {!collapsed && <span className="text-yellow-500">{item.title}</span>}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-border p-4">
