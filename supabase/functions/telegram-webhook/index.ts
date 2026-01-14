@@ -214,6 +214,7 @@ async function setBotCommands(): Promise<void> {
     { command: "mystatus", description: "👤 Check account status" },
     { command: "admincmd", description: "🔐 View admin command panel" },
     { command: "ticket", description: "🎫 View/manage a support ticket" },
+    { command: "topups", description: "💰 View pending top-up requests" },
     { command: "banuser", description: "🔨 Ban a user" },
     { command: "cancelban", description: "↩️ Cancel pending ban" },
     { command: "unbanuser", description: "✅ Unban a user" },
@@ -398,6 +399,15 @@ async function handleAdminCmd(chatId: string): Promise<void> {
 │
 │  /ticket <code>[ticket_id]</code>
 │  └ 📝 View and manage support ticket
+│
+└─────────────────────────────────┘
+
+┌─────────────────────────────────┐
+│  💰 <b>FINANCIAL</b>
+├─────────────────────────────────┤
+│
+│  /topups
+│  └ 💳 View pending top-up requests
 │
 └─────────────────────────────────┘
 
@@ -1395,6 +1405,149 @@ async function handleViewBans(chatId: string, supabase: any): Promise<void> {
   await sendTelegramMessage(chatId, message);
 }
 
+// Build paginated topups list message
+function buildTopupsListMessage(
+  topups: any[],
+  page: number,
+  totalCount: number,
+  perPage: number
+): { message: string; keyboard: object | null } {
+  const totalPages = Math.ceil(totalCount / perPage);
+  const startIndex = page * perPage;
+  const endIndex = Math.min(startIndex + perPage, totalCount);
+  const displayTopups = topups.slice(startIndex, endIndex);
+
+  let topupList = "";
+  displayTopups.forEach((topup, index) => {
+    const createdDate = new Date(topup.created_at).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+    const username = topup.profiles?.username || topup.profiles?.name || "Unknown";
+    
+    topupList += `
+${startIndex + index + 1}. <b>$${Number(topup.amount).toFixed(2)}</b>
+   👤 ${username}
+   💳 ${topup.payment_method}
+   📅 ${createdDate}
+   🆔 <code>${topup.id.substring(0, 8)}</code>
+`;
+  });
+
+  const topupsMessage = `
+╔═══════════════════════════════╗
+     💰 <b>PENDING TOP-UP REQUESTS</b>
+╚═══════════════════════════════╝
+
+┌─────────────────────────────────┐
+│  📊 <b>SUMMARY</b>
+├─────────────────────────────────┤
+│
+│  <b>Pending:</b> ${totalCount}
+│  <b>Page:</b> ${page + 1}/${totalPages || 1}
+│
+└─────────────────────────────────┘
+
+┌─────────────────────────────────┐
+│  📋 <b>REQUESTS</b>
+├─────────────────────────────────┤
+${topupList || "\n│  No pending requests\n"}
+└─────────────────────────────────┘
+
+<i>💡 Use buttons below to approve/reject</i>
+<i>📱 Or manage via web dashboard</i>
+`;
+
+  // Build pagination and action buttons
+  const buttons: any[][] = [];
+  
+  // Add approve/reject buttons for each topup
+  displayTopups.forEach((topup) => {
+    buttons.push([
+      { text: `✅ Approve $${Number(topup.amount).toFixed(2)}`, callback_data: `topup_accept_${topup.id}` },
+      { text: `❌ Reject`, callback_data: `topup_reject_${topup.id}` }
+    ]);
+  });
+  
+  // Pagination buttons
+  if (totalPages > 1) {
+    const paginationButtons = [];
+    
+    if (page > 0) {
+      paginationButtons.push({ text: "◀️ Previous", callback_data: `topups_page_${page - 1}` });
+    }
+    
+    paginationButtons.push({ text: `${page + 1}/${totalPages}`, callback_data: "topups_noop" });
+    
+    if (page < totalPages - 1) {
+      paginationButtons.push({ text: "Next ▶️", callback_data: `topups_page_${page + 1}` });
+    }
+    
+    buttons.push(paginationButtons);
+  }
+  
+  // Refresh button
+  buttons.push([{ text: "🔄 Refresh", callback_data: "topups_refresh" }]);
+
+  const keyboard = buttons.length > 0 ? { inline_keyboard: buttons } : null;
+
+  return { message: topupsMessage, keyboard };
+}
+
+async function handleTopups(chatId: string, supabase: any, page: number = 0): Promise<{ message: string; keyboard: object | null }> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to view top-up requests.");
+    return { message: "", keyboard: null };
+  }
+
+  const perPage = 5;
+
+  // Get all pending topup transactions with user profile info
+  const { data: topups, error, count } = await supabase
+    .from("topup_transactions")
+    .select(`
+      id, user_id, amount, payment_method, status, created_at, proof_image_url,
+      profiles!inner(username, name, telegram_chat_id)
+    `, { count: "exact" })
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching topups:", error);
+    await sendTelegramMessage(chatId, "❌ Error fetching top-up requests. Please try again.");
+    return { message: "", keyboard: null };
+  }
+
+  const totalCount = count || 0;
+
+  if (!topups || topups.length === 0) {
+    const noTopupsMessage = `
+╔═══════════════════════════════╗
+     💰 <b>PENDING TOP-UP REQUESTS</b>
+╚═══════════════════════════════╝
+
+┌─────────────────────────────────┐
+│
+│  ✅ No pending requests!
+│
+│  All top-up requests have been
+│  processed.
+│
+└─────────────────────────────────┘
+
+<i>🔄 Check back later for new requests</i>
+`;
+    return { 
+      message: noTopupsMessage, 
+      keyboard: { inline_keyboard: [[{ text: "🔄 Refresh", callback_data: "topups_refresh" }]] } 
+    };
+  }
+
+  return buildTopupsListMessage(topups, page, totalCount, perPage);
+}
+
 const handler = async (req: Request): Promise<Response> => {
   console.log("Received Telegram webhook");
 
@@ -1468,6 +1621,63 @@ const handler = async (req: Request): Promise<Response> => {
       // Handle noop callback (page indicator button)
       if (callbackData === "allusers_noop") {
         await answerCallbackQuery(update.callback_query.id, "Current page");
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      // Handle topups pagination callback
+      if (callbackData.startsWith("topups_page_")) {
+        const chatId = update.callback_query.message?.chat.id.toString();
+        const messageId = update.callback_query.message?.message_id;
+        
+        if (!chatId || !isAdmin(chatId)) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        const page = parseInt(callbackData.replace("topups_page_", ""));
+        const { message, keyboard } = await handleTopups(chatId, supabase, page);
+
+        if (messageId && message) {
+          await editTelegramMessage(chatId, messageId, message, keyboard || undefined);
+        }
+
+        await answerCallbackQuery(update.callback_query.id, `Page ${page + 1}`);
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      // Handle topups noop callback
+      if (callbackData === "topups_noop") {
+        await answerCallbackQuery(update.callback_query.id, "Current page");
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      // Handle topups refresh callback
+      if (callbackData === "topups_refresh") {
+        const chatId = update.callback_query.message?.chat.id.toString();
+        const messageId = update.callback_query.message?.message_id;
+        
+        if (!chatId || !isAdmin(chatId)) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        const { message, keyboard } = await handleTopups(chatId, supabase, 0);
+
+        if (messageId && message) {
+          await editTelegramMessage(chatId, messageId, message, keyboard || undefined);
+        }
+
+        await answerCallbackQuery(update.callback_query.id, "🔄 Refreshed");
         return new Response(JSON.stringify({ ok: true }), {
           headers: { "Content-Type": "application/json", ...corsHeaders },
         });
@@ -2444,6 +2654,9 @@ This action will:
 │  /ticket <code>[id]</code>
 │  └ 🎫 Manage support ticket
 │
+│  /topups
+│  └ 💰 View pending top-ups
+│
 │  /banuser <code>[user]</code>
 │  └ 🔨 Ban a user
 │
@@ -2679,6 +2892,18 @@ Yunchi account.
     if (update.message?.text === "/stats") {
       const chatId = update.message.chat.id.toString();
       await handleStats(chatId, supabase);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Handle /topups command
+    if (update.message?.text === "/topups") {
+      const chatId = update.message.chat.id.toString();
+      const { message, keyboard } = await handleTopups(chatId, supabase, 0);
+      if (message) {
+        await sendTelegramMessage(chatId, message, keyboard || undefined);
+      }
       return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
