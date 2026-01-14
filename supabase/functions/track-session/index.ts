@@ -19,21 +19,26 @@ Deno.serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return new Response(
         JSON.stringify({ error: "No authorization header" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const supabaseClient = createClient(
+    const token = authHeader.replace("Bearer ", "");
+    
+    // Use service role client to verify the token
+    const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    // Get user from the token
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+    
     if (userError || !user) {
+      console.error("Auth error:", userError?.message || "No user found");
       return new Response(
         JSON.stringify({ error: "Invalid token" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -46,12 +51,6 @@ Deno.serve(async (req) => {
     const ip_address = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || 
                        req.headers.get("x-real-ip") || 
                        "Unknown";
-
-    // Use service role for session management
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
 
     // Mark all existing sessions as not current
     await supabaseAdmin
