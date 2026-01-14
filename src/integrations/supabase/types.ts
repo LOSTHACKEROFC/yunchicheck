@@ -191,6 +191,36 @@ export type Database = {
         }
         Relationships: []
       }
+      pending_bans: {
+        Row: {
+          admin_chat_id: string
+          created_at: string
+          id: string
+          user_email: string | null
+          user_id: string
+          user_telegram_chat_id: string | null
+          username: string | null
+        }
+        Insert: {
+          admin_chat_id: string
+          created_at?: string
+          id?: string
+          user_email?: string | null
+          user_id: string
+          user_telegram_chat_id?: string | null
+          username?: string | null
+        }
+        Update: {
+          admin_chat_id?: string
+          created_at?: string
+          id?: string
+          user_email?: string | null
+          user_id?: string
+          user_telegram_chat_id?: string | null
+          username?: string | null
+        }
+        Relationships: []
+      }
       pending_verifications: {
         Row: {
           created_at: string
