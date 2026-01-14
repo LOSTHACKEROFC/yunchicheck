@@ -1,11 +1,80 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Mail, Loader2, AlertTriangle, ArrowLeft, ShieldAlert } from "lucide-react";
+import { Mail, Loader2, AlertTriangle, ArrowLeft, ShieldAlert, CreditCard, User, Lock, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "sonner";
+
+// Floating card component
+const FloatingCard = ({ 
+  icon: Icon, 
+  delay, 
+  duration, 
+  startX, 
+  startY 
+}: { 
+  icon: React.ElementType; 
+  delay: number; 
+  duration: number; 
+  startX: number; 
+  startY: number;
+}) => (
+  <div
+    className="absolute opacity-10 pointer-events-none"
+    style={{
+      left: `${startX}%`,
+      top: `${startY}%`,
+      animation: `float-card ${duration}s ease-in-out infinite`,
+      animationDelay: `${delay}s`,
+    }}
+  >
+    <div className="w-16 h-20 bg-card/50 backdrop-blur-sm rounded-lg border border-border/30 flex items-center justify-center shadow-lg">
+      <Icon className="h-6 w-6 text-destructive/50" />
+    </div>
+  </div>
+);
+
+// Background floating cards
+const FloatingCardsBackground = () => {
+  const cards = [
+    { icon: CreditCard, delay: 0, duration: 8, startX: 5, startY: 10 },
+    { icon: User, delay: 1.5, duration: 10, startX: 85, startY: 15 },
+    { icon: Lock, delay: 3, duration: 7, startX: 15, startY: 70 },
+    { icon: Shield, delay: 2, duration: 9, startX: 80, startY: 65 },
+    { icon: CreditCard, delay: 4, duration: 11, startX: 50, startY: 5 },
+    { icon: User, delay: 0.5, duration: 8, startX: 25, startY: 85 },
+    { icon: Lock, delay: 2.5, duration: 10, startX: 70, startY: 80 },
+    { icon: Shield, delay: 1, duration: 9, startX: 10, startY: 40 },
+    { icon: CreditCard, delay: 3.5, duration: 7, startX: 90, startY: 40 },
+    { icon: User, delay: 5, duration: 12, startX: 40, startY: 90 },
+  ];
+
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none">
+      <style>{`
+        @keyframes float-card {
+          0%, 100% {
+            transform: translateY(0px) rotate(0deg);
+          }
+          25% {
+            transform: translateY(-20px) rotate(5deg);
+          }
+          50% {
+            transform: translateY(-10px) rotate(-3deg);
+          }
+          75% {
+            transform: translateY(-25px) rotate(3deg);
+          }
+        }
+      `}</style>
+      {cards.map((card, index) => (
+        <FloatingCard key={index} {...card} />
+      ))}
+    </div>
+  );
+};
 
 const VerifyDeactivation = () => {
   const navigate = useNavigate();
@@ -121,16 +190,19 @@ const VerifyDeactivation = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
+        <FloatingCardsBackground />
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4 relative">
+      <FloatingCardsBackground />
+      
+      <Card className="w-full max-w-md relative z-10 animate-scale-in">
         <CardHeader className="text-center space-y-4">
-          <div className="mx-auto w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center">
+          <div className="mx-auto w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center animate-pulse">
             <ShieldAlert className="h-8 w-8 text-destructive" />
           </div>
           <CardTitle className="text-2xl text-destructive">Verify Account Deletion</CardTitle>
@@ -142,7 +214,7 @@ const VerifyDeactivation = () => {
         
         <CardContent className="space-y-6">
           {/* Warning Box */}
-          <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+          <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 animate-fade-in">
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
               <div className="text-sm text-destructive">
