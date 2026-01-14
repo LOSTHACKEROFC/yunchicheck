@@ -73,6 +73,9 @@ export interface Translations {
   createAccount: string;
   username: string;
   enterUsername: string;
+  telegramChatId: string;
+  enterTelegramChatId: string;
+  telegramChatIdRequired: string;
   loading: string;
   signIn: string;
   signUp: string;
@@ -187,6 +190,9 @@ const translations: Record<Language, Translations> = {
     createAccount: "Create your account",
     username: "Username",
     enterUsername: "Enter username",
+    telegramChatId: "Telegram Chat ID",
+    enterTelegramChatId: "Enter your Telegram Chat ID",
+    telegramChatIdRequired: "Telegram Chat ID is required for notifications",
     loading: "Loading...",
     signIn: "Sign In",
     signUp: "Sign Up",
@@ -297,6 +303,9 @@ const translations: Record<Language, Translations> = {
     createAccount: "Crea tu cuenta",
     username: "Usuario",
     enterUsername: "Ingresa usuario",
+    telegramChatId: "ID de Chat de Telegram",
+    enterTelegramChatId: "Ingresa tu ID de Chat de Telegram",
+    telegramChatIdRequired: "El ID de Chat de Telegram es requerido para notificaciones",
     loading: "Cargando...",
     signIn: "Iniciar Sesión",
     signUp: "Registrarse",
@@ -407,6 +416,9 @@ const translations: Record<Language, Translations> = {
     createAccount: "Créez votre compte",
     username: "Nom d'utilisateur",
     enterUsername: "Entrez le nom d'utilisateur",
+    telegramChatId: "ID de Chat Telegram",
+    enterTelegramChatId: "Entrez votre ID de Chat Telegram",
+    telegramChatIdRequired: "L'ID de Chat Telegram est requis pour les notifications",
     loading: "Chargement...",
     signIn: "Se Connecter",
     signUp: "S'inscrire",
@@ -517,6 +529,9 @@ const translations: Record<Language, Translations> = {
     createAccount: "Erstellen Sie Ihr Konto",
     username: "Benutzername",
     enterUsername: "Benutzername eingeben",
+    telegramChatId: "Telegram Chat-ID",
+    enterTelegramChatId: "Geben Sie Ihre Telegram Chat-ID ein",
+    telegramChatIdRequired: "Telegram Chat-ID ist für Benachrichtigungen erforderlich",
     loading: "Laden...",
     signIn: "Anmelden",
     signUp: "Registrieren",
@@ -627,6 +642,9 @@ const translations: Record<Language, Translations> = {
     createAccount: "إنشاء حسابك",
     username: "اسم المستخدم",
     enterUsername: "أدخل اسم المستخدم",
+    telegramChatId: "معرف محادثة تيليجرام",
+    enterTelegramChatId: "أدخل معرف محادثة تيليجرام الخاص بك",
+    telegramChatIdRequired: "معرف محادثة تيليجرام مطلوب للإشعارات",
     loading: "جاري التحميل...",
     signIn: "تسجيل الدخول",
     signUp: "إنشاء حساب",
@@ -737,6 +755,9 @@ const translations: Record<Language, Translations> = {
     createAccount: "创建您的账户",
     username: "用户名",
     enterUsername: "输入用户名",
+    telegramChatId: "Telegram 聊天 ID",
+    enterTelegramChatId: "输入您的 Telegram 聊天 ID",
+    telegramChatIdRequired: "需要 Telegram 聊天 ID 以接收通知",
     loading: "加载中...",
     signIn: "登录",
     signUp: "注册",
