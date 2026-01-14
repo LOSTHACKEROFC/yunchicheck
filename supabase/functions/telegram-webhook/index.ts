@@ -217,6 +217,7 @@ async function setBotCommands(): Promise<void> {
     { command: "banuser", description: "Ban a user" },
     { command: "cancelban", description: "Cancel pending ban" },
     { command: "unbanuser", description: "Unban a user" },
+    { command: "deleteuser", description: "Permanently delete a user" },
     { command: "viewbans", description: "View all banned users" },
     { command: "broadcast", description: "Broadcast message to all users" },
     { command: "stats", description: "View website statistics" },
@@ -403,6 +404,9 @@ async function handleAdminCmd(chatId: string): Promise<void> {
 /unbanuser <code>[username/email]</code>
 └ Unban a previously banned user
 
+/deleteuser <code>[username/email/chat_id]</code>
+└ ⚠️ Permanently delete a user
+
 /cancelban
 └ Cancel a pending ban operation
 
@@ -429,6 +433,228 @@ async function handleAdminCmd(chatId: string): Promise<void> {
 <i>💡 Commands registered in menu. Type / to see them.</i>
 `;
   await sendTelegramMessage(chatId, adminMenu);
+}
+
+// Handle delete user command
+async function handleDeleteUser(chatId: string, identifier: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to delete users.");
+    return;
+  }
+
+  if (!identifier) {
+    await sendTelegramMessage(chatId, "❌ Please provide a username, email, or Telegram chat ID.\n\n<b>Usage:</b> /deleteuser identifier");
+    return;
+  }
+
+  // Find user by username, email, or telegram_chat_id
+  let userId: string | null = null;
+  let userInfo: any = null;
+  let userEmail: string | null = null;
+
+  // First try by username or telegram_chat_id
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, user_id, username, name, telegram_chat_id, telegram_username, balance, created_at")
+    .or(`username.ilike.${identifier},telegram_chat_id.eq.${identifier}`)
+    .maybeSingle();
+
+  if (profile) {
+    userId = profile.user_id;
+    userInfo = profile;
+    // Get email from auth.users
+    const { data: authData } = await supabase.auth.admin.listUsers();
+    const foundUser = authData?.users?.find((u: any) => u.id === userId);
+    userEmail = foundUser?.email || null;
+  } else {
+    // Try by email via auth.users
+    const { data: authData } = await supabase.auth.admin.listUsers();
+    const foundUser = authData?.users?.find((u: any) => 
+      u.email?.toLowerCase() === identifier.toLowerCase()
+    );
+    
+    if (foundUser) {
+      userId = foundUser.id;
+      userEmail = foundUser.email;
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("id, user_id, username, name, telegram_chat_id, telegram_username, balance, created_at")
+        .eq("user_id", foundUser.id)
+        .maybeSingle();
+      userInfo = profileData;
+    }
+  }
+
+  if (!userId) {
+    await sendTelegramMessage(chatId, `❌ User not found: <code>${identifier}</code>\n\n<i>Try searching by username, email, or Telegram chat ID.</i>`);
+    return;
+  }
+
+  // Store pending deletion info
+  const memberSince = userInfo?.created_at 
+    ? new Date(userInfo.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+    : "Unknown";
+
+  const confirmationKeyboard = {
+    inline_keyboard: [
+      [
+        { text: "⚠️ CONFIRM DELETE", callback_data: `delete_confirm_${userId}` },
+        { text: "❌ Cancel", callback_data: `delete_cancel_${userId}` },
+      ],
+    ],
+  };
+
+  const confirmMessage = `
+⚠️ <b>DELETE USER - CONFIRMATION REQUIRED</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>👤 USER DETAILS</b>
+
+<b>Username:</b> ${userInfo?.username || "Not set"}
+<b>Name:</b> ${userInfo?.name || "Not set"}
+<b>Email:</b> ${userEmail || "Unknown"}
+<b>Telegram:</b> ${userInfo?.telegram_chat_id ? `<code>${userInfo.telegram_chat_id}</code>` : "Not connected"}
+<b>Balance:</b> $${Number(userInfo?.balance || 0).toFixed(2)}
+<b>Member Since:</b> ${memberSince}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>🗑️ DATA TO BE DELETED:</b>
+• Profile & account info
+• All notifications
+• All support tickets & messages
+• All card checks
+• All sessions
+• Ban appeals & history
+• Auth account
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>⚠️ THIS ACTION IS IRREVERSIBLE!</b>
+
+<i>Click CONFIRM DELETE to proceed or Cancel to abort.</i>
+`;
+
+  await sendTelegramMessage(chatId, confirmMessage, confirmationKeyboard);
+}
+
+// Execute user deletion
+async function executeUserDeletion(chatId: string, userId: string, supabase: any): Promise<{ success: boolean; error?: string }> {
+  try {
+    console.log(`Starting deletion for user: ${userId}`);
+
+    // Get user info before deletion for logging
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("username, telegram_chat_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    // Delete all related data in order (respecting foreign keys)
+    
+    // 1. Get all ticket IDs for this user first
+    const { data: tickets } = await supabase
+      .from("support_tickets")
+      .select("id")
+      .eq("user_id", userId);
+    
+    // 2. Delete ticket messages for those tickets
+    if (tickets && tickets.length > 0) {
+      const ticketIds = tickets.map((t: any) => t.id);
+      await supabase
+        .from("ticket_messages")
+        .delete()
+        .in("ticket_id", ticketIds);
+    }
+
+    // 3. Delete support tickets
+    await supabase
+      .from("support_tickets")
+      .delete()
+      .eq("user_id", userId);
+
+    // 4. Delete notifications
+    await supabase
+      .from("notifications")
+      .delete()
+      .eq("user_id", userId);
+
+    // 5. Delete notification reads
+    await supabase
+      .from("notification_reads")
+      .delete()
+      .eq("user_id", userId);
+
+    // 6. Delete deleted_notifications
+    await supabase
+      .from("deleted_notifications")
+      .delete()
+      .eq("user_id", userId);
+
+    // 7. Delete card checks
+    await supabase
+      .from("card_checks")
+      .delete()
+      .eq("user_id", userId);
+
+    // 8. Delete user sessions
+    await supabase
+      .from("user_sessions")
+      .delete()
+      .eq("user_id", userId);
+
+    // 9. Delete user roles
+    await supabase
+      .from("user_roles")
+      .delete()
+      .eq("user_id", userId);
+
+    // 10. Delete ban appeals
+    await supabase
+      .from("ban_appeals")
+      .delete()
+      .eq("user_id", userId);
+
+    // 11. Delete password reset OTPs
+    await supabase
+      .from("password_reset_otps")
+      .delete()
+      .eq("user_id", userId);
+
+    // 12. Delete pending bans
+    await supabase
+      .from("pending_bans")
+      .delete()
+      .eq("user_id", userId);
+
+    // 13. Delete pending verifications by telegram_chat_id if exists
+    if (profile?.telegram_chat_id) {
+      await supabase
+        .from("pending_verifications")
+        .delete()
+        .eq("telegram_chat_id", profile.telegram_chat_id);
+    }
+
+    // 14. Delete profile
+    await supabase
+      .from("profiles")
+      .delete()
+      .eq("user_id", userId);
+
+    // 15. Delete auth user
+    const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+    if (authError) {
+      console.error("Error deleting auth user:", authError);
+      return { success: false, error: `Auth deletion failed: ${authError.message}` };
+    }
+
+    console.log(`Successfully deleted user: ${userId}`);
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error during user deletion:", error);
+    return { success: false, error: error.message };
+  }
 }
 
 // Store pending ban operations (in-memory, per webhook call we'll use DB)
@@ -1055,6 +1281,76 @@ const handler = async (req: Request): Promise<Response> => {
       // Handle noop callback (page indicator button)
       if (callbackData === "allusers_noop") {
         await answerCallbackQuery(update.callback_query.id, "Current page");
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      // Handle user deletion confirmation
+      if (callbackData.startsWith("delete_confirm_")) {
+        const callbackChatId = update.callback_query.message?.chat.id.toString();
+        const messageId = update.callback_query.message?.message_id;
+        
+        if (!callbackChatId || !isAdmin(callbackChatId)) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        const userId = callbackData.replace("delete_confirm_", "");
+        
+        // Get user info before deletion
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("username, name")
+          .eq("user_id", userId)
+          .maybeSingle();
+
+        const displayName = profile?.username || profile?.name || userId;
+
+        // Execute deletion
+        const result = await executeUserDeletion(callbackChatId, userId, supabase);
+
+        if (result.success) {
+          if (messageId) {
+            await editTelegramMessage(
+              callbackChatId,
+              messageId,
+              `✅ <b>User Deleted Successfully</b>\n\n<b>User:</b> ${displayName}\n<b>User ID:</b> <code>${userId}</code>\n\n<i>All user data has been permanently removed.</i>`
+            );
+          }
+          await answerCallbackQuery(update.callback_query.id, "✅ User deleted successfully");
+        } else {
+          if (messageId) {
+            await editTelegramMessage(
+              callbackChatId,
+              messageId,
+              `❌ <b>Deletion Failed</b>\n\n<b>User:</b> ${displayName}\n<b>Error:</b> ${result.error}\n\n<i>Please try again or check the logs.</i>`
+            );
+          }
+          await answerCallbackQuery(update.callback_query.id, "❌ Deletion failed");
+        }
+
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      // Handle user deletion cancellation
+      if (callbackData.startsWith("delete_cancel_")) {
+        const callbackChatId = update.callback_query.message?.chat.id.toString();
+        const messageId = update.callback_query.message?.message_id;
+        
+        if (callbackChatId && messageId) {
+          await editTelegramMessage(
+            callbackChatId,
+            messageId,
+            "❌ <b>Deletion Cancelled</b>\n\n<i>No changes were made.</i>"
+          );
+        }
+        
+        await answerCallbackQuery(update.callback_query.id, "Deletion cancelled");
         return new Response(JSON.stringify({ ok: true }), {
           headers: { "Content-Type": "application/json", ...corsHeaders },
         });
@@ -1791,6 +2087,16 @@ Your Telegram is not linked to any Yunchi account.
       const chatId = update.message.chat.id.toString();
       const identifier = update.message.text.replace("/unbanuser", "").trim();
       await handleUnbanUser(chatId, identifier, supabase);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Handle /deleteuser command
+    if (update.message?.text?.startsWith("/deleteuser")) {
+      const chatId = update.message.chat.id.toString();
+      const identifier = update.message.text.replace("/deleteuser", "").trim();
+      await handleDeleteUser(chatId, identifier, supabase);
       return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
