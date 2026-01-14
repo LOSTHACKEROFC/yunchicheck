@@ -543,6 +543,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      handle_topup_completion: {
+        Args: { p_transaction_id: string }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
