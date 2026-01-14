@@ -16,6 +16,7 @@ interface TopupNotificationRequest {
   amount: number;
   status: string;
   payment_method: string;
+  rejection_reason?: string;
 }
 
 async function sendTelegramMessage(chatId: string, message: string): Promise<boolean> {
@@ -67,9 +68,9 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { transaction_id, user_id, amount, status, payment_method }: TopupNotificationRequest = await req.json();
+    const { transaction_id, user_id, amount, status, payment_method, rejection_reason }: TopupNotificationRequest = await req.json();
 
-    console.log("Processing topup notification:", { transaction_id, user_id, amount, status });
+    console.log("Processing topup notification:", { transaction_id, user_id, amount, status, rejection_reason });
 
     // Create Supabase client with service role
     const supabaseAdmin = createClient(
@@ -172,6 +173,7 @@ Your balance has been credited. Thank you for using Yunchi Checker!
 
     } else if (status === "failed") {
       // REJECTED notification
+      const reasonText = rejection_reason ? `\n\n📋 <b>Reason:</b> ${rejection_reason}` : "";
       const telegramMessage = `
 ❌ <b>Topup Rejected</b>
 
@@ -181,11 +183,15 @@ Unfortunately, your topup request has been rejected.
 
 💰 <b>Amount:</b> ${formattedAmount}
 💳 <b>Method:</b> ${methodLabel}
-📝 <b>Transaction ID:</b> <code>${transaction_id.slice(0, 8)}...</code>
+📝 <b>Transaction ID:</b> <code>${transaction_id.slice(0, 8)}...</code>${reasonText}
 
 If you believe this was a mistake, please contact support with your transaction details.
       `.trim();
 
+      const reasonHtml = rejection_reason 
+        ? `<p style="margin: 10px 0; padding: 15px; background: #3b1c1c; border-left: 4px solid #ef4444; border-radius: 4px;"><strong>Reason:</strong> ${rejection_reason}</p>` 
+        : "";
+      
       const emailHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="background: linear-gradient(135deg, #ef4444, #dc2626); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
@@ -201,6 +207,8 @@ If you believe this was a mistake, please contact support with your transaction 
               <p style="margin: 5px 0;"><strong>Transaction ID:</strong> ${transaction_id.slice(0, 8)}...</p>
             </div>
             
+            ${reasonHtml}
+            
             <p style="color: #a3a3a3; font-size: 14px;">If you believe this was a mistake, please contact support with your transaction details.</p>
           </div>
         </div>
@@ -215,12 +223,16 @@ If you believe this was a mistake, please contact support with your transaction 
       }
 
       // Create notification in database
+      const notificationMessage = rejection_reason 
+        ? `Your ${formattedAmount} topup via ${methodLabel} has been rejected. Reason: ${rejection_reason}`
+        : `Your ${formattedAmount} topup via ${methodLabel} has been rejected. Please contact support if you need assistance.`;
+      
       await supabaseAdmin.from("notifications").insert({
         user_id,
         type: "topup_rejected",
         title: "Topup Rejected",
-        message: `Your ${formattedAmount} topup via ${methodLabel} has been rejected. Please contact support if you need assistance.`,
-        metadata: { transaction_id, amount, payment_method }
+        message: notificationMessage,
+        metadata: { transaction_id, amount, payment_method, rejection_reason }
       });
     }
 
