@@ -1713,6 +1713,13 @@ This action will:
           }
         }
 
+        // Refetch transaction to get any updates (like rejection_reason from admin panel)
+        const { data: updatedTransaction } = await supabase
+          .from("topup_transactions")
+          .select("rejection_reason")
+          .eq("id", transactionId)
+          .single();
+
         // Notify user via the notify-topup-status edge function
         try {
           const notifyUrl = `${SUPABASE_URL}/functions/v1/notify-topup-status`;
@@ -1728,6 +1735,7 @@ This action will:
               amount: transaction.amount,
               status: newStatus,
               payment_method: transaction.payment_method,
+              rejection_reason: updatedTransaction?.rejection_reason || null,
             }),
           });
         } catch (notifyError) {
