@@ -60,7 +60,7 @@ interface TopupTransaction {
 
 interface Profile {
   username: string | null;
-  balance: number;
+  credits: number;
 }
 
 const AdminTopups = () => {
@@ -126,12 +126,12 @@ const AdminTopups = () => {
       if (userIds.length > 0) {
         const { data: profilesData } = await supabase
           .from('profiles')
-          .select('user_id, username, balance')
+          .select('user_id, username, credits')
           .in('user_id', userIds);
 
         const profilesMap: Record<string, Profile> = {};
         profilesData?.forEach(p => {
-          profilesMap[p.user_id] = { username: p.username, balance: p.balance };
+          profilesMap[p.user_id] = { username: p.username, credits: p.credits };
         });
         setProfiles(profilesMap);
       }
@@ -196,7 +196,7 @@ const AdminTopups = () => {
           return;
         }
 
-        toast.success("Transaction approved - balance credited!");
+        toast.success("Transaction approved - credits added!");
       } else {
         // For rejection, just update the status and reason
         const updateData: { status: string; rejection_reason?: string; updated_at: string } = { 
@@ -399,12 +399,12 @@ const AdminTopups = () => {
                         <div>
                           <p className="font-medium">{profiles[tx.user_id]?.username || 'Unknown'}</p>
                           <p className="text-xs text-muted-foreground">
-                            Balance: ${profiles[tx.user_id]?.balance?.toFixed(2) || '0.00'}
+                            Credits: {profiles[tx.user_id]?.credits?.toLocaleString() || '0'}
                           </p>
                         </div>
                       </TableCell>
                       <TableCell className="font-medium text-primary">
-                        ${Number(tx.amount).toFixed(2)}
+                        {Number(tx.amount).toLocaleString()} credits
                       </TableCell>
                       <TableCell>{getPaymentMethodLabel(tx.payment_method)}</TableCell>
                       <TableCell>{getStatusBadge(tx.status)}</TableCell>
@@ -449,16 +449,16 @@ const AdminTopups = () => {
                   <p className="font-medium">{profiles[selectedTx.user_id]?.username || 'Unknown'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Amount</p>
-                  <p className="font-medium text-primary">${Number(selectedTx.amount).toFixed(2)}</p>
+                  <p className="text-sm text-muted-foreground">Credits</p>
+                  <p className="font-medium text-primary">{Number(selectedTx.amount).toLocaleString()} credits</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Payment Method</p>
                   <p className="font-medium">{getPaymentMethodLabel(selectedTx.payment_method)}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Current Balance</p>
-                  <p className="font-medium">${profiles[selectedTx.user_id]?.balance?.toFixed(2) || '0.00'}</p>
+                  <p className="text-sm text-muted-foreground">Current Credits</p>
+                  <p className="font-medium">{profiles[selectedTx.user_id]?.credits?.toLocaleString() || '0'}</p>
                 </div>
               </div>
 

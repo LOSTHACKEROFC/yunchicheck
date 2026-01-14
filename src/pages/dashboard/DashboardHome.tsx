@@ -2,16 +2,16 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wallet, CreditCard, Activity, ArrowUpCircle, History, HeadphonesIcon, ChevronRight, Users, Zap } from "lucide-react";
+import { Coins, CreditCard, Activity, ArrowUpCircle, History, HeadphonesIcon, ChevronRight, Users, Zap } from "lucide-react";
 
 const quickLinks = [
-  { title: "Topup Balance", description: "Add funds to your account", icon: ArrowUpCircle, url: "/dashboard/topup", color: "text-green-500" },
+  { title: "Buy Credits", description: "Purchase credit packages", icon: ArrowUpCircle, url: "/dashboard/topup", color: "text-green-500" },
   { title: "View History", description: "Check your transaction history", icon: History, url: "/dashboard/balance", color: "text-primary" },
   { title: "Get Support", description: "Contact our support team", icon: HeadphonesIcon, url: "/dashboard/support", color: "text-yellow-500" },
 ];
 
 const DashboardHome = () => {
-  const [profile, setProfile] = useState<{ username: string | null; balance: number } | null>(null);
+  const [profile, setProfile] = useState<{ username: string | null; credits: number } | null>(null);
   const [stats, setStats] = useState<{ total_users: number; total_checks: number }>({ total_users: 0, total_checks: 0 });
 
   useEffect(() => {
@@ -20,7 +20,7 @@ const DashboardHome = () => {
       if (user) {
         const { data } = await supabase
           .from("profiles")
-          .select("username, balance")
+          .select("username, credits")
           .eq("user_id", user.id)
           .maybeSingle();
         setProfile(data);
@@ -125,13 +125,14 @@ const DashboardHome = () => {
         <Card className="bg-card border-border col-span-2 sm:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
-              Your Balance
+              Your Credits
             </CardTitle>
-            <Wallet className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
+            <Coins className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
           </CardHeader>
           <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
-            <div className="text-xl sm:text-2xl font-bold text-primary">
-              ${profile?.balance?.toFixed(2) || "0.00"}
+            <div className="text-xl sm:text-2xl font-bold text-primary flex items-center gap-1">
+              {profile?.credits?.toLocaleString() || "0"}
+              <span className="text-xs font-normal text-muted-foreground">credits</span>
             </div>
           </CardContent>
         </Card>

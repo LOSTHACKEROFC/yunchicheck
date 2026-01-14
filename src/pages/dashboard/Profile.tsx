@@ -32,7 +32,7 @@ const Profile = () => {
   const [telegramChatId, setTelegramChatId] = useState("");
   const [telegramUsername, setTelegramUsername] = useState("");
   const [email, setEmail] = useState("");
-  const [balance, setBalance] = useState(0);
+  const [credits, setCredits] = useState(0);
   const [createdAt, setCreatedAt] = useState("");
   const [loading, setLoading] = useState(false);
   const [telegramProfile, setTelegramProfile] = useState<TelegramProfile | null>(null);
@@ -91,7 +91,7 @@ const Profile = () => {
         setCreatedAt(new Date(user.created_at).toLocaleDateString());
         const { data } = await supabase
           .from("profiles")
-          .select("username, name, telegram_chat_id, telegram_username, balance")
+          .select("username, name, telegram_chat_id, telegram_username, credits")
           .eq("user_id", user.id)
           .maybeSingle();
         
@@ -107,7 +107,7 @@ const Profile = () => {
         setTelegramChatId(profileData.telegramChatId);
         setTelegramUsername(profileData.telegramUsername);
         setOriginalValues(profileData);
-        setBalance(data?.balance || 0);
+        setCredits(data?.credits || 0);
         
         chatIdRef = data?.telegram_chat_id || "";
         
@@ -433,11 +433,11 @@ const Profile = () => {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
                 <Key className="h-4 w-4" />
-                Current Balance
+                Current Credits
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-lg font-bold text-primary">${balance.toFixed(2)}</p>
+              <p className="text-lg font-bold text-primary">{credits.toLocaleString()} credits</p>
             </CardContent>
         </Card>
         </div>

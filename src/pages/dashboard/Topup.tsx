@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { 
   ArrowUpCircle, 
@@ -16,7 +14,8 @@ import {
   Loader2,
   Upload,
   ImageIcon,
-  X
+  X,
+  Coins
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -41,10 +40,16 @@ const paymentMethods = [
   { id: "usdt", name: "USDT TRC20", icon: Banknote, fee: "0%", time: "1-5 min", address: "TJYeasypBvHPcTKe5ykGEVMR8Hgb5a9r4J" },
 ];
 
-const quickAmounts = [10, 25, 50, 100, 250, 500];
+// Credit packages with prices
+const creditPackages = [
+  { credits: 100, price: 10, popular: false },
+  { credits: 250, price: 20, popular: false },
+  { credits: 500, price: 35, popular: true },
+  { credits: 1000, price: 60, popular: false },
+];
 
 const Topup = () => {
-  const [amount, setAmount] = useState("");
+  const [selectedPackage, setSelectedPackage] = useState<typeof creditPackages[0] | null>(null);
   const [selectedMethod, setSelectedMethod] = useState("");
   const [showPayment, setShowPayment] = useState(false);
   const [transactions, setTransactions] = useState<TopupTransaction[]>([]);
@@ -101,10 +106,10 @@ const Topup = () => {
             
             // If this is the current transaction and it's completed
             if (currentTransaction?.id === updated.id && updated.status === 'completed') {
-              toast.success(`$${updated.amount} has been added to your balance!`);
+              toast.success(`${updated.amount} credits have been added to your account!`);
               setShowPayment(false);
               setCurrentTransaction(null);
-              setAmount("");
+              setSelectedPackage(null);
               setSelectedMethod("");
             }
           }
@@ -118,8 +123,8 @@ const Topup = () => {
   }, [currentTransaction]);
 
   const handleTopup = async () => {
-    if (!amount || parseFloat(amount) < 5) {
-      toast.error("Minimum topup amount is $5");
+    if (!selectedPackage) {
+      toast.error("Please select a credit package");
       return;
     }
     if (!selectedMethod) {
@@ -138,11 +143,12 @@ const Topup = () => {
 
     const selectedPayment = paymentMethods.find(m => m.id === selectedMethod);
     
+    // Store credits in the amount field
     const { data, error } = await supabase
       .from('topup_transactions')
       .insert({
         user_id: user.id,
-        amount: parseFloat(amount),
+        amount: selectedPackage.credits,
         payment_method: selectedMethod,
         wallet_address: selectedPayment?.address || null,
         status: 'pending'
@@ -268,7 +274,7 @@ const Topup = () => {
       setShowPayment(false);
       setCurrentTransaction(null);
       clearProofImage();
-      setAmount("");
+      setSelectedPackage(null);
       setSelectedMethod("");
     } catch (error) {
       console.error('Error submitting proof:', error);
@@ -293,34 +299,38 @@ const Topup = () => {
 
   const selectedPayment = paymentMethods.find(m => m.id === selectedMethod);
 
-  if (showPayment && currentTransaction) {
+  if (showPayment && currentTransaction && selectedPackage) {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-display font-bold text-foreground">Complete Payment</h1>
-          <p className="text-muted-foreground mt-1">Send the exact amount and upload payment confirmation</p>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-foreground">Complete Payment</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">Send the exact amount and upload payment confirmation</p>
         </div>
 
         <Card className="bg-card border-border max-w-xl">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              {selectedPayment && <selectedPayment.icon className="h-5 w-5 text-primary" />}
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              {selectedPayment && <selectedPayment.icon className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />}
               Pay with {selectedPayment?.name}
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="text-center p-6 bg-secondary rounded-lg">
-              <p className="text-sm text-muted-foreground mb-2">Amount to Send</p>
-              <p className="text-4xl font-bold text-primary">${currentTransaction.amount}</p>
+          <CardContent className="space-y-4 sm:space-y-6">
+            <div className="text-center p-4 sm:p-6 bg-secondary rounded-lg">
+              <p className="text-xs sm:text-sm text-muted-foreground mb-2">Amount to Pay</p>
+              <p className="text-3xl sm:text-4xl font-bold text-primary">${selectedPackage.price}</p>
+              <p className="text-sm text-muted-foreground mt-2 flex items-center justify-center gap-1">
+                <Coins className="h-4 w-4" />
+                {selectedPackage.credits} Credits
+              </p>
             </div>
 
             <div className="space-y-2">
-              <Label>Wallet Address</Label>
+              <label className="text-sm font-medium">Wallet Address</label>
               <div className="flex gap-2">
-                <Input 
+                <input 
                   value={currentTransaction.wallet_address || ''} 
                   readOnly 
-                  className="bg-secondary border-border font-mono text-sm"
+                  className="flex-1 bg-secondary border border-border rounded-md px-3 py-2 text-xs sm:text-sm font-mono"
                 />
                 <Button 
                   variant="outline" 
@@ -334,10 +344,10 @@ const Topup = () => {
 
             {/* Payment Proof Upload */}
             <div className="space-y-3">
-              <Label className="flex items-center gap-2">
+              <label className="text-sm font-medium flex items-center gap-2">
                 <Upload className="h-4 w-4" />
                 Payment Confirmation <span className="text-destructive">*</span>
-              </Label>
+              </label>
               
               <input
                 ref={fileInputRef}
@@ -367,25 +377,25 @@ const Topup = () => {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full p-8 border-2 border-dashed border-border rounded-lg hover:border-primary/50 transition-colors flex flex-col items-center gap-3 bg-secondary/50"
+                  className="w-full p-6 sm:p-8 border-2 border-dashed border-border rounded-lg hover:border-primary/50 transition-colors flex flex-col items-center gap-3 bg-secondary/50"
                 >
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                    <ImageIcon className="h-6 w-6 text-primary" />
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <ImageIcon className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-medium text-foreground">Upload payment screenshot</p>
-                    <p className="text-xs text-muted-foreground mt-1">Click to select or drag and drop</p>
-                    <p className="text-xs text-muted-foreground">PNG, JPG up to 5MB</p>
+                    <p className="text-xs sm:text-sm font-medium text-foreground">Upload payment screenshot</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Click to select or drag and drop</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">PNG, JPG up to 5MB</p>
                   </div>
                 </button>
               )}
             </div>
 
-            <div className="flex items-center gap-2 p-4 bg-primary/10 border border-primary/30 rounded-lg">
-              <CheckCircle className="h-5 w-5 text-primary" />
+            <div className="flex items-center gap-2 p-3 sm:p-4 bg-primary/10 border border-primary/30 rounded-lg">
+              <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-primary shrink-0" />
               <div>
-                <p className="text-sm font-medium text-primary">Upload Required</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs sm:text-sm font-medium text-primary">Upload Required</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground">
                   Upload your payment confirmation to verify your deposit
                 </p>
               </div>
@@ -423,164 +433,150 @@ const Topup = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-display font-bold text-foreground">Topup</h1>
-        <p className="text-muted-foreground mt-1">Add funds to your account</p>
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-foreground">Buy Credits</h1>
+        <p className="text-sm sm:text-base text-muted-foreground mt-1">Purchase credit packages to use for checks</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Topup Form */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        {/* Credit Packages */}
         <Card className="bg-card border-border lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ArrowUpCircle className="h-5 w-5 text-primary" />
-              Add Funds
+          <CardHeader className="p-3 sm:p-6">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Coins className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+              Credit Packages
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Amount Input */}
-            <div className="space-y-3">
-              <Label htmlFor="amount">Amount (USD)</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-                <Input
-                  id="amount"
-                  type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="bg-secondary border-border pl-8 text-lg h-12"
-                  min="5"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">Minimum: $5.00</p>
-            </div>
-
-            {/* Quick Amounts */}
-            <div className="space-y-3">
-              <Label>Quick Select</Label>
-              <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-                {quickAmounts.map((value) => (
-                  <Button
-                    key={value}
-                    variant="outline"
-                    onClick={() => setAmount(value.toString())}
-                    className={`border-border hover:border-primary hover:text-primary transition-all ${
-                      amount === value.toString() ? "border-primary text-primary bg-primary/10" : ""
-                    }`}
-                  >
-                    ${value}
-                  </Button>
-                ))}
-              </div>
+          <CardContent className="space-y-4 sm:space-y-6 p-3 pt-0 sm:p-6 sm:pt-0">
+            {/* Package Selection */}
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+              {creditPackages.map((pkg) => (
+                <button
+                  key={pkg.credits}
+                  onClick={() => setSelectedPackage(pkg)}
+                  className={`relative p-3 sm:p-4 rounded-lg border transition-all text-left ${
+                    selectedPackage?.credits === pkg.credits
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-secondary hover:border-primary/50"
+                  }`}
+                >
+                  {pkg.popular && (
+                    <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[10px]">
+                      Popular
+                    </Badge>
+                  )}
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-1 mb-1">
+                      <Coins className={`h-4 w-4 sm:h-5 sm:w-5 ${selectedPackage?.credits === pkg.credits ? "text-primary" : "text-muted-foreground"}`} />
+                      <span className={`text-xl sm:text-2xl font-bold ${selectedPackage?.credits === pkg.credits ? "text-primary" : "text-foreground"}`}>
+                        {pkg.credits}
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-muted-foreground">Credits</p>
+                    <p className="text-base sm:text-lg font-semibold text-primary mt-1 sm:mt-2">${pkg.price}</p>
+                  </div>
+                </button>
+              ))}
             </div>
 
             {/* Payment Methods */}
             <div className="space-y-3">
-              <Label>Payment Method</Label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="text-sm font-medium">Payment Method</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                 {paymentMethods.map((method) => (
                   <button
                     key={method.id}
                     onClick={() => setSelectedMethod(method.id)}
-                    className={`flex items-center gap-4 p-4 rounded-lg border transition-all text-left ${
+                    className={`flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-lg border transition-all text-left ${
                       selectedMethod === method.id
                         ? "border-primary bg-primary/10"
                         : "border-border bg-secondary hover:border-primary/50"
                     }`}
                   >
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0 ${
                       selectedMethod === method.id ? "bg-primary/20" : "bg-muted"
                     }`}>
-                      <method.icon className={`h-5 w-5 ${
+                      <method.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${
                         selectedMethod === method.id ? "text-primary" : "text-muted-foreground"
                       }`} />
                     </div>
-                    <div className="flex-1">
-                      <p className={`font-medium ${
+                    <div className="min-w-0">
+                      <p className={`font-medium text-sm sm:text-base ${
                         selectedMethod === method.id ? "text-primary" : "text-foreground"
                       }`}>
                         {method.name}
                       </p>
-                      <div className="flex gap-2 mt-1">
-                        <Badge variant="outline" className="text-xs py-0">
-                          Fee: {method.fee}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs py-0">
+                      <div className="flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground">
+                        <span>Fee: {method.fee}</span>
+                        <span>•</span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
                           {method.time}
-                        </Badge>
+                        </span>
                       </div>
                     </div>
-                    {selectedMethod === method.id && (
-                      <CheckCircle className="h-5 w-5 text-primary" />
-                    )}
                   </button>
                 ))}
               </div>
             </div>
 
             <Button 
-              onClick={handleTopup} 
-              className="w-full btn-primary h-12 text-lg"
-              disabled={loading}
+              className="w-full btn-primary h-10 sm:h-12 text-sm sm:text-base"
+              onClick={handleTopup}
+              disabled={!selectedPackage || !selectedMethod || loading}
             >
               {loading ? (
-                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 mr-2 animate-spin" />
               ) : (
-                <ArrowUpCircle className="h-5 w-5 mr-2" />
+                <ArrowUpCircle className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
               )}
-              Proceed to Payment
+              {loading ? "Processing..." : selectedPackage ? `Buy ${selectedPackage.credits} Credits for $${selectedPackage.price}` : "Select a Package"}
             </Button>
           </CardContent>
         </Card>
 
-        {/* Transaction History */}
-        <div className="space-y-4">
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
-                <History className="h-4 w-4 text-primary" />
-                Recent Transactions
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {loadingTransactions ? (
-                <div className="flex items-center justify-center py-4">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : transactions.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No transactions yet
-                </p>
-              ) : (
-                transactions.slice(0, 5).map((tx) => (
-                  <div 
-                    key={tx.id} 
-                    className="flex items-center justify-between p-3 bg-secondary rounded-lg"
+        {/* Recent Transactions */}
+        <Card className="bg-card border-border">
+          <CardHeader className="p-3 sm:p-6">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <History className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+              Recent Purchases
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            {loadingTransactions ? (
+              <div className="flex items-center justify-center py-6 sm:py-8">
+                <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-primary" />
+              </div>
+            ) : transactions.length === 0 ? (
+              <div className="text-center py-6 sm:py-8 text-muted-foreground">
+                <Clock className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-2 sm:mb-3 opacity-50" />
+                <p className="text-sm sm:text-base">No purchases yet</p>
+              </div>
+            ) : (
+              <div className="space-y-2 sm:space-y-3">
+                {transactions.slice(0, 5).map((tx) => (
+                  <div
+                    key={tx.id}
+                    className="flex items-center justify-between p-2 sm:p-3 rounded-lg bg-secondary/50 border border-border"
                   >
-                    <div>
-                      <p className="font-medium text-sm">${tx.amount}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {format(new Date(tx.created_at), 'MMM d, HH:mm')}
+                    <div className="min-w-0">
+                      <p className="font-medium text-xs sm:text-sm flex items-center gap-1">
+                        <Coins className="h-3 w-3 text-primary" />
+                        {tx.amount} Credits
+                      </p>
+                      <p className="text-[10px] sm:text-xs text-muted-foreground">
+                        {format(new Date(tx.created_at), "MMM d, HH:mm")}
                       </p>
                     </div>
                     {getStatusBadge(tx.status)}
                   </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-primary/20 to-primary/5 border-primary/30">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-primary">Need help?</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Contact support for manual topup or payment issues.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

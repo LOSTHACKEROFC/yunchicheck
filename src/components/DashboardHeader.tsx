@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Menu, Wallet, Bell, Check, Trash2, CheckCheck, MessageSquare, DollarSign, Megaphone, ArrowUpCircle, X } from "lucide-react";
+import { Menu, Coins, Bell, Check, Trash2, CheckCheck, MessageSquare, DollarSign, Megaphone, ArrowUpCircle, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -60,7 +60,7 @@ const notificationConfig: Record<string, { icon: typeof MessageSquare; color: st
 const DashboardHeader = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const [balance, setBalance] = useState<number>(0);
+  const [credits, setCredits] = useState<number>(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(() => {
@@ -155,15 +155,15 @@ const DashboardHeader = () => {
 
       setEmail(user.email || "");
 
-      // Fetch balance and telegram chat id
+      // Fetch credits and telegram chat id
       const { data: profile } = await supabase
         .from("profiles")
-        .select("balance, telegram_chat_id, username")
+        .select("credits, telegram_chat_id, username")
         .eq("user_id", user.id)
         .single();
 
       if (profile) {
-        setBalance(profile.balance);
+        setCredits(profile.credits);
         setUsername(profile.username || "");
         
         // Fetch Telegram profile if chat ID exists
@@ -219,8 +219,8 @@ const DashboardHeader = () => {
           table: "profiles",
         },
         (payload) => {
-          if (payload.new && payload.new.balance !== undefined) {
-            setBalance(payload.new.balance);
+          if (payload.new && payload.new.credits !== undefined) {
+            setCredits(payload.new.credits);
           }
         }
       )
@@ -346,21 +346,21 @@ const DashboardHeader = () => {
         <Separator orientation="vertical" className="h-4 sm:h-6 hidden xs:block" />
 
         <TooltipProvider>
-          {/* Balance */}
+          {/* Credits */}
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 onClick={() => navigate("/dashboard/balance")}
                 className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors border border-primary/20"
               >
-                <Wallet className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
+                <Coins className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
                 <span className="text-xs sm:text-sm font-semibold text-primary">
-                  {loading ? "..." : `$${balance.toFixed(2)}`}
+                  {loading ? "..." : `${credits.toLocaleString()}`}
                 </span>
               </button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>{t.yourBalance}</p>
+              <p>Your Credits</p>
             </TooltipContent>
           </Tooltip>
 
