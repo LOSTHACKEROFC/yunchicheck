@@ -745,11 +745,27 @@ const Auth = () => {
       if (isLogin) {
         loginSchema.parse({ email, password });
         
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data: signInData, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
+        
+        // Check if user is banned
+        if (signInData.user) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("is_banned, ban_reason")
+            .eq("user_id", signInData.user.id)
+            .maybeSingle();
+          
+          if (profile?.is_banned) {
+            // Sign out the banned user immediately
+            await supabase.auth.signOut();
+            throw new Error("Your account has been banned. Please contact support if you believe this is a mistake.");
+          }
+        }
+        
         toast.success(t.loginSuccessful);
       } else {
         signupSchema.parse({ email, password, username, telegramChatId });
