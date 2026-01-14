@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { User, Mail, Calendar, Shield, Key, MessageCircle } from "lucide-react";
+import { User, Mail, Calendar, Shield, Key, MessageCircle, Pencil, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface TelegramProfile {
@@ -26,6 +26,15 @@ const Profile = () => {
   const [loading, setLoading] = useState(false);
   const [telegramProfile, setTelegramProfile] = useState<TelegramProfile | null>(null);
   const [loadingTelegram, setLoadingTelegram] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  
+  // Store original values for cancel functionality
+  const [originalValues, setOriginalValues] = useState({
+    username: "",
+    name: "",
+    telegramChatId: "",
+    telegramUsername: "",
+  });
 
   const fetchTelegramProfile = async (chatId: string) => {
     if (!chatId) {
@@ -64,10 +73,19 @@ const Profile = () => {
           .select("username, name, telegram_chat_id, telegram_username, balance")
           .eq("user_id", user.id)
           .maybeSingle();
-        setUsername(data?.username || "");
-        setName(data?.name || "");
-        setTelegramChatId(data?.telegram_chat_id || "");
-        setTelegramUsername(data?.telegram_username || "");
+        
+        const profileData = {
+          username: data?.username || "",
+          name: data?.name || "",
+          telegramChatId: data?.telegram_chat_id || "",
+          telegramUsername: data?.telegram_username || "",
+        };
+        
+        setUsername(profileData.username);
+        setName(profileData.name);
+        setTelegramChatId(profileData.telegramChatId);
+        setTelegramUsername(profileData.telegramUsername);
+        setOriginalValues(profileData);
         setBalance(data?.balance || 0);
         
         // Fetch Telegram profile if chat ID exists
@@ -78,6 +96,24 @@ const Profile = () => {
     };
     fetchProfile();
   }, []);
+
+  const handleEdit = () => {
+    setOriginalValues({
+      username,
+      name,
+      telegramChatId,
+      telegramUsername,
+    });
+    setIsEditing(true);
+  };
+
+  const handleCancel = () => {
+    setUsername(originalValues.username);
+    setName(originalValues.name);
+    setTelegramChatId(originalValues.telegramChatId);
+    setTelegramUsername(originalValues.telegramUsername);
+    setIsEditing(false);
+  };
 
   const handleUpdate = async () => {
     setLoading(true);
@@ -97,6 +133,18 @@ const Profile = () => {
         toast.error("Failed to update profile");
       } else {
         toast.success("Profile updated successfully");
+        setOriginalValues({
+          username,
+          name,
+          telegramChatId,
+          telegramUsername,
+        });
+        setIsEditing(false);
+        
+        // Refresh Telegram profile if chat ID changed
+        if (telegramChatId !== originalValues.telegramChatId) {
+          fetchTelegramProfile(telegramChatId);
+        }
       }
     }
     setLoading(false);
@@ -112,11 +160,32 @@ const Profile = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Profile Card */}
         <Card className="bg-card border-border lg:col-span-2">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <User className="h-5 w-5 text-primary" />
               Account Details
             </CardTitle>
+            {!isEditing ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleEdit}
+                className="gap-2"
+              >
+                <Pencil className="h-4 w-4" />
+                Edit Profile
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCancel}
+                className="gap-2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+                Cancel
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="flex items-center gap-4">
@@ -173,6 +242,7 @@ const Profile = () => {
                   onChange={(e) => setUsername(e.target.value)}
                   className="bg-secondary border-border"
                   placeholder="Enter username"
+                  disabled={!isEditing}
                 />
               </div>
 
@@ -187,6 +257,7 @@ const Profile = () => {
                   onChange={(e) => setName(e.target.value)}
                   className="bg-secondary border-border"
                   placeholder="Enter your full name"
+                  disabled={!isEditing}
                 />
               </div>
 
@@ -201,6 +272,7 @@ const Profile = () => {
                   onChange={(e) => setTelegramUsername(e.target.value)}
                   className="bg-secondary border-border"
                   placeholder="@username"
+                  disabled={!isEditing}
                 />
               </div>
 
@@ -215,17 +287,20 @@ const Profile = () => {
                   onChange={(e) => setTelegramChatId(e.target.value)}
                   className="bg-secondary border-border"
                   placeholder="Enter your Telegram Chat ID"
+                  disabled={!isEditing}
                 />
               </div>
             </div>
 
-            <Button
-              onClick={handleUpdate}
-              className="btn-primary"
-              disabled={loading}
-            >
-              {loading ? "Saving..." : "Save Changes"}
-            </Button>
+            {isEditing && (
+              <Button
+                onClick={handleUpdate}
+                className="btn-primary"
+                disabled={loading}
+              >
+                {loading ? "Saving..." : "Save Changes"}
+              </Button>
+            )}
           </CardContent>
         </Card>
 
