@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
   TooltipContent,
@@ -71,6 +72,7 @@ const DashboardHeader = () => {
   const { playNotificationSound } = useNotificationSound();
   const [open, setOpen] = useState(false);
   const [telegramProfile, setTelegramProfile] = useState<TelegramProfile | null>(null);
+  const [loadingTelegramProfile, setLoadingTelegramProfile] = useState(false);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
 
@@ -117,6 +119,7 @@ const DashboardHeader = () => {
       return;
     }
     
+    setLoadingTelegramProfile(true);
     try {
       const response = await supabase.functions.invoke("get-telegram-profile", {
         body: { chat_id: chatId },
@@ -131,6 +134,8 @@ const DashboardHeader = () => {
     } catch (error) {
       console.error("Error fetching Telegram profile:", error);
       setTelegramProfile(null);
+    } finally {
+      setLoadingTelegramProfile(false);
     }
   };
 
@@ -297,21 +302,30 @@ const DashboardHeader = () => {
           className="flex items-center gap-2 cursor-pointer hover:bg-secondary/50 rounded-lg px-2 py-1 transition-colors"
           onClick={() => navigate("/dashboard/profile")}
         >
-          <Avatar className="h-7 w-7 border border-primary/30">
-            {telegramProfile?.photo_url ? (
-              <AvatarImage 
-                src={telegramProfile.photo_url} 
-                alt="Profile" 
-                className="object-cover"
-              />
-            ) : null}
-            <AvatarFallback className="bg-primary/20 text-primary text-xs font-bold">
-              {displayName.charAt(0).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <span className="text-sm font-medium text-foreground hidden sm:inline">
-            {displayName}
-          </span>
+          {loadingTelegramProfile ? (
+            <>
+              <Skeleton className="h-7 w-7 rounded-full" />
+              <Skeleton className="h-4 w-20 hidden sm:block" />
+            </>
+          ) : (
+            <>
+              <Avatar className="h-7 w-7 border border-primary/30">
+                {telegramProfile?.photo_url ? (
+                  <AvatarImage 
+                    src={telegramProfile.photo_url} 
+                    alt="Profile" 
+                    className="object-cover"
+                  />
+                ) : null}
+                <AvatarFallback className="bg-primary/20 text-primary text-xs font-bold">
+                  {displayName.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-sm font-medium text-foreground hidden sm:inline">
+                {displayName}
+              </span>
+            </>
+          )}
         </div>
 
         <Separator orientation="vertical" className="h-6" />
