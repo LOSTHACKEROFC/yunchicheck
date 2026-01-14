@@ -197,11 +197,10 @@ const Auth = () => {
 
     setCheckingVerification(true);
     try {
-      const { data, error } = await supabase
-        .from("pending_verifications")
-        .select("verified, expires_at")
-        .eq("verification_code", verificationCode)
-        .single();
+      // Use edge function to check verification status securely
+      const { data, error } = await supabase.functions.invoke("check-verification-status", {
+        body: { verification_code: verificationCode },
+      });
 
       if (error) {
         console.error("Error checking verification:", error);
@@ -212,7 +211,7 @@ const Auth = () => {
         setIsVerified(true);
         toast.success("Telegram verified! Fetching your profile...");
         fetchTelegramProfile();
-      } else if (new Date(data.expires_at) < new Date()) {
+      } else if (data?.expired) {
         toast.error("Verification expired. Please request a new one.");
         setRegistrationStep("telegram");
         setVerificationCode("");
