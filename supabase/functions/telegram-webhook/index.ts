@@ -237,6 +237,7 @@ View website statistics
   await sendTelegramMessage(chatId, adminMenu);
 }
 
+// Store pending ban operations (in-memory, per webhook call we'll use DB)
 async function handleBanUser(chatId: string, identifier: string, supabase: any): Promise<void> {
   if (!isAdmin(chatId)) {
     await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to ban users.");
@@ -251,12 +252,13 @@ async function handleBanUser(chatId: string, identifier: string, supabase: any):
   // Find user by username or email
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("id, user_id, username, name, is_banned")
+    .select("id, user_id, username, name, is_banned, telegram_chat_id")
     .or(`username.ilike.${identifier}`)
     .maybeSingle();
 
   let userId = profile?.user_id;
   let userInfo = profile;
+  let userEmail: string | null = null;
 
   // If not found by username, try by email via auth.users
   if (!profile) {
@@ -267,13 +269,19 @@ async function handleBanUser(chatId: string, identifier: string, supabase: any):
     
     if (foundUser) {
       userId = foundUser.id;
+      userEmail = foundUser.email;
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("id, user_id, username, name, is_banned")
+        .select("id, user_id, username, name, is_banned, telegram_chat_id")
         .eq("user_id", foundUser.id)
         .maybeSingle();
       userInfo = profileData;
     }
+  } else {
+    // Get email from auth.users
+    const { data: authUser } = await supabase.auth.admin.listUsers();
+    const foundUser = authUser?.users?.find((u: any) => u.id === userId);
+    userEmail = foundUser?.email || null;
   }
 
   if (!userId || !userInfo) {
@@ -286,15 +294,57 @@ async function handleBanUser(chatId: string, identifier: string, supabase: any):
     return;
   }
 
-  // Ban the user
+  // Store pending ban in database and ask for reason
+  const { error: pendingError } = await supabase
+    .from("pending_bans")
+    .upsert({
+      admin_chat_id: chatId,
+      user_id: userId,
+      username: userInfo.username || userInfo.name || identifier,
+      user_email: userEmail,
+      user_telegram_chat_id: userInfo.telegram_chat_id,
+      created_at: new Date().toISOString(),
+    }, { onConflict: "admin_chat_id" });
+
+  if (pendingError) {
+    console.error("Error storing pending ban:", pendingError);
+    await sendTelegramMessage(chatId, "❌ Failed to initiate ban. Please try again.");
+    return;
+  }
+
+  await sendTelegramMessage(
+    chatId,
+    `🚫 <b>Ban User Confirmation</b>\n\n<b>User:</b> ${userInfo.username || userInfo.name || identifier}\n<b>User ID:</b> <code>${userId}</code>\n\n<b>Please reply with the ban reason:</b>\n\n<i>Type the reason for banning this user, or send /cancelban to cancel.</i>`
+  );
+}
+
+async function handleBanReason(chatId: string, reason: string, supabase: any): Promise<void> {
+  // Get pending ban for this admin
+  const { data: pendingBan, error: pendingError } = await supabase
+    .from("pending_bans")
+    .select("*")
+    .eq("admin_chat_id", chatId)
+    .maybeSingle();
+
+  if (!pendingBan) {
+    return; // No pending ban, ignore
+  }
+
+  // Delete pending ban
+  await supabase
+    .from("pending_bans")
+    .delete()
+    .eq("admin_chat_id", chatId);
+
+  // Ban the user with the provided reason
   const { error: banError } = await supabase
     .from("profiles")
     .update({ 
       is_banned: true, 
       banned_at: new Date().toISOString(),
-      ban_reason: "Banned by admin via Telegram"
+      ban_reason: reason
     })
-    .eq("user_id", userId);
+    .eq("user_id", pendingBan.user_id);
 
   if (banError) {
     console.error("Error banning user:", banError);
@@ -302,21 +352,70 @@ async function handleBanUser(chatId: string, identifier: string, supabase: any):
     return;
   }
 
-  await sendTelegramMessage(chatId, `✅ <b>User Banned</b>\n\n<b>User:</b> ${userInfo.username || userInfo.name || identifier}\n<b>User ID:</b> <code>${userId}</code>`);
+  await sendTelegramMessage(
+    chatId, 
+    `✅ <b>User Banned</b>\n\n<b>User:</b> ${pendingBan.username}\n<b>Reason:</b> ${reason}`
+  );
 
   // Notify user via Telegram if they have a chat ID
-  const { data: bannedProfile } = await supabase
-    .from("profiles")
-    .select("telegram_chat_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (bannedProfile?.telegram_chat_id) {
+  if (pendingBan.user_telegram_chat_id) {
     await sendTelegramMessage(
-      bannedProfile.telegram_chat_id,
-      "🚫 <b>Account Banned</b>\n\nYour account has been banned from the platform. If you believe this is a mistake, please contact support."
+      pendingBan.user_telegram_chat_id,
+      `🚫 <b>Account Banned</b>\n\nYour account has been banned from the platform.\n\n<b>Reason:</b> ${reason}\n\nIf you believe this is a mistake, please contact support.`
     );
   }
+
+  // Send email notification if we have user email
+  if (pendingBan.user_email && RESEND_API_KEY) {
+    try {
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${RESEND_API_KEY}`,
+        },
+        body: JSON.stringify({
+          from: "Yunchi Support <onboarding@resend.dev>",
+          to: [pendingBan.user_email],
+          subject: "Account Banned - Yunchi",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #dc2626;">🚫 Account Banned</h2>
+              <p>Your Yunchi account has been banned.</p>
+              <div style="background: #fef2f2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
+                <p><strong>Reason:</strong></p>
+                <p>${reason}</p>
+              </div>
+              <p>If you believe this was a mistake, you can submit an appeal through our website or contact support directly.</p>
+              <p style="color: #6c757d; font-size: 14px; margin-top: 20px;">— Yunchi Team</p>
+            </div>
+          `,
+        }),
+      });
+    } catch (error) {
+      console.error("Error sending ban email:", error);
+    }
+  }
+}
+
+async function handleCancelBan(chatId: string, supabase: any): Promise<void> {
+  const { data: pendingBan } = await supabase
+    .from("pending_bans")
+    .select("username")
+    .eq("admin_chat_id", chatId)
+    .maybeSingle();
+
+  if (!pendingBan) {
+    await sendTelegramMessage(chatId, "⚠️ No pending ban to cancel.");
+    return;
+  }
+
+  await supabase
+    .from("pending_bans")
+    .delete()
+    .eq("admin_chat_id", chatId);
+
+  await sendTelegramMessage(chatId, `✅ Ban cancelled for user: <b>${pendingBan.username}</b>`);
 }
 
 async function handleUnbanUser(chatId: string, identifier: string, supabase: any): Promise<void> {
