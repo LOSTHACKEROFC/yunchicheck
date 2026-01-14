@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 import SettingsDropdown from "@/components/SettingsDropdown";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface Notification {
   id: string;
@@ -42,6 +43,7 @@ const notificationConfig: Record<string, { icon: typeof MessageSquare; color: st
 
 const DashboardHeader = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [balance, setBalance] = useState<number>(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +68,7 @@ const DashboardHeader = () => {
   const handleSoundToggle = (enabled: boolean) => {
     setSoundEnabled(enabled);
     localStorage.setItem("notification-sound-enabled", String(enabled));
-    toast.success(enabled ? "Notification sound enabled" : "Notification sound disabled");
+    toast.success(enabled ? t.notificationSoundEnabled : t.notificationSoundDisabled);
   };
 
   // Sync notification preferences from localStorage
@@ -240,7 +242,7 @@ const DashboardHeader = () => {
         <SidebarTrigger className="text-muted-foreground hover:text-primary transition-colors">
           <Menu className="h-5 w-5" />
         </SidebarTrigger>
-        <span className="text-sm text-muted-foreground">Dashboard</span>
+        <span className="text-sm text-muted-foreground">{t.dashboard}</span>
       </div>
 
       <div className="flex items-center gap-3">
@@ -259,7 +261,7 @@ const DashboardHeader = () => {
               </button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Your Balance</p>
+              <p>{t.yourBalance}</p>
             </TooltipContent>
           </Tooltip>
 
@@ -283,7 +285,7 @@ const DashboardHeader = () => {
               sideOffset={8}
             >
               <div className="flex items-center justify-between p-3 border-b border-border">
-                <h4 className="font-semibold text-sm">Notifications</h4>
+                <h4 className="font-semibold text-sm">{t.notifications}</h4>
                 {unreadCount > 0 && (
                   <Button
                     variant="ghost"
@@ -292,7 +294,7 @@ const DashboardHeader = () => {
                     className="text-xs h-7 px-2 text-primary hover:text-primary"
                   >
                     <CheckCheck className="h-3.5 w-3.5 mr-1" />
-                    Mark all read
+                    {t.markAllRead}
                   </Button>
                 )}
               </div>
@@ -301,7 +303,7 @@ const DashboardHeader = () => {
                 {notifications.length === 0 ? (
                   <div className="p-6 text-center text-muted-foreground">
                     <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">No notifications yet</p>
+                    <p className="text-sm">{t.noNotifications}</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-border">
@@ -400,7 +402,7 @@ const DashboardHeader = () => {
                         navigate("/dashboard/support");
                       }}
                     >
-                      View all tickets
+                      {t.viewAllTickets}
                     </Button>
                   </div>
                 </>

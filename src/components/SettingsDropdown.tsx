@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Settings, Volume2, VolumeX, UserX, Sun, Moon, Monitor, Bell, MessageSquare, DollarSign, Megaphone } from "lucide-react";
+import { Settings, Volume2, VolumeX, UserX, Sun, Moon, Monitor, Bell, MessageSquare, DollarSign, Megaphone, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -27,8 +27,16 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
+import { useLanguage, languageNames, type Language } from "@/contexts/LanguageContext";
 
 interface NotificationPreferences {
   ticket_reply: boolean;
@@ -52,6 +60,7 @@ const defaultNotificationPrefs: NotificationPreferences = {
 const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps) => {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
+  const { language, setLanguage, t } = useLanguage();
   const [open, setOpen] = useState(false);
   const [confirmStep, setConfirmStep] = useState(0);
   const [email, setEmail] = useState("");
@@ -87,7 +96,12 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
 
   const handleNotificationPrefChange = (key: keyof NotificationPreferences, value: boolean) => {
     setNotificationPrefs(prev => ({ ...prev, [key]: value }));
-    toast.success(`${key.replace("_", " ")} notifications ${value ? "enabled" : "disabled"}`);
+    toast.success(`${key.replace("_", " ")} ${value ? t.notificationsEnabled : t.notificationsDisabled}`);
+  };
+
+  const handleLanguageChange = (lang: Language) => {
+    setLanguage(lang);
+    toast.success(`${t.languageChanged} ${languageNames[lang]}`);
   };
 
   const handleFinalDeactivation = async () => {
@@ -144,9 +158,9 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
   };
 
   const themeOptions = [
-    { value: "light", icon: Sun, label: "Light" },
-    { value: "dark", icon: Moon, label: "Dark" },
-    { value: "system", icon: Monitor, label: "System" },
+    { value: "light", icon: Sun, label: t.light },
+    { value: "dark", icon: Moon, label: t.dark },
+    { value: "system", icon: Monitor, label: t.system },
   ];
 
   return (
@@ -166,14 +180,38 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
           sideOffset={8}
         >
           <div className="p-3 border-b border-border">
-            <h4 className="font-semibold text-sm">Settings</h4>
+            <h4 className="font-semibold text-sm">{t.settings}</h4>
           </div>
 
           <div className="p-3 space-y-4 max-h-[70vh] overflow-y-auto">
+            {/* Language Settings */}
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                {t.language}
+              </Label>
+              <Select value={language} onValueChange={(value) => handleLanguageChange(value as Language)}>
+                <SelectTrigger className="w-full">
+                  <div className="flex items-center gap-2">
+                    <Globe className="h-4 w-4" />
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(languageNames) as Language[]).map((lang) => (
+                    <SelectItem key={lang} value={lang}>
+                      {languageNames[lang]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Separator />
+
             {/* Theme Settings */}
             <div className="space-y-2">
               <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Theme
+                {t.theme}
               </Label>
               <div className="flex gap-1">
                 {themeOptions.map((option) => {
@@ -185,7 +223,7 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
                         <button
                           onClick={() => {
                             setTheme(option.value);
-                            toast.success(`Theme set to ${option.label}`);
+                            toast.success(`${t.themeSetTo} ${option.label}`);
                           }}
                           className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-md text-sm transition-colors ${
                             isActive
@@ -197,7 +235,7 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
                           <span className="text-xs">{option.label}</span>
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent>{option.label} mode</TooltipContent>
+                      <TooltipContent>{option.label}</TooltipContent>
                     </Tooltip>
                   );
                 })}
@@ -209,7 +247,7 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
             {/* Sound Settings */}
             <div className="space-y-2">
               <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Sound
+                {t.sound}
               </Label>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -218,7 +256,7 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
                   ) : (
                     <VolumeX className="h-4 w-4 text-muted-foreground" />
                   )}
-                  <span className="text-sm">Notification Sound</span>
+                  <span className="text-sm">{t.notificationSound}</span>
                 </div>
                 <Switch
                   checked={soundEnabled}
@@ -232,14 +270,14 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
             {/* Notification Preferences */}
             <div className="space-y-3">
               <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Notification Types
+                {t.notificationTypes}
               </Label>
               
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <MessageSquare className="h-4 w-4 text-blue-500" />
-                    <span className="text-sm">Ticket Replies</span>
+                    <span className="text-sm">{t.ticketReplies}</span>
                   </div>
                   <Switch
                     checked={notificationPrefs.ticket_reply}
@@ -250,7 +288,7 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <DollarSign className="h-4 w-4 text-green-500" />
-                    <span className="text-sm">Balance Updates</span>
+                    <span className="text-sm">{t.balanceUpdates}</span>
                   </div>
                   <Switch
                     checked={notificationPrefs.balance_update}
@@ -261,7 +299,7 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Megaphone className="h-4 w-4 text-amber-500" />
-                    <span className="text-sm">System Announcements</span>
+                    <span className="text-sm">{t.systemAnnouncements}</span>
                   </div>
                   <Switch
                     checked={notificationPrefs.system}
@@ -272,7 +310,7 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Bell className="h-4 w-4 text-purple-500" />
-                    <span className="text-sm">Topup Alerts</span>
+                    <span className="text-sm">{t.topupAlerts}</span>
                   </div>
                   <Switch
                     checked={notificationPrefs.topup}
@@ -287,7 +325,7 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
             {/* Deactivate Account */}
             <div className="space-y-2">
               <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Danger Zone
+                {t.dangerZone}
               </Label>
               <Button
                 variant="destructive"
@@ -296,10 +334,10 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
                 onClick={handleDeactivateClick}
               >
                 <UserX className="h-4 w-4 mr-2" />
-                Deactivate Account
+                {t.deactivateAccount}
               </Button>
               <p className="text-xs text-muted-foreground text-center">
-                Permanently delete your account and all data.
+                {t.permanentlyDeleteAccount}
               </p>
             </div>
           </div>
@@ -310,24 +348,24 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
       <AlertDialog open={confirmStep === 1} onOpenChange={(isOpen) => !isOpen && resetDeactivation()}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive">Deactivate Account?</AlertDialogTitle>
+            <AlertDialogTitle className="text-destructive">{t.deactivateAccountQuestion}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to deactivate your account? This action will permanently delete all your data including:
+              {t.deactivateWarning}
               <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>Your profile information</li>
-                <li>Your balance and transaction history</li>
-                <li>All support tickets and messages</li>
-                <li>All notifications</li>
+                <li>{t.profileInfo}</li>
+                <li>{t.balanceHistory}</li>
+                <li>{t.supportTickets}</li>
+                <li>{t.allNotifications}</li>
               </ul>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={resetDeactivation}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={resetDeactivation}>{t.cancel}</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleFirstConfirm}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Yes, Continue
+              {t.yesContinue}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -337,20 +375,18 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
       <AlertDialog open={confirmStep === 2} onOpenChange={(isOpen) => !isOpen && resetDeactivation()}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive">Final Warning</AlertDialogTitle>
+            <AlertDialogTitle className="text-destructive">{t.finalWarning}</AlertDialogTitle>
             <AlertDialogDescription>
-              This is your last chance to cancel. Once you proceed, your account will be permanently deleted and <strong>cannot be recovered</strong>.
-              <br /><br />
-              Are you absolutely sure you want to delete your account?
+              {t.lastChanceWarning}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={resetDeactivation}>No, Keep My Account</AlertDialogCancel>
+            <AlertDialogCancel onClick={resetDeactivation}>{t.noKeepAccount}</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleSecondConfirm}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Yes, Delete My Account
+              {t.yesDeleteAccount}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -360,41 +396,41 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
       <AlertDialog open={confirmStep === 3} onOpenChange={(isOpen) => !isOpen && resetDeactivation()}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive">Verify Your Identity</AlertDialogTitle>
+            <AlertDialogTitle className="text-destructive">{t.verifyIdentity}</AlertDialogTitle>
             <AlertDialogDescription>
-              Please enter your email and password to confirm account deletion.
+              {t.enterCredentials}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="confirm-email">Email</Label>
+              <Label htmlFor="confirm-email">{t.email}</Label>
               <Input
                 id="confirm-email"
                 type="email"
-                placeholder="Enter your email"
+                placeholder={t.enterEmail}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="confirm-password">Password</Label>
+              <Label htmlFor="confirm-password">{t.password}</Label>
               <Input
                 id="confirm-password"
                 type="password"
-                placeholder="Enter your password"
+                placeholder={t.enterPassword}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={resetDeactivation}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={resetDeactivation}>{t.cancel}</AlertDialogCancel>
             <Button
               variant="destructive"
               onClick={handleFinalDeactivation}
               disabled={isDeleting || !email || !password}
             >
-              {isDeleting ? "Deleting..." : "Delete Account Permanently"}
+              {isDeleting ? t.deleting : t.deletePermanently}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
