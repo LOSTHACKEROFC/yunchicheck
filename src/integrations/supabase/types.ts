@@ -430,6 +430,45 @@ export type Database = {
           },
         ]
       }
+      topup_transactions: {
+        Row: {
+          amount: number
+          completed_at: string | null
+          created_at: string
+          id: string
+          payment_method: string
+          status: string
+          transaction_hash: string | null
+          updated_at: string
+          user_id: string
+          wallet_address: string | null
+        }
+        Insert: {
+          amount: number
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          payment_method: string
+          status?: string
+          transaction_hash?: string | null
+          updated_at?: string
+          user_id: string
+          wallet_address?: string | null
+        }
+        Update: {
+          amount?: number
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          payment_method?: string
+          status?: string
+          transaction_hash?: string | null
+          updated_at?: string
+          user_id?: string
+          wallet_address?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
