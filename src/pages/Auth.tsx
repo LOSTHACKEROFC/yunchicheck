@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { MessageCircle, CheckCircle, Clock, ExternalLink, Loader2, XCircle, AlertCircle } from "lucide-react";
+import { MessageCircle, CheckCircle, Clock, ExternalLink, Loader2, XCircle, AlertCircle, ArrowLeft, Mail } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
 const loginSchema = z.object({
@@ -29,6 +29,8 @@ const VERIFICATION_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
 const Auth = () => {
   const { t } = useLanguage();
   const [isLogin, setIsLogin] = useState(true);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
@@ -543,6 +545,47 @@ const Auth = () => {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!email.trim()) {
+      toast.error("Please enter your email address");
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) throw error;
+
+      setResetEmailSent(true);
+      toast.success("Password reset email sent! Check your inbox.");
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        toast.error(error.message);
+      } else {
+        toast.error("Failed to send reset email");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBackToLogin = () => {
+    setShowForgotPassword(false);
+    setResetEmailSent(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -1013,12 +1056,103 @@ const Auth = () => {
             Yunchi Checker
           </h1>
           <p className="text-muted-foreground">
-            {isLogin ? t.signInToAccount : t.createAccount}
+            {showForgotPassword 
+              ? "Reset your password" 
+              : isLogin 
+                ? t.signInToAccount 
+                : t.createAccount}
           </p>
         </div>
 
         <div className="bg-card border border-border rounded-lg p-6 shadow-card">
-          {isLogin ? (
+          {showForgotPassword ? (
+            // Forgot Password Form
+            <div className="space-y-4">
+              {resetEmailSent ? (
+                // Success state
+                <div className="text-center space-y-4">
+                  <div className="w-16 h-16 mx-auto rounded-full bg-green-500/10 flex items-center justify-center">
+                    <Mail className="h-8 w-8 text-green-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg">Check your email</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      We've sent a password reset link to <span className="font-medium text-foreground">{email}</span>
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Didn't receive the email? Check your spam folder or try again.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={handleBackToLogin}
+                    >
+                      <ArrowLeft className="h-4 w-4 mr-2" />
+                      Back to Login
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => setResetEmailSent(false)}
+                    >
+                      Try Again
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                // Email input form
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  <div className="text-center space-y-2 mb-4">
+                    <Mail className="h-12 w-12 mx-auto text-primary" />
+                    <p className="text-sm text-muted-foreground">
+                      Enter your email address and we'll send you a link to reset your password.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="reset-email">{t.email}</Label>
+                    <Input
+                      id="reset-email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder={t.enterEmail}
+                      className="bg-secondary border-border"
+                      required
+                    />
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full btn-primary"
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      "Send Reset Link"
+                    )}
+                  </Button>
+
+                  <button
+                    type="button"
+                    onClick={handleBackToLogin}
+                    className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-2"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to Login
+                  </button>
+                </form>
+              )}
+            </div>
+          ) : isLogin ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">{t.email}</Label>
@@ -1034,7 +1168,16 @@ const Auth = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">{t.password}</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">{t.password}</Label>
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
                 <Input
                   id="password"
                   type="password"
@@ -1058,15 +1201,17 @@ const Auth = () => {
             renderRegistrationStep()
           )}
 
-          <div className="mt-4 text-center">
-            <button
-              type="button"
-              onClick={handleToggleMode}
-              className="text-primary hover:underline text-sm"
-            >
-              {isLogin ? t.dontHaveAccount : t.alreadyHaveAccount}
-            </button>
-          </div>
+          {!showForgotPassword && (
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                onClick={handleToggleMode}
+                className="text-primary hover:underline text-sm"
+              >
+                {isLogin ? t.dontHaveAccount : t.alreadyHaveAccount}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
