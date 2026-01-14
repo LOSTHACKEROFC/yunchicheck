@@ -7,6 +7,9 @@ const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+// Admin chat ID for admin-only commands
+const ADMIN_CHAT_ID = "8496943061";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -197,6 +200,330 @@ ${message}
   await sendTelegramMessage(chatId, telegramMessage);
 }
 
+// Check if the chat ID is admin
+function isAdmin(chatId: string): boolean {
+  return chatId === ADMIN_CHAT_ID;
+}
+
+// Admin command handlers
+async function handleAdminCmd(chatId: string): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to access admin commands.");
+    return;
+  }
+
+  const adminMenu = `
+🔐 <b>Admin Command Panel</b>
+
+<b>Available Commands:</b>
+
+📋 <b>/ticket</b> [ticket_id]
+View and manage a support ticket
+
+🚫 <b>/banuser</b> [username or email]
+Ban a user from the platform
+
+✅ <b>/unbanuser</b> [username or email]
+Unban a previously banned user
+
+📢 <b>/broadcast</b> [message]
+Send a message to all users via Telegram
+
+📊 <b>/stats</b>
+View website statistics
+
+<i>💡 Only you (Admin) can access these commands.</i>
+`;
+  await sendTelegramMessage(chatId, adminMenu);
+}
+
+async function handleBanUser(chatId: string, identifier: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to ban users.");
+    return;
+  }
+
+  if (!identifier) {
+    await sendTelegramMessage(chatId, "❌ Please provide a username or email.\n\n<b>Usage:</b> /banuser username_or_email");
+    return;
+  }
+
+  // Find user by username or email
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, user_id, username, name, is_banned")
+    .or(`username.ilike.${identifier}`)
+    .maybeSingle();
+
+  let userId = profile?.user_id;
+  let userInfo = profile;
+
+  // If not found by username, try by email via auth.users
+  if (!profile) {
+    const { data: authUser } = await supabase.auth.admin.listUsers();
+    const foundUser = authUser?.users?.find((u: any) => 
+      u.email?.toLowerCase() === identifier.toLowerCase()
+    );
+    
+    if (foundUser) {
+      userId = foundUser.id;
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("id, user_id, username, name, is_banned")
+        .eq("user_id", foundUser.id)
+        .maybeSingle();
+      userInfo = profileData;
+    }
+  }
+
+  if (!userId || !userInfo) {
+    await sendTelegramMessage(chatId, `❌ User not found: <code>${identifier}</code>`);
+    return;
+  }
+
+  if (userInfo.is_banned) {
+    await sendTelegramMessage(chatId, `⚠️ User <b>${userInfo.username || userInfo.name || identifier}</b> is already banned.`);
+    return;
+  }
+
+  // Ban the user
+  const { error: banError } = await supabase
+    .from("profiles")
+    .update({ 
+      is_banned: true, 
+      banned_at: new Date().toISOString(),
+      ban_reason: "Banned by admin via Telegram"
+    })
+    .eq("user_id", userId);
+
+  if (banError) {
+    console.error("Error banning user:", banError);
+    await sendTelegramMessage(chatId, "❌ Failed to ban user. Please try again.");
+    return;
+  }
+
+  await sendTelegramMessage(chatId, `✅ <b>User Banned</b>\n\n<b>User:</b> ${userInfo.username || userInfo.name || identifier}\n<b>User ID:</b> <code>${userId}</code>`);
+
+  // Notify user via Telegram if they have a chat ID
+  const { data: bannedProfile } = await supabase
+    .from("profiles")
+    .select("telegram_chat_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (bannedProfile?.telegram_chat_id) {
+    await sendTelegramMessage(
+      bannedProfile.telegram_chat_id,
+      "🚫 <b>Account Banned</b>\n\nYour account has been banned from the platform. If you believe this is a mistake, please contact support."
+    );
+  }
+}
+
+async function handleUnbanUser(chatId: string, identifier: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to unban users.");
+    return;
+  }
+
+  if (!identifier) {
+    await sendTelegramMessage(chatId, "❌ Please provide a username or email.\n\n<b>Usage:</b> /unbanuser username_or_email");
+    return;
+  }
+
+  // Find user by username
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, user_id, username, name, is_banned")
+    .or(`username.ilike.${identifier}`)
+    .maybeSingle();
+
+  let userId = profile?.user_id;
+  let userInfo = profile;
+
+  // If not found by username, try by email
+  if (!profile) {
+    const { data: authUser } = await supabase.auth.admin.listUsers();
+    const foundUser = authUser?.users?.find((u: any) => 
+      u.email?.toLowerCase() === identifier.toLowerCase()
+    );
+    
+    if (foundUser) {
+      userId = foundUser.id;
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("id, user_id, username, name, is_banned")
+        .eq("user_id", foundUser.id)
+        .maybeSingle();
+      userInfo = profileData;
+    }
+  }
+
+  if (!userId || !userInfo) {
+    await sendTelegramMessage(chatId, `❌ User not found: <code>${identifier}</code>`);
+    return;
+  }
+
+  if (!userInfo.is_banned) {
+    await sendTelegramMessage(chatId, `⚠️ User <b>${userInfo.username || userInfo.name || identifier}</b> is not banned.`);
+    return;
+  }
+
+  // Unban the user
+  const { error: unbanError } = await supabase
+    .from("profiles")
+    .update({ 
+      is_banned: false, 
+      banned_at: null,
+      ban_reason: null
+    })
+    .eq("user_id", userId);
+
+  if (unbanError) {
+    console.error("Error unbanning user:", unbanError);
+    await sendTelegramMessage(chatId, "❌ Failed to unban user. Please try again.");
+    return;
+  }
+
+  await sendTelegramMessage(chatId, `✅ <b>User Unbanned</b>\n\n<b>User:</b> ${userInfo.username || userInfo.name || identifier}\n<b>User ID:</b> <code>${userId}</code>`);
+
+  // Notify user via Telegram
+  const { data: unbannedProfile } = await supabase
+    .from("profiles")
+    .select("telegram_chat_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (unbannedProfile?.telegram_chat_id) {
+    await sendTelegramMessage(
+      unbannedProfile.telegram_chat_id,
+      "✅ <b>Account Unbanned</b>\n\nYour account has been unbanned. You can now access the platform again."
+    );
+  }
+}
+
+async function handleBroadcast(chatId: string, message: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to broadcast messages.");
+    return;
+  }
+
+  if (!message) {
+    await sendTelegramMessage(chatId, "❌ Please provide a message to broadcast.\n\n<b>Usage:</b> /broadcast Your message here");
+    return;
+  }
+
+  // Get all users with Telegram chat IDs
+  const { data: profiles, error } = await supabase
+    .from("profiles")
+    .select("telegram_chat_id, username")
+    .not("telegram_chat_id", "is", null)
+    .eq("is_banned", false);
+
+  if (error) {
+    console.error("Error fetching profiles:", error);
+    await sendTelegramMessage(chatId, "❌ Failed to fetch users. Please try again.");
+    return;
+  }
+
+  if (!profiles || profiles.length === 0) {
+    await sendTelegramMessage(chatId, "⚠️ No users with Telegram connected.");
+    return;
+  }
+
+  await sendTelegramMessage(chatId, `📢 <b>Broadcasting to ${profiles.length} users...</b>`);
+
+  let successCount = 0;
+  let failCount = 0;
+
+  const broadcastMessage = `
+📢 <b>Announcement</b>
+
+${message}
+
+<i>— Yunchi Team</i>
+`;
+
+  for (const profile of profiles) {
+    if (profile.telegram_chat_id && profile.telegram_chat_id !== ADMIN_CHAT_ID) {
+      const success = await sendTelegramMessage(profile.telegram_chat_id, broadcastMessage);
+      if (success) {
+        successCount++;
+      } else {
+        failCount++;
+      }
+      // Add a small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  }
+
+  await sendTelegramMessage(
+    chatId,
+    `✅ <b>Broadcast Complete</b>\n\n<b>Sent:</b> ${successCount}\n<b>Failed:</b> ${failCount}\n<b>Total:</b> ${profiles.length}`
+  );
+}
+
+async function handleStats(chatId: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to view statistics.");
+    return;
+  }
+
+  // Fetch site stats
+  const { data: stats } = await supabase
+    .from("site_stats")
+    .select("total_users, total_checks, updated_at")
+    .eq("id", "global")
+    .maybeSingle();
+
+  // Fetch ticket stats
+  const { data: tickets } = await supabase
+    .from("support_tickets")
+    .select("status");
+
+  const ticketStats = {
+    total: tickets?.length || 0,
+    open: tickets?.filter((t: any) => t.status === "open").length || 0,
+    processing: tickets?.filter((t: any) => t.status === "processing").length || 0,
+    solved: tickets?.filter((t: any) => t.status === "solved").length || 0,
+    closed: tickets?.filter((t: any) => t.status === "closed").length || 0,
+  };
+
+  // Fetch banned users count
+  const { data: bannedUsers } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("is_banned", true);
+
+  // Fetch users with Telegram connected
+  const { data: telegramUsers } = await supabase
+    .from("profiles")
+    .select("id")
+    .not("telegram_chat_id", "is", null);
+
+  const statsMessage = `
+📊 <b>Website Statistics</b>
+
+<b>👥 Users</b>
+• Total Users: ${stats?.total_users || 0}
+• Telegram Connected: ${telegramUsers?.length || 0}
+• Banned: ${bannedUsers?.length || 0}
+
+<b>✅ Card Checks</b>
+• Total Checks: ${stats?.total_checks || 0}
+
+<b>🎫 Support Tickets</b>
+• Total: ${ticketStats.total}
+• 🟡 Open: ${ticketStats.open}
+• 🔵 Processing: ${ticketStats.processing}
+• 🟢 Solved: ${ticketStats.solved}
+• ⚫ Closed: ${ticketStats.closed}
+
+<i>Last updated: ${stats?.updated_at ? new Date(stats.updated_at).toLocaleString() : 'N/A'}</i>
+`;
+
+  await sendTelegramMessage(chatId, statsMessage);
+}
+
 const handler = async (req: Request): Promise<Response> => {
   console.log("Received Telegram webhook");
 
@@ -283,6 +610,15 @@ const handler = async (req: Request): Promise<Response> => {
           "✅ <b>Account Verified!</b>\n\nYou can now complete your registration on the website."
         );
 
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      // Check if this is from admin for ticket operations
+      const callbackChatId = update.callback_query.message?.chat.id.toString();
+      if (callbackChatId !== ADMIN_CHAT_ID) {
+        await answerCallbackQuery(update.callback_query.id, "❌ Only admins can change ticket status");
         return new Response(JSON.stringify({ ok: true }), {
           headers: { "Content-Type": "application/json", ...corsHeaders },
         });
@@ -377,7 +713,7 @@ const handler = async (req: Request): Promise<Response> => {
       const originalMessage = update.message.reply_to_message.text || "";
 
       // Check if this is from admin
-      if (chatId !== ADMIN_TELEGRAM_CHAT_ID) {
+      if (chatId !== ADMIN_CHAT_ID) {
         console.log("Message not from admin, ignoring");
         return new Response(JSON.stringify({ ok: true }), {
           headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -480,18 +816,80 @@ const handler = async (req: Request): Promise<Response> => {
     // Handle /start command
     if (update.message?.text === "/start") {
       const chatId = update.message.chat.id.toString();
-      await sendTelegramMessage(
-        chatId,
-        `👋 <b>Welcome to @YunchiSupportbot</b>\n\nThis bot is used for:\n• Account verification during registration\n• Support ticket notifications\n• Replying to tickets directly\n\n<b>Commands:</b>\n/ticket [ticket_id] - View and manage a ticket\n/start - Show this message\n\n<b>Your Chat ID:</b> <code>${chatId}</code>\n\n💡 Use this Chat ID when registering on Yunchi Checker.`
-      );
+      const isAdminUser = isAdmin(chatId);
+      
+      let welcomeMessage = `👋 <b>Welcome to @YunchiSupportbot</b>\n\nThis bot is used for:\n• Account verification during registration\n• Support ticket notifications\n• Replying to tickets directly\n\n<b>Your Chat ID:</b> <code>${chatId}</code>\n\n💡 Use this Chat ID when registering on Yunchi Checker.`;
+      
+      if (isAdminUser) {
+        welcomeMessage += `\n\n🔐 <b>Admin Access Detected</b>\nUse /admincmd to view admin commands.`;
+      }
+      
+      await sendTelegramMessage(chatId, welcomeMessage);
       return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
     }
 
-    // Handle /ticket command
+    // Handle /admincmd command
+    if (update.message?.text === "/admincmd") {
+      const chatId = update.message.chat.id.toString();
+      await handleAdminCmd(chatId);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Handle /banuser command
+    if (update.message?.text?.startsWith("/banuser")) {
+      const chatId = update.message.chat.id.toString();
+      const identifier = update.message.text.replace("/banuser", "").trim();
+      await handleBanUser(chatId, identifier, supabase);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Handle /unbanuser command
+    if (update.message?.text?.startsWith("/unbanuser")) {
+      const chatId = update.message.chat.id.toString();
+      const identifier = update.message.text.replace("/unbanuser", "").trim();
+      await handleUnbanUser(chatId, identifier, supabase);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Handle /broadcast command
+    if (update.message?.text?.startsWith("/broadcast")) {
+      const chatId = update.message.chat.id.toString();
+      const message = update.message.text.replace("/broadcast", "").trim();
+      await handleBroadcast(chatId, message, supabase);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Handle /stats command
+    if (update.message?.text === "/stats") {
+      const chatId = update.message.chat.id.toString();
+      await handleStats(chatId, supabase);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Handle /ticket command (admin only for management)
     if (update.message?.text?.startsWith("/ticket")) {
       const chatId = update.message.chat.id.toString();
+      
+      // Only admin can use /ticket command
+      if (!isAdmin(chatId)) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can manage tickets via this command.");
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+      
       const parts = update.message.text.split(" ");
       
       if (parts.length < 2) {

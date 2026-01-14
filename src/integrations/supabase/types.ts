@@ -182,8 +182,11 @@ export type Database = {
       profiles: {
         Row: {
           balance: number
+          ban_reason: string | null
+          banned_at: string | null
           created_at: string
           id: string
+          is_banned: boolean
           name: string | null
           telegram_chat_id: string | null
           telegram_username: string | null
@@ -193,8 +196,11 @@ export type Database = {
         }
         Insert: {
           balance?: number
+          ban_reason?: string | null
+          banned_at?: string | null
           created_at?: string
           id?: string
+          is_banned?: boolean
           name?: string | null
           telegram_chat_id?: string | null
           telegram_username?: string | null
@@ -204,8 +210,11 @@ export type Database = {
         }
         Update: {
           balance?: number
+          ban_reason?: string | null
+          banned_at?: string | null
           created_at?: string
           id?: string
+          is_banned?: boolean
           name?: string | null
           telegram_chat_id?: string | null
           telegram_username?: string | null
