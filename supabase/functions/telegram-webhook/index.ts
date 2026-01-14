@@ -101,6 +101,7 @@ async function setBotCommands(): Promise<void> {
     { command: "viewbans", description: "View all banned users" },
     { command: "broadcast", description: "Broadcast message to all users" },
     { command: "stats", description: "View website statistics" },
+    { command: "allusers", description: "View all registered users" },
   ];
 
   try {
@@ -300,6 +301,9 @@ async function handleAdminCmd(chatId: string): Promise<void> {
 <b>📈 ANALYTICS</b>
 /stats
 └ View website statistics
+
+/allusers
+└ View all registered users with Telegram IDs
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
@@ -1636,6 +1640,84 @@ Your Telegram is not linked to any Yunchi account.
     if (update.message?.text === "/viewbans") {
       const chatId = update.message.chat.id.toString();
       await handleViewBans(chatId, supabase);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Handle /allusers command (Admin only)
+    if (update.message?.text === "/allusers") {
+      const chatId = update.message.chat.id.toString();
+      
+      if (!isAdmin(chatId)) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can view all users.");
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      // Get all users with their profile info
+      const { data: users, error, count } = await supabase
+        .from("profiles")
+        .select("user_id, username, name, telegram_chat_id, telegram_username, is_banned, created_at", { count: "exact" })
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching users:", error);
+        await sendTelegramMessage(chatId, "❌ Error fetching users. Please try again.");
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      const totalCount = count || 0;
+      const connectedCount = users?.filter(u => u.telegram_chat_id).length || 0;
+      const bannedCount = users?.filter(u => u.is_banned).length || 0;
+
+      // Build user list (limit to 15 for readability)
+      let userList = "";
+      const displayUsers = users?.slice(0, 15) || [];
+      
+      displayUsers.forEach((user, index) => {
+        const status = user.is_banned ? "🚫" : "✅";
+        const telegramId = user.telegram_chat_id ? `<code>${user.telegram_chat_id}</code>` : "❌ Not connected";
+        const username = user.username || user.name || "No username";
+        const profileLink = `https://yunchi.app/dashboard/profile?user=${user.user_id}`;
+        
+        userList += `
+${index + 1}. ${status} <b>${username}</b>
+   📱 ${telegramId}
+   🔗 <a href="${profileLink}">View Profile</a>
+`;
+      });
+
+      const remainingCount = totalCount - displayUsers.length;
+      const moreText = remainingCount > 0 ? `\n<i>...and ${remainingCount} more users</i>` : "";
+
+      const allUsersMessage = `
+👥 <b>All Users</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>📊 STATISTICS</b>
+
+<b>Total Users:</b> ${totalCount}
+<b>Telegram Connected:</b> ${connectedCount}
+<b>Banned:</b> ${bannedCount}
+<b>Active:</b> ${totalCount - bannedCount}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>📋 USER LIST</b>
+${userList}${moreText}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<i>✅ = Active | 🚫 = Banned</i>
+<i>📱 = Telegram Chat ID</i>
+`;
+
+      await sendTelegramMessage(chatId, allUsersMessage);
       return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
