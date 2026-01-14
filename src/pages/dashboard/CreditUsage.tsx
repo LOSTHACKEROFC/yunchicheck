@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import CreditUsageCharts from "@/components/CreditUsageCharts";
+import SpendingAlertSettings from "@/components/SpendingAlertSettings";
 
 interface CardCheck {
   id: string;
@@ -248,6 +249,9 @@ const CreditUsage = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Spending Alert Settings */}
+      <SpendingAlertSettings />
 
       {/* Usage Charts */}
       <CreditUsageCharts checks={checks} creditCostPerCheck={CREDIT_COST_PER_CHECK} />

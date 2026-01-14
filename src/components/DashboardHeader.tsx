@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Menu, Coins, Bell, Check, Trash2, CheckCheck, MessageSquare, DollarSign, Megaphone, ArrowUpCircle, X } from "lucide-react";
+import { Menu, Coins, Bell, Check, Trash2, CheckCheck, MessageSquare, DollarSign, Megaphone, ArrowUpCircle, X, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -34,7 +34,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 
 interface Notification {
   id: string;
-  type: "ticket_reply" | "balance_update" | "system" | "topup" | "announcement";
+  type: "ticket_reply" | "balance_update" | "system" | "topup" | "announcement" | "spending_alert" | "credits_update" | "topup_approved" | "topup_rejected";
   title: string;
   message: string;
   metadata: Record<string, unknown>;
@@ -55,6 +55,10 @@ const notificationConfig: Record<string, { icon: typeof MessageSquare; color: st
   system: { icon: Megaphone, color: "text-amber-500", bgColor: "bg-amber-500/20" },
   topup: { icon: ArrowUpCircle, color: "text-purple-500", bgColor: "bg-purple-500/20" },
   announcement: { icon: Megaphone, color: "text-orange-500", bgColor: "bg-orange-500/20" },
+  spending_alert: { icon: AlertTriangle, color: "text-red-500", bgColor: "bg-red-500/20" },
+  credits_update: { icon: DollarSign, color: "text-emerald-500", bgColor: "bg-emerald-500/20" },
+  topup_approved: { icon: ArrowUpCircle, color: "text-green-500", bgColor: "bg-green-500/20" },
+  topup_rejected: { icon: ArrowUpCircle, color: "text-red-500", bgColor: "bg-red-500/20" },
 };
 
 const DashboardHeader = () => {
