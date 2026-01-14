@@ -69,118 +69,124 @@ const DashboardHome = () => {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-display font-bold text-foreground">
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-foreground">
           Welcome, <span className="text-primary">{profile?.username || "User"}</span>
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="text-sm sm:text-base text-muted-foreground mt-1">
           Dashboard overview
         </p>
       </div>
 
       {/* Real-time Global Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         <Card className="bg-gradient-to-br from-primary/20 to-primary/5 border-primary/30">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-2">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
               </span>
-              Total Users (Live)
+              <span className="hidden xs:inline">Total Users</span>
+              <span className="xs:hidden">Users</span>
+              <span className="hidden sm:inline">(Live)</span>
             </CardTitle>
-            <Users className="h-4 w-4 text-primary" />
+            <Users className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-primary">{stats.total_users.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground mt-1">Registered users</p>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-2xl sm:text-3xl font-bold text-primary">{stats.total_users.toLocaleString()}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Registered users</p>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-green-500/20 to-green-500/5 border-green-500/30">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-2">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
               </span>
-              Total Cards Checked (Live)
+              <span className="hidden xs:inline">Total Cards Checked</span>
+              <span className="xs:hidden">Checks</span>
+              <span className="hidden sm:inline">(Live)</span>
             </CardTitle>
-            <Zap className="h-4 w-4 text-green-500" />
+            <Zap className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-500">{stats.total_checks.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground mt-1">All time checks</p>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-2xl sm:text-3xl font-bold text-green-500">{stats.total_checks.toLocaleString()}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">All time checks</p>
           </CardContent>
         </Card>
       </div>
 
       {/* User Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="bg-card border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
+        <Card className="bg-card border-border col-span-2 sm:col-span-1">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
               Your Balance
             </CardTitle>
-            <Wallet className="h-4 w-4 text-primary" />
+            <Wallet className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-primary">
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold text-primary">
               ${profile?.balance?.toFixed(2) || "0.00"}
             </div>
           </CardContent>
         </Card>
 
         <Card className="bg-card border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Your Checks Today
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
+              <span className="hidden xs:inline">Your Checks Today</span>
+              <span className="xs:hidden">Today</span>
             </CardTitle>
-            <CreditCard className="h-4 w-4 text-primary" />
+            <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">0</div>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold text-foreground">0</div>
           </CardContent>
         </Card>
 
         <Card className="bg-card border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              System Status
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
+              <span className="hidden xs:inline">System Status</span>
+              <span className="xs:hidden">Status</span>
             </CardTitle>
-            <Activity className="h-4 w-4 text-green-500" />
+            <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-500">Online</div>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold text-green-500">Online</div>
           </CardContent>
         </Card>
       </div>
 
       {/* Quick Links */}
       <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle className="text-lg">Quick Actions</CardTitle>
+        <CardHeader className="p-3 sm:p-6">
+          <CardTitle className="text-base sm:text-lg">Quick Actions</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {quickLinks.map((link, index) => (
             <Link
               key={link.title}
               to={link.url}
-              className={`flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors ${
+              className={`flex items-center justify-between p-3 sm:p-4 hover:bg-secondary/50 transition-colors ${
                 index !== quickLinks.length - 1 ? "border-b border-border" : ""
               }`}
             >
-              <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-lg bg-secondary flex items-center justify-center`}>
-                  <link.icon className={`h-5 w-5 ${link.color}`} />
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-secondary flex items-center justify-center`}>
+                  <link.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${link.color}`} />
                 </div>
                 <div>
-                  <p className="font-medium text-foreground">{link.title}</p>
-                  <p className="text-sm text-muted-foreground">{link.description}</p>
+                  <p className="font-medium text-sm sm:text-base text-foreground">{link.title}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground hidden xs:block">{link.description}</p>
                 </div>
               </div>
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
             </Link>
           ))}
         </CardContent>

@@ -123,9 +123,9 @@ const Dashboard = () => {
       <div className="min-h-screen flex w-full bg-background relative">
         <FloatingCardsBackground />
         <DashboardSidebar />
-        <div className="flex-1 flex flex-col relative z-10">
+        <div className="flex-1 flex flex-col relative z-10 min-w-0">
           <DashboardHeader />
-          <main className="flex-1 p-6 overflow-auto">
+          <main className="flex-1 p-3 sm:p-4 md:p-6 overflow-auto">
             <Outlet />
           </main>
         </div>
