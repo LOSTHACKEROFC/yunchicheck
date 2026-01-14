@@ -16,7 +16,7 @@ import {
   XCircle,
   Clock
 } from "lucide-react";
-import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import { format, subDays, startOfDay } from "date-fns";
 import {
   Select,
   SelectContent,
@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import CreditUsageCharts from "@/components/CreditUsageCharts";
 
 interface CardCheck {
   id: string;
@@ -247,6 +248,9 @@ const CreditUsage = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Usage Charts */}
+      <CreditUsageCharts checks={checks} creditCostPerCheck={CREDIT_COST_PER_CHECK} />
 
       {/* Gateway Breakdown */}
       {gatewayStats.length > 0 && (
