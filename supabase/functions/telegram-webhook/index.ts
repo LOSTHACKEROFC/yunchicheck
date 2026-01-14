@@ -229,6 +229,9 @@ Cancel pending ban operation
 ✅ <b>/unbanuser</b> [username or email]
 Unban a previously banned user
 
+👁️ <b>/viewbans</b>
+View all currently banned users
+
 📢 <b>/broadcast</b> [message]
 Send a message to all users via Telegram
 
@@ -722,6 +725,73 @@ async function handleStats(chatId: string, supabase: any): Promise<void> {
 `;
 
   await sendTelegramMessage(chatId, statsMessage);
+}
+
+async function handleViewBans(chatId: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to view banned users.");
+    return;
+  }
+
+  // Fetch all banned users
+  const { data: bannedUsers, error } = await supabase
+    .from("profiles")
+    .select("user_id, username, name, ban_reason, banned_at, banned_until")
+    .eq("is_banned", true)
+    .order("banned_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching banned users:", error);
+    await sendTelegramMessage(chatId, "❌ Failed to fetch banned users. Please try again.");
+    return;
+  }
+
+  if (!bannedUsers || bannedUsers.length === 0) {
+    await sendTelegramMessage(chatId, "✅ <b>No Banned Users</b>\n\nThere are currently no banned users on the platform.");
+    return;
+  }
+
+  // Build the message with all banned users
+  let message = `🚫 <b>Banned Users (${bannedUsers.length})</b>\n\n`;
+
+  for (const user of bannedUsers) {
+    const displayName = user.username || user.name || "Unknown";
+    const bannedDate = user.banned_at 
+      ? new Date(user.banned_at).toLocaleDateString()
+      : "N/A";
+    
+    let banStatus = "🔴 Permanent";
+    if (user.banned_until) {
+      const expiryDate = new Date(user.banned_until);
+      const now = new Date();
+      if (expiryDate > now) {
+        const diffMs = expiryDate.getTime() - now.getTime();
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffHours / 24);
+        
+        if (diffDays > 0) {
+          banStatus = `⏳ ${diffDays}d ${diffHours % 24}h left`;
+        } else {
+          banStatus = `⏳ ${diffHours}h left`;
+        }
+      } else {
+        banStatus = "⚠️ Pending unban";
+      }
+    }
+
+    message += `<b>👤 ${displayName}</b>\n`;
+    message += `├ Status: ${banStatus}\n`;
+    message += `├ Reason: ${user.ban_reason || "Not specified"}\n`;
+    message += `├ Banned: ${bannedDate}\n`;
+    if (user.banned_until) {
+      message += `├ Expires: ${new Date(user.banned_until).toLocaleString()}\n`;
+    }
+    message += `└ <code>/unbanuser ${user.username || user.user_id}</code>\n\n`;
+  }
+
+  message += `<i>Use /unbanuser [username] to unban a user</i>`;
+
+  await sendTelegramMessage(chatId, message);
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -1326,6 +1396,15 @@ const handler = async (req: Request): Promise<Response> => {
     if (update.message?.text === "/stats") {
       const chatId = update.message.chat.id.toString();
       await handleStats(chatId, supabase);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Handle /viewbans command
+    if (update.message?.text === "/viewbans") {
+      const chatId = update.message.chat.id.toString();
+      await handleViewBans(chatId, supabase);
       return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
