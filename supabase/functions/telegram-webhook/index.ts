@@ -215,6 +215,79 @@ const handler = async (req: Request): Promise<Response> => {
       const callbackData = update.callback_query.data;
       console.log("Callback data:", callbackData);
 
+      // Handle verification callback
+      if (callbackData.startsWith("verify_")) {
+        const verificationCode = callbackData.replace("verify_", "");
+        const chatId = update.callback_query.message?.chat.id.toString();
+
+        if (!chatId) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Invalid chat");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        // Find pending verification
+        const { data: verification, error: verifyError } = await supabase
+          .from("pending_verifications")
+          .select("*")
+          .eq("verification_code", verificationCode)
+          .eq("telegram_chat_id", chatId)
+          .single();
+
+        if (verifyError || !verification) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Verification not found or already used");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        // Check if expired
+        if (new Date(verification.expires_at) < new Date()) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Verification has expired. Please request a new one.");
+          // Delete expired verification
+          await supabase
+            .from("pending_verifications")
+            .delete()
+            .eq("id", verification.id);
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        // Check if already verified
+        if (verification.verified) {
+          await answerCallbackQuery(update.callback_query.id, "✅ Already verified!");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        // Mark as verified
+        const { error: updateError } = await supabase
+          .from("pending_verifications")
+          .update({ verified: true })
+          .eq("id", verification.id);
+
+        if (updateError) {
+          console.error("Error updating verification:", updateError);
+          await answerCallbackQuery(update.callback_query.id, "❌ Failed to verify. Please try again.");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        await answerCallbackQuery(update.callback_query.id, "✅ Account verified successfully! You can now complete your registration.");
+        await sendTelegramMessage(
+          chatId,
+          "✅ <b>Account Verified!</b>\n\nYou can now complete your registration on the website."
+        );
+
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
       // Parse callback data: action_ticketUuid
       const [action, ticketUuid] = callbackData.split("_");
 
