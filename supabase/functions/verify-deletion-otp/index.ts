@@ -75,14 +75,59 @@ serve(async (req) => {
       );
     }
 
-    // Mark as verified (we'll delete it after successful account deletion)
-    await adminClient
-      .from("deletion_otps")
-      .update({ verified: true })
-      .eq("id", otpRecord.id);
+    console.log(`OTP verified for user: ${userId}. Proceeding with account deletion...`);
+
+    // Delete all user data in order (respecting foreign keys)
+    
+    // 1. Delete deletion OTPs first
+    await adminClient.from("deletion_otps").delete().eq("user_id", userId);
+    
+    // 2. Delete notification reads and deleted notifications
+    await adminClient.from("notification_reads").delete().eq("user_id", userId);
+    await adminClient.from("deleted_notifications").delete().eq("user_id", userId);
+    
+    // 3. Delete notifications
+    await adminClient.from("notifications").delete().eq("user_id", userId);
+
+    // 4. Get user's ticket IDs first
+    const { data: tickets } = await adminClient
+      .from("support_tickets")
+      .select("id")
+      .eq("user_id", userId);
+
+    // 5. Delete ticket messages
+    if (tickets && tickets.length > 0) {
+      const ticketIds = tickets.map(t => t.id);
+      await adminClient.from("ticket_messages").delete().in("ticket_id", ticketIds);
+    }
+
+    // 6. Delete support tickets
+    await adminClient.from("support_tickets").delete().eq("user_id", userId);
+
+    // 7. Delete card checks
+    await adminClient.from("card_checks").delete().eq("user_id", userId);
+
+    // 8. Delete user sessions
+    await adminClient.from("user_sessions").delete().eq("user_id", userId);
+
+    // 9. Delete profile
+    await adminClient.from("profiles").delete().eq("user_id", userId);
+
+    // 10. Delete the auth user (this will cascade delete sessions, etc.)
+    const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(userId);
+
+    if (deleteAuthError) {
+      console.error("Error deleting auth user:", deleteAuthError);
+      return new Response(
+        JSON.stringify({ error: "Failed to delete authentication record" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`Successfully deleted account for user: ${userId}`);
 
     return new Response(
-      JSON.stringify({ success: true, verified: true }),
+      JSON.stringify({ success: true, deleted: true, message: "Account deleted successfully" }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {
