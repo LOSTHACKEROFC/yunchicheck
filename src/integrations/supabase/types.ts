@@ -113,6 +113,42 @@ export type Database = {
         }
         Relationships: []
       }
+      password_reset_otps: {
+        Row: {
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          otp_code: string
+          telegram_chat_id: string | null
+          used: boolean
+          user_id: string
+          verified: boolean
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          expires_at: string
+          id?: string
+          otp_code: string
+          telegram_chat_id?: string | null
+          used?: boolean
+          user_id: string
+          verified?: boolean
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          otp_code?: string
+          telegram_chat_id?: string | null
+          used?: boolean
+          user_id?: string
+          verified?: boolean
+        }
+        Relationships: []
+      }
       pending_verifications: {
         Row: {
           created_at: string
