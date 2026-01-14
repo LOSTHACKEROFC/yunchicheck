@@ -35,7 +35,9 @@ import {
   Loader2,
   RefreshCw,
   DollarSign,
-  Users
+  Users,
+  Image as ImageIcon,
+  ExternalLink
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -49,6 +51,7 @@ interface TopupTransaction {
   status: string;
   wallet_address: string | null;
   transaction_hash: string | null;
+  proof_image_url: string | null;
   created_at: string;
   completed_at: string | null;
 }
@@ -396,6 +399,33 @@ const AdminTopups = () => {
                   <p className="font-medium">${profiles[selectedTx.user_id]?.balance?.toFixed(2) || '0.00'}</p>
                 </div>
               </div>
+
+              {selectedTx.proof_image_url && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground flex items-center gap-2">
+                      <ImageIcon className="h-4 w-4" />
+                      Payment Proof
+                    </p>
+                    <a
+                      href={selectedTx.proof_image_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                    >
+                      Open Full Size
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                  <div className="relative rounded-lg overflow-hidden border border-border bg-secondary">
+                    <img
+                      src={selectedTx.proof_image_url}
+                      alt="Payment proof"
+                      className="w-full max-h-64 object-contain"
+                    />
+                  </div>
+                </div>
+              )}
 
               {selectedTx.wallet_address && (
                 <div className="p-3 bg-secondary rounded-lg">
