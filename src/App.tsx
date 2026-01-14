@@ -16,6 +16,7 @@ import Gateways from "./pages/dashboard/Gateways";
 import Topup from "./pages/dashboard/Topup";
 import Support from "./pages/dashboard/Support";
 import BannedAccount from "./pages/BannedAccount";
+import VerifyDeactivation from "./pages/VerifyDeactivation";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/verify-deactivation" element={<VerifyDeactivation />} />
             <Route path="/banned" element={<BannedAccount />} />
             <Route path="/dashboard" element={<Dashboard />}>
               <Route index element={<DashboardHome />} />

@@ -1,12 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { Settings, Volume2, VolumeX, UserX, Sun, Moon, Monitor, Bell, MessageSquare, DollarSign, Megaphone, Globe, Radio, Mail, Loader2 } from "lucide-react";
+import { Settings, Volume2, VolumeX, UserX, Sun, Moon, Monitor, Bell, MessageSquare, DollarSign, Megaphone, Globe, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import {
   Popover,
   PopoverContent,
@@ -64,10 +62,7 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
   const { theme, setTheme } = useTheme();
   const { language, setLanguage, t } = useLanguage();
   const [open, setOpen] = useState(false);
-  const [confirmStep, setConfirmStep] = useState(0);
-  const [otp, setOtp] = useState("");
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferences>(() => {
     const saved = localStorage.getItem("notification-preferences");
     return saved ? JSON.parse(saved) : defaultNotificationPrefs;
@@ -78,97 +73,15 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
     localStorage.setItem("notification-preferences", JSON.stringify(notificationPrefs));
   }, [notificationPrefs]);
 
-  const resetDeactivation = () => {
-    setConfirmStep(0);
-    setOtp("");
-  };
-
   const handleDeactivateClick = () => {
-    setConfirmStep(1);
+    setShowConfirmDialog(true);
   };
 
-  const handleFirstConfirm = async () => {
-    setConfirmStep(2);
-    // Send OTP to email immediately
-    await sendDeletionOtp();
-  };
-
-  const sendDeletionOtp = async () => {
-    setIsSendingOtp(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast.error("Please log in again");
-        return;
-      }
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-deletion-otp`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        }
-      );
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to send verification code");
-      }
-
-      toast.success("Verification code sent to your email");
-    } catch (error: unknown) {
-      console.error("Error sending OTP:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to send verification code");
-    } finally {
-      setIsSendingOtp(false);
-    }
-  };
-
-  const verifyAndDeleteAccount = async () => {
-    if (otp.length !== 6) {
-      toast.error("Please enter the 6-digit code");
-      return;
-    }
-
-    setIsDeleting(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast.error("Please log in again");
-        return;
-      }
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-deletion-otp`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ otp }),
-        }
-      );
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Invalid verification code");
-      }
-
-      // Account deleted successfully - sign out and redirect
-      await supabase.auth.signOut();
-      toast.success("Your account has been permanently deleted");
-      navigate("/");
-    } catch (error: unknown) {
-      console.error("Error deleting account:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to delete account");
-    } finally {
-      setIsDeleting(false);
-      resetDeactivation();
-    }
+  const handleConfirmDeactivation = () => {
+    setShowConfirmDialog(false);
+    setOpen(false);
+    // Navigate to the verification page
+    navigate("/verify-deactivation");
   };
 
   const handleNotificationPrefChange = (key: keyof NotificationPreferences, value: boolean) => {
@@ -189,11 +102,7 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
 
   return (
     <>
-      <Popover open={open} onOpenChange={(isOpen) => {
-        setOpen(isOpen);
-        // Don't reset deactivation if a dialog step is active
-        if (!isOpen && confirmStep === 0) resetDeactivation();
-      }}>
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button className="p-2 rounded-lg hover:bg-secondary transition-colors">
             <Settings className="h-5 w-5 text-muted-foreground" />
@@ -380,8 +289,8 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
         </PopoverContent>
       </Popover>
 
-      {/* First Confirmation Dialog */}
-      <AlertDialog open={confirmStep === 1} onOpenChange={(isOpen) => !isOpen && resetDeactivation()}>
+      {/* Confirmation Dialog */}
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-destructive">{t.deactivateAccountQuestion}</AlertDialogTitle>
@@ -396,77 +305,13 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={resetDeactivation}>{t.cancel}</AlertDialogCancel>
+            <AlertDialogCancel>{t.cancel}</AlertDialogCancel>
             <AlertDialogAction 
-              onClick={handleFirstConfirm}
-              disabled={isSendingOtp}
+              onClick={handleConfirmDeactivation}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isSendingOtp ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Sending Code...
-                </>
-              ) : (
-                t.yesContinue
-              )}
+              {t.yesContinue}
             </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Email OTP Verification Dialog */}
-      <AlertDialog open={confirmStep === 2} onOpenChange={(isOpen) => !isOpen && resetDeactivation()}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
-              <Mail className="h-5 w-5" />
-              Verify Your Email
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              We've sent a 6-digit verification code to your email. Enter it below to permanently delete your account.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex flex-col items-center gap-4 py-6">
-            <InputOTP
-              maxLength={6}
-              value={otp}
-              onChange={setOtp}
-            >
-              <InputOTPGroup>
-                <InputOTPSlot index={0} />
-                <InputOTPSlot index={1} />
-                <InputOTPSlot index={2} />
-                <InputOTPSlot index={3} />
-                <InputOTPSlot index={4} />
-                <InputOTPSlot index={5} />
-              </InputOTPGroup>
-            </InputOTP>
-            <button
-              type="button"
-              onClick={sendDeletionOtp}
-              disabled={isSendingOtp}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-            >
-              {isSendingOtp ? "Sending..." : "Didn't receive the code? Resend"}
-            </button>
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={resetDeactivation}>{t.cancel}</AlertDialogCancel>
-            <Button
-              variant="destructive"
-              onClick={verifyAndDeleteAccount}
-              disabled={isDeleting || otp.length !== 6}
-            >
-              {isDeleting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Deleting Account...
-                </>
-              ) : (
-                "Verify & Delete Account"
-              )}
-            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
