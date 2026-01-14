@@ -81,7 +81,7 @@ const handler = async (req: Request): Promise<Response> => {
     // Get user profile and email
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
-      .select("username, telegram_chat_id")
+      .select("username, telegram_chat_id, balance")
       .eq("user_id", user_id)
       .single();
 
@@ -103,6 +103,7 @@ const handler = async (req: Request): Promise<Response> => {
     const userEmail = authUser?.user?.email;
     const username = profile?.username || "User";
     const telegramChatId = profile?.telegram_chat_id;
+    const currentBalance = profile?.balance || 0;
 
     const paymentMethodLabels: Record<string, string> = {
       btc: "Bitcoin",
@@ -113,12 +114,13 @@ const handler = async (req: Request): Promise<Response> => {
 
     const methodLabel = paymentMethodLabels[payment_method] || payment_method;
     const formattedAmount = `$${Number(amount).toFixed(2)}`;
+    const formattedBalance = `$${Number(currentBalance).toFixed(2)}`;
 
     let telegramSent = false;
     let emailSent = false;
 
     if (status === "completed") {
-      // APPROVED notification
+      // APPROVED notification with new balance
       const telegramMessage = `
 ✅ <b>Topup Approved!</b>
 
@@ -126,11 +128,13 @@ Hello <b>${username}</b>,
 
 Your topup request has been approved and processed.
 
-💰 <b>Amount:</b> ${formattedAmount}
+💰 <b>Amount Added:</b> ${formattedAmount}
 💳 <b>Method:</b> ${methodLabel}
 📝 <b>Transaction ID:</b> <code>${transaction_id.slice(0, 8)}...</code>
 
-Your balance has been credited. Thank you for using Yunchi Checker!
+💵 <b>New Balance:</b> ${formattedBalance}
+
+Thank you for using Yunchi Checker!
       `.trim();
 
       const emailHtml = `
@@ -143,13 +147,17 @@ Your balance has been credited. Thank you for using Yunchi Checker!
             <p>Your topup request has been approved and processed successfully.</p>
             
             <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 5px 0;"><strong>Amount:</strong> ${formattedAmount}</p>
+              <p style="margin: 5px 0;"><strong>Amount Added:</strong> ${formattedAmount}</p>
               <p style="margin: 5px 0;"><strong>Method:</strong> ${methodLabel}</p>
               <p style="margin: 5px 0;"><strong>Transaction ID:</strong> ${transaction_id.slice(0, 8)}...</p>
             </div>
             
-            <p style="color: #10b981; font-weight: bold;">Your balance has been credited!</p>
-            <p style="color: #a3a3a3; font-size: 14px;">Thank you for using Yunchi Checker.</p>
+            <div style="background: linear-gradient(135deg, #10b981, #059669); padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+              <p style="margin: 0; font-size: 14px; color: rgba(255,255,255,0.8);">Your New Balance</p>
+              <p style="margin: 5px 0 0 0; font-size: 28px; font-weight: bold; color: white;">${formattedBalance}</p>
+            </div>
+            
+            <p style="color: #a3a3a3; font-size: 14px; text-align: center;">Thank you for using Yunchi Checker.</p>
           </div>
         </div>
       `;
@@ -167,8 +175,8 @@ Your balance has been credited. Thank you for using Yunchi Checker!
         user_id,
         type: "topup_approved",
         title: "Topup Approved",
-        message: `Your ${formattedAmount} topup via ${methodLabel} has been approved and credited to your balance.`,
-        metadata: { transaction_id, amount, payment_method }
+        message: `Your ${formattedAmount} topup via ${methodLabel} has been approved. New balance: ${formattedBalance}`,
+        metadata: { transaction_id, amount, payment_method, new_balance: currentBalance }
       });
 
     } else if (status === "failed") {
