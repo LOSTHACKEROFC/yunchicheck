@@ -16,6 +16,7 @@ export interface Translations {
   balanceUpdates: string;
   systemAnnouncements: string;
   topupAlerts: string;
+  broadcastAnnouncements: string;
   language: string;
   dangerZone: string;
   deactivateAccount: string;
@@ -142,6 +143,7 @@ const translations: Record<Language, Translations> = {
     balanceUpdates: "Balance Updates",
     systemAnnouncements: "System Announcements",
     topupAlerts: "Topup Alerts",
+    broadcastAnnouncements: "Broadcast Announcements",
     language: "Language",
     dangerZone: "Danger Zone",
     deactivateAccount: "Deactivate Account",
@@ -255,6 +257,7 @@ const translations: Record<Language, Translations> = {
     balanceUpdates: "Actualizaciones de Saldo",
     systemAnnouncements: "Anuncios del Sistema",
     topupAlerts: "Alertas de Recarga",
+    broadcastAnnouncements: "Anuncios de Difusión",
     language: "Idioma",
     dangerZone: "Zona Peligrosa",
     deactivateAccount: "Desactivar Cuenta",
@@ -368,6 +371,7 @@ const translations: Record<Language, Translations> = {
     balanceUpdates: "Mises à jour du Solde",
     systemAnnouncements: "Annonces Système",
     topupAlerts: "Alertes de Recharge",
+    broadcastAnnouncements: "Annonces de Diffusion",
     language: "Langue",
     dangerZone: "Zone Dangereuse",
     deactivateAccount: "Désactiver le Compte",
@@ -481,6 +485,7 @@ const translations: Record<Language, Translations> = {
     balanceUpdates: "Kontostand-Updates",
     systemAnnouncements: "Systemankündigungen",
     topupAlerts: "Auflade-Benachrichtigungen",
+    broadcastAnnouncements: "Broadcast-Ankündigungen",
     language: "Sprache",
     dangerZone: "Gefahrenzone",
     deactivateAccount: "Konto Deaktivieren",
@@ -594,6 +599,7 @@ const translations: Record<Language, Translations> = {
     balanceUpdates: "تحديثات الرصيد",
     systemAnnouncements: "إعلانات النظام",
     topupAlerts: "تنبيهات الشحن",
+    broadcastAnnouncements: "إعلانات البث",
     language: "اللغة",
     dangerZone: "منطقة الخطر",
     deactivateAccount: "إلغاء تنشيط الحساب",
@@ -707,6 +713,7 @@ const translations: Record<Language, Translations> = {
     balanceUpdates: "余额更新",
     systemAnnouncements: "系统公告",
     topupAlerts: "充值提醒",
+    broadcastAnnouncements: "广播公告",
     language: "语言",
     dangerZone: "危险区域",
     deactivateAccount: "停用账户",

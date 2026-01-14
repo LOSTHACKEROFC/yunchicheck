@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Settings, Volume2, VolumeX, UserX, Sun, Moon, Monitor, Bell, MessageSquare, DollarSign, Megaphone, Globe } from "lucide-react";
+import { Settings, Volume2, VolumeX, UserX, Sun, Moon, Monitor, Bell, MessageSquare, DollarSign, Megaphone, Globe, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -43,6 +43,7 @@ interface NotificationPreferences {
   balance_update: boolean;
   system: boolean;
   topup: boolean;
+  announcement: boolean;
 }
 
 interface SettingsDropdownProps {
@@ -55,6 +56,7 @@ const defaultNotificationPrefs: NotificationPreferences = {
   balance_update: true,
   system: true,
   topup: true,
+  announcement: true,
 };
 
 const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps) => {
@@ -315,6 +317,17 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
                   <Switch
                     checked={notificationPrefs.topup}
                     onCheckedChange={(v) => handleNotificationPrefChange("topup", v)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Radio className="h-4 w-4 text-orange-500" />
+                    <span className="text-sm">{t.broadcastAnnouncements}</span>
+                  </div>
+                  <Switch
+                    checked={notificationPrefs.announcement}
+                    onCheckedChange={(v) => handleNotificationPrefChange("announcement", v)}
                   />
                 </div>
               </div>
