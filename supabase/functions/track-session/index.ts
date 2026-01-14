@@ -38,9 +38,15 @@ Deno.serve(async (req) => {
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     
     if (userError || !user) {
-      console.error("Auth error:", userError?.message || "No user found");
+      // Don't log expected auth errors (deleted users, expired tokens)
+      const isExpectedError = userError?.message?.includes("not found") || 
+                              userError?.message?.includes("expired") ||
+                              userError?.message?.includes("invalid");
+      if (!isExpectedError) {
+        console.error("Auth error:", userError?.message || "No user found");
+      }
       return new Response(
-        JSON.stringify({ error: "Invalid token" }),
+        JSON.stringify({ error: "Invalid token", code: "USER_NOT_FOUND" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
