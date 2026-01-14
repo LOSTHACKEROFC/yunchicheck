@@ -169,7 +169,8 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
     <>
       <Popover open={open} onOpenChange={(isOpen) => {
         setOpen(isOpen);
-        if (!isOpen) resetDeactivation();
+        // Don't reset deactivation if a dialog step is active
+        if (!isOpen && confirmStep === 0) resetDeactivation();
       }}>
         <PopoverTrigger asChild>
           <button className="p-2 rounded-lg hover:bg-secondary transition-colors">
