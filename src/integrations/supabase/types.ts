@@ -438,6 +438,7 @@ export type Database = {
           id: string
           payment_method: string
           proof_image_url: string | null
+          rejection_reason: string | null
           status: string
           transaction_hash: string | null
           updated_at: string
@@ -451,6 +452,7 @@ export type Database = {
           id?: string
           payment_method: string
           proof_image_url?: string | null
+          rejection_reason?: string | null
           status?: string
           transaction_hash?: string | null
           updated_at?: string
@@ -464,6 +466,7 @@ export type Database = {
           id?: string
           payment_method?: string
           proof_image_url?: string | null
+          rejection_reason?: string | null
           status?: string
           transaction_hash?: string | null
           updated_at?: string

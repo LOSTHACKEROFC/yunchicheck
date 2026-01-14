@@ -74,6 +74,8 @@ const AdminTopups = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [stats, setStats] = useState({ pending: 0, completed: 0, total: 0 });
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [showRejectConfirm, setShowRejectConfirm] = useState(false);
 
   // Check admin status
   useEffect(() => {
@@ -167,13 +169,19 @@ const AdminTopups = () => {
     };
   }, [isAdmin]);
 
-  const handleUpdateStatus = async (status: 'completed' | 'failed') => {
+  const handleUpdateStatus = async (status: 'completed' | 'failed', reason?: string) => {
     if (!selectedTx) return;
 
     setActionLoading(true);
+    
+    const updateData: { status: string; rejection_reason?: string } = { status };
+    if (status === 'failed' && reason) {
+      updateData.rejection_reason = reason;
+    }
+    
     const { error } = await supabase
       .from('topup_transactions')
-      .update({ status })
+      .update(updateData)
       .eq('id', selectedTx.id);
 
     setActionLoading(false);
@@ -184,7 +192,22 @@ const AdminTopups = () => {
     } else {
       toast.success(`Transaction ${status === 'completed' ? 'approved' : 'rejected'}`);
       setSelectedTx(null);
+      setRejectionReason("");
+      setShowRejectConfirm(false);
     }
+  };
+  
+  const handleRejectClick = () => {
+    setShowRejectConfirm(true);
+  };
+  
+  const handleConfirmReject = () => {
+    handleUpdateStatus('failed', rejectionReason);
+  };
+  
+  const handleCancelReject = () => {
+    setShowRejectConfirm(false);
+    setRejectionReason("");
   };
 
   const getStatusBadge = (status: string) => {
@@ -460,37 +483,70 @@ const AdminTopups = () => {
             </div>
           )}
 
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={() => handleUpdateStatus('failed')}
-              disabled={actionLoading}
-              className="border-red-500/50 text-red-400 hover:bg-red-500/10"
-            >
-              {actionLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <XCircle className="h-4 w-4 mr-2" />
-                  Reject
-                </>
-              )}
-            </Button>
-            <Button
-              onClick={() => handleUpdateStatus('completed')}
-              disabled={actionLoading}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              {actionLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Approve
-                </>
-              )}
-            </Button>
-          </DialogFooter>
+          {showRejectConfirm ? (
+            <div className="space-y-4 w-full">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">
+                  Rejection Reason
+                </label>
+                <textarea
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="Enter the reason for rejection (optional but recommended)..."
+                  className="w-full min-h-[80px] px-3 py-2 rounded-md border border-border bg-secondary text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={handleCancelReject}
+                  disabled={actionLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleConfirmReject}
+                  disabled={actionLoading}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
+                  {actionLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <XCircle className="h-4 w-4 mr-2" />
+                      Confirm Rejection
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <DialogFooter className="gap-2">
+              <Button
+                variant="outline"
+                onClick={handleRejectClick}
+                disabled={actionLoading}
+                className="border-red-500/50 text-red-400 hover:bg-red-500/10"
+              >
+                <XCircle className="h-4 w-4 mr-2" />
+                Reject
+              </Button>
+              <Button
+                onClick={() => handleUpdateStatus('completed')}
+                disabled={actionLoading}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {actionLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Approve
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 
