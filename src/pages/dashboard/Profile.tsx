@@ -82,6 +82,8 @@ const Profile = () => {
   };
 
   useEffect(() => {
+    let chatIdRef = "";
+    
     const fetchProfile = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -107,6 +109,8 @@ const Profile = () => {
         setOriginalValues(profileData);
         setBalance(data?.balance || 0);
         
+        chatIdRef = data?.telegram_chat_id || "";
+        
         // Fetch Telegram profile if chat ID exists
         if (data?.telegram_chat_id) {
           fetchTelegramProfile(data.telegram_chat_id);
@@ -114,6 +118,15 @@ const Profile = () => {
       }
     };
     fetchProfile();
+
+    // Auto-refresh Telegram status every 30 seconds
+    const intervalId = setInterval(() => {
+      if (chatIdRef) {
+        fetchTelegramProfile(chatIdRef);
+      }
+    }, 30000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   const handleEdit = () => {
