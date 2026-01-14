@@ -83,6 +83,7 @@ const Auth = () => {
 
   // Banned user dialog state
   const [showBannedDialog, setShowBannedDialog] = useState(false);
+  const [banReason, setBanReason] = useState<string | null>(null);
 
   // Telegram profile state
   const [telegramProfile, setTelegramProfile] = useState<{
@@ -772,6 +773,7 @@ const Auth = () => {
           if (profile?.is_banned) {
             // Sign out the banned user immediately
             await supabase.auth.signOut();
+            setBanReason(profile.ban_reason);
             setShowBannedDialog(true);
             setLoading(false);
             return;
@@ -1552,10 +1554,16 @@ const Auth = () => {
               <Ban className="h-8 w-8 text-red-500" />
             </div>
             <DialogTitle className="text-xl text-center">Account Banned</DialogTitle>
-            <DialogDescription className="text-center space-y-2">
+            <DialogDescription className="text-center space-y-3">
               <p className="text-base">
                 Your account has been banned by Support.
               </p>
+              {banReason && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                  <p className="text-sm font-medium text-red-500">Reason:</p>
+                  <p className="text-sm text-foreground">{banReason}</p>
+                </div>
+              )}
               <p className="text-sm text-muted-foreground">
                 You need to contact support to unban your account.
               </p>

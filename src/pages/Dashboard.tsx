@@ -21,6 +21,7 @@ const Dashboard = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [showBannedDialog, setShowBannedDialog] = useState(false);
+  const [banReason, setBanReason] = useState<string | null>(null);
   const navigate = useNavigate();
   
   // Track user session for security
@@ -30,11 +31,12 @@ const Dashboard = () => {
   const checkBanStatus = async (userId: string) => {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("is_banned")
+      .select("is_banned, ban_reason")
       .eq("user_id", userId)
       .maybeSingle();
     
     if (profile?.is_banned) {
+      setBanReason(profile.ban_reason);
       await supabase.auth.signOut();
       setShowBannedDialog(true);
       return true;
@@ -80,8 +82,9 @@ const Dashboard = () => {
               filter: `user_id=eq.${session.user.id}`,
             },
             (payload) => {
-              const newProfile = payload.new as { is_banned?: boolean };
+              const newProfile = payload.new as { is_banned?: boolean; ban_reason?: string | null };
               if (newProfile?.is_banned === true) {
+                setBanReason(newProfile.ban_reason ?? null);
                 supabase.auth.signOut().then(() => {
                   setShowBannedDialog(true);
                 });
@@ -131,10 +134,16 @@ const Dashboard = () => {
               <Ban className="h-8 w-8 text-red-500" />
             </div>
             <DialogTitle className="text-xl text-center">Account Banned</DialogTitle>
-            <DialogDescription className="text-center space-y-2">
+            <DialogDescription className="text-center space-y-3">
               <p className="text-base">
                 Your account has been banned by Support.
               </p>
+              {banReason && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                  <p className="text-sm font-medium text-red-500">Reason:</p>
+                  <p className="text-sm text-foreground">{banReason}</p>
+                </div>
+              )}
               <p className="text-sm text-muted-foreground">
                 You need to contact support to unban your account.
               </p>
