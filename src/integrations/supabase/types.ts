@@ -101,6 +101,36 @@ export type Database = {
         }
         Relationships: []
       }
+      deletion_otps: {
+        Row: {
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          otp_hash: string
+          user_id: string
+          verified: boolean
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          expires_at: string
+          id?: string
+          otp_hash: string
+          user_id: string
+          verified?: boolean
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          otp_hash?: string
+          user_id?: string
+          verified?: boolean
+        }
+        Relationships: []
+      }
       notification_reads: {
         Row: {
           created_at: string
