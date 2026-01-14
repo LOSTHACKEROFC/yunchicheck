@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Tooltip,
   TooltipContent,
@@ -32,6 +33,13 @@ interface Notification {
   metadata: Record<string, unknown>;
   is_read: boolean;
   created_at: string;
+}
+
+interface TelegramProfile {
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
 }
 
 const notificationConfig: Record<string, { icon: typeof MessageSquare; color: string; bgColor: string }> = {
@@ -62,6 +70,9 @@ const DashboardHeader = () => {
   });
   const { playNotificationSound } = useNotificationSound();
   const [open, setOpen] = useState(false);
+  const [telegramProfile, setTelegramProfile] = useState<TelegramProfile | null>(null);
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
@@ -100,20 +111,51 @@ const DashboardHeader = () => {
     }
   };
 
+  const fetchTelegramProfile = async (chatId: string) => {
+    if (!chatId) {
+      setTelegramProfile(null);
+      return;
+    }
+    
+    try {
+      const response = await supabase.functions.invoke("get-telegram-profile", {
+        body: { chat_id: chatId },
+      });
+      
+      if (response.error) {
+        console.error("Error fetching Telegram profile:", response.error);
+        setTelegramProfile(null);
+      } else {
+        setTelegramProfile(response.data);
+      }
+    } catch (error) {
+      console.error("Error fetching Telegram profile:", error);
+      setTelegramProfile(null);
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Fetch balance
+      setEmail(user.email || "");
+
+      // Fetch balance and telegram chat id
       const { data: profile } = await supabase
         .from("profiles")
-        .select("balance")
+        .select("balance, telegram_chat_id, username")
         .eq("user_id", user.id)
         .single();
 
       if (profile) {
         setBalance(profile.balance);
+        setUsername(profile.username || "");
+        
+        // Fetch Telegram profile if chat ID exists
+        if (profile.telegram_chat_id) {
+          fetchTelegramProfile(profile.telegram_chat_id);
+        }
       }
 
       await fetchNotifications();
@@ -236,6 +278,10 @@ const DashboardHeader = () => {
     return notificationConfig[type] || notificationConfig.system;
   };
 
+  const displayName = telegramProfile?.first_name 
+    ? `${telegramProfile.first_name}${telegramProfile.last_name ? ` ${telegramProfile.last_name}` : ""}`
+    : (username || email?.split("@")[0] || "User");
+
   return (
     <header className="h-14 border-b border-border flex items-center justify-between px-4 bg-card">
       <div className="flex items-center gap-4">
@@ -246,6 +292,30 @@ const DashboardHeader = () => {
       </div>
 
       <div className="flex items-center gap-3">
+        {/* User Profile */}
+        <div 
+          className="flex items-center gap-2 cursor-pointer hover:bg-secondary/50 rounded-lg px-2 py-1 transition-colors"
+          onClick={() => navigate("/dashboard/profile")}
+        >
+          <Avatar className="h-7 w-7 border border-primary/30">
+            {telegramProfile?.photo_url ? (
+              <AvatarImage 
+                src={telegramProfile.photo_url} 
+                alt="Profile" 
+                className="object-cover"
+              />
+            ) : null}
+            <AvatarFallback className="bg-primary/20 text-primary text-xs font-bold">
+              {displayName.charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <span className="text-sm font-medium text-foreground hidden sm:inline">
+            {displayName}
+          </span>
+        </div>
+
+        <Separator orientation="vertical" className="h-6" />
+
         <TooltipProvider>
           {/* Balance */}
           <Tooltip>
