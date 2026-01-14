@@ -7,6 +7,16 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { User, Mail, Calendar, Shield, Key, MessageCircle, Pencil, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface TelegramProfile {
   first_name?: string;
@@ -27,6 +37,7 @@ const Profile = () => {
   const [telegramProfile, setTelegramProfile] = useState<TelegramProfile | null>(null);
   const [loadingTelegram, setLoadingTelegram] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   
   // Store original values for cancel functionality
   const [originalValues, setOriginalValues] = useState({
@@ -35,6 +46,15 @@ const Profile = () => {
     telegramChatId: "",
     telegramUsername: "",
   });
+
+  const hasUnsavedChanges = () => {
+    return (
+      username !== originalValues.username ||
+      name !== originalValues.name ||
+      telegramChatId !== originalValues.telegramChatId ||
+      telegramUsername !== originalValues.telegramUsername
+    );
+  };
 
   const fetchTelegramProfile = async (chatId: string) => {
     if (!chatId) {
@@ -107,12 +127,21 @@ const Profile = () => {
     setIsEditing(true);
   };
 
-  const handleCancel = () => {
+  const handleCancelClick = () => {
+    if (hasUnsavedChanges()) {
+      setShowDiscardDialog(true);
+    } else {
+      setIsEditing(false);
+    }
+  };
+
+  const handleConfirmDiscard = () => {
     setUsername(originalValues.username);
     setName(originalValues.name);
     setTelegramChatId(originalValues.telegramChatId);
     setTelegramUsername(originalValues.telegramUsername);
     setIsEditing(false);
+    setShowDiscardDialog(false);
   };
 
   const handleUpdate = async () => {
@@ -179,7 +208,7 @@ const Profile = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleCancel}
+                onClick={handleCancelClick}
                 className="gap-2 text-muted-foreground hover:text-foreground"
               >
                 <X className="h-4 w-4" />
@@ -343,6 +372,27 @@ const Profile = () => {
           </Card>
         </div>
       </div>
+
+      {/* Discard Changes Confirmation Dialog */}
+      <AlertDialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard Changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes. Are you sure you want to discard them? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Editing</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmDiscard}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Discard Changes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
