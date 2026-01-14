@@ -77,6 +77,52 @@ async function sendTelegramMessage(
   }
 }
 
+// Register bot commands with Telegram
+async function setBotCommands(): Promise<void> {
+  if (!TELEGRAM_BOT_TOKEN) return;
+
+  // Public commands (visible to all users)
+  const publicCommands = [
+    { command: "start", description: "Start the bot and get your Chat ID" },
+  ];
+
+  // Admin commands (only visible to admin)
+  const adminCommands = [
+    { command: "start", description: "Start the bot" },
+    { command: "admincmd", description: "View admin command panel" },
+    { command: "ticket", description: "View/manage a support ticket" },
+    { command: "banuser", description: "Ban a user" },
+    { command: "cancelban", description: "Cancel pending ban" },
+    { command: "unbanuser", description: "Unban a user" },
+    { command: "viewbans", description: "View all banned users" },
+    { command: "broadcast", description: "Broadcast message to all users" },
+    { command: "stats", description: "View website statistics" },
+  ];
+
+  try {
+    // Set default commands for all users
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commands: publicCommands }),
+    });
+
+    // Set admin-specific commands
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        commands: adminCommands,
+        scope: { type: "chat", chat_id: parseInt(ADMIN_CHAT_ID) },
+      }),
+    });
+
+    console.log("Bot commands registered successfully");
+  } catch (error) {
+    console.error("Error setting bot commands:", error);
+  }
+}
+
 async function answerCallbackQuery(callbackQueryId: string, text: string): Promise<void> {
   if (!TELEGRAM_BOT_TOKEN) return;
 
@@ -212,33 +258,48 @@ async function handleAdminCmd(chatId: string): Promise<void> {
     return;
   }
 
+  // Register commands when admin requests the panel
+  await setBotCommands();
+
   const adminMenu = `
 🔐 <b>Admin Command Panel</b>
 
-<b>Available Commands:</b>
+━━━━━━━━━━━━━━━━━━━━━━
 
-📋 <b>/ticket</b> [ticket_id]
-View and manage a support ticket
+<b>🎫 TICKET MANAGEMENT</b>
+/ticket <code>[ticket_id]</code>
+└ View and manage a support ticket
 
-🚫 <b>/banuser</b> [username or email]
-Ban a user from the platform (will ask for reason)
+━━━━━━━━━━━━━━━━━━━━━━
 
-❌ <b>/cancelban</b>
-Cancel pending ban operation
+<b>🛡️ USER MODERATION</b>
+/banuser <code>[username/email]</code>
+└ Ban a user (2-step: reason → duration)
 
-✅ <b>/unbanuser</b> [username or email]
-Unban a previously banned user
+/unbanuser <code>[username/email]</code>
+└ Unban a previously banned user
 
-👁️ <b>/viewbans</b>
-View all currently banned users
+/cancelban
+└ Cancel a pending ban operation
 
-📢 <b>/broadcast</b> [message]
-Send a message to all users via Telegram
+/viewbans
+└ List all currently banned users
 
-📊 <b>/stats</b>
-View website statistics
+━━━━━━━━━━━━━━━━━━━━━━
 
-<i>💡 Only you (Admin) can access these commands.</i>
+<b>📣 COMMUNICATION</b>
+/broadcast <code>[message]</code>
+└ Send announcement to all users
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>📈 ANALYTICS</b>
+/stats
+└ View website statistics
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<i>💡 Commands registered in menu. Type / to see them.</i>
 `;
   await sendTelegramMessage(chatId, adminMenu);
 }
