@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,10 @@ import {
   Clock,
   Copy,
   History,
-  Loader2
+  Loader2,
+  Upload,
+  ImageIcon,
+  X
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,6 +31,7 @@ interface TopupTransaction {
   transaction_hash: string | null;
   created_at: string;
   completed_at: string | null;
+  proof_image_url: string | null;
 }
 
 const paymentMethods = [
@@ -47,6 +51,10 @@ const Topup = () => {
   const [loading, setLoading] = useState(false);
   const [loadingTransactions, setLoadingTransactions] = useState(true);
   const [currentTransaction, setCurrentTransaction] = useState<TopupTransaction | null>(null);
+  const [proofImage, setProofImage] = useState<File | null>(null);
+  const [proofPreview, setProofPreview] = useState<string | null>(null);
+  const [uploadingProof, setUploadingProof] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch transactions
   useEffect(() => {
@@ -160,6 +168,116 @@ const Topup = () => {
     toast.success("Address copied to clipboard!");
   };
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error("Please select an image file");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image size must be less than 5MB");
+      return;
+    }
+
+    setProofImage(file);
+    setProofPreview(URL.createObjectURL(file));
+  };
+
+  const clearProofImage = () => {
+    setProofImage(null);
+    if (proofPreview) {
+      URL.revokeObjectURL(proofPreview);
+      setProofPreview(null);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSubmitProof = async () => {
+    if (!proofImage || !currentTransaction) {
+      toast.error("Please upload a payment confirmation image");
+      return;
+    }
+
+    setUploadingProof(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Please login to continue");
+        setUploadingProof(false);
+        return;
+      }
+
+      // Upload image to storage
+      const fileExt = proofImage.name.split('.').pop();
+      const fileName = `${user.id}/${currentTransaction.id}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('payment-proofs')
+        .upload(fileName, proofImage, { upsert: true });
+
+      if (uploadError) {
+        console.error('Error uploading proof:', uploadError);
+        toast.error("Failed to upload payment proof");
+        setUploadingProof(false);
+        return;
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('payment-proofs')
+        .getPublicUrl(fileName);
+
+      // Update transaction with proof image URL
+      const { error: updateError } = await supabase
+        .from('topup_transactions')
+        .update({ proof_image_url: publicUrl })
+        .eq('id', currentTransaction.id);
+
+      if (updateError) {
+        console.error('Error updating transaction:', updateError);
+        toast.error("Failed to save payment proof");
+        setUploadingProof(false);
+        return;
+      }
+
+      // Call edge function to notify admin via Telegram
+      const { error: notifyError } = await supabase.functions.invoke('notify-topup-proof', {
+        body: { 
+          transaction_id: currentTransaction.id,
+          user_id: user.id,
+          amount: currentTransaction.amount,
+          payment_method: currentTransaction.payment_method,
+          proof_image_url: publicUrl
+        }
+      });
+
+      if (notifyError) {
+        console.error('Error notifying admin:', notifyError);
+        // Don't show error to user, proof was uploaded successfully
+      }
+
+      toast.success("Payment proof submitted! Waiting for admin confirmation.");
+      setShowPayment(false);
+      setCurrentTransaction(null);
+      clearProofImage();
+      setAmount("");
+      setSelectedMethod("");
+    } catch (error) {
+      console.error('Error submitting proof:', error);
+      toast.error("Failed to submit payment proof");
+    } finally {
+      setUploadingProof(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'completed':
@@ -180,7 +298,7 @@ const Topup = () => {
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-display font-bold text-foreground">Complete Payment</h1>
-          <p className="text-muted-foreground mt-1">Send the exact amount to the address below</p>
+          <p className="text-muted-foreground mt-1">Send the exact amount and upload payment confirmation</p>
         </div>
 
         <Card className="bg-card border-border max-w-xl">
@@ -214,12 +332,61 @@ const Topup = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-              <Clock className="h-5 w-5 text-yellow-500" />
+            {/* Payment Proof Upload */}
+            <div className="space-y-3">
+              <Label className="flex items-center gap-2">
+                <Upload className="h-4 w-4" />
+                Payment Confirmation <span className="text-destructive">*</span>
+              </Label>
+              
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+
+              {proofPreview ? (
+                <div className="relative rounded-lg overflow-hidden border border-border">
+                  <img 
+                    src={proofPreview} 
+                    alt="Payment proof" 
+                    className="w-full max-h-64 object-contain bg-secondary"
+                  />
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="absolute top-2 right-2"
+                    onClick={clearProofImage}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full p-8 border-2 border-dashed border-border rounded-lg hover:border-primary/50 transition-colors flex flex-col items-center gap-3 bg-secondary/50"
+                >
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <ImageIcon className="h-6 w-6 text-primary" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-foreground">Upload payment screenshot</p>
+                    <p className="text-xs text-muted-foreground mt-1">Click to select or drag and drop</p>
+                    <p className="text-xs text-muted-foreground">PNG, JPG up to 5MB</p>
+                  </div>
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 p-4 bg-primary/10 border border-primary/30 rounded-lg">
+              <CheckCircle className="h-5 w-5 text-primary" />
               <div>
-                <p className="text-sm font-medium text-yellow-500">Waiting for Payment</p>
+                <p className="text-sm font-medium text-primary">Upload Required</p>
                 <p className="text-xs text-muted-foreground">
-                  Your balance will be credited automatically once payment is confirmed
+                  Upload your payment confirmation to verify your deposit
                 </p>
               </div>
             </div>
@@ -231,16 +398,22 @@ const Topup = () => {
                 onClick={() => {
                   setShowPayment(false);
                   setCurrentTransaction(null);
+                  clearProofImage();
                 }}
               >
                 Back
               </Button>
               <Button 
                 className="flex-1 btn-primary"
-                onClick={() => copyAddress(currentTransaction.wallet_address || '')}
+                onClick={handleSubmitProof}
+                disabled={!proofImage || uploadingProof}
               >
-                <Copy className="h-4 w-4 mr-2" />
-                Copy Address
+                {uploadingProof ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4 mr-2" />
+                )}
+                {uploadingProof ? "Submitting..." : "Submit Proof"}
               </Button>
             </div>
           </CardContent>

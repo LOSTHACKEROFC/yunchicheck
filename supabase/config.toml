@@ -29,3 +29,30 @@ verify_jwt = false
 
 [functions.auto-unban]
 verify_jwt = false
+
+[functions.notify-topup-status]
+verify_jwt = false
+
+[functions.notify-topup-proof]
+verify_jwt = false
+
+[functions.check-verification-status]
+verify_jwt = false
+
+[functions.check-email-availability]
+verify_jwt = false
+
+[functions.check-telegram-availability]
+verify_jwt = false
+
+[functions.get-telegram-profile]
+verify_jwt = false
+
+[functions.send-deletion-otp]
+verify_jwt = false
+
+[functions.verify-deletion-otp]
+verify_jwt = false
+
+[functions.delete-account]
+verify_jwt = false
