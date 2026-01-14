@@ -47,22 +47,17 @@ export const useSessionTracker = () => {
         
         const { browser, os, device_info } = getBrowserInfo();
         
-        const { error } = await supabase.functions.invoke("track-session", {
+        await supabase.functions.invoke("track-session", {
           body: {
             browser,
             os,
             device_info,
-            session_token: session.access_token.slice(-32), // Use last 32 chars as token identifier
+            session_token: session.access_token.slice(-32),
           },
         });
-
-        // Silently ignore auth errors (user may have been signed out)
-        if (error && !error.message?.includes("401") && !error.message?.includes("Invalid token")) {
-          console.error("Failed to track session:", error);
-        }
-      } catch (error) {
-        // Silently ignore errors - session tracking is non-critical
-        console.debug("Session tracking skipped:", error);
+        // Session tracking is non-critical, errors are silently ignored
+      } catch {
+        // Silently ignore all errors - session tracking should never block the app
       }
     };
 
