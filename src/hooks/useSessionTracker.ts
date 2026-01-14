@@ -37,37 +37,49 @@ const getBrowserInfo = () => {
 
 export const useSessionTracker = () => {
   useEffect(() => {
+    let isMounted = true;
+
     const trackSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session?.access_token) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!isMounted || !session?.access_token) return;
+        
         const { browser, os, device_info } = getBrowserInfo();
         
-        try {
-          await supabase.functions.invoke("track-session", {
-            body: {
-              browser,
-              os,
-              device_info,
-              session_token: session.access_token.slice(-32), // Use last 32 chars as token identifier
-            },
-          });
-        } catch (error) {
+        const { error } = await supabase.functions.invoke("track-session", {
+          body: {
+            browser,
+            os,
+            device_info,
+            session_token: session.access_token.slice(-32), // Use last 32 chars as token identifier
+          },
+        });
+
+        // Silently ignore auth errors (user may have been signed out)
+        if (error && !error.message?.includes("401") && !error.message?.includes("Invalid token")) {
           console.error("Failed to track session:", error);
         }
+      } catch (error) {
+        // Silently ignore errors - session tracking is non-critical
+        console.debug("Session tracking skipped:", error);
       }
     };
 
-    // Track on mount
-    trackSession();
+    // Track on mount with a small delay to ensure auth is ready
+    const timeoutId = setTimeout(trackSession, 500);
 
     // Track on auth state change
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-        trackSession();
+        setTimeout(trackSession, 100);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+      subscription.unsubscribe();
+    };
   }, []);
 };
