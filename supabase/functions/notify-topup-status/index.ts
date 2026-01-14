@@ -1,6 +1,10 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// Declare EdgeRuntime for Supabase edge functions
+declare const EdgeRuntime: {
+  waitUntil: (promise: Promise<any>) => void;
+} | undefined;
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
@@ -21,6 +25,7 @@ interface TopupNotificationRequest {
 
 async function sendTelegramMessage(chatId: string, message: string): Promise<boolean> {
   try {
+    console.log("Sending Telegram message to:", chatId);
     const response = await fetch(
       `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
       {
@@ -48,80 +53,79 @@ async function sendEmail(
   html: string
 ): Promise<boolean> {
   try {
+    console.log("Sending email to:", to);
     const result = await resend.emails.send({
       from: "Yunchi Checker <onboarding@resend.dev>",
       to: [to],
       subject,
       html,
     });
-    console.log("Email sent:", result);
-    return !result.error;
+    console.log("Email result:", JSON.stringify(result));
+    if (result.error) {
+      console.error("Resend error:", result.error);
+      return false;
+    }
+    return true;
   } catch (error) {
     console.error("Error sending email:", error);
     return false;
   }
 }
 
-const handler = async (req: Request): Promise<Response> => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+async function processNotification(data: TopupNotificationRequest): Promise<{ telegramSent: boolean; emailSent: boolean }> {
+  const { transaction_id, user_id, amount, status, payment_method, rejection_reason } = data;
+
+  console.log("Processing topup notification:", { transaction_id, user_id, amount, status, rejection_reason });
+
+  // Create Supabase client with service role
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+  );
+
+  // Get user profile and email
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from("profiles")
+    .select("username, telegram_chat_id, balance")
+    .eq("user_id", user_id)
+    .single();
+
+  if (profileError) {
+    console.error("Error fetching profile:", profileError);
+    throw new Error("Failed to fetch user profile");
   }
 
-  try {
-    const { transaction_id, user_id, amount, status, payment_method, rejection_reason }: TopupNotificationRequest = await req.json();
+  // Get user email from auth
+  const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.getUserById(user_id);
 
-    console.log("Processing topup notification:", { transaction_id, user_id, amount, status, rejection_reason });
+  if (authError) {
+    console.error("Error fetching auth user:", authError);
+  }
 
-    // Create Supabase client with service role
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
+  const userEmail = authUser?.user?.email;
+  const username = profile?.username || "User";
+  const telegramChatId = profile?.telegram_chat_id;
+  const currentBalance = profile?.balance || 0;
 
-    // Get user profile and email
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .select("username, telegram_chat_id, balance")
-      .eq("user_id", user_id)
-      .single();
+  console.log("User info:", { userEmail, username, telegramChatId, currentBalance });
 
-    if (profileError) {
-      console.error("Error fetching profile:", profileError);
-      return new Response(
-        JSON.stringify({ error: "Failed to fetch user profile" }),
-        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
-    }
+  const paymentMethodLabels: Record<string, string> = {
+    btc: "Bitcoin",
+    eth: "Ethereum", 
+    ltc: "Litecoin",
+    usdt: "USDT TRC20"
+  };
 
-    // Get user email from auth
-    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.getUserById(user_id);
+  const methodLabel = paymentMethodLabels[payment_method] || payment_method;
+  const formattedAmount = `$${Number(amount).toFixed(2)}`;
+  const formattedBalance = `$${Number(currentBalance).toFixed(2)}`;
 
-    if (authError) {
-      console.error("Error fetching auth user:", authError);
-    }
+  let telegramSent = false;
+  let emailSent = false;
 
-    const userEmail = authUser?.user?.email;
-    const username = profile?.username || "User";
-    const telegramChatId = profile?.telegram_chat_id;
-    const currentBalance = profile?.balance || 0;
-
-    const paymentMethodLabels: Record<string, string> = {
-      btc: "Bitcoin",
-      eth: "Ethereum", 
-      ltc: "Litecoin",
-      usdt: "USDT TRC20"
-    };
-
-    const methodLabel = paymentMethodLabels[payment_method] || payment_method;
-    const formattedAmount = `$${Number(amount).toFixed(2)}`;
-    const formattedBalance = `$${Number(currentBalance).toFixed(2)}`;
-
-    let telegramSent = false;
-    let emailSent = false;
-
-    if (status === "completed") {
-      // APPROVED notification with new balance
-      const telegramMessage = `
+  if (status === "completed") {
+    // APPROVED notification with new balance
+    const telegramMessage = `
 ✅ <b>Topup Approved!</b>
 
 Hello <b>${username}</b>,
@@ -135,54 +139,61 @@ Your topup request has been approved and processed.
 💵 <b>New Balance:</b> ${formattedBalance}
 
 Thank you for using Yunchi Checker!
-      `.trim();
+    `.trim();
 
-      const emailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: linear-gradient(135deg, #10b981, #059669); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0;">✅ Topup Approved!</h1>
-          </div>
-          <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
-            <p style="font-size: 16px;">Hello <strong>${username}</strong>,</p>
-            <p>Your topup request has been approved and processed successfully.</p>
-            
-            <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 5px 0;"><strong>Amount Added:</strong> ${formattedAmount}</p>
-              <p style="margin: 5px 0;"><strong>Method:</strong> ${methodLabel}</p>
-              <p style="margin: 5px 0;"><strong>Transaction ID:</strong> ${transaction_id.slice(0, 8)}...</p>
-            </div>
-            
-            <div style="background: linear-gradient(135deg, #10b981, #059669); padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
-              <p style="margin: 0; font-size: 14px; color: rgba(255,255,255,0.8);">Your New Balance</p>
-              <p style="margin: 5px 0 0 0; font-size: 28px; font-weight: bold; color: white;">${formattedBalance}</p>
-            </div>
-            
-            <p style="color: #a3a3a3; font-size: 14px; text-align: center;">Thank you for using Yunchi Checker.</p>
-          </div>
+    const emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #10b981, #059669); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+          <h1 style="color: white; margin: 0;">✅ Topup Approved!</h1>
         </div>
-      `;
+        <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
+          <p style="font-size: 16px;">Hello <strong>${username}</strong>,</p>
+          <p>Your topup request has been approved and processed successfully.</p>
+          
+          <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 5px 0;"><strong>Amount Added:</strong> ${formattedAmount}</p>
+            <p style="margin: 5px 0;"><strong>Method:</strong> ${methodLabel}</p>
+            <p style="margin: 5px 0;"><strong>Transaction ID:</strong> ${transaction_id.slice(0, 8)}...</p>
+          </div>
+          
+          <div style="background: linear-gradient(135deg, #10b981, #059669); padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+            <p style="margin: 0; font-size: 14px; color: rgba(255,255,255,0.8);">Your New Balance</p>
+            <p style="margin: 5px 0 0 0; font-size: 28px; font-weight: bold; color: white;">${formattedBalance}</p>
+          </div>
+          
+          <p style="color: #a3a3a3; font-size: 14px; text-align: center;">Thank you for using Yunchi Checker.</p>
+        </div>
+      </div>
+    `;
 
-      if (telegramChatId) {
-        telegramSent = await sendTelegramMessage(telegramChatId, telegramMessage);
-      }
+    // Send notifications sequentially to ensure completion
+    if (telegramChatId) {
+      telegramSent = await sendTelegramMessage(telegramChatId, telegramMessage);
+      console.log("Telegram sent for completed:", telegramSent);
+    }
 
-      if (userEmail) {
-        emailSent = await sendEmail(userEmail, "✅ Your Topup Has Been Approved!", emailHtml);
-      }
+    if (userEmail) {
+      emailSent = await sendEmail(userEmail, "✅ Your Topup Has Been Approved!", emailHtml);
+      console.log("Email sent for completed:", emailSent);
+    }
 
-      // Create notification in database
-      await supabaseAdmin.from("notifications").insert({
-        user_id,
-        type: "topup_approved",
-        title: "Topup Approved",
-        message: `Your ${formattedAmount} topup via ${methodLabel} has been approved. New balance: ${formattedBalance}`,
-        metadata: { transaction_id, amount, payment_method, new_balance: currentBalance }
-      });
+    // Create notification in database
+    const { error: notifError } = await supabaseAdmin.from("notifications").insert({
+      user_id,
+      type: "topup_approved",
+      title: "Topup Approved",
+      message: `Your ${formattedAmount} topup via ${methodLabel} has been approved. New balance: ${formattedBalance}`,
+      metadata: { transaction_id, amount, payment_method, new_balance: currentBalance }
+    });
 
-    } else if (status === "failed") {
-      // REJECTED notification
-      const reasonText = rejection_reason ? `\n\n📋 <b>Reason:</b> ${rejection_reason}` : "";
-      const telegramMessage = `
+    if (notifError) {
+      console.error("Error creating notification:", notifError);
+    }
+
+  } else if (status === "failed") {
+    // REJECTED notification
+    const reasonText = rejection_reason ? `\n\n📋 <b>Reason:</b> ${rejection_reason}` : "";
+    const telegramMessage = `
 ❌ <b>Topup Rejected</b>
 
 Hello <b>${username}</b>,
@@ -194,69 +205,110 @@ Unfortunately, your topup request has been rejected.
 📝 <b>Transaction ID:</b> <code>${transaction_id.slice(0, 8)}...</code>${reasonText}
 
 If you believe this was a mistake, please contact support with your transaction details.
-      `.trim();
+    `.trim();
 
-      const reasonHtml = rejection_reason 
-        ? `<p style="margin: 10px 0; padding: 15px; background: #3b1c1c; border-left: 4px solid #ef4444; border-radius: 4px;"><strong>Reason:</strong> ${rejection_reason}</p>` 
-        : "";
-      
-      const emailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: linear-gradient(135deg, #ef4444, #dc2626); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0;">❌ Topup Rejected</h1>
-          </div>
-          <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
-            <p style="font-size: 16px;">Hello <strong>${username}</strong>,</p>
-            <p>Unfortunately, your topup request has been rejected.</p>
-            
-            <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 5px 0;"><strong>Amount:</strong> ${formattedAmount}</p>
-              <p style="margin: 5px 0;"><strong>Method:</strong> ${methodLabel}</p>
-              <p style="margin: 5px 0;"><strong>Transaction ID:</strong> ${transaction_id.slice(0, 8)}...</p>
-            </div>
-            
-            ${reasonHtml}
-            
-            <p style="color: #a3a3a3; font-size: 14px;">If you believe this was a mistake, please contact support with your transaction details.</p>
-          </div>
+    const reasonHtml = rejection_reason 
+      ? `<p style="margin: 10px 0; padding: 15px; background: #3b1c1c; border-left: 4px solid #ef4444; border-radius: 4px;"><strong>Reason:</strong> ${rejection_reason}</p>` 
+      : "";
+    
+    const emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #ef4444, #dc2626); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+          <h1 style="color: white; margin: 0;">❌ Topup Rejected</h1>
         </div>
-      `;
+        <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
+          <p style="font-size: 16px;">Hello <strong>${username}</strong>,</p>
+          <p>Unfortunately, your topup request has been rejected.</p>
+          
+          <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 5px 0;"><strong>Amount:</strong> ${formattedAmount}</p>
+            <p style="margin: 5px 0;"><strong>Method:</strong> ${methodLabel}</p>
+            <p style="margin: 5px 0;"><strong>Transaction ID:</strong> ${transaction_id.slice(0, 8)}...</p>
+          </div>
+          
+          ${reasonHtml}
+          
+          <p style="color: #a3a3a3; font-size: 14px;">If you believe this was a mistake, please contact support with your transaction details.</p>
+        </div>
+      </div>
+    `;
 
-      if (telegramChatId) {
-        telegramSent = await sendTelegramMessage(telegramChatId, telegramMessage);
-      }
-
-      if (userEmail) {
-        emailSent = await sendEmail(userEmail, "❌ Your Topup Request Was Rejected", emailHtml);
-      }
-
-      // Create notification in database
-      const notificationMessage = rejection_reason 
-        ? `Your ${formattedAmount} topup via ${methodLabel} has been rejected. Reason: ${rejection_reason}`
-        : `Your ${formattedAmount} topup via ${methodLabel} has been rejected. Please contact support if you need assistance.`;
-      
-      await supabaseAdmin.from("notifications").insert({
-        user_id,
-        type: "topup_rejected",
-        title: "Topup Rejected",
-        message: notificationMessage,
-        metadata: { transaction_id, amount, payment_method, rejection_reason }
-      });
+    // Send notifications sequentially to ensure completion
+    if (telegramChatId) {
+      telegramSent = await sendTelegramMessage(telegramChatId, telegramMessage);
+      console.log("Telegram sent for failed:", telegramSent);
     }
 
-    console.log("Notification results:", { telegramSent, emailSent });
+    if (userEmail) {
+      emailSent = await sendEmail(userEmail, "❌ Your Topup Request Was Rejected", emailHtml);
+      console.log("Email sent for failed:", emailSent);
+    }
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        telegramSent, 
-        emailSent 
-      }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      }
-    );
+    // Create notification in database
+    const notificationMessage = rejection_reason 
+      ? `Your ${formattedAmount} topup via ${methodLabel} has been rejected. Reason: ${rejection_reason}`
+      : `Your ${formattedAmount} topup via ${methodLabel} has been rejected. Please contact support if you need assistance.`;
+    
+    const { error: notifError } = await supabaseAdmin.from("notifications").insert({
+      user_id,
+      type: "topup_rejected",
+      title: "Topup Rejected",
+      message: notificationMessage,
+      metadata: { transaction_id, amount, payment_method, rejection_reason }
+    });
+
+    if (notifError) {
+      console.error("Error creating notification:", notifError);
+    }
+  }
+
+  console.log("Notification processing complete:", { telegramSent, emailSent });
+  return { telegramSent, emailSent };
+}
+
+// Use Deno.serve for better background task support
+Deno.serve(async (req: Request): Promise<Response> => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const data: TopupNotificationRequest = await req.json();
+    console.log("Received notification request:", data);
+
+    // Process notification and wait for completion
+    const notificationPromise = processNotification(data);
+    
+    // Use EdgeRuntime.waitUntil if available, otherwise await directly
+    if (typeof EdgeRuntime !== "undefined" && EdgeRuntime.waitUntil) {
+      EdgeRuntime.waitUntil(notificationPromise);
+      console.log("Background task scheduled");
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: "Notification processing started"
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        }
+      );
+    } else {
+      // Fallback: await the promise directly
+      const result = await notificationPromise;
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          ...result
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        }
+      );
+    }
   } catch (error: any) {
     console.error("Error in notify-topup-status:", error);
     return new Response(
@@ -267,6 +319,9 @@ If you believe this was a mistake, please contact support with your transaction 
       }
     );
   }
-};
+});
 
-serve(handler);
+// Handle shutdown gracefully
+addEventListener('beforeunload', (ev: any) => {
+  console.log('Function shutting down:', ev.detail?.reason);
+});
