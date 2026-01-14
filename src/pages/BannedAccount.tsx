@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Ban, MessageCircle, ShieldAlert, Send, ArrowLeft, CheckCircle } from "lucide-react";
+import { Ban, MessageCircle, ShieldAlert, Send, ArrowLeft, CheckCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 const BannedAccount = () => {
@@ -29,7 +30,7 @@ const BannedAccount = () => {
     if (userEmail) setEmail(userEmail);
   }, [searchParams]);
 
-  const handleSubmitAppeal = () => {
+  const handleSubmitAppeal = async () => {
     if (!email.trim()) {
       toast.error("Please enter your email address");
       return;
@@ -41,21 +42,31 @@ const BannedAccount = () => {
 
     setIsSubmitting(true);
 
-    // Open Telegram with pre-filled appeal message
-    const fullMessage = encodeURIComponent(
-      `🔓 *Ban Appeal Request*\n\n` +
-      `📧 Email: ${email}\n` +
-      `👤 Username: ${username || 'N/A'}\n\n` +
-      `📝 *Ban Reason:*\n${banReason || 'No reason provided'}\n\n` +
-      `✉️ *Appeal Message:*\n${appealMessage}\n\n` +
-      `Please review my case and consider unbanning my account.`
-    );
-    
-    window.open(`https://t.me/8496943061?text=${fullMessage}`, "_blank");
-    
-    setIsSubmitting(false);
-    setAppealSubmitted(true);
-    toast.success("Appeal request opened in Telegram");
+    try {
+      const { data, error } = await supabase.functions.invoke("submit-ban-appeal", {
+        body: {
+          email: email.trim(),
+          username: username,
+          ban_reason: banReason,
+          appeal_message: appealMessage.trim(),
+        },
+      });
+
+      if (error) {
+        console.error("Appeal submission error:", error);
+        toast.error("Failed to submit appeal. Please try again.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      setAppealSubmitted(true);
+      toast.success("Appeal submitted successfully! You will be notified of the decision.");
+    } catch (error) {
+      console.error("Error submitting appeal:", error);
+      toast.error("Failed to submit appeal. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleContactSupport = () => {
@@ -140,8 +151,12 @@ const BannedAccount = () => {
                 onClick={handleSubmitAppeal}
                 disabled={isSubmitting}
               >
-                <Send className="mr-2 h-4 w-4" />
-                Submit Appeal Request
+                {isSubmitting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="mr-2 h-4 w-4" />
+                )}
+                {isSubmitting ? "Submitting..." : "Submit Appeal Request"}
               </Button>
             </CardContent>
           </Card>

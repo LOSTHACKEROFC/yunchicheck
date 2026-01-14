@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.track-session]
 verify_jwt = false
+
+[functions.submit-ban-appeal]
+verify_jwt = false

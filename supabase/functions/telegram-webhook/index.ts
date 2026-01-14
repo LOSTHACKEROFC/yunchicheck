@@ -615,6 +615,189 @@ const handler = async (req: Request): Promise<Response> => {
         });
       }
 
+      // Handle ban appeal callbacks
+      if (callbackData.startsWith("unban_appeal_") || callbackData.startsWith("reject_appeal_")) {
+        const callbackChatId = update.callback_query.message?.chat.id.toString();
+        
+        if (callbackChatId !== ADMIN_CHAT_ID) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can respond to appeals");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        const isUnban = callbackData.startsWith("unban_appeal_");
+        const appealId = callbackData.replace(isUnban ? "unban_appeal_" : "reject_appeal_", "");
+
+        // Get appeal details
+        const { data: appeal, error: appealError } = await supabase
+          .from("ban_appeals")
+          .select("*")
+          .eq("id", appealId)
+          .single();
+
+        if (appealError || !appeal) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Appeal not found");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        if (appeal.status !== "pending") {
+          await answerCallbackQuery(update.callback_query.id, `⚠️ Appeal already ${appeal.status}`);
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        if (isUnban) {
+          // Unban the user
+          const { data: authUsers } = await supabase.auth.admin.listUsers();
+          const authUser = authUsers?.users?.find((u: any) => 
+            u.email?.toLowerCase() === appeal.email.toLowerCase()
+          );
+
+          if (authUser) {
+            await supabase
+              .from("profiles")
+              .update({ 
+                is_banned: false, 
+                banned_at: null,
+                ban_reason: null
+              })
+              .eq("user_id", authUser.id);
+          }
+
+          // Update appeal status
+          await supabase
+            .from("ban_appeals")
+            .update({ 
+              status: "approved",
+              admin_response: "Your account has been unbanned.",
+              resolved_at: new Date().toISOString()
+            })
+            .eq("id", appealId);
+
+          // Notify user via email
+          if (RESEND_API_KEY) {
+            await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${RESEND_API_KEY}`,
+              },
+              body: JSON.stringify({
+                from: "Yunchi Support <onboarding@resend.dev>",
+                to: [appeal.email],
+                subject: "✅ Ban Appeal Approved - Account Unbanned",
+                html: `
+                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #22c55e;">✅ Good News! Your Appeal Has Been Approved</h2>
+                    <p>Hello${appeal.username ? ` ${appeal.username}` : ''},</p>
+                    <p>Your ban appeal has been reviewed and <strong>approved</strong>. Your account has been unbanned.</p>
+                    <p>You can now log in to your account and use the platform again.</p>
+                    <p style="color: #6c757d; font-size: 14px; margin-top: 20px;">
+                      If you have any questions, please contact support.
+                    </p>
+                    <p>— Yunchi Support Team</p>
+                  </div>
+                `,
+              }),
+            });
+          }
+
+          // Notify user via Telegram
+          if (appeal.telegram_chat_id) {
+            await sendTelegramMessage(
+              appeal.telegram_chat_id,
+              `✅ <b>Ban Appeal Approved!</b>\n\nGreat news! Your ban appeal has been reviewed and approved.\n\nYour account has been unbanned. You can now log in and use the platform again.\n\n— Yunchi Support Team`
+            );
+          }
+
+          await answerCallbackQuery(update.callback_query.id, "✅ User unbanned and notified!");
+          await sendTelegramMessage(
+            ADMIN_TELEGRAM_CHAT_ID!,
+            `✅ <b>Appeal Approved</b>\n\nUser <b>${appeal.username || appeal.email}</b> has been unbanned.\nNotifications sent via email and Telegram.`
+          );
+        } else {
+          // Reject the appeal
+          await supabase
+            .from("ban_appeals")
+            .update({ 
+              status: "rejected",
+              admin_response: "Your ban appeal has been reviewed and rejected.",
+              resolved_at: new Date().toISOString()
+            })
+            .eq("id", appealId);
+
+          // Notify user via email
+          if (RESEND_API_KEY) {
+            await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${RESEND_API_KEY}`,
+              },
+              body: JSON.stringify({
+                from: "Yunchi Support <onboarding@resend.dev>",
+                to: [appeal.email],
+                subject: "❌ Ban Appeal Rejected",
+                html: `
+                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #ef4444;">❌ Ban Appeal Rejected</h2>
+                    <p>Hello${appeal.username ? ` ${appeal.username}` : ''},</p>
+                    <p>Your ban appeal has been reviewed, but unfortunately it has been <strong>rejected</strong>.</p>
+                    <p>The ban on your account remains in effect. If you have additional information to provide, you may submit a new appeal.</p>
+                    <p style="color: #6c757d; font-size: 14px; margin-top: 20px;">
+                      If you believe this decision was made in error, please contact support directly.
+                    </p>
+                    <p>— Yunchi Support Team</p>
+                  </div>
+                `,
+              }),
+            });
+          }
+
+          // Notify user via Telegram
+          if (appeal.telegram_chat_id) {
+            await sendTelegramMessage(
+              appeal.telegram_chat_id,
+              `❌ <b>Ban Appeal Rejected</b>\n\nWe're sorry, but your ban appeal has been reviewed and rejected.\n\nThe ban on your account remains in effect. If you believe this decision was made in error, you may contact support directly.\n\n— Yunchi Support Team`
+            );
+          }
+
+          await answerCallbackQuery(update.callback_query.id, "❌ Appeal rejected and user notified");
+          await sendTelegramMessage(
+            ADMIN_TELEGRAM_CHAT_ID!,
+            `❌ <b>Appeal Rejected</b>\n\nAppeal from <b>${appeal.username || appeal.email}</b> has been rejected.\nNotifications sent via email and Telegram.`
+          );
+        }
+
+        // Update the message to remove buttons
+        if (update.callback_query.message) {
+          try {
+            await fetch(
+              `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  chat_id: update.callback_query.message.chat.id,
+                  message_id: update.callback_query.message.message_id,
+                  reply_markup: { inline_keyboard: [] },
+                }),
+              }
+            );
+          } catch (e) {
+            console.error("Failed to remove buttons:", e);
+          }
+        }
+
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
       // Check if this is from admin for ticket operations
       const callbackChatId = update.callback_query.message?.chat.id.toString();
       if (callbackChatId !== ADMIN_CHAT_ID) {
