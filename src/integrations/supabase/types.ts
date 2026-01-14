@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      ban_appeals: {
+        Row: {
+          admin_response: string | null
+          appeal_message: string
+          ban_reason: string | null
+          created_at: string
+          email: string
+          id: string
+          resolved_at: string | null
+          status: string
+          telegram_chat_id: string | null
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          admin_response?: string | null
+          appeal_message: string
+          ban_reason?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          resolved_at?: string | null
+          status?: string
+          telegram_chat_id?: string | null
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          admin_response?: string | null
+          appeal_message?: string
+          ban_reason?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          resolved_at?: string | null
+          status?: string
+          telegram_chat_id?: string | null
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
       card_checks: {
         Row: {
           created_at: string
