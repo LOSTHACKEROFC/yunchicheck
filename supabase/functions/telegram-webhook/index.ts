@@ -1029,28 +1029,31 @@ async function handleBroadcast(chatId: string, message: string, supabase: any): 
     return;
   }
 
-  // Get all users with Telegram chat IDs
-  const { data: profiles, error } = await supabase
+  // Get ALL users (not just those with Telegram connected)
+  const { data: allProfiles, error: allError } = await supabase
     .from("profiles")
-    .select("telegram_chat_id, username")
-    .not("telegram_chat_id", "is", null)
+    .select("user_id, telegram_chat_id, username")
     .eq("is_banned", false);
 
-  if (error) {
-    console.error("Error fetching profiles:", error);
+  if (allError) {
+    console.error("Error fetching profiles:", allError);
     await sendTelegramMessage(chatId, "❌ Failed to fetch users. Please try again.");
     return;
   }
 
-  if (!profiles || profiles.length === 0) {
-    await sendTelegramMessage(chatId, "⚠️ No users with Telegram connected.");
+  if (!allProfiles || allProfiles.length === 0) {
+    await sendTelegramMessage(chatId, "⚠️ No users found.");
     return;
   }
 
-  await sendTelegramMessage(chatId, `📢 <b>Broadcasting to ${profiles.length} users...</b>`);
+  const telegramUsers = allProfiles.filter((p: any) => p.telegram_chat_id && p.telegram_chat_id !== ADMIN_CHAT_ID);
+  
+  await sendTelegramMessage(chatId, `📢 <b>Broadcasting to ${allProfiles.length} users (${telegramUsers.length} via Telegram)...</b>`);
 
-  let successCount = 0;
-  let failCount = 0;
+  let telegramSuccess = 0;
+  let telegramFail = 0;
+  let webNotifSuccess = 0;
+  let webNotifFail = 0;
 
   const broadcastMessage = `
 📢 <b>Announcement</b>
@@ -1060,22 +1063,51 @@ ${message}
 <i>— Yunchi Team</i>
 `;
 
-  for (const profile of profiles) {
-    if (profile.telegram_chat_id && profile.telegram_chat_id !== ADMIN_CHAT_ID) {
-      const success = await sendTelegramMessage(profile.telegram_chat_id, broadcastMessage);
-      if (success) {
-        successCount++;
-      } else {
-        failCount++;
-      }
-      // Add a small delay to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 50));
+  // Create web notifications for ALL users
+  const notifications = allProfiles.map((profile: any) => ({
+    user_id: profile.user_id,
+    type: "announcement",
+    title: "📢 Announcement",
+    message: message,
+    metadata: { broadcast: true, sent_at: new Date().toISOString() }
+  }));
+
+  const { error: notifError } = await supabase
+    .from("notifications")
+    .insert(notifications);
+
+  if (notifError) {
+    console.error("Error creating web notifications:", notifError);
+    webNotifFail = allProfiles.length;
+  } else {
+    webNotifSuccess = allProfiles.length;
+  }
+
+  // Send Telegram messages to users with connected Telegram
+  for (const profile of telegramUsers) {
+    const success = await sendTelegramMessage(profile.telegram_chat_id, broadcastMessage);
+    if (success) {
+      telegramSuccess++;
+    } else {
+      telegramFail++;
     }
+    // Add a small delay to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 50));
   }
 
   await sendTelegramMessage(
     chatId,
-    `✅ <b>Broadcast Complete</b>\n\n<b>Sent:</b> ${successCount}\n<b>Failed:</b> ${failCount}\n<b>Total:</b> ${profiles.length}`
+    `✅ <b>Broadcast Complete</b>
+
+<b>📱 Telegram:</b>
+├ Sent: ${telegramSuccess}
+├ Failed: ${telegramFail}
+└ Total: ${telegramUsers.length}
+
+<b>🌐 Web Notifications:</b>
+├ Sent: ${webNotifSuccess}
+├ Failed: ${webNotifFail}
+└ Total: ${allProfiles.length}`
   );
 }
 

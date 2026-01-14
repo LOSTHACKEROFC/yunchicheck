@@ -28,7 +28,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 
 interface Notification {
   id: string;
-  type: "ticket_reply" | "balance_update" | "system" | "topup";
+  type: "ticket_reply" | "balance_update" | "system" | "topup" | "announcement";
   title: string;
   message: string;
   metadata: Record<string, unknown>;
@@ -48,6 +48,7 @@ const notificationConfig: Record<string, { icon: typeof MessageSquare; color: st
   balance_update: { icon: DollarSign, color: "text-green-500", bgColor: "bg-green-500/20" },
   system: { icon: Megaphone, color: "text-amber-500", bgColor: "bg-amber-500/20" },
   topup: { icon: ArrowUpCircle, color: "text-purple-500", bgColor: "bg-purple-500/20" },
+  announcement: { icon: Megaphone, color: "text-orange-500", bgColor: "bg-orange-500/20" },
 };
 
 const DashboardHeader = () => {
@@ -67,6 +68,7 @@ const DashboardHeader = () => {
       balance_update: true,
       system: true,
       topup: true,
+      announcement: true,
     };
   });
   const { playNotificationSound } = useNotificationSound();
