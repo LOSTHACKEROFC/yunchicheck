@@ -9,6 +9,7 @@ import { z } from "zod";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { MessageCircle, CheckCircle, Clock, ExternalLink, Loader2, XCircle, AlertCircle, ArrowLeft, Mail } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import FloatingCardsBackground from "@/components/FloatingCardsBackground";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -1553,6 +1554,7 @@ const Auth = () => {
           )}
         </div>
       </div>
+      <FloatingCardsBackground />
     </div>
   );
 };

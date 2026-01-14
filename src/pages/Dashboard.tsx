@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { User } from "@supabase/supabase-js";
 import DashboardSidebar from "@/components/DashboardSidebar";
 import DashboardHeader from "@/components/DashboardHeader";
+import FloatingCardsBackground from "@/components/FloatingCardsBackground";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Outlet } from "react-router-dom";
 import { useSessionTracker } from "@/hooks/useSessionTracker";
@@ -108,8 +109,9 @@ const Dashboard = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-primary animate-pulse text-xl">Loading...</div>
+      <div className="min-h-screen bg-background flex items-center justify-center relative">
+        <FloatingCardsBackground />
+        <div className="text-primary animate-pulse text-xl relative z-10">Loading...</div>
       </div>
     );
   }
@@ -118,9 +120,10 @@ const Dashboard = () => {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full bg-background">
+      <div className="min-h-screen flex w-full bg-background relative">
+        <FloatingCardsBackground />
         <DashboardSidebar />
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col relative z-10">
           <DashboardHeader />
           <main className="flex-1 p-6 overflow-auto">
             <Outlet />

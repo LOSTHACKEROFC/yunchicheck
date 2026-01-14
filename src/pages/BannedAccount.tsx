@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Ban, MessageCircle, ShieldAlert, Send, ArrowLeft, CheckCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import FloatingCardsBackground from "@/components/FloatingCardsBackground";
 
 const BannedAccount = () => {
   const [searchParams] = useSearchParams();
@@ -93,8 +94,10 @@ const BannedAccount = () => {
   const isPermanent = !bannedUntil;
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-lg space-y-6">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative">
+      <FloatingCardsBackground />
+      
+      <div className="w-full max-w-lg space-y-6 relative z-10">
         {/* Header */}
         <div className="text-center space-y-4">
           <div className="mx-auto w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center">
