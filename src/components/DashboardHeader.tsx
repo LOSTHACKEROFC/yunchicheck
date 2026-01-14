@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Menu, Wallet, Bell, Check, Trash2, CheckCheck, MessageSquare, DollarSign, Megaphone, ArrowUpCircle } from "lucide-react";
+import { Menu, Wallet, Bell, Check, Trash2, CheckCheck, MessageSquare, DollarSign, Megaphone, ArrowUpCircle, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -20,6 +20,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
@@ -77,6 +83,7 @@ const DashboardHeader = () => {
   const [loadingTelegramProfile, setLoadingTelegramProfile] = useState(false);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<Notification | null>(null);
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
@@ -266,6 +273,12 @@ const DashboardHeader = () => {
       await markAsRead(notification.id);
     }
     setOpen(false);
+
+    // Handle announcement type - show in modal
+    if (notification.type === "announcement") {
+      setSelectedAnnouncement(notification);
+      return;
+    }
 
     // Navigate based on notification type
     switch (notification.type) {
@@ -503,6 +516,33 @@ const DashboardHeader = () => {
           />
         </TooltipProvider>
       </div>
+
+      {/* Announcement Detail Modal */}
+      <Dialog open={!!selectedAnnouncement} onOpenChange={(open) => !open && setSelectedAnnouncement(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="p-2 rounded-full bg-orange-500/20">
+                <Megaphone className="h-5 w-5 text-orange-500" />
+              </div>
+              {selectedAnnouncement?.title || "Announcement"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-4 rounded-lg bg-secondary/50 border border-border">
+              <p className="text-foreground whitespace-pre-wrap leading-relaxed">
+                {selectedAnnouncement?.message}
+              </p>
+            </div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>— Yunchi Team</span>
+              {selectedAnnouncement?.created_at && (
+                <span>{format(new Date(selectedAnnouncement.created_at), "MMM d, yyyy 'at' h:mm a")}</span>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 };
