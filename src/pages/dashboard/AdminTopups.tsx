@@ -174,26 +174,62 @@ const AdminTopups = () => {
 
     setActionLoading(true);
     
-    const updateData: { status: string; rejection_reason?: string } = { status };
-    if (status === 'failed' && reason) {
-      updateData.rejection_reason = reason;
-    }
-    
-    const { error } = await supabase
-      .from('topup_transactions')
-      .update(updateData)
-      .eq('id', selectedTx.id);
+    try {
+      if (status === 'completed') {
+        // Use RPC function to update status AND credit balance
+        const { data, error } = await supabase.rpc('handle_topup_completion', {
+          p_transaction_id: selectedTx.id
+        });
 
-    setActionLoading(false);
+        if (error) {
+          console.error('Error completing topup:', error);
+          toast.error("Failed to approve transaction");
+          setActionLoading(false);
+          return;
+        }
 
-    if (error) {
-      console.error('Error updating transaction:', error);
-      toast.error("Failed to update transaction");
-    } else {
-      toast.success(`Transaction ${status === 'completed' ? 'approved' : 'rejected'}`);
+        // Check if RPC returned an error (data is JSONB)
+        const result = data as { success: boolean; error?: string } | null;
+        if (result && !result.success) {
+          toast.error(result.error || "Failed to approve transaction");
+          setActionLoading(false);
+          return;
+        }
+
+        toast.success("Transaction approved - balance credited!");
+      } else {
+        // For rejection, just update the status and reason
+        const updateData: { status: string; rejection_reason?: string; updated_at: string } = { 
+          status,
+          updated_at: new Date().toISOString()
+        };
+        if (reason) {
+          updateData.rejection_reason = reason;
+        }
+        
+        const { error } = await supabase
+          .from('topup_transactions')
+          .update(updateData)
+          .eq('id', selectedTx.id);
+
+        if (error) {
+          console.error('Error rejecting transaction:', error);
+          toast.error("Failed to reject transaction");
+          setActionLoading(false);
+          return;
+        }
+
+        toast.success("Transaction rejected");
+      }
+
       setSelectedTx(null);
       setRejectionReason("");
       setShowRejectConfirm(false);
+    } catch (err) {
+      console.error('Error updating transaction:', err);
+      toast.error("Failed to update transaction");
+    } finally {
+      setActionLoading(false);
     }
   };
   
