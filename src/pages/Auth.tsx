@@ -30,7 +30,16 @@ const Auth = () => {
   const { t } = useLanguage();
   const [isLogin, setIsLogin] = useState(true);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [resetEmailSent, setResetEmailSent] = useState(false);
+  const [resetOtpSent, setResetOtpSent] = useState(false);
+  const [resetOtp, setResetOtp] = useState("");
+  const [resetOtpVerified, setResetOtpVerified] = useState(false);
+  const [resetOtpExpiry, setResetOtpExpiry] = useState<Date | null>(null);
+  const [resetTimeRemaining, setResetTimeRemaining] = useState(0);
+  const [hasTelegramForReset, setHasTelegramForReset] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [resetPasswordStrength, setResetPasswordStrength] = useState<"weak" | "medium" | "strong" | null>(null);
+  const [resetPasswordFeedback, setResetPasswordFeedback] = useState<string[]>([]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
@@ -545,6 +554,39 @@ const Auth = () => {
     }
   };
 
+  // Countdown timer for password reset OTP
+  useEffect(() => {
+    if (!resetOtpExpiry || resetOtpVerified) return;
+
+    const interval = setInterval(() => {
+      const remaining = resetOtpExpiry.getTime() - Date.now();
+      if (remaining <= 0) {
+        setResetTimeRemaining(0);
+        clearInterval(interval);
+        toast.error("OTP expired. Please request a new one.");
+        setResetOtpSent(false);
+        setResetOtp("");
+        setResetOtpExpiry(null);
+      } else {
+        setResetTimeRemaining(remaining);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [resetOtpExpiry, resetOtpVerified]);
+
+  const handleResetPasswordChange = (value: string) => {
+    setNewPassword(value);
+    if (value) {
+      const { strength, feedback } = calculatePasswordStrength(value);
+      setResetPasswordStrength(strength);
+      setResetPasswordFeedback(feedback);
+    } else {
+      setResetPasswordStrength(null);
+      setResetPasswordFeedback([]);
+    }
+  };
+
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -562,19 +604,119 @@ const Auth = () => {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      const response = await supabase.functions.invoke("send-password-reset-otp", {
+        body: { email: email.trim() },
       });
 
-      if (error) throw error;
+      if (response.error) {
+        throw new Error(response.error.message || "Failed to send OTP");
+      }
 
-      setResetEmailSent(true);
-      toast.success("Password reset email sent! Check your inbox.");
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      setResetOtpSent(true);
+      setHasTelegramForReset(response.data?.hasTelegram || false);
+      setResetOtpExpiry(new Date(response.data.expiresAt));
+      setResetTimeRemaining(2 * 60 * 1000); // 2 minutes
+      toast.success("OTP sent! Check your email" + (response.data?.hasTelegram ? " and Telegram" : ""));
     } catch (error: unknown) {
       if (error instanceof Error) {
         toast.error(error.message);
       } else {
-        toast.error("Failed to send reset email");
+        toast.error("Failed to send OTP");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!resetOtp.trim() || resetOtp.length !== 6) {
+      toast.error("Please enter the 6-digit OTP");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await supabase.functions.invoke("verify-password-reset-otp", {
+        body: { email: email.trim(), otp: resetOtp.trim() },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || "Invalid OTP");
+      }
+
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      if (response.data?.verified) {
+        setResetOtpVerified(true);
+        toast.success("OTP verified! Set your new password.");
+      }
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        toast.error(error.message);
+      } else {
+        toast.error("Failed to verify OTP");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (newPassword.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await supabase.functions.invoke("verify-password-reset-otp", {
+        body: { 
+          email: email.trim(), 
+          otp: resetOtp.trim(),
+          newPassword: newPassword
+        },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || "Failed to reset password");
+      }
+
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      toast.success("Password updated successfully!");
+      
+      // Auto-login with new password
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: newPassword,
+      });
+
+      if (signInError) {
+        toast.info("Password updated! Please login with your new password.");
+        handleBackToLogin();
+      } else {
+        navigate("/dashboard");
+      }
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        toast.error(error.message);
+      } else {
+        toast.error("Failed to reset password");
       }
     } finally {
       setLoading(false);
@@ -583,7 +725,16 @@ const Auth = () => {
 
   const handleBackToLogin = () => {
     setShowForgotPassword(false);
-    setResetEmailSent(false);
+    setResetOtpSent(false);
+    setResetOtp("");
+    setResetOtpVerified(false);
+    setResetOtpExpiry(null);
+    setResetTimeRemaining(0);
+    setNewPassword("");
+    setConfirmNewPassword("");
+    setResetPasswordStrength(null);
+    setResetPasswordFeedback([]);
+    setHasTelegramForReset(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1066,23 +1217,172 @@ const Auth = () => {
 
         <div className="bg-card border border-border rounded-lg p-6 shadow-card">
           {showForgotPassword ? (
-            // Forgot Password Form
+            // Forgot Password Form with OTP
             <div className="space-y-4">
-              {resetEmailSent ? (
-                // Success state
-                <div className="text-center space-y-4">
-                  <div className="w-16 h-16 mx-auto rounded-full bg-green-500/10 flex items-center justify-center">
-                    <Mail className="h-8 w-8 text-green-500" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg">Check your email</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      We've sent a password reset link to <span className="font-medium text-foreground">{email}</span>
+              {resetOtpVerified ? (
+                // New password form after OTP verification
+                <form onSubmit={handleResetPassword} className="space-y-4">
+                  <div className="text-center space-y-2 mb-4">
+                    <CheckCircle className="h-12 w-12 mx-auto text-green-500" />
+                    <h3 className="font-semibold text-lg">OTP Verified!</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Enter your new password below.
                     </p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Didn't receive the email? Check your spam folder or try again.
-                  </p>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="new-password">New Password</Label>
+                    <Input
+                      id="new-password"
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => handleResetPasswordChange(e.target.value)}
+                      placeholder="Enter new password"
+                      className="bg-secondary border-border"
+                      required
+                    />
+                    {newPassword && (
+                      <div className="space-y-2">
+                        <div className="flex gap-1">
+                          <div className={`h-1.5 flex-1 rounded-full transition-colors ${
+                            resetPasswordStrength === "weak" ? "bg-red-500" : 
+                            resetPasswordStrength === "medium" ? "bg-yellow-500" : 
+                            resetPasswordStrength === "strong" ? "bg-green-500" : "bg-muted"
+                          }`} />
+                          <div className={`h-1.5 flex-1 rounded-full transition-colors ${
+                            resetPasswordStrength === "medium" ? "bg-yellow-500" : 
+                            resetPasswordStrength === "strong" ? "bg-green-500" : "bg-muted"
+                          }`} />
+                          <div className={`h-1.5 flex-1 rounded-full transition-colors ${
+                            resetPasswordStrength === "strong" ? "bg-green-500" : "bg-muted"
+                          }`} />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-medium ${
+                            resetPasswordStrength === "weak" ? "text-red-500" : 
+                            resetPasswordStrength === "medium" ? "text-yellow-500" : 
+                            resetPasswordStrength === "strong" ? "text-green-500" : ""
+                          }`}>
+                            {resetPasswordStrength === "weak" && "Weak"}
+                            {resetPasswordStrength === "medium" && "Medium"}
+                            {resetPasswordStrength === "strong" && "Strong"}
+                          </span>
+                        </div>
+                        {resetPasswordFeedback.length > 0 && resetPasswordStrength !== "strong" && (
+                          <ul className="text-xs text-muted-foreground space-y-0.5">
+                            {resetPasswordFeedback.map((tip, i) => (
+                              <li key={i}>• {tip}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-new-password">Confirm Password</Label>
+                    <Input
+                      id="confirm-new-password"
+                      type="password"
+                      value={confirmNewPassword}
+                      onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      placeholder="Confirm new password"
+                      className={`bg-secondary border-border ${
+                        confirmNewPassword && newPassword !== confirmNewPassword
+                          ? "border-red-500"
+                          : confirmNewPassword && newPassword === confirmNewPassword
+                          ? "border-green-500"
+                          : ""
+                      }`}
+                      required
+                    />
+                    {confirmNewPassword && newPassword !== confirmNewPassword && (
+                      <p className="text-sm text-red-500">Passwords do not match</p>
+                    )}
+                    {confirmNewPassword && newPassword === confirmNewPassword && (
+                      <p className="text-sm text-green-500">Passwords match!</p>
+                    )}
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full btn-primary"
+                    disabled={loading || newPassword !== confirmNewPassword || !newPassword}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Updating...
+                      </>
+                    ) : (
+                      "Update Password"
+                    )}
+                  </Button>
+
+                  <button
+                    type="button"
+                    onClick={handleBackToLogin}
+                    className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-2"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Cancel
+                  </button>
+                </form>
+              ) : resetOtpSent ? (
+                // OTP verification step
+                <div className="space-y-4">
+                  <div className="text-center space-y-2">
+                    <Clock className="h-12 w-12 mx-auto text-yellow-500" />
+                    <h3 className="font-semibold text-lg">Enter OTP</h3>
+                    <p className="text-sm text-muted-foreground">
+                      We've sent a 6-digit OTP to <span className="font-medium text-foreground">{email}</span>
+                      {hasTelegramForReset && (
+                        <span className="block mt-1">Also sent to your Telegram!</span>
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="bg-secondary/50 rounded-lg p-4 space-y-3 text-center">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-center gap-2 text-yellow-500">
+                        <Clock className="h-4 w-4" />
+                        <span className="font-mono text-lg">{formatTime(resetTimeRemaining)}</span>
+                      </div>
+                      <Progress value={(resetTimeRemaining / (2 * 60 * 1000)) * 100} className="h-2" />
+                      <p className="text-xs text-muted-foreground">OTP expires in 2 minutes</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="otp-input">OTP Code</Label>
+                    <Input
+                      id="otp-input"
+                      type="text"
+                      value={resetOtp}
+                      onChange={(e) => setResetOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="Enter 6-digit OTP"
+                      className="bg-secondary border-border text-center text-2xl tracking-widest font-mono"
+                      maxLength={6}
+                      required
+                    />
+                  </div>
+
+                  <Button
+                    type="button"
+                    className="w-full btn-primary"
+                    onClick={handleVerifyOtp}
+                    disabled={loading || resetOtp.length !== 6}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Verifying...
+                      </>
+                    ) : (
+                      "Verify OTP"
+                    )}
+                  </Button>
+
                   <div className="flex gap-2">
                     <Button
                       type="button"
@@ -1091,15 +1391,16 @@ const Auth = () => {
                       onClick={handleBackToLogin}
                     >
                       <ArrowLeft className="h-4 w-4 mr-2" />
-                      Back to Login
+                      Back
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
                       className="flex-1"
-                      onClick={() => setResetEmailSent(false)}
+                      onClick={handleForgotPassword}
+                      disabled={loading}
                     >
-                      Try Again
+                      Resend OTP
                     </Button>
                   </div>
                 </div>
@@ -1109,7 +1410,7 @@ const Auth = () => {
                   <div className="text-center space-y-2 mb-4">
                     <Mail className="h-12 w-12 mx-auto text-primary" />
                     <p className="text-sm text-muted-foreground">
-                      Enter your email address and we'll send you a link to reset your password.
+                      Enter your email address and we'll send you an OTP to reset your password.
                     </p>
                   </div>
 
@@ -1134,10 +1435,10 @@ const Auth = () => {
                     {loading ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Sending...
+                        Sending OTP...
                       </>
                     ) : (
-                      "Send Reset Link"
+                      "Send OTP"
                     )}
                   </Button>
 

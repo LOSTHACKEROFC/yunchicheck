@@ -11,3 +11,9 @@ verify_jwt = false
 
 [functions.send-telegram-verification]
 verify_jwt = false
+
+[functions.send-password-reset-otp]
+verify_jwt = false
+
+[functions.verify-password-reset-otp]
+verify_jwt = false
