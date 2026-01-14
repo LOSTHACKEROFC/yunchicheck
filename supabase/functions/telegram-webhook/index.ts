@@ -482,7 +482,7 @@ const handler = async (req: Request): Promise<Response> => {
       const chatId = update.message.chat.id.toString();
       await sendTelegramMessage(
         chatId,
-        `👋 <b>Welcome to Yunchi Support Bot</b>\n\nThis bot notifies you about new support tickets and allows you to:\n• Reply to tickets directly\n• Change ticket status\n\n<b>Commands:</b>\n/ticket [ticket_id] - View and manage a ticket\n/start - Show this message\n\nYour Chat ID: <code>${chatId}</code>\n\nReply to ticket notifications to respond to users.`
+        `👋 <b>Welcome to @YunchiSupportbot</b>\n\nThis bot is used for:\n• Account verification during registration\n• Support ticket notifications\n• Replying to tickets directly\n\n<b>Commands:</b>\n/ticket [ticket_id] - View and manage a ticket\n/start - Show this message\n\n<b>Your Chat ID:</b> <code>${chatId}</code>\n\n💡 Use this Chat ID when registering on Yunchi Checker.`
       );
       return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json", ...corsHeaders },
