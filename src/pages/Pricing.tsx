@@ -19,51 +19,56 @@ const Pricing = () => {
 
   const plans = [
     {
-      name: t.starter,
-      price: "$9.99",
-      period: t.perMonth,
-      description: t.perfectForBeginners,
+      name: t.starter || "Starter",
+      credits: "100",
+      price: "$10",
+      pricePerCredit: "$0.10",
+      description: t.perfectForBeginners || "Perfect for beginners",
       icon: Zap,
       popular: false,
+      checksCount: "20",
       features: [
-        { text: `100 ${t.checksPerDay}`, included: true },
-        { text: t.twoGateways, included: true },
-        { text: t.basicSupport, included: true },
-        { text: t.apiAccess, included: false },
-        { text: t.priorityQueue, included: false },
-        { text: t.bulkChecking, included: false },
+        { text: "100 Credits", included: true },
+        { text: "20 Card Checks", included: true },
+        { text: t.allGateways || "All Gateways", included: true },
+        { text: t.basicSupport || "Basic Support", included: true },
+        { text: t.priorityQueue || "Priority Queue", included: false },
       ],
     },
     {
-      name: t.professional,
-      price: "$29.99",
-      period: t.perMonth,
-      description: t.mostPopularChoice,
+      name: t.professional || "Professional",
+      credits: "500",
+      price: "$45",
+      pricePerCredit: "$0.09",
+      description: t.mostPopularChoice || "Most popular choice",
       icon: Crown,
       popular: true,
+      checksCount: "100",
+      savings: "10%",
       features: [
-        { text: `500 ${t.checksPerDay}`, included: true },
-        { text: t.allGateways, included: true },
-        { text: t.prioritySupport, included: true },
-        { text: t.apiAccess, included: true },
-        { text: t.priorityQueue, included: true },
-        { text: t.bulkChecking, included: false },
+        { text: "500 Credits", included: true },
+        { text: "100 Card Checks", included: true },
+        { text: t.allGateways || "All Gateways", included: true },
+        { text: t.prioritySupport || "Priority Support", included: true },
+        { text: t.priorityQueue || "Priority Queue", included: true },
       ],
     },
     {
-      name: t.enterprise,
-      price: "$99.99",
-      period: t.perMonth,
-      description: t.forPowerUsers,
+      name: t.enterprise || "Enterprise",
+      credits: "1000",
+      price: "$80",
+      pricePerCredit: "$0.08",
+      description: t.forPowerUsers || "For power users",
       icon: Rocket,
       popular: false,
+      checksCount: "200",
+      savings: "20%",
       features: [
-        { text: t.unlimitedChecks, included: true },
-        { text: t.allGateways, included: true },
-        { text: t.vipSupport, included: true },
-        { text: t.fullApiAccess, included: true },
-        { text: t.priorityQueue, included: true },
-        { text: t.bulkChecking, included: true },
+        { text: "1000 Credits", included: true },
+        { text: "200 Card Checks", included: true },
+        { text: t.allGateways || "All Gateways", included: true },
+        { text: t.vipSupport || "VIP Support", included: true },
+        { text: t.priorityQueue || "Priority Queue", included: true },
       ],
     },
   ];
@@ -141,9 +146,18 @@ const Pricing = () => {
               </CardHeader>
 
               <CardContent className="space-y-4 sm:space-y-6">
-                <div className="text-center">
-                  <span className="text-3xl sm:text-4xl font-bold text-primary">{plan.price}</span>
-                  <span className="text-muted-foreground text-sm">{plan.period}</span>
+                <div className="text-center space-y-1">
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-3xl sm:text-4xl font-bold text-primary">{plan.credits}</span>
+                    <span className="text-muted-foreground text-sm">Credits</span>
+                  </div>
+                  <div className="text-xl sm:text-2xl font-semibold">{plan.price}</div>
+                  <div className="text-xs text-muted-foreground">{plan.pricePerCredit}/credit</div>
+                  {plan.savings && (
+                    <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-xs">
+                      Save {plan.savings}
+                    </Badge>
+                  )}
                 </div>
 
                 <ul className="space-y-2 sm:space-y-3">
