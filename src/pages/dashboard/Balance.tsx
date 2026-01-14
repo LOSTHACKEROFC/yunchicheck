@@ -10,38 +10,231 @@ import {
   ArrowUpRight, 
   ArrowDownRight,
   CreditCard,
-  History
+  History,
+  RefreshCw
 } from "lucide-react";
+import { format } from "date-fns";
 
-// Mock transaction history
-const transactions = [
-  { id: 1, type: "topup", amount: 50, method: "Bitcoin", date: "2024-01-10", status: "completed" },
-  { id: 2, type: "check", amount: -0.50, gateway: "Stripe", date: "2024-01-10", status: "completed" },
-  { id: 3, type: "check", amount: -0.50, gateway: "Braintree", date: "2024-01-09", status: "completed" },
-  { id: 4, type: "topup", amount: 25, method: "USDT", date: "2024-01-08", status: "completed" },
-  { id: 5, type: "check", amount: -0.50, gateway: "Stripe", date: "2024-01-08", status: "failed" },
-];
+interface TopupTransaction {
+  id: string;
+  amount: number;
+  payment_method: string;
+  status: string;
+  created_at: string;
+}
+
+interface CardCheck {
+  id: string;
+  gateway: string;
+  status: string;
+  created_at: string;
+}
+
+interface Transaction {
+  id: string;
+  type: "topup" | "check";
+  amount: number;
+  method?: string;
+  gateway?: string;
+  date: string;
+  status: string;
+}
 
 const Balance = () => {
   const [balance, setBalance] = useState<number>(0);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  const fetchData = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    
+    setUserId(user.id);
+
+    // Fetch balance
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("balance")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    
+    setBalance(profile?.balance || 0);
+
+    // Fetch topup transactions
+    const { data: topups } = await supabase
+      .from("topup_transactions")
+      .select("id, amount, payment_method, status, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+
+    // Fetch card checks
+    const { data: checks } = await supabase
+      .from("card_checks")
+      .select("id, gateway, status, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+
+    // Combine and sort transactions
+    const allTransactions: Transaction[] = [];
+
+    if (topups) {
+      topups.forEach((tx: TopupTransaction) => {
+        allTransactions.push({
+          id: tx.id,
+          type: "topup",
+          amount: tx.status === "completed" ? tx.amount : 0,
+          method: tx.payment_method,
+          date: tx.created_at,
+          status: tx.status
+        });
+      });
+    }
+
+    if (checks) {
+      checks.forEach((check: CardCheck) => {
+        allTransactions.push({
+          id: check.id,
+          type: "check",
+          amount: -0.50, // Default check cost
+          gateway: check.gateway,
+          date: check.created_at,
+          status: check.status
+        });
+      });
+    }
+
+    // Sort by date descending
+    allTransactions.sort((a, b) => 
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
+    setTransactions(allTransactions);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    const fetchBalance = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("balance")
-          .eq("user_id", user.id)
-          .maybeSingle();
-        setBalance(data?.balance || 0);
-      }
-    };
-    fetchBalance();
+    fetchData();
   }, []);
 
-  const totalDeposits = transactions.filter(t => t.type === "topup").reduce((sum, t) => sum + t.amount, 0);
-  const totalSpent = Math.abs(transactions.filter(t => t.type === "check").reduce((sum, t) => sum + t.amount, 0));
+  // Real-time subscription for balance updates
+  useEffect(() => {
+    if (!userId) return;
+
+    const profileChannel = supabase
+      .channel('balance-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `user_id=eq.${userId}`
+        },
+        (payload) => {
+          console.log('Balance updated:', payload);
+          if (payload.new && typeof payload.new.balance === 'number') {
+            setBalance(payload.new.balance);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profileChannel);
+    };
+  }, [userId]);
+
+  // Real-time subscription for topup transactions
+  useEffect(() => {
+    if (!userId) return;
+
+    const topupChannel = supabase
+      .channel('topup-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'topup_transactions',
+          filter: `user_id=eq.${userId}`
+        },
+        (payload) => {
+          console.log('Topup transaction updated:', payload);
+          // Refetch all data to ensure consistency
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(topupChannel);
+    };
+  }, [userId]);
+
+  // Real-time subscription for card checks
+  useEffect(() => {
+    if (!userId) return;
+
+    const checkChannel = supabase
+      .channel('check-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'card_checks',
+          filter: `user_id=eq.${userId}`
+        },
+        (payload) => {
+          console.log('Card check updated:', payload);
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(checkChannel);
+    };
+  }, [userId]);
+
+  const completedTopups = transactions.filter(t => t.type === "topup" && t.status === "completed");
+  const totalDeposits = completedTopups.reduce((sum, t) => sum + t.amount, 0);
+  const totalSpent = Math.abs(
+    transactions
+      .filter(t => t.type === "check" && t.status === "completed")
+      .reduce((sum, t) => sum + t.amount, 0)
+  );
+  const totalChecks = transactions.filter(t => t.type === "check").length;
+
+  const getStatusBadgeClass = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "border-green-500/50 text-green-500";
+      case "pending":
+        return "border-yellow-500/50 text-yellow-500";
+      case "failed":
+        return "border-destructive/50 text-destructive";
+      default:
+        return "border-muted-foreground/50 text-muted-foreground";
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    try {
+      return format(new Date(dateString), "MMM d, yyyy HH:mm");
+    } catch {
+      return dateString;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -101,7 +294,7 @@ const Balance = () => {
             <CreditCard className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{transactions.filter(t => t.type === "check").length}</div>
+            <div className="text-2xl font-bold">{totalChecks}</div>
             <p className="text-xs text-muted-foreground mt-1">All time</p>
           </CardContent>
         </Card>
@@ -113,6 +306,9 @@ const Balance = () => {
           <CardTitle className="flex items-center gap-2">
             <History className="h-5 w-5 text-primary" />
             Transaction History
+            <Badge variant="outline" className="ml-2 text-xs">
+              Live
+            </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -121,19 +317,32 @@ const Balance = () => {
               <div className="text-center py-8 text-muted-foreground">
                 <Clock className="h-12 w-12 mx-auto mb-3 opacity-50" />
                 <p>No transactions yet</p>
+                <p className="text-sm mt-1">Your transaction history will appear here</p>
               </div>
             ) : (
               transactions.map((tx) => (
                 <div
                   key={tx.id}
-                  className="flex items-center justify-between p-4 rounded-lg bg-secondary/50 border border-border"
+                  className="flex items-center justify-between p-4 rounded-lg bg-secondary/50 border border-border transition-all hover:bg-secondary/70"
                 >
                   <div className="flex items-center gap-4">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                      tx.type === "topup" ? "bg-green-500/20" : "bg-primary/20"
+                      tx.type === "topup" 
+                        ? tx.status === "completed" 
+                          ? "bg-green-500/20" 
+                          : tx.status === "pending"
+                            ? "bg-yellow-500/20"
+                            : "bg-destructive/20"
+                        : "bg-primary/20"
                     }`}>
                       {tx.type === "topup" ? (
-                        <ArrowUpRight className="h-5 w-5 text-green-500" />
+                        <ArrowUpRight className={`h-5 w-5 ${
+                          tx.status === "completed" 
+                            ? "text-green-500" 
+                            : tx.status === "pending"
+                              ? "text-yellow-500"
+                              : "text-destructive"
+                        }`} />
                       ) : (
                         <ArrowDownRight className="h-5 w-5 text-primary" />
                       )}
@@ -142,20 +351,22 @@ const Balance = () => {
                       <p className="font-medium">
                         {tx.type === "topup" ? `Topup via ${tx.method}` : `Check - ${tx.gateway}`}
                       </p>
-                      <p className="text-sm text-muted-foreground">{tx.date}</p>
+                      <p className="text-sm text-muted-foreground">{formatDate(tx.date)}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className={`font-bold ${tx.amount > 0 ? "text-green-500" : "text-foreground"}`}>
-                      {tx.amount > 0 ? "+" : ""}{tx.amount.toFixed(2)} USD
+                    <p className={`font-bold ${
+                      tx.type === "topup" 
+                        ? tx.status === "completed" 
+                          ? "text-green-500" 
+                          : "text-muted-foreground"
+                        : "text-foreground"
+                    }`}>
+                      {tx.type === "topup" ? "+" : ""}{tx.type === "topup" ? tx.amount.toFixed(2) : tx.amount.toFixed(2)} USD
                     </p>
                     <Badge
                       variant="outline"
-                      className={`text-xs ${
-                        tx.status === "completed" 
-                          ? "border-green-500/50 text-green-500" 
-                          : "border-destructive/50 text-destructive"
-                      }`}
+                      className={`text-xs ${getStatusBadgeClass(tx.status)}`}
                     >
                       {tx.status}
                     </Badge>
