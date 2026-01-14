@@ -48,7 +48,7 @@ export const useSessionTracker = () => {
         
         const { browser, os, device_info } = getBrowserInfo();
         
-        const { error } = await supabase.functions.invoke("track-session", {
+        const { error, data } = await supabase.functions.invoke("track-session", {
           body: {
             browser,
             os,
@@ -57,7 +57,14 @@ export const useSessionTracker = () => {
           },
         });
         
-        // Log only if there's an unexpected error (not auth-related)
+        // If user not found (deleted), sign out to clear stale session
+        if (error?.message?.includes("401") || data?.code === "USER_NOT_FOUND") {
+          console.log("Session invalid, clearing stale auth...");
+          await supabase.auth.signOut();
+          return;
+        }
+        
+        // Log only truly unexpected errors
         if (error && !error.message?.includes("401") && !error.message?.includes("Invalid token")) {
           console.warn("Session tracking error:", error.message);
         }

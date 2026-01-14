@@ -107,17 +107,33 @@ const Auth = () => {
   }, [telegramChatId]);
 
   useEffect(() => {
+    const checkAndRedirect = async (userId: string) => {
+      // Verify user profile exists before redirecting
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      
+      if (profile) {
+        navigate("/dashboard");
+      } else {
+        // User was deleted, clear stale session
+        await supabase.auth.signOut();
+      }
+    };
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (session?.user) {
-          navigate("/dashboard");
+          setTimeout(() => checkAndRedirect(session.user.id), 0);
         }
       }
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        navigate("/dashboard");
+        checkAndRedirect(session.user.id);
       }
     });
 
