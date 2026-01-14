@@ -221,7 +221,10 @@ async function handleAdminCmd(chatId: string): Promise<void> {
 View and manage a support ticket
 
 🚫 <b>/banuser</b> [username or email]
-Ban a user from the platform
+Ban a user from the platform (will ask for reason)
+
+❌ <b>/cancelban</b>
+Cancel pending ban operation
 
 ✅ <b>/unbanuser</b> [username or email]
 Unban a previously banned user
@@ -1131,6 +1134,15 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
+    // Handle /cancelban command
+    if (update.message?.text === "/cancelban") {
+      const chatId = update.message.chat.id.toString();
+      await handleCancelBan(chatId, supabase);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
     // Handle /unbanuser command
     if (update.message?.text?.startsWith("/unbanuser")) {
       const chatId = update.message.chat.id.toString();
@@ -1283,6 +1295,32 @@ ${ticket.message.substring(0, 500)}${ticket.message.length > 500 ? "..." : ""}${
       return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
+    }
+
+    // Handle regular text messages from admin (for pending ban reason)
+    if (update.message?.text && !update.message.reply_to_message) {
+      const chatId = update.message.chat.id.toString();
+      const messageText = update.message.text;
+
+      // Skip if it's a command
+      if (!messageText.startsWith("/")) {
+        // Check if admin has pending ban
+        if (isAdmin(chatId)) {
+          const { data: pendingBan } = await supabase
+            .from("pending_bans")
+            .select("*")
+            .eq("admin_chat_id", chatId)
+            .maybeSingle();
+
+          if (pendingBan) {
+            // This message is the ban reason
+            await handleBanReason(chatId, messageText, supabase);
+            return new Response(JSON.stringify({ ok: true }), {
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
+          }
+        }
+      }
     }
 
     return new Response(JSON.stringify({ ok: true }), {
