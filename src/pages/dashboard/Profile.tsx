@@ -46,16 +46,12 @@ const Profile = () => {
   const [originalValues, setOriginalValues] = useState({
     username: "",
     name: "",
-    telegramChatId: "",
-    telegramUsername: "",
   });
 
   const hasUnsavedChanges = () => {
     return (
       username !== originalValues.username ||
-      name !== originalValues.name ||
-      telegramChatId !== originalValues.telegramChatId ||
-      telegramUsername !== originalValues.telegramUsername
+      name !== originalValues.name
     );
   };
 
@@ -124,8 +120,6 @@ const Profile = () => {
     setOriginalValues({
       username,
       name,
-      telegramChatId,
-      telegramUsername,
     });
     setIsEditing(true);
   };
@@ -141,8 +135,6 @@ const Profile = () => {
   const handleConfirmDiscard = () => {
     setUsername(originalValues.username);
     setName(originalValues.name);
-    setTelegramChatId(originalValues.telegramChatId);
-    setTelegramUsername(originalValues.telegramUsername);
     setIsEditing(false);
     setShowDiscardDialog(false);
   };
@@ -156,8 +148,6 @@ const Profile = () => {
         .update({ 
           username,
           name,
-          telegram_chat_id: telegramChatId,
-          telegram_username: telegramUsername
         })
         .eq("user_id", user.id);
       
@@ -168,15 +158,8 @@ const Profile = () => {
         setOriginalValues({
           username,
           name,
-          telegramChatId,
-          telegramUsername,
         });
         setIsEditing(false);
-        
-        // Refresh Telegram profile if chat ID changed
-        if (telegramChatId !== originalValues.telegramChatId) {
-          fetchTelegramProfile(telegramChatId);
-        }
       }
     }
     setLoading(false);
@@ -207,11 +190,6 @@ const Profile = () => {
         setTelegramChatId("");
         setTelegramUsername("");
         setTelegramProfile(null);
-        setOriginalValues(prev => ({
-          ...prev,
-          telegramChatId: "",
-          telegramUsername: "",
-        }));
         setShowUnlinkDialog(false);
       }
     } catch (error) {
@@ -340,11 +318,10 @@ const Profile = () => {
                 </Label>
                 <Input
                   id="telegramUsername"
-                  value={telegramUsername}
-                  onChange={(e) => setTelegramUsername(e.target.value)}
-                  className="bg-secondary border-border"
-                  placeholder="@username"
-                  disabled={!isEditing}
+                  value={telegramProfile?.username ? `@${telegramProfile.username}` : (telegramUsername ? `@${telegramUsername}` : "")}
+                  className="bg-secondary border-border opacity-50"
+                  placeholder="Detected from Telegram"
+                  disabled
                 />
               </div>
 
@@ -357,12 +334,11 @@ const Profile = () => {
                   <Input
                     id="telegramChatId"
                     value={telegramChatId}
-                    onChange={(e) => setTelegramChatId(e.target.value)}
-                    className="bg-secondary border-border flex-1"
-                    placeholder="Enter your Telegram Chat ID"
-                    disabled={!isEditing}
+                    className="bg-secondary border-border flex-1 opacity-50"
+                    placeholder="Linked during registration"
+                    disabled
                   />
-                  {telegramChatId && !isEditing && (
+                  {telegramChatId && (
                     <Button
                       variant="outline"
                       size="icon"
@@ -374,6 +350,9 @@ const Profile = () => {
                     </Button>
                   )}
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Telegram details are automatically detected and cannot be edited manually.
+                </p>
               </div>
             </div>
 
