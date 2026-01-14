@@ -218,6 +218,7 @@ async function setBotCommands(): Promise<void> {
     { command: "cancelban", description: "Cancel pending ban" },
     { command: "unbanuser", description: "Unban a user" },
     { command: "deleteuser", description: "Permanently delete a user" },
+    { command: "deletealluser", description: "⚠️ Delete ALL users (dangerous)" },
     { command: "viewbans", description: "View all banned users" },
     { command: "broadcast", description: "Broadcast message to all users" },
     { command: "stats", description: "View website statistics" },
@@ -406,6 +407,9 @@ async function handleAdminCmd(chatId: string): Promise<void> {
 
 /deleteuser <code>[username/email/chat_id]</code>
 └ ⚠️ Permanently delete a user
+
+/deletealluser
+└ ☠️ Delete ALL users (EXTREMELY DANGEROUS)
 
 /cancelban
 └ Cancel a pending ban operation
@@ -654,6 +658,144 @@ async function executeUserDeletion(chatId: string, userId: string, supabase: any
   } catch (error: any) {
     console.error("Error during user deletion:", error);
     return { success: false, error: error.message };
+  }
+}
+
+// Handle delete all users command (EXTREMELY DANGEROUS - requires multi-step confirmation)
+async function handleDeleteAllUsers(chatId: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to delete users.");
+    return;
+  }
+
+  // Get count of all users
+  const { count: userCount, error: countError } = await supabase
+    .from("profiles")
+    .select("*", { count: "exact", head: true });
+
+  if (countError) {
+    console.error("Error counting users:", countError);
+    await sendTelegramMessage(chatId, "❌ Error fetching user count. Please try again.");
+    return;
+  }
+
+  if (!userCount || userCount === 0) {
+    await sendTelegramMessage(chatId, "ℹ️ No users to delete.");
+    return;
+  }
+
+  const confirmationKeyboard = {
+    inline_keyboard: [
+      [
+        { text: "☠️ CONFIRM DELETE ALL", callback_data: `deleteall_confirm_step1` },
+        { text: "❌ Cancel", callback_data: `deleteall_cancel` },
+      ],
+    ],
+  };
+
+  const warningMessage = `
+☠️ <b>DELETE ALL USERS - EXTREME WARNING</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>⚠️ YOU ARE ABOUT TO DELETE ALL USERS!</b>
+
+<b>Total users to delete:</b> ${userCount}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>🗑️ DATA TO BE DELETED:</b>
+• ALL user profiles & accounts
+• ALL notifications
+• ALL support tickets & messages
+• ALL card checks
+• ALL sessions
+• ALL ban appeals & history
+• ALL auth accounts
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>☠️ THIS ACTION IS IRREVERSIBLE!</b>
+<b>☠️ ALL DATA WILL BE PERMANENTLY LOST!</b>
+
+<i>This will require TWO confirmations.</i>
+`;
+
+  await sendTelegramMessage(chatId, warningMessage, confirmationKeyboard);
+}
+
+// Execute deletion of all users
+async function executeDeleteAllUsers(chatId: string, supabase: any): Promise<void> {
+  await sendTelegramMessage(chatId, "🔄 <b>Deleting all users...</b>\n\n<i>This may take a while. Please wait.</i>");
+
+  try {
+    // Get all user IDs first
+    const { data: profiles, error: profilesError } = await supabase
+      .from("profiles")
+      .select("user_id, telegram_chat_id");
+
+    if (profilesError) {
+      console.error("Error fetching profiles:", profilesError);
+      await sendTelegramMessage(chatId, "❌ Error fetching users. Please try again.");
+      return;
+    }
+
+    if (!profiles || profiles.length === 0) {
+      await sendTelegramMessage(chatId, "ℹ️ No users to delete.");
+      return;
+    }
+
+    const totalUsers = profiles.length;
+    let deletedCount = 0;
+    let failedCount = 0;
+    const errors: string[] = [];
+
+    // Delete users one by one
+    for (const profile of profiles) {
+      const result = await executeUserDeletion(chatId, profile.user_id, supabase);
+      if (result.success) {
+        deletedCount++;
+      } else {
+        failedCount++;
+        errors.push(`User ${profile.user_id}: ${result.error}`);
+      }
+
+      // Send progress update every 10 users
+      if ((deletedCount + failedCount) % 10 === 0) {
+        await sendTelegramMessage(
+          chatId,
+          `🔄 <b>Progress:</b> ${deletedCount + failedCount}/${totalUsers} processed\n✅ Deleted: ${deletedCount}\n❌ Failed: ${failedCount}`
+        );
+      }
+    }
+
+    // Send final summary
+    let summaryMessage = `
+✅ <b>Delete All Users - Complete</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>📊 SUMMARY</b>
+
+<b>Total Processed:</b> ${totalUsers}
+<b>Successfully Deleted:</b> ${deletedCount}
+<b>Failed:</b> ${failedCount}
+
+━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+    if (errors.length > 0) {
+      summaryMessage += `\n<b>❌ Errors:</b>\n${errors.slice(0, 5).join("\n")}`;
+      if (errors.length > 5) {
+        summaryMessage += `\n<i>... and ${errors.length - 5} more errors</i>`;
+      }
+    }
+
+    await sendTelegramMessage(chatId, summaryMessage);
+    console.log(`Delete all users complete: ${deletedCount} deleted, ${failedCount} failed`);
+  } catch (error: any) {
+    console.error("Error during delete all users:", error);
+    await sendTelegramMessage(chatId, `❌ Error during deletion: ${error.message}`);
   }
 }
 
@@ -1383,6 +1525,120 @@ const handler = async (req: Request): Promise<Response> => {
         }
         
         await answerCallbackQuery(update.callback_query.id, "Deletion cancelled");
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      // Handle delete ALL users - Step 1 confirmation
+      if (callbackData === "deleteall_confirm_step1") {
+        const callbackChatId = update.callback_query.message?.chat.id.toString();
+        const messageId = update.callback_query.message?.message_id;
+        
+        if (!callbackChatId || !isAdmin(callbackChatId)) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        // Get fresh count
+        const { count: userCount } = await supabase
+          .from("profiles")
+          .select("*", { count: "exact", head: true });
+
+        // Second confirmation with final warning
+        const step2Keyboard = {
+          inline_keyboard: [
+            [
+              { text: "☠️ YES, DELETE ALL " + userCount + " USERS", callback_data: "deleteall_confirm_step2" },
+            ],
+            [
+              { text: "❌ CANCEL - ABORT OPERATION", callback_data: "deleteall_cancel" },
+            ],
+          ],
+        };
+
+        if (messageId) {
+          await editTelegramMessage(
+            callbackChatId,
+            messageId,
+            `
+☠️ <b>FINAL CONFIRMATION REQUIRED</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>⚠️ ARE YOU ABSOLUTELY SURE?</b>
+
+You are about to permanently delete <b>${userCount}</b> user accounts.
+
+This action will:
+• Remove ALL user data permanently
+• Clear ALL auth records
+• Delete ALL notifications, tickets, sessions
+• Reset the entire user database
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>☠️ THERE IS NO UNDO!</b>
+<b>☠️ DATA CANNOT BE RECOVERED!</b>
+
+<i>Click the button below ONLY if you are certain.</i>
+`,
+            step2Keyboard
+          );
+        }
+
+        await answerCallbackQuery(update.callback_query.id, "⚠️ Step 2 of 2 - Final confirmation required");
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      // Handle delete ALL users - Step 2 (FINAL) confirmation
+      if (callbackData === "deleteall_confirm_step2") {
+        const callbackChatId = update.callback_query.message?.chat.id.toString();
+        const messageId = update.callback_query.message?.message_id;
+        
+        if (!callbackChatId || !isAdmin(callbackChatId)) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        if (messageId) {
+          await editTelegramMessage(
+            callbackChatId,
+            messageId,
+            "🔄 <b>DELETE ALL USERS - IN PROGRESS</b>\n\n<i>Processing deletion... Please wait.</i>"
+          );
+        }
+
+        await answerCallbackQuery(update.callback_query.id, "☠️ Deletion started...");
+        
+        // Execute the deletion
+        await executeDeleteAllUsers(callbackChatId, supabase);
+
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      // Handle delete ALL users cancellation
+      if (callbackData === "deleteall_cancel") {
+        const callbackChatId = update.callback_query.message?.chat.id.toString();
+        const messageId = update.callback_query.message?.message_id;
+        
+        if (callbackChatId && messageId) {
+          await editTelegramMessage(
+            callbackChatId,
+            messageId,
+            "✅ <b>Delete All Users - Cancelled</b>\n\n<i>No users were deleted. Database is unchanged.</i>"
+          );
+        }
+        
+        await answerCallbackQuery(update.callback_query.id, "✅ Operation cancelled");
         return new Response(JSON.stringify({ ok: true }), {
           headers: { "Content-Type": "application/json", ...corsHeaders },
         });
@@ -2125,10 +2381,19 @@ Your Telegram is not linked to any Yunchi account.
     }
 
     // Handle /deleteuser command
-    if (update.message?.text?.startsWith("/deleteuser")) {
+    if (update.message?.text?.startsWith("/deleteuser") && !update.message?.text?.startsWith("/deletealluser")) {
       const chatId = update.message.chat.id.toString();
       const identifier = update.message.text.replace("/deleteuser", "").trim();
       await handleDeleteUser(chatId, identifier, supabase);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Handle /deletealluser command (EXTREMELY DANGEROUS)
+    if (update.message?.text === "/deletealluser") {
+      const chatId = update.message.chat.id.toString();
+      await handleDeleteAllUsers(chatId, supabase);
       return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
