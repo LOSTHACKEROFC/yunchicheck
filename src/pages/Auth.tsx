@@ -362,7 +362,7 @@ const Auth = () => {
     };
   }, []);
 
-  // Check if Telegram ID is already registered
+  // Check if Telegram ID is already registered using edge function (bypasses RLS)
   const checkTelegramIdAvailability = useCallback(async (chatId: string) => {
     // Only check if it looks like a valid chat ID (numeric)
     if (!/^\d+$/.test(chatId)) {
@@ -375,24 +375,24 @@ const Auth = () => {
     setTelegramIdError("");
 
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("telegram_chat_id")
-        .eq("telegram_chat_id", chatId)
-        .maybeSingle();
+      const response = await supabase.functions.invoke("check-telegram-availability", {
+        body: { telegramChatId: chatId },
+      });
 
-      if (error) {
-        console.error("Error checking Telegram ID:", error);
+      if (response.error) {
+        console.error("Error checking Telegram ID:", response.error);
         setTelegramIdStatus("idle");
         return;
       }
 
-      if (data) {
+      if (response.data?.available === false) {
         setTelegramIdStatus("taken");
-        setTelegramIdError("This Telegram ID is already registered");
-      } else {
+        setTelegramIdError(response.data.message || "This Telegram ID is already linked to another account");
+      } else if (response.data?.available === true) {
         setTelegramIdStatus("available");
         setTelegramIdError("");
+      } else {
+        setTelegramIdStatus("idle");
       }
     } catch (error) {
       console.error("Error checking Telegram ID:", error);
