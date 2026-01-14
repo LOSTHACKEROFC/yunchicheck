@@ -12,6 +12,7 @@ import {
   CreditCard
 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import FloatingCardsBackground from "@/components/FloatingCardsBackground";
 
 const Pricing = () => {
   const { t } = useLanguage();
@@ -68,9 +69,11 @@ const Pricing = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background relative">
+      <FloatingCardsBackground />
+      
       {/* Header */}
-      <header className="border-b border-border">
+      <header className="border-b border-border relative z-10">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
             <div className="w-10 h-10 bg-primary rounded-md flex items-center justify-center">
@@ -95,7 +98,7 @@ const Pricing = () => {
       </header>
 
       {/* Pricing Section */}
-      <section className="container mx-auto px-4 py-16">
+      <section className="container mx-auto px-4 py-16 relative z-10">
         <div className="text-center mb-12">
           <Badge className="bg-primary/20 text-primary border-primary/30 mb-4">
             <CreditCard className="h-3 w-3 mr-1" />
@@ -186,7 +189,7 @@ const Pricing = () => {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border py-8 mt-auto">
+      <footer className="border-t border-border py-8 mt-auto relative z-10">
         <div className="container mx-auto px-4 text-center text-muted-foreground text-sm">
           © 2024 Yunchi Checker. {t.allRightsReserved}
         </div>

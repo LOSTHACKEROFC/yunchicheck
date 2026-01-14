@@ -2,14 +2,17 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Shield, Zap, CreditCard } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import FloatingCardsBackground from "@/components/FloatingCardsBackground";
 
 const Index = () => {
   const { t } = useLanguage();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background relative">
+      <FloatingCardsBackground />
+      
       {/* Header */}
-      <header className="border-b border-border">
+      <header className="border-b border-border relative z-10">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-10 h-10 bg-primary rounded-md flex items-center justify-center">
@@ -41,7 +44,7 @@ const Index = () => {
       </header>
 
       {/* Hero */}
-      <section className="container mx-auto px-4 py-20">
+      <section className="container mx-auto px-4 py-20 relative z-10">
         <div className="max-w-3xl mx-auto text-center">
           <h1 className="text-5xl md:text-6xl font-display font-bold mb-6">
             {t.welcomeTo}{" "}
@@ -67,7 +70,7 @@ const Index = () => {
       </section>
 
       {/* Features */}
-      <section className="container mx-auto px-4 py-16">
+      <section className="container mx-auto px-4 py-16 relative z-10">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div className="bg-card border border-border rounded-lg p-6 text-center">
             <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
@@ -102,7 +105,7 @@ const Index = () => {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border py-8">
+      <footer className="border-t border-border py-8 relative z-10">
         <div className="container mx-auto px-4 text-center text-muted-foreground text-sm">
           © 2024 Yunchi Checker. {t.allRightsReserved}
         </div>
