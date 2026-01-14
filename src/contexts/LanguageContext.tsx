@@ -57,6 +57,7 @@ export interface Translations {
   profile: string;
   topup: string;
   balanceAndHistory: string;
+  creditUsage: string;
   gateways: string;
   contactSupport: string;
   logout: string;
@@ -178,6 +179,7 @@ const translations: Record<Language, Translations> = {
     profile: "Profile",
     topup: "Topup",
     balanceAndHistory: "Balance & History",
+    creditUsage: "Credit Usage",
     gateways: "Gateways",
     contactSupport: "Contact Support",
     logout: "Logout",
@@ -292,6 +294,7 @@ const translations: Record<Language, Translations> = {
     profile: "Perfil",
     topup: "Recargar",
     balanceAndHistory: "Saldo e Historial",
+    creditUsage: "Uso de Créditos",
     gateways: "Pasarelas",
     contactSupport: "Contactar Soporte",
     logout: "Cerrar Sesión",
@@ -406,6 +409,7 @@ const translations: Record<Language, Translations> = {
     profile: "Profil",
     topup: "Recharger",
     balanceAndHistory: "Solde et Historique",
+    creditUsage: "Utilisation des Crédits",
     gateways: "Passerelles",
     contactSupport: "Contacter le Support",
     logout: "Déconnexion",
@@ -520,6 +524,7 @@ const translations: Record<Language, Translations> = {
     profile: "Profil",
     topup: "Aufladen",
     balanceAndHistory: "Kontostand & Verlauf",
+    creditUsage: "Kreditnutzung",
     gateways: "Gateways",
     contactSupport: "Support Kontaktieren",
     logout: "Abmelden",
@@ -634,6 +639,7 @@ const translations: Record<Language, Translations> = {
     profile: "الملف الشخصي",
     topup: "شحن",
     balanceAndHistory: "الرصيد والسجل",
+    creditUsage: "استخدام الرصيد",
     gateways: "البوابات",
     contactSupport: "اتصل بالدعم",
     logout: "تسجيل الخروج",
@@ -748,6 +754,7 @@ const translations: Record<Language, Translations> = {
     profile: "个人资料",
     topup: "充值",
     balanceAndHistory: "余额与历史",
+    creditUsage: "积分使用",
     gateways: "网关",
     contactSupport: "联系支持",
     logout: "退出登录",
