@@ -16,13 +16,21 @@ const Dashboard = () => {
   // Track user session for security
   useSessionTracker();
 
-  // Check if user is banned
-  const checkBanStatus = async (userId: string) => {
-    const { data: profile } = await supabase
+  // Check if user is banned or deleted
+  const checkUserStatus = async (userId: string) => {
+    const { data: profile, error } = await supabase
       .from("profiles")
       .select("is_banned, ban_reason, username, banned_until")
       .eq("user_id", userId)
       .maybeSingle();
+    
+    // If no profile found, user was likely deleted - sign out
+    if (!profile && !error) {
+      console.log("User profile not found, signing out...");
+      await supabase.auth.signOut();
+      navigate("/auth");
+      return true;
+    }
     
     if (profile?.is_banned) {
       await supabase.auth.signOut();
@@ -45,9 +53,9 @@ const Dashboard = () => {
         if (!session?.user) {
           navigate("/auth");
         } else {
-          // Check ban status when auth state changes
+          // Check user status when auth state changes
           setTimeout(() => {
-            checkBanStatus(session.user.id);
+            checkUserStatus(session.user.id);
           }, 0);
         }
         setLoading(false);
@@ -59,8 +67,8 @@ const Dashboard = () => {
       if (!session?.user) {
         navigate("/auth");
       } else {
-        // Check ban status on initial load
-        checkBanStatus(session.user.id);
+        // Check user status on initial load
+        checkUserStatus(session.user.id);
 
         // Subscribe to real-time ban status changes
         realtimeChannel = supabase
