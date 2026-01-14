@@ -296,13 +296,13 @@ const Auth = () => {
               <li>Copy and paste it here</li>
             </ol>
             <a
-              href="https://t.me/yunchi_support_bot"
+              href="https://t.me/YunchiSupportbot"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-primary hover:underline text-sm"
             >
               <ExternalLink className="h-4 w-4" />
-              Open Telegram Bot
+              Open @YunchiSupportbot
             </a>
           </div>
 
