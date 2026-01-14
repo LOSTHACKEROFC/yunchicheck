@@ -215,6 +215,7 @@ async function setBotCommands(): Promise<void> {
     { command: "admincmd", description: "🔐 View admin command panel" },
     { command: "ticket", description: "🎫 View/manage a support ticket" },
     { command: "topups", description: "💰 View pending top-up requests" },
+    { command: "addfund", description: "💵 Add/deduct funds from user" },
     { command: "banuser", description: "🔨 Ban a user" },
     { command: "cancelban", description: "↩️ Cancel pending ban" },
     { command: "unbanuser", description: "✅ Unban a user" },
@@ -409,6 +410,9 @@ async function handleAdminCmd(chatId: string): Promise<void> {
 │  /topups
 │  └ 💳 View pending top-up requests
 │
+│  /addfund <code>[email] [amount]</code>
+│  └ 💵 Add/deduct funds (use -100 to deduct)
+│
 └─────────────────────────────────┘
 
 ┌─────────────────────────────────┐
@@ -462,7 +466,227 @@ async function handleAdminCmd(chatId: string): Promise<void> {
   await sendTelegramMessage(chatId, adminMenu);
 }
 
-// Handle delete user command
+// Handle add fund command
+async function handleAddFund(chatId: string, args: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to manage funds.");
+    return;
+  }
+
+  const parts = args.trim().split(/\s+/);
+  if (parts.length < 2) {
+    await sendTelegramMessage(chatId, `
+❌ <b>Invalid Usage</b>
+
+<b>Usage:</b> /addfund <code>[email]</code> <code>[amount]</code>
+
+<b>Examples:</b>
+• /addfund user@email.com 50
+  └ Adds $50 to user's balance
+• /addfund user@email.com -100
+  └ Deducts $100 from user's balance
+
+<i>💡 Use negative amounts to deduct funds</i>
+`);
+    return;
+  }
+
+  const email = parts[0].toLowerCase();
+  const amountStr = parts[1];
+  const amount = parseFloat(amountStr);
+
+  if (isNaN(amount) || amount === 0) {
+    await sendTelegramMessage(chatId, "❌ <b>Invalid amount</b>\n\nPlease provide a valid non-zero number.");
+    return;
+  }
+
+  // Find user by email
+  const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
+  
+  if (authError) {
+    console.error("Error listing users:", authError);
+    await sendTelegramMessage(chatId, "❌ Error fetching users. Please try again.");
+    return;
+  }
+
+  const foundUser = authData?.users?.find((u: any) => u.email?.toLowerCase() === email);
+  
+  if (!foundUser) {
+    await sendTelegramMessage(chatId, `❌ <b>User not found</b>\n\nNo user found with email: <code>${email}</code>`);
+    return;
+  }
+
+  const userId = foundUser.id;
+  const userEmail = foundUser.email;
+
+  // Get user profile
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("username, balance, telegram_chat_id")
+    .eq("user_id", userId)
+    .single();
+
+  if (profileError || !profile) {
+    await sendTelegramMessage(chatId, `❌ <b>Profile not found</b>\n\nNo profile found for: <code>${email}</code>`);
+    return;
+  }
+
+  const oldBalance = Number(profile.balance) || 0;
+  const newBalance = oldBalance + amount;
+
+  // Prevent negative balance
+  if (newBalance < 0) {
+    await sendTelegramMessage(chatId, `
+❌ <b>Insufficient Balance</b>
+
+User's current balance: <b>$${oldBalance.toFixed(2)}</b>
+Requested deduction: <b>$${Math.abs(amount).toFixed(2)}</b>
+
+<i>Cannot deduct more than available balance.</i>
+`);
+    return;
+  }
+
+  // Update balance
+  const { error: updateError } = await supabase
+    .from("profiles")
+    .update({ 
+      balance: newBalance,
+      updated_at: new Date().toISOString()
+    })
+    .eq("user_id", userId);
+
+  if (updateError) {
+    console.error("Error updating balance:", updateError);
+    await sendTelegramMessage(chatId, "❌ Error updating balance. Please try again.");
+    return;
+  }
+
+  const isAddition = amount > 0;
+  const actionText = isAddition ? "Added" : "Deducted";
+  const actionEmoji = isAddition ? "💰" : "💸";
+  const statusEmoji = isAddition ? "✅" : "🔻";
+
+  // Create notification for user
+  const notificationTitle = isAddition ? "Funds Added" : "Funds Deducted";
+  const notificationMessage = isAddition 
+    ? `$${amount.toFixed(2)} has been added to your account by admin. New balance: $${newBalance.toFixed(2)}`
+    : `$${Math.abs(amount).toFixed(2)} has been deducted from your account by admin. New balance: $${newBalance.toFixed(2)}`;
+
+  await supabase.from("notifications").insert({
+    user_id: userId,
+    type: "balance_admin",
+    title: notificationTitle,
+    message: notificationMessage,
+    metadata: { 
+      old_balance: oldBalance, 
+      new_balance: newBalance, 
+      amount: amount,
+      action: isAddition ? "add" : "deduct"
+    }
+  });
+
+  // Send Telegram notification to user if connected
+  if (profile.telegram_chat_id) {
+    const userTelegramMessage = `
+${actionEmoji} <b>${notificationTitle}</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+${statusEmoji} <b>${actionText}:</b> $${Math.abs(amount).toFixed(2)}
+
+<b>Previous Balance:</b> $${oldBalance.toFixed(2)}
+<b>New Balance:</b> $${newBalance.toFixed(2)}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<i>This action was performed by an administrator.</i>
+<i>Contact support if you have questions.</i>
+`;
+    await sendTelegramMessage(profile.telegram_chat_id, userTelegramMessage);
+  }
+
+  // Send email notification to user
+  if (RESEND_API_KEY && userEmail) {
+    try {
+      const emailSubject = isAddition 
+        ? `💰 $${amount.toFixed(2)} Added to Your Account`
+        : `💸 $${Math.abs(amount).toFixed(2)} Deducted from Your Account`;
+      
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, ${isAddition ? '#10b981' : '#ef4444'}, ${isAddition ? '#059669' : '#dc2626'}); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0;">${actionEmoji} ${notificationTitle}</h1>
+          </div>
+          <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
+            <p style="font-size: 16px;">Hello <strong>${profile.username || 'User'}</strong>,</p>
+            <p>${isAddition ? 'Funds have been added to' : 'Funds have been deducted from'} your account by an administrator.</p>
+            
+            <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>${actionText}:</strong> $${Math.abs(amount).toFixed(2)}</p>
+              <p style="margin: 5px 0;"><strong>Previous Balance:</strong> $${oldBalance.toFixed(2)}</p>
+            </div>
+            
+            <div style="background: linear-gradient(135deg, ${isAddition ? '#10b981' : '#3b82f6'}, ${isAddition ? '#059669' : '#2563eb'}); padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+              <p style="margin: 0; font-size: 14px; color: rgba(255,255,255,0.8);">Your New Balance</p>
+              <p style="margin: 5px 0 0 0; font-size: 28px; font-weight: bold; color: white;">$${newBalance.toFixed(2)}</p>
+            </div>
+            
+            <p style="color: #a3a3a3; font-size: 14px; text-align: center;">
+              This action was performed by an administrator.<br>
+              Contact support if you have any questions.
+            </p>
+          </div>
+        </div>
+      `;
+
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${RESEND_API_KEY}`,
+        },
+        body: JSON.stringify({
+          from: "Yunchi Checker <onboarding@resend.dev>",
+          to: [userEmail],
+          subject: emailSubject,
+          html: emailHtml,
+        }),
+      });
+      console.log("Email notification sent for fund adjustment");
+    } catch (emailError) {
+      console.error("Error sending email notification:", emailError);
+    }
+  }
+
+  // Confirm to admin
+  const adminConfirmMessage = `
+${statusEmoji} <b>Fund ${isAddition ? 'Addition' : 'Deduction'} Successful</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>👤 USER</b>
+<b>Username:</b> ${profile.username || 'Not set'}
+<b>Email:</b> ${userEmail}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>💳 TRANSACTION</b>
+<b>${actionText}:</b> $${Math.abs(amount).toFixed(2)}
+<b>Previous:</b> $${oldBalance.toFixed(2)}
+<b>New Balance:</b> $${newBalance.toFixed(2)}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>📧 NOTIFICATIONS SENT</b>
+• Web notification: ✅
+• Telegram: ${profile.telegram_chat_id ? '✅' : '❌ Not connected'}
+• Email: ${userEmail ? '✅' : '❌'}
+`;
+
+  await sendTelegramMessage(chatId, adminConfirmMessage);
+}
+
 async function handleDeleteUser(chatId: string, identifier: string, supabase: any): Promise<void> {
   if (!isAdmin(chatId)) {
     await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to delete users.");
@@ -2904,6 +3128,16 @@ Yunchi account.
       if (message) {
         await sendTelegramMessage(chatId, message, keyboard || undefined);
       }
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Handle /addfund command
+    if (update.message?.text?.startsWith("/addfund")) {
+      const chatId = update.message.chat.id.toString();
+      const args = update.message.text.replace("/addfund", "").trim();
+      await handleAddFund(chatId, args, supabase);
       return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
