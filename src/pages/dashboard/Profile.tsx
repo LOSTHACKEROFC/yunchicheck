@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { User, Mail, Calendar, Shield, Key, MessageCircle, Pencil, X } from "lucide-react";
+import { User, Mail, Calendar, Shield, Key, MessageCircle, Pencil, X, Unlink } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   AlertDialog,
@@ -39,6 +39,8 @@ const Profile = () => {
   const [loadingTelegram, setLoadingTelegram] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  const [showUnlinkDialog, setShowUnlinkDialog] = useState(false);
+  const [unlinking, setUnlinking] = useState(false);
   
   // Store original values for cancel functionality
   const [originalValues, setOriginalValues] = useState({
@@ -180,6 +182,46 @@ const Profile = () => {
     setLoading(false);
   };
 
+  const handleUnlinkTelegram = async () => {
+    setUnlinking(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("User not found");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({ 
+          telegram_chat_id: null,
+          telegram_username: null
+        })
+        .eq("user_id", user.id);
+
+      if (error) {
+        toast.error("Failed to unlink Telegram");
+        console.error("Unlink error:", error);
+      } else {
+        toast.success("Telegram account unlinked successfully");
+        setTelegramChatId("");
+        setTelegramUsername("");
+        setTelegramProfile(null);
+        setOriginalValues(prev => ({
+          ...prev,
+          telegramChatId: "",
+          telegramUsername: "",
+        }));
+        setShowUnlinkDialog(false);
+      }
+    } catch (error) {
+      console.error("Error unlinking Telegram:", error);
+      toast.error("An error occurred while unlinking");
+    } finally {
+      setUnlinking(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -311,14 +353,27 @@ const Profile = () => {
                   <MessageCircle className="h-4 w-4 text-muted-foreground" />
                   Telegram Chat ID
                 </Label>
-                <Input
-                  id="telegramChatId"
-                  value={telegramChatId}
-                  onChange={(e) => setTelegramChatId(e.target.value)}
-                  className="bg-secondary border-border"
-                  placeholder="Enter your Telegram Chat ID"
-                  disabled={!isEditing}
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="telegramChatId"
+                    value={telegramChatId}
+                    onChange={(e) => setTelegramChatId(e.target.value)}
+                    className="bg-secondary border-border flex-1"
+                    placeholder="Enter your Telegram Chat ID"
+                    disabled={!isEditing}
+                  />
+                  {telegramChatId && !isEditing && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowUnlinkDialog(true)}
+                      className="shrink-0 border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                      title="Unlink Telegram"
+                    >
+                      <Unlink className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -394,6 +449,31 @@ const Profile = () => {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Discard Changes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Unlink Telegram Confirmation Dialog */}
+      <AlertDialog open={showUnlinkDialog} onOpenChange={setShowUnlinkDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Unlink className="h-5 w-5 text-destructive" />
+              Unlink Telegram Account?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will disconnect your Telegram account from your profile. You will no longer receive notifications via Telegram. You can link a new Telegram account later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={unlinking}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleUnlinkTelegram}
+              disabled={unlinking}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {unlinking ? "Unlinking..." : "Unlink Telegram"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
