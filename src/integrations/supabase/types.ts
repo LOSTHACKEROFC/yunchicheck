@@ -113,6 +113,36 @@ export type Database = {
         }
         Relationships: []
       }
+      pending_verifications: {
+        Row: {
+          created_at: string
+          email: string | null
+          expires_at: string
+          id: string
+          telegram_chat_id: string
+          verification_code: string
+          verified: boolean
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          expires_at: string
+          id?: string
+          telegram_chat_id: string
+          verification_code: string
+          verified?: boolean
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          expires_at?: string
+          id?: string
+          telegram_chat_id?: string
+          verification_code?: string
+          verified?: boolean
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           balance: number
