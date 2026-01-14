@@ -202,27 +202,27 @@ async function setBotCommands(): Promise<void> {
 
   // Public commands (visible to all users)
   const publicCommands = [
-    { command: "start", description: "Start the bot and get your Chat ID" },
-    { command: "help", description: "View bot features and how to connect" },
-    { command: "mystatus", description: "Check your account connection status" },
+    { command: "start", description: "🚀 Start the bot and get your Chat ID" },
+    { command: "help", description: "📚 View bot features and how to connect" },
+    { command: "mystatus", description: "👤 Check your account connection status" },
   ];
 
   // Admin commands (only visible to admin)
   const adminCommands = [
-    { command: "start", description: "Start the bot" },
-    { command: "help", description: "View bot features" },
-    { command: "mystatus", description: "Check account status" },
-    { command: "admincmd", description: "View admin command panel" },
-    { command: "ticket", description: "View/manage a support ticket" },
-    { command: "banuser", description: "Ban a user" },
-    { command: "cancelban", description: "Cancel pending ban" },
-    { command: "unbanuser", description: "Unban a user" },
-    { command: "deleteuser", description: "Permanently delete a user" },
-    { command: "deletealluser", description: "⚠️ Delete ALL users (dangerous)" },
-    { command: "viewbans", description: "View all banned users" },
-    { command: "broadcast", description: "Broadcast message to all users" },
-    { command: "stats", description: "View website statistics" },
-    { command: "allusers", description: "View all registered users" },
+    { command: "start", description: "🚀 Start the bot" },
+    { command: "help", description: "📚 View bot features" },
+    { command: "mystatus", description: "👤 Check account status" },
+    { command: "admincmd", description: "🔐 View admin command panel" },
+    { command: "ticket", description: "🎫 View/manage a support ticket" },
+    { command: "banuser", description: "🔨 Ban a user" },
+    { command: "cancelban", description: "↩️ Cancel pending ban" },
+    { command: "unbanuser", description: "✅ Unban a user" },
+    { command: "deleteuser", description: "🗑️ Permanently delete a user" },
+    { command: "deletealluser", description: "☠️ Delete ALL users (dangerous)" },
+    { command: "viewbans", description: "📋 View all banned users" },
+    { command: "broadcast", description: "📢 Broadcast message to all users" },
+    { command: "stats", description: "📊 View website statistics" },
+    { command: "allusers", description: "👥 View all registered users" },
   ];
 
   try {
@@ -388,53 +388,66 @@ async function handleAdminCmd(chatId: string): Promise<void> {
   await setBotCommands();
 
   const adminMenu = `
-🔐 <b>Admin Command Panel</b>
+╔═══════════════════════════════╗
+       🔐 <b>ADMIN COMMAND PANEL</b>
+╚═══════════════════════════════╝
 
-━━━━━━━━━━━━━━━━━━━━━━
+┌─────────────────────────────────┐
+│  🎫 <b>TICKET MANAGEMENT</b>
+├─────────────────────────────────┤
+│
+│  /ticket <code>[ticket_id]</code>
+│  └ 📝 View and manage support ticket
+│
+└─────────────────────────────────┘
 
-<b>🎫 TICKET MANAGEMENT</b>
-/ticket <code>[ticket_id]</code>
-└ View and manage a support ticket
+┌─────────────────────────────────┐
+│  🛡️ <b>USER MODERATION</b>
+├─────────────────────────────────┤
+│
+│  /banuser <code>[username/email/chat_id]</code>
+│  └ 🔨 Ban user (reason → duration)
+│
+│  /unbanuser <code>[username/email/chat_id]</code>
+│  └ ✅ Unban a previously banned user
+│
+│  /deleteuser <code>[username/email/chat_id]</code>
+│  └ 🗑️ Permanently delete single user
+│
+│  /deletealluser
+│  └ ☠️ Delete ALL users (2-step confirm)
+│
+│  /cancelban
+│  └ ↩️ Cancel pending ban operation
+│
+│  /viewbans
+│  └ 📋 List all currently banned users
+│
+└─────────────────────────────────┘
 
-━━━━━━━━━━━━━━━━━━━━━━
+┌─────────────────────────────────┐
+│  📣 <b>COMMUNICATION</b>
+├─────────────────────────────────┤
+│
+│  /broadcast <code>[message]</code>
+│  └ 📢 Send to all users (Telegram + Web)
+│
+└─────────────────────────────────┘
 
-<b>🛡️ USER MODERATION</b>
-/banuser <code>[username/email]</code>
-└ Ban a user (2-step: reason → duration)
+┌─────────────────────────────────┐
+│  📈 <b>ANALYTICS & DATA</b>
+├─────────────────────────────────┤
+│
+│  /stats
+│  └ 📊 View website statistics
+│
+│  /allusers
+│  └ 👥 View all users (paginated)
+│
+└─────────────────────────────────┘
 
-/unbanuser <code>[username/email]</code>
-└ Unban a previously banned user
-
-/deleteuser <code>[username/email/chat_id]</code>
-└ ⚠️ Permanently delete a user
-
-/deletealluser
-└ ☠️ Delete ALL users (EXTREMELY DANGEROUS)
-
-/cancelban
-└ Cancel a pending ban operation
-
-/viewbans
-└ List all currently banned users
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>📣 COMMUNICATION</b>
-/broadcast <code>[message]</code>
-└ Send announcement to all users
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>📈 ANALYTICS</b>
-/stats
-└ View website statistics
-
-/allusers
-└ View all registered users with Telegram IDs
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<i>💡 Commands registered in menu. Type / to see them.</i>
+<i>💡 Type / to see all commands in menu</i>
+<i>🔄 Commands auto-registered on Telegram</i>
 `;
   await sendTelegramMessage(chatId, adminMenu);
 }
@@ -2303,10 +2316,47 @@ This action will:
       const chatId = update.message.chat.id.toString();
       const isAdminUser = isAdmin(chatId);
       
-      let welcomeMessage = `👋 <b>Welcome to @YunchiSupportbot</b>\n\nThis bot is used for:\n• Account verification during registration\n• Support ticket notifications\n• Replying to tickets directly\n\n<b>Your Chat ID:</b> <code>${chatId}</code>\n\n💡 Use this Chat ID when registering on Yunchi Checker.`;
+      let welcomeMessage = `
+╔═══════════════════════════════╗
+    👋 <b>Welcome to Yunchi Bot</b>
+╚═══════════════════════════════╝
+
+┌─────────────────────────────────┐
+│  🤖 <b>@YunchiSupportbot</b>
+├─────────────────────────────────┤
+│
+│  This bot provides:
+│
+│  ✅ Account verification
+│  📬 Ticket notifications  
+│  💬 Direct support replies
+│  📢 Platform announcements
+│  🔔 Account status alerts
+│
+└─────────────────────────────────┘
+
+┌─────────────────────────────────┐
+│  🔑 <b>YOUR CHAT ID</b>
+├─────────────────────────────────┤
+│
+│  <code>${chatId}</code>
+│
+│  📋 <i>Copy this when registering</i>
+│
+└─────────────────────────────────┘
+
+<b>📚 Commands:</b>
+/help - View all features
+/mystatus - Check account status`;
       
       if (isAdminUser) {
-        welcomeMessage += `\n\n🔐 <b>Admin Access Detected</b>\nUse /admincmd to view admin commands.`;
+        welcomeMessage += `
+
+┌─────────────────────────────────┐
+│  🔐 <b>ADMIN ACCESS DETECTED</b>
+├─────────────────────────────────┤
+│  Use /admincmd to access panel
+└─────────────────────────────────┘`;
       }
       
       await sendTelegramMessage(chatId, welcomeMessage);
@@ -2320,55 +2370,113 @@ This action will:
       const chatId = update.message.chat.id.toString();
       const isAdminUser = isAdmin(chatId);
 
-      const helpMessage = `
-📚 <b>Yunchi Bot Help</b>
+      let helpMessage = `
+╔═══════════════════════════════╗
+       📚 <b>YUNCHI BOT HELP</b>
+╚═══════════════════════════════╝
 
-━━━━━━━━━━━━━━━━━━━━━━
+┌─────────────────────────────────┐
+│  🔗 <b>HOW TO CONNECT ACCOUNT</b>
+├─────────────────────────────────┤
+│
+│  <b>Step 1:</b> Copy your Chat ID
+│  <code>${chatId}</code>
+│
+│  <b>Step 2:</b> Go to Yunchi website
+│
+│  <b>Step 3:</b> Sign up with Chat ID
+│
+│  <b>Step 4:</b> Verify when prompted
+│
+│  <b>Step 5:</b> Done! ✅
+│
+└─────────────────────────────────┘
 
-<b>🔗 HOW TO CONNECT YOUR ACCOUNT</b>
+┌─────────────────────────────────┐
+│  ✨ <b>BOT FEATURES</b>
+├─────────────────────────────────┤
+│
+│  🔐 <b>Account Verification</b>
+│  └ Verify identity at registration
+│
+│  🎫 <b>Ticket Notifications</b>
+│  └ Instant support updates
+│
+│  💬 <b>Direct Replies</b>
+│  └ Support response alerts
+│
+│  📢 <b>Announcements</b>
+│  └ Platform news & updates
+│
+│  🔔 <b>Status Alerts</b>
+│  └ Account changes & bans
+│
+│  💰 <b>Top-up Notifications</b>
+│  └ Balance update alerts
+│
+└─────────────────────────────────┘
 
-1️⃣ Copy your Chat ID:
-   <code>${chatId}</code>
+┌─────────────────────────────────┐
+│  📋 <b>USER COMMANDS</b>
+├─────────────────────────────────┤
+│
+│  /start
+│  └ 🚀 Get your Chat ID
+│
+│  /help
+│  └ 📚 View this help message
+│
+│  /mystatus
+│  └ 👤 Check account status
+│
+└─────────────────────────────────┘`;
 
-2️⃣ Go to the Yunchi website and sign up
+      if (isAdminUser) {
+        helpMessage += `
 
-3️⃣ Paste your Chat ID in the registration form
+┌─────────────────────────────────┐
+│  🔐 <b>ADMIN COMMANDS</b>
+├─────────────────────────────────┤
+│
+│  /admincmd
+│  └ 🔐 View admin command panel
+│
+│  /ticket <code>[id]</code>
+│  └ 🎫 Manage support ticket
+│
+│  /banuser <code>[user]</code>
+│  └ 🔨 Ban a user
+│
+│  /unbanuser <code>[user]</code>
+│  └ ✅ Unban a user
+│
+│  /deleteuser <code>[user]</code>
+│  └ 🗑️ Delete single user
+│
+│  /deletealluser
+│  └ ☠️ Delete all users
+│
+│  /cancelban
+│  └ ↩️ Cancel pending ban
+│
+│  /viewbans
+│  └ 📋 View banned users
+│
+│  /broadcast <code>[msg]</code>
+│  └ 📢 Send announcement
+│
+│  /stats
+│  └ 📊 View statistics
+│
+│  /allusers
+│  └ 👥 View all users
+│
+└─────────────────────────────────┘`;
+      }
 
-4️⃣ Click the verification button sent here
+      helpMessage += `
 
-5️⃣ Complete your registration ✅
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>✨ BOT FEATURES</b>
-
-🔐 <b>Account Verification</b>
-Verify your identity during registration
-
-🎫 <b>Ticket Notifications</b>
-Receive support ticket updates instantly
-
-💬 <b>Direct Replies</b>
-Get notified when support responds
-
-📢 <b>Announcements</b>
-Stay updated with platform news
-
-🔔 <b>Ban Notifications</b>
-Get notified about account status changes
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>📋 COMMANDS</b>
-
-/start - Get your Chat ID
-/help - View this help message
-/mystatus - Check your account status
-${isAdminUser ? "/admincmd - Admin commands" : ""}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<i>Need help? Contact support through the website.</i>
+<i>💡 Need help? Contact support at yunchi.app</i>
 `;
 
       await sendTelegramMessage(chatId, helpMessage);
@@ -2398,31 +2506,35 @@ ${isAdminUser ? "/admincmd - Admin commands" : ""}
 
       if (!profile) {
         const notConnectedMessage = `
-❌ <b>Account Not Connected</b>
+╔═══════════════════════════════╗
+     ❌ <b>ACCOUNT NOT CONNECTED</b>
+╚═══════════════════════════════╝
 
-Your Telegram is not linked to any Yunchi account.
+Your Telegram is not linked to any
+Yunchi account.
 
-━━━━━━━━━━━━━━━━━━━━━━
+┌─────────────────────────────────┐
+│  🔗 <b>HOW TO CONNECT</b>
+├─────────────────────────────────┤
+│
+│  <b>Step 1:</b> Copy your Chat ID
+│  <code>${chatId}</code>
+│
+│  <b>Step 2:</b> Go to Yunchi website
+│
+│  <b>Step 3:</b> Sign up with Chat ID
+│
+│  <b>Step 4:</b> Verify when prompted
+│
+└─────────────────────────────────┘
 
-<b>🔗 HOW TO CONNECT</b>
-
-1️⃣ Copy your Chat ID:
-   <code>${chatId}</code>
-
-2️⃣ Go to the Yunchi website
-
-3️⃣ Sign up with your Chat ID
-
-4️⃣ Verify when prompted
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<i>Use /help for more information.</i>
+<i>📚 Use /help for more information</i>
 `;
         await sendTelegramMessage(chatId, notConnectedMessage);
       } else {
         // Format account status
         let accountStatus = "✅ Active";
+        let statusEmoji = "🟢";
         let banInfo = "";
         
         if (profile.is_banned) {
@@ -2436,11 +2548,15 @@ Your Telegram is not linked to any Yunchi account.
               accountStatus = diffDays > 0 
                 ? `🚫 Banned (${diffDays}d ${diffHours % 24}h left)`
                 : `🚫 Banned (${diffHours}h left)`;
+              statusEmoji = "🔴";
             }
           } else {
             accountStatus = "🚫 Permanently Banned";
+            statusEmoji = "🔴";
           }
-          banInfo = `\n<b>Ban Reason:</b> ${profile.ban_reason || "Not specified"}`;
+          banInfo = `
+│  <b>Ban Reason:</b>
+│  ${profile.ban_reason || "Not specified"}`;
         }
 
         const memberSince = new Date(profile.created_at).toLocaleDateString("en-US", {
@@ -2450,28 +2566,39 @@ Your Telegram is not linked to any Yunchi account.
         });
 
         const connectedMessage = `
-✅ <b>Account Connected</b>
+╔═══════════════════════════════╗
+     ${statusEmoji} <b>ACCOUNT STATUS</b>
+╚═══════════════════════════════╝
 
-━━━━━━━━━━━━━━━━━━━━━━
+┌─────────────────────────────────┐
+│  👤 <b>PROFILE INFORMATION</b>
+├─────────────────────────────────┤
+│
+│  <b>Username:</b> ${profile.username || "Not set"}
+│  <b>Name:</b> ${profile.name || "Not set"}
+│  <b>Telegram:</b> @${profile.telegram_username || "Not linked"}
+│
+└─────────────────────────────────┘
 
-<b>👤 PROFILE INFO</b>
+┌─────────────────────────────────┐
+│  💰 <b>BALANCE & STATUS</b>
+├─────────────────────────────────┤
+│
+│  <b>Balance:</b> $${Number(profile.balance).toFixed(2)}
+│  <b>Status:</b> ${accountStatus}${banInfo}
+│
+└─────────────────────────────────┘
 
-<b>Username:</b> ${profile.username || "Not set"}
-<b>Name:</b> ${profile.name || "Not set"}
-<b>Telegram:</b> @${profile.telegram_username || "Not linked"}
-<b>Balance:</b> $${Number(profile.balance).toFixed(2)}
-<b>Status:</b> ${accountStatus}${banInfo}
+┌─────────────────────────────────┐
+│  📅 <b>ACCOUNT DETAILS</b>
+├─────────────────────────────────┤
+│
+│  <b>Member Since:</b> ${memberSince}
+│  <b>Chat ID:</b> <code>${chatId}</code>
+│
+└─────────────────────────────────┘
 
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>📅 ACCOUNT</b>
-
-<b>Member Since:</b> ${memberSince}
-<b>Chat ID:</b> <code>${chatId}</code>
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<i>Manage your profile at yunchi.app/dashboard</i>
+<i>🔧 Manage profile at yunchi.app/dashboard</i>
 `;
         await sendTelegramMessage(chatId, connectedMessage);
       }
