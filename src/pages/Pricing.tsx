@@ -11,59 +11,62 @@ import {
   ArrowLeft,
   CreditCard
 } from "lucide-react";
-
-const plans = [
-  {
-    name: "Starter",
-    price: "$9.99",
-    period: "/month",
-    description: "Perfect for beginners",
-    icon: Zap,
-    popular: false,
-    features: [
-      { text: "100 checks/day", included: true },
-      { text: "2 gateways", included: true },
-      { text: "Basic support", included: true },
-      { text: "API access", included: false },
-      { text: "Priority queue", included: false },
-      { text: "Bulk checking", included: false },
-    ],
-  },
-  {
-    name: "Professional",
-    price: "$29.99",
-    period: "/month",
-    description: "Most popular choice",
-    icon: Crown,
-    popular: true,
-    features: [
-      { text: "500 checks/day", included: true },
-      { text: "All gateways", included: true },
-      { text: "Priority support", included: true },
-      { text: "API access", included: true },
-      { text: "Priority queue", included: true },
-      { text: "Bulk checking", included: false },
-    ],
-  },
-  {
-    name: "Enterprise",
-    price: "$99.99",
-    period: "/month",
-    description: "For power users",
-    icon: Rocket,
-    popular: false,
-    features: [
-      { text: "Unlimited checks", included: true },
-      { text: "All gateways", included: true },
-      { text: "24/7 VIP support", included: true },
-      { text: "Full API access", included: true },
-      { text: "Priority queue", included: true },
-      { text: "Bulk checking", included: true },
-    ],
-  },
-];
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const Pricing = () => {
+  const { t } = useLanguage();
+
+  const plans = [
+    {
+      name: t.starter,
+      price: "$9.99",
+      period: t.perMonth,
+      description: t.perfectForBeginners,
+      icon: Zap,
+      popular: false,
+      features: [
+        { text: `100 ${t.checksPerDay}`, included: true },
+        { text: t.twoGateways, included: true },
+        { text: t.basicSupport, included: true },
+        { text: t.apiAccess, included: false },
+        { text: t.priorityQueue, included: false },
+        { text: t.bulkChecking, included: false },
+      ],
+    },
+    {
+      name: t.professional,
+      price: "$29.99",
+      period: t.perMonth,
+      description: t.mostPopularChoice,
+      icon: Crown,
+      popular: true,
+      features: [
+        { text: `500 ${t.checksPerDay}`, included: true },
+        { text: t.allGateways, included: true },
+        { text: t.prioritySupport, included: true },
+        { text: t.apiAccess, included: true },
+        { text: t.priorityQueue, included: true },
+        { text: t.bulkChecking, included: false },
+      ],
+    },
+    {
+      name: t.enterprise,
+      price: "$99.99",
+      period: t.perMonth,
+      description: t.forPowerUsers,
+      icon: Rocket,
+      popular: false,
+      features: [
+        { text: t.unlimitedChecks, included: true },
+        { text: t.allGateways, included: true },
+        { text: t.vipSupport, included: true },
+        { text: t.fullApiAccess, included: true },
+        { text: t.priorityQueue, included: true },
+        { text: t.bulkChecking, included: true },
+      ],
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -81,11 +84,11 @@ const Pricing = () => {
             <Link to="/">
               <Button variant="ghost" className="text-foreground hover:text-primary">
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
+                {t.back}
               </Button>
             </Link>
             <Link to="/auth">
-              <Button className="btn-primary">Get Started</Button>
+              <Button className="btn-primary">{t.getStarted}</Button>
             </Link>
           </div>
         </div>
@@ -96,13 +99,14 @@ const Pricing = () => {
         <div className="text-center mb-12">
           <Badge className="bg-primary/20 text-primary border-primary/30 mb-4">
             <CreditCard className="h-3 w-3 mr-1" />
-            Pricing Plans
+            {t.pricingPlans}
           </Badge>
           <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">
-            Choose Your <span className="text-primary">Plan</span>
+            {t.chooseYourPlan.split(" ").slice(0, -1).join(" ")}{" "}
+            <span className="text-primary">{t.chooseYourPlan.split(" ").slice(-1)}</span>
           </h1>
           <p className="text-muted-foreground max-w-xl mx-auto">
-            Select the perfect plan for your needs. Upgrade or downgrade anytime.
+            {t.selectPerfectPlan}
           </p>
         </div>
 
@@ -118,7 +122,7 @@ const Pricing = () => {
               {plan.popular && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                   <Badge className="bg-primary text-primary-foreground">
-                    Most Popular
+                    {t.mostPopular}
                   </Badge>
                 </div>
               )}
@@ -159,7 +163,7 @@ const Pricing = () => {
                     className={`w-full ${plan.popular ? "btn-primary" : ""}`}
                     variant={plan.popular ? "default" : "outline"}
                   >
-                    Get Started
+                    {t.getStarted}
                   </Button>
                 </Link>
               </CardContent>
@@ -170,12 +174,12 @@ const Pricing = () => {
         {/* FAQ / Note */}
         <div className="text-center mt-16">
           <p className="text-muted-foreground text-sm">
-            All plans include secure payment processing. Cancel anytime.
+            {t.securePayment}
           </p>
           <p className="text-muted-foreground text-sm mt-2">
-            Need a custom plan?{" "}
+            {t.needCustomPlan}{" "}
             <Link to="/dashboard/support" className="text-primary hover:underline">
-              Contact us
+              {t.contactSupport}
             </Link>
           </p>
         </div>
@@ -184,7 +188,7 @@ const Pricing = () => {
       {/* Footer */}
       <footer className="border-t border-border py-8 mt-auto">
         <div className="container mx-auto px-4 text-center text-muted-foreground text-sm">
-          © 2024 Yunchi Checker. All rights reserved.
+          © 2024 Yunchi Checker. {t.allRightsReserved}
         </div>
       </footer>
     </div>

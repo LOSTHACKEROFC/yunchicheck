@@ -1,8 +1,11 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Shield, Zap, CreditCard } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const Index = () => {
+  const { t } = useLanguage();
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -19,17 +22,17 @@ const Index = () => {
           <div className="flex items-center gap-4">
             <Link to="/pricing">
               <Button variant="ghost" className="text-foreground hover:text-primary">
-                Pricing
+                {t.pricing}
               </Button>
             </Link>
             <Link to="/auth">
               <Button variant="ghost" className="text-foreground hover:text-primary">
-                Login
+                {t.login}
               </Button>
             </Link>
             <Link to="/auth">
               <Button className="btn-primary">
-                Get Started
+                {t.getStarted}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
@@ -41,23 +44,22 @@ const Index = () => {
       <section className="container mx-auto px-4 py-20">
         <div className="max-w-3xl mx-auto text-center">
           <h1 className="text-5xl md:text-6xl font-display font-bold mb-6">
-            Welcome to{" "}
+            {t.welcomeTo}{" "}
             <span className="text-primary">Yunchi Checker</span>
           </h1>
           <p className="text-xl text-muted-foreground mb-8">
-            Fast, reliable, and secure checking service. 
-            Join thousands of users worldwide.
+            {t.heroDescription}
           </p>
           <div className="flex gap-4 justify-center flex-wrap">
             <Link to="/auth">
               <Button size="lg" className="btn-primary">
-                Start Now
+                {t.startNow}
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
             <Link to="/pricing">
               <Button size="lg" variant="outline" className="border-primary text-primary hover:bg-primary/10">
-                View Pricing
+                {t.viewPricing}
               </Button>
             </Link>
           </div>
@@ -71,9 +73,9 @@ const Index = () => {
             <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
               <Zap className="h-6 w-6 text-primary" />
             </div>
-            <h3 className="text-lg font-bold mb-2">Fast Processing</h3>
+            <h3 className="text-lg font-bold mb-2">{t.fastProcessing}</h3>
             <p className="text-muted-foreground text-sm">
-              Lightning-fast checks with instant results
+              {t.fastProcessingDesc}
             </p>
           </div>
 
@@ -81,9 +83,9 @@ const Index = () => {
             <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
               <Shield className="h-6 w-6 text-primary" />
             </div>
-            <h3 className="text-lg font-bold mb-2">Secure Platform</h3>
+            <h3 className="text-lg font-bold mb-2">{t.securePlatform}</h3>
             <p className="text-muted-foreground text-sm">
-              Enterprise-grade security for your data
+              {t.securePlatformDesc}
             </p>
           </div>
 
@@ -91,9 +93,9 @@ const Index = () => {
             <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
               <CreditCard className="h-6 w-6 text-primary" />
             </div>
-            <h3 className="text-lg font-bold mb-2">Multiple Gateways</h3>
+            <h3 className="text-lg font-bold mb-2">{t.multipleGateways}</h3>
             <p className="text-muted-foreground text-sm">
-              Access to various payment gateways
+              {t.multipleGatewaysDesc}
             </p>
           </div>
         </div>
@@ -102,7 +104,7 @@ const Index = () => {
       {/* Footer */}
       <footer className="border-t border-border py-8">
         <div className="container mx-auto px-4 text-center text-muted-foreground text-sm">
-          © 2024 Yunchi Checker. All rights reserved.
+          © 2024 Yunchi Checker. {t.allRightsReserved}
         </div>
       </footer>
     </div>

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { z } from "zod";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const authSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -14,6 +15,7 @@ const authSchema = z.object({
 });
 
 const Auth = () => {
+  const { t } = useLanguage();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -56,7 +58,7 @@ const Auth = () => {
           password,
         });
         if (error) throw error;
-        toast.success("Login successful!");
+        toast.success(t.loginSuccessful);
       } else {
         const { error } = await supabase.auth.signUp({
           email,
@@ -67,7 +69,7 @@ const Auth = () => {
           },
         });
         if (error) throw error;
-        toast.success("Registration successful!");
+        toast.success(t.registrationSuccessful);
       }
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -88,7 +90,7 @@ const Auth = () => {
             Yunchi Checker
           </h1>
           <p className="text-muted-foreground">
-            {isLogin ? "Sign in to your account" : "Create your account"}
+            {isLogin ? t.signInToAccount : t.createAccount}
           </p>
         </div>
 
@@ -96,39 +98,39 @@ const Auth = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
               <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
+                <Label htmlFor="username">{t.username}</Label>
                 <Input
                   id="username"
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter username"
+                  placeholder={t.enterUsername}
                   className="bg-secondary border-border"
                 />
               </div>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t.email}</Label>
               <Input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter email"
+                placeholder={t.enterEmail}
                 className="bg-secondary border-border"
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t.password}</Label>
               <Input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
+                placeholder={t.enterPassword}
                 className="bg-secondary border-border"
                 required
               />
@@ -139,7 +141,7 @@ const Auth = () => {
               className="w-full btn-primary"
               disabled={loading}
             >
-              {loading ? "Loading..." : isLogin ? "Sign In" : "Sign Up"}
+              {loading ? t.loading : isLogin ? t.signIn : t.signUp}
             </Button>
           </form>
 
@@ -149,9 +151,7 @@ const Auth = () => {
               onClick={() => setIsLogin(!isLogin)}
               className="text-primary hover:underline text-sm"
             >
-              {isLogin
-                ? "Don't have an account? Sign up"
-                : "Already have an account? Sign in"}
+              {isLogin ? t.dontHaveAccount : t.alreadyHaveAccount}
             </button>
           </div>
         </div>
