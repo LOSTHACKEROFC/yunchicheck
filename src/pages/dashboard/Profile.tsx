@@ -6,7 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { User, Mail, Calendar, Shield, Key, MessageCircle } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+interface TelegramProfile {
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+}
 
 const Profile = () => {
   const [username, setUsername] = useState("");
@@ -17,6 +24,34 @@ const Profile = () => {
   const [balance, setBalance] = useState(0);
   const [createdAt, setCreatedAt] = useState("");
   const [loading, setLoading] = useState(false);
+  const [telegramProfile, setTelegramProfile] = useState<TelegramProfile | null>(null);
+  const [loadingTelegram, setLoadingTelegram] = useState(false);
+
+  const fetchTelegramProfile = async (chatId: string) => {
+    if (!chatId) {
+      setTelegramProfile(null);
+      return;
+    }
+    
+    setLoadingTelegram(true);
+    try {
+      const response = await supabase.functions.invoke("get-telegram-profile", {
+        body: { chat_id: chatId },
+      });
+      
+      if (response.error) {
+        console.error("Error fetching Telegram profile:", response.error);
+        setTelegramProfile(null);
+      } else {
+        setTelegramProfile(response.data);
+      }
+    } catch (error) {
+      console.error("Error fetching Telegram profile:", error);
+      setTelegramProfile(null);
+    } finally {
+      setLoadingTelegram(false);
+    }
+  };
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -34,6 +69,11 @@ const Profile = () => {
         setTelegramChatId(data?.telegram_chat_id || "");
         setTelegramUsername(data?.telegram_username || "");
         setBalance(data?.balance || 0);
+        
+        // Fetch Telegram profile if chat ID exists
+        if (data?.telegram_chat_id) {
+          fetchTelegramProfile(data.telegram_chat_id);
+        }
       }
     };
     fetchProfile();
@@ -81,13 +121,30 @@ const Profile = () => {
           <CardContent className="space-y-6">
             <div className="flex items-center gap-4">
               <Avatar className="h-20 w-20 border-2 border-primary">
+                {telegramProfile?.photo_url ? (
+                  <AvatarImage 
+                    src={telegramProfile.photo_url} 
+                    alt="Telegram Profile" 
+                    className="object-cover"
+                  />
+                ) : null}
                 <AvatarFallback className="bg-primary/20 text-primary text-2xl font-bold">
-                  {username?.charAt(0)?.toUpperCase() || email?.charAt(0)?.toUpperCase() || "U"}
+                  {loadingTelegram ? "..." : (username?.charAt(0)?.toUpperCase() || email?.charAt(0)?.toUpperCase() || "U")}
                 </AvatarFallback>
               </Avatar>
               <div>
-                <h3 className="text-xl font-bold">{username || "User"}</h3>
+                <h3 className="text-xl font-bold">
+                  {telegramProfile?.first_name 
+                    ? `${telegramProfile.first_name}${telegramProfile.last_name ? ` ${telegramProfile.last_name}` : ""}`
+                    : (username || "User")}
+                </h3>
                 <p className="text-muted-foreground text-sm">{email}</p>
+                {telegramProfile?.username && (
+                  <p className="text-primary text-sm flex items-center gap-1 mt-1">
+                    <MessageCircle className="h-3 w-3" />
+                    @{telegramProfile.username}
+                  </p>
+                )}
               </div>
             </div>
 
