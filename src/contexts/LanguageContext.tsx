@@ -67,6 +67,62 @@ export interface Translations {
   notificationsEnabled: string;
   notificationsDisabled: string;
   languageChanged: string;
+  
+  // Auth page
+  signInToAccount: string;
+  createAccount: string;
+  username: string;
+  enterUsername: string;
+  loading: string;
+  signIn: string;
+  signUp: string;
+  dontHaveAccount: string;
+  alreadyHaveAccount: string;
+  loginSuccessful: string;
+  registrationSuccessful: string;
+  
+  // Index page
+  welcomeTo: string;
+  heroDescription: string;
+  startNow: string;
+  viewPricing: string;
+  fastProcessing: string;
+  fastProcessingDesc: string;
+  securePlatform: string;
+  securePlatformDesc: string;
+  multipleGateways: string;
+  multipleGatewaysDesc: string;
+  allRightsReserved: string;
+  login: string;
+  getStarted: string;
+  pricing: string;
+  back: string;
+  
+  // Pricing page
+  pricingPlans: string;
+  chooseYourPlan: string;
+  selectPerfectPlan: string;
+  mostPopular: string;
+  starter: string;
+  professional: string;
+  enterprise: string;
+  perfectForBeginners: string;
+  mostPopularChoice: string;
+  forPowerUsers: string;
+  checksPerDay: string;
+  unlimitedChecks: string;
+  twoGateways: string;
+  allGateways: string;
+  basicSupport: string;
+  prioritySupport: string;
+  vipSupport: string;
+  apiAccess: string;
+  fullApiAccess: string;
+  priorityQueue: string;
+  bulkChecking: string;
+  securePayment: string;
+  needCustomPlan: string;
+  perMonth: string;
 }
 
 const translations: Record<Language, Translations> = {
@@ -126,6 +182,59 @@ const translations: Record<Language, Translations> = {
     notificationsEnabled: "notifications enabled",
     notificationsDisabled: "notifications disabled",
     languageChanged: "Language changed to",
+    // Auth
+    signInToAccount: "Sign in to your account",
+    createAccount: "Create your account",
+    username: "Username",
+    enterUsername: "Enter username",
+    loading: "Loading...",
+    signIn: "Sign In",
+    signUp: "Sign Up",
+    dontHaveAccount: "Don't have an account? Sign up",
+    alreadyHaveAccount: "Already have an account? Sign in",
+    loginSuccessful: "Login successful!",
+    registrationSuccessful: "Registration successful!",
+    // Index
+    welcomeTo: "Welcome to",
+    heroDescription: "Fast, reliable, and secure checking service. Join thousands of users worldwide.",
+    startNow: "Start Now",
+    viewPricing: "View Pricing",
+    fastProcessing: "Fast Processing",
+    fastProcessingDesc: "Lightning-fast checks with instant results",
+    securePlatform: "Secure Platform",
+    securePlatformDesc: "Enterprise-grade security for your data",
+    multipleGateways: "Multiple Gateways",
+    multipleGatewaysDesc: "Access to various payment gateways",
+    allRightsReserved: "All rights reserved.",
+    login: "Login",
+    getStarted: "Get Started",
+    pricing: "Pricing",
+    back: "Back",
+    // Pricing
+    pricingPlans: "Pricing Plans",
+    chooseYourPlan: "Choose Your Plan",
+    selectPerfectPlan: "Select the perfect plan for your needs. Upgrade or downgrade anytime.",
+    mostPopular: "Most Popular",
+    starter: "Starter",
+    professional: "Professional",
+    enterprise: "Enterprise",
+    perfectForBeginners: "Perfect for beginners",
+    mostPopularChoice: "Most popular choice",
+    forPowerUsers: "For power users",
+    checksPerDay: "checks/day",
+    unlimitedChecks: "Unlimited checks",
+    twoGateways: "2 gateways",
+    allGateways: "All gateways",
+    basicSupport: "Basic support",
+    prioritySupport: "Priority support",
+    vipSupport: "24/7 VIP support",
+    apiAccess: "API access",
+    fullApiAccess: "Full API access",
+    priorityQueue: "Priority queue",
+    bulkChecking: "Bulk checking",
+    securePayment: "All plans include secure payment processing. Cancel anytime.",
+    needCustomPlan: "Need a custom plan?",
+    perMonth: "/month",
   },
   es: {
     settings: "Configuración",
@@ -183,6 +292,59 @@ const translations: Record<Language, Translations> = {
     notificationsEnabled: "notificaciones activadas",
     notificationsDisabled: "notificaciones desactivadas",
     languageChanged: "Idioma cambiado a",
+    // Auth
+    signInToAccount: "Inicia sesión en tu cuenta",
+    createAccount: "Crea tu cuenta",
+    username: "Usuario",
+    enterUsername: "Ingresa usuario",
+    loading: "Cargando...",
+    signIn: "Iniciar Sesión",
+    signUp: "Registrarse",
+    dontHaveAccount: "¿No tienes cuenta? Regístrate",
+    alreadyHaveAccount: "¿Ya tienes cuenta? Inicia sesión",
+    loginSuccessful: "¡Inicio de sesión exitoso!",
+    registrationSuccessful: "¡Registro exitoso!",
+    // Index
+    welcomeTo: "Bienvenido a",
+    heroDescription: "Servicio de verificación rápido, confiable y seguro. Únete a miles de usuarios en todo el mundo.",
+    startNow: "Comenzar Ahora",
+    viewPricing: "Ver Precios",
+    fastProcessing: "Procesamiento Rápido",
+    fastProcessingDesc: "Verificaciones ultrarrápidas con resultados instantáneos",
+    securePlatform: "Plataforma Segura",
+    securePlatformDesc: "Seguridad de nivel empresarial para tus datos",
+    multipleGateways: "Múltiples Pasarelas",
+    multipleGatewaysDesc: "Acceso a varias pasarelas de pago",
+    allRightsReserved: "Todos los derechos reservados.",
+    login: "Iniciar Sesión",
+    getStarted: "Comenzar",
+    pricing: "Precios",
+    back: "Volver",
+    // Pricing
+    pricingPlans: "Planes de Precios",
+    chooseYourPlan: "Elige Tu Plan",
+    selectPerfectPlan: "Selecciona el plan perfecto para tus necesidades. Actualiza o degrada en cualquier momento.",
+    mostPopular: "Más Popular",
+    starter: "Inicial",
+    professional: "Profesional",
+    enterprise: "Empresarial",
+    perfectForBeginners: "Perfecto para principiantes",
+    mostPopularChoice: "La opción más popular",
+    forPowerUsers: "Para usuarios avanzados",
+    checksPerDay: "verificaciones/día",
+    unlimitedChecks: "Verificaciones ilimitadas",
+    twoGateways: "2 pasarelas",
+    allGateways: "Todas las pasarelas",
+    basicSupport: "Soporte básico",
+    prioritySupport: "Soporte prioritario",
+    vipSupport: "Soporte VIP 24/7",
+    apiAccess: "Acceso API",
+    fullApiAccess: "Acceso API completo",
+    priorityQueue: "Cola prioritaria",
+    bulkChecking: "Verificación masiva",
+    securePayment: "Todos los planes incluyen procesamiento de pago seguro. Cancela en cualquier momento.",
+    needCustomPlan: "¿Necesitas un plan personalizado?",
+    perMonth: "/mes",
   },
   fr: {
     settings: "Paramètres",
@@ -240,6 +402,59 @@ const translations: Record<Language, Translations> = {
     notificationsEnabled: "notifications activées",
     notificationsDisabled: "notifications désactivées",
     languageChanged: "Langue changée en",
+    // Auth
+    signInToAccount: "Connectez-vous à votre compte",
+    createAccount: "Créez votre compte",
+    username: "Nom d'utilisateur",
+    enterUsername: "Entrez le nom d'utilisateur",
+    loading: "Chargement...",
+    signIn: "Se Connecter",
+    signUp: "S'inscrire",
+    dontHaveAccount: "Pas de compte? Inscrivez-vous",
+    alreadyHaveAccount: "Déjà un compte? Connectez-vous",
+    loginSuccessful: "Connexion réussie!",
+    registrationSuccessful: "Inscription réussie!",
+    // Index
+    welcomeTo: "Bienvenue sur",
+    heroDescription: "Service de vérification rapide, fiable et sécurisé. Rejoignez des milliers d'utilisateurs dans le monde.",
+    startNow: "Commencer",
+    viewPricing: "Voir les Prix",
+    fastProcessing: "Traitement Rapide",
+    fastProcessingDesc: "Vérifications ultra-rapides avec résultats instantanés",
+    securePlatform: "Plateforme Sécurisée",
+    securePlatformDesc: "Sécurité de niveau entreprise pour vos données",
+    multipleGateways: "Passerelles Multiples",
+    multipleGatewaysDesc: "Accès à diverses passerelles de paiement",
+    allRightsReserved: "Tous droits réservés.",
+    login: "Connexion",
+    getStarted: "Commencer",
+    pricing: "Tarifs",
+    back: "Retour",
+    // Pricing
+    pricingPlans: "Plans Tarifaires",
+    chooseYourPlan: "Choisissez Votre Plan",
+    selectPerfectPlan: "Sélectionnez le plan parfait pour vos besoins. Mettez à niveau ou rétrogradez à tout moment.",
+    mostPopular: "Plus Populaire",
+    starter: "Débutant",
+    professional: "Professionnel",
+    enterprise: "Entreprise",
+    perfectForBeginners: "Parfait pour les débutants",
+    mostPopularChoice: "Le choix le plus populaire",
+    forPowerUsers: "Pour les utilisateurs avancés",
+    checksPerDay: "vérifications/jour",
+    unlimitedChecks: "Vérifications illimitées",
+    twoGateways: "2 passerelles",
+    allGateways: "Toutes les passerelles",
+    basicSupport: "Support basique",
+    prioritySupport: "Support prioritaire",
+    vipSupport: "Support VIP 24/7",
+    apiAccess: "Accès API",
+    fullApiAccess: "Accès API complet",
+    priorityQueue: "File prioritaire",
+    bulkChecking: "Vérification en masse",
+    securePayment: "Tous les plans incluent un traitement de paiement sécurisé. Annulez à tout moment.",
+    needCustomPlan: "Besoin d'un plan personnalisé?",
+    perMonth: "/mois",
   },
   de: {
     settings: "Einstellungen",
@@ -297,6 +512,59 @@ const translations: Record<Language, Translations> = {
     notificationsEnabled: "Benachrichtigungen aktiviert",
     notificationsDisabled: "Benachrichtigungen deaktiviert",
     languageChanged: "Sprache geändert zu",
+    // Auth
+    signInToAccount: "Melden Sie sich bei Ihrem Konto an",
+    createAccount: "Erstellen Sie Ihr Konto",
+    username: "Benutzername",
+    enterUsername: "Benutzername eingeben",
+    loading: "Laden...",
+    signIn: "Anmelden",
+    signUp: "Registrieren",
+    dontHaveAccount: "Kein Konto? Registrieren",
+    alreadyHaveAccount: "Bereits ein Konto? Anmelden",
+    loginSuccessful: "Anmeldung erfolgreich!",
+    registrationSuccessful: "Registrierung erfolgreich!",
+    // Index
+    welcomeTo: "Willkommen bei",
+    heroDescription: "Schneller, zuverlässiger und sicherer Überprüfungsservice. Schließen Sie sich Tausenden von Benutzern weltweit an.",
+    startNow: "Jetzt Starten",
+    viewPricing: "Preise Ansehen",
+    fastProcessing: "Schnelle Verarbeitung",
+    fastProcessingDesc: "Blitzschnelle Überprüfungen mit sofortigen Ergebnissen",
+    securePlatform: "Sichere Plattform",
+    securePlatformDesc: "Sicherheit auf Unternehmensebene für Ihre Daten",
+    multipleGateways: "Mehrere Gateways",
+    multipleGatewaysDesc: "Zugang zu verschiedenen Zahlungs-Gateways",
+    allRightsReserved: "Alle Rechte vorbehalten.",
+    login: "Anmelden",
+    getStarted: "Loslegen",
+    pricing: "Preise",
+    back: "Zurück",
+    // Pricing
+    pricingPlans: "Preispläne",
+    chooseYourPlan: "Wählen Sie Ihren Plan",
+    selectPerfectPlan: "Wählen Sie den perfekten Plan für Ihre Bedürfnisse. Jederzeit upgraden oder downgraden.",
+    mostPopular: "Beliebteste",
+    starter: "Starter",
+    professional: "Professionell",
+    enterprise: "Unternehmen",
+    perfectForBeginners: "Perfekt für Anfänger",
+    mostPopularChoice: "Die beliebteste Wahl",
+    forPowerUsers: "Für Power-User",
+    checksPerDay: "Überprüfungen/Tag",
+    unlimitedChecks: "Unbegrenzte Überprüfungen",
+    twoGateways: "2 Gateways",
+    allGateways: "Alle Gateways",
+    basicSupport: "Basis-Support",
+    prioritySupport: "Prioritäts-Support",
+    vipSupport: "24/7 VIP-Support",
+    apiAccess: "API-Zugang",
+    fullApiAccess: "Voller API-Zugang",
+    priorityQueue: "Prioritätswarteschlange",
+    bulkChecking: "Massenüberprüfung",
+    securePayment: "Alle Pläne beinhalten sichere Zahlungsabwicklung. Jederzeit kündbar.",
+    needCustomPlan: "Benötigen Sie einen individuellen Plan?",
+    perMonth: "/Monat",
   },
   ar: {
     settings: "الإعدادات",
@@ -354,6 +622,59 @@ const translations: Record<Language, Translations> = {
     notificationsEnabled: "تم تفعيل الإشعارات",
     notificationsDisabled: "تم إيقاف الإشعارات",
     languageChanged: "تم تغيير اللغة إلى",
+    // Auth
+    signInToAccount: "تسجيل الدخول إلى حسابك",
+    createAccount: "إنشاء حسابك",
+    username: "اسم المستخدم",
+    enterUsername: "أدخل اسم المستخدم",
+    loading: "جاري التحميل...",
+    signIn: "تسجيل الدخول",
+    signUp: "إنشاء حساب",
+    dontHaveAccount: "ليس لديك حساب؟ سجل الآن",
+    alreadyHaveAccount: "لديك حساب بالفعل؟ سجل دخول",
+    loginSuccessful: "تم تسجيل الدخول بنجاح!",
+    registrationSuccessful: "تم التسجيل بنجاح!",
+    // Index
+    welcomeTo: "مرحباً بك في",
+    heroDescription: "خدمة فحص سريعة وموثوقة وآمنة. انضم إلى آلاف المستخدمين حول العالم.",
+    startNow: "ابدأ الآن",
+    viewPricing: "عرض الأسعار",
+    fastProcessing: "معالجة سريعة",
+    fastProcessingDesc: "فحوصات فائقة السرعة مع نتائج فورية",
+    securePlatform: "منصة آمنة",
+    securePlatformDesc: "أمان على مستوى المؤسسات لبياناتك",
+    multipleGateways: "بوابات متعددة",
+    multipleGatewaysDesc: "الوصول إلى بوابات دفع متنوعة",
+    allRightsReserved: "جميع الحقوق محفوظة.",
+    login: "تسجيل الدخول",
+    getStarted: "ابدأ",
+    pricing: "الأسعار",
+    back: "رجوع",
+    // Pricing
+    pricingPlans: "خطط الأسعار",
+    chooseYourPlan: "اختر خطتك",
+    selectPerfectPlan: "اختر الخطة المثالية لاحتياجاتك. قم بالترقية أو التخفيض في أي وقت.",
+    mostPopular: "الأكثر شعبية",
+    starter: "مبتدئ",
+    professional: "احترافي",
+    enterprise: "مؤسسي",
+    perfectForBeginners: "مثالي للمبتدئين",
+    mostPopularChoice: "الخيار الأكثر شعبية",
+    forPowerUsers: "للمستخدمين المتقدمين",
+    checksPerDay: "فحص/يوم",
+    unlimitedChecks: "فحوصات غير محدودة",
+    twoGateways: "2 بوابة",
+    allGateways: "جميع البوابات",
+    basicSupport: "دعم أساسي",
+    prioritySupport: "دعم ذو أولوية",
+    vipSupport: "دعم VIP على مدار الساعة",
+    apiAccess: "الوصول إلى API",
+    fullApiAccess: "وصول كامل إلى API",
+    priorityQueue: "قائمة انتظار ذات أولوية",
+    bulkChecking: "فحص جماعي",
+    securePayment: "جميع الخطط تتضمن معالجة دفع آمنة. إلغاء في أي وقت.",
+    needCustomPlan: "تحتاج خطة مخصصة؟",
+    perMonth: "/شهر",
   },
   zh: {
     settings: "设置",
@@ -411,6 +732,59 @@ const translations: Record<Language, Translations> = {
     notificationsEnabled: "通知已启用",
     notificationsDisabled: "通知已禁用",
     languageChanged: "语言已更改为",
+    // Auth
+    signInToAccount: "登录您的账户",
+    createAccount: "创建您的账户",
+    username: "用户名",
+    enterUsername: "输入用户名",
+    loading: "加载中...",
+    signIn: "登录",
+    signUp: "注册",
+    dontHaveAccount: "没有账户？注册",
+    alreadyHaveAccount: "已有账户？登录",
+    loginSuccessful: "登录成功！",
+    registrationSuccessful: "注册成功！",
+    // Index
+    welcomeTo: "欢迎来到",
+    heroDescription: "快速、可靠、安全的检查服务。加入全球数千用户。",
+    startNow: "立即开始",
+    viewPricing: "查看定价",
+    fastProcessing: "快速处理",
+    fastProcessingDesc: "闪电般的检查，即时结果",
+    securePlatform: "安全平台",
+    securePlatformDesc: "企业级数据安全",
+    multipleGateways: "多种网关",
+    multipleGatewaysDesc: "访问各种支付网关",
+    allRightsReserved: "版权所有。",
+    login: "登录",
+    getStarted: "开始使用",
+    pricing: "定价",
+    back: "返回",
+    // Pricing
+    pricingPlans: "定价方案",
+    chooseYourPlan: "选择您的方案",
+    selectPerfectPlan: "选择适合您需求的完美方案。随时升级或降级。",
+    mostPopular: "最受欢迎",
+    starter: "入门版",
+    professional: "专业版",
+    enterprise: "企业版",
+    perfectForBeginners: "适合初学者",
+    mostPopularChoice: "最受欢迎的选择",
+    forPowerUsers: "适合高级用户",
+    checksPerDay: "次检查/天",
+    unlimitedChecks: "无限检查",
+    twoGateways: "2个网关",
+    allGateways: "所有网关",
+    basicSupport: "基础支持",
+    prioritySupport: "优先支持",
+    vipSupport: "24/7 VIP支持",
+    apiAccess: "API访问",
+    fullApiAccess: "完整API访问",
+    priorityQueue: "优先队列",
+    bulkChecking: "批量检查",
+    securePayment: "所有方案包含安全支付处理。随时取消。",
+    needCustomPlan: "需要定制方案？",
+    perMonth: "/月",
   },
 };
 
