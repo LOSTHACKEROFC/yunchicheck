@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Settings, Volume2, VolumeX, UserX, Sun, Moon, Monitor, Bell, MessageSquare, DollarSign, Megaphone, Globe, Radio } from "lucide-react";
+import { Settings, Volume2, VolumeX, UserX, Sun, Moon, Monitor, Bell, MessageSquare, DollarSign, Megaphone, Globe, Radio, Mail, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import {
   Popover,
   PopoverContent,
@@ -67,7 +68,11 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
   const [confirmStep, setConfirmStep] = useState(0);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
   const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferences>(() => {
     const saved = localStorage.getItem("notification-preferences");
     return saved ? JSON.parse(saved) : defaultNotificationPrefs;
@@ -82,6 +87,8 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
     setConfirmStep(0);
     setEmail("");
     setPassword("");
+    setOtp("");
+    setOtpVerified(false);
   };
 
   const handleDeactivateClick = () => {
@@ -92,8 +99,86 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
     setConfirmStep(2);
   };
 
-  const handleSecondConfirm = () => {
+  const handleSecondConfirm = async () => {
     setConfirmStep(3);
+    // Send OTP to email
+    await sendDeletionOtp();
+  };
+
+  const sendDeletionOtp = async () => {
+    setIsSendingOtp(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Please log in again");
+        return;
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-deletion-otp`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to send verification code");
+      }
+
+      toast.success("Verification code sent to your email");
+    } catch (error: unknown) {
+      console.error("Error sending OTP:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to send verification code");
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    if (otp.length !== 6) {
+      toast.error("Please enter the 6-digit code");
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Please log in again");
+        return;
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-deletion-otp`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ otp }),
+        }
+      );
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Invalid verification code");
+      }
+
+      setOtpVerified(true);
+      toast.success("Email verified! Enter your credentials to confirm deletion.");
+      setConfirmStep(4);
+    } catch (error: unknown) {
+      console.error("Error verifying OTP:", error);
+      toast.error(error instanceof Error ? error.message : "Invalid verification code");
+    } finally {
+      setIsVerifyingOtp(false);
+    }
   };
 
   const handleNotificationPrefChange = (key: keyof NotificationPreferences, value: boolean) => {
@@ -109,6 +194,11 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
   const handleFinalDeactivation = async () => {
     if (!email || !password) {
       toast.error("Please enter your email and password");
+      return;
+    }
+
+    if (!otpVerified) {
+      toast.error("Please verify your email first");
       return;
     }
 
@@ -398,16 +488,80 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
             <AlertDialogCancel onClick={resetDeactivation}>{t.noKeepAccount}</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleSecondConfirm}
+              disabled={isSendingOtp}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {t.yesDeleteAccount}
+              {isSendingOtp ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                t.yesDeleteAccount
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Credentials Verification Dialog */}
+      {/* Email OTP Verification Dialog */}
       <AlertDialog open={confirmStep === 3} onOpenChange={(isOpen) => !isOpen && resetDeactivation()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Mail className="h-5 w-5" />
+              Verify Your Email
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              We've sent a 6-digit verification code to your email. Enter it below to confirm your identity.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col items-center gap-4 py-6">
+            <InputOTP
+              maxLength={6}
+              value={otp}
+              onChange={setOtp}
+            >
+              <InputOTPGroup>
+                <InputOTPSlot index={0} />
+                <InputOTPSlot index={1} />
+                <InputOTPSlot index={2} />
+                <InputOTPSlot index={3} />
+                <InputOTPSlot index={4} />
+                <InputOTPSlot index={5} />
+              </InputOTPGroup>
+            </InputOTP>
+            <button
+              type="button"
+              onClick={sendDeletionOtp}
+              disabled={isSendingOtp}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              {isSendingOtp ? "Sending..." : "Didn't receive the code? Resend"}
+            </button>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={resetDeactivation}>{t.cancel}</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              onClick={verifyOtp}
+              disabled={isVerifyingOtp || otp.length !== 6}
+            >
+              {isVerifyingOtp ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Verifying...
+                </>
+              ) : (
+                "Verify Code"
+              )}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Credentials Verification Dialog */}
+      <AlertDialog open={confirmStep === 4} onOpenChange={(isOpen) => !isOpen && resetDeactivation()}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-destructive">{t.verifyIdentity}</AlertDialogTitle>
