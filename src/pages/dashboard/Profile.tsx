@@ -315,6 +315,28 @@ const Profile = () => {
                 <Label htmlFor="telegramUsername" className="flex items-center gap-2">
                   <MessageCircle className="h-4 w-4 text-muted-foreground" />
                   Telegram Username
+                  {telegramChatId && (
+                    <span className="flex items-center gap-1 ml-auto">
+                      <span 
+                        className={`h-2 w-2 rounded-full ${
+                          loadingTelegram 
+                            ? "bg-yellow-500 animate-pulse" 
+                            : telegramProfile 
+                              ? "bg-green-500" 
+                              : "bg-red-500"
+                        }`} 
+                      />
+                      <span className={`text-xs ${
+                        loadingTelegram 
+                          ? "text-yellow-500" 
+                          : telegramProfile 
+                            ? "text-green-500" 
+                            : "text-red-500"
+                      }`}>
+                        {loadingTelegram ? "Checking..." : telegramProfile ? "Connected" : "Disconnected"}
+                      </span>
+                    </span>
+                  )}
                 </Label>
                 <Input
                   id="telegramUsername"
