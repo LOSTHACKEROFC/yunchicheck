@@ -86,7 +86,7 @@ async function processNotification(data: TopupNotificationRequest): Promise<{ te
   // Get user profile and email
   const { data: profile, error: profileError } = await supabaseAdmin
     .from("profiles")
-    .select("username, telegram_chat_id, balance")
+    .select("username, telegram_chat_id, credits")
     .eq("user_id", user_id)
     .single();
 
@@ -105,9 +105,9 @@ async function processNotification(data: TopupNotificationRequest): Promise<{ te
   const userEmail = authUser?.user?.email;
   const username = profile?.username || "User";
   const telegramChatId = profile?.telegram_chat_id;
-  const currentBalance = profile?.balance || 0;
+  const currentCredits = profile?.credits || 0;
 
-  console.log("User info:", { userEmail, username, telegramChatId, currentBalance });
+  console.log("User info:", { userEmail, username, telegramChatId, currentCredits });
 
   const paymentMethodLabels: Record<string, string> = {
     btc: "Bitcoin",
@@ -117,8 +117,8 @@ async function processNotification(data: TopupNotificationRequest): Promise<{ te
   };
 
   const methodLabel = paymentMethodLabels[payment_method] || payment_method;
-  const formattedAmount = `$${Number(amount).toFixed(2)}`;
-  const formattedBalance = `$${Number(currentBalance).toFixed(2)}`;
+  const formattedCredits = `${Number(amount).toLocaleString()} credits`;
+  const formattedCurrentCredits = `${Number(currentCredits).toLocaleString()} credits`;
 
   let telegramSent = false;
   let emailSent = false;
@@ -126,17 +126,17 @@ async function processNotification(data: TopupNotificationRequest): Promise<{ te
   if (status === "completed") {
     // APPROVED notification with new balance
     const telegramMessage = `
-✅ <b>Topup Approved!</b>
+✅ <b>Credits Added!</b>
 
 Hello <b>${username}</b>,
 
-Your topup request has been approved and processed.
+Your credit purchase has been approved and processed.
 
-💰 <b>Amount Added:</b> ${formattedAmount}
+🪙 <b>Credits Added:</b> ${formattedCredits}
 💳 <b>Method:</b> ${methodLabel}
 📝 <b>Transaction ID:</b> <code>${transaction_id.slice(0, 8)}...</code>
 
-💵 <b>New Balance:</b> ${formattedBalance}
+💰 <b>New Balance:</b> ${formattedCurrentCredits}
 
 Thank you for using Yunchi Checker!
     `.trim();
@@ -144,21 +144,21 @@ Thank you for using Yunchi Checker!
     const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #10b981, #059669); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-          <h1 style="color: white; margin: 0;">✅ Topup Approved!</h1>
+          <h1 style="color: white; margin: 0;">✅ Credits Added!</h1>
         </div>
         <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
           <p style="font-size: 16px;">Hello <strong>${username}</strong>,</p>
-          <p>Your topup request has been approved and processed successfully.</p>
+          <p>Your credit purchase has been approved and processed successfully.</p>
           
           <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p style="margin: 5px 0;"><strong>Amount Added:</strong> ${formattedAmount}</p>
+            <p style="margin: 5px 0;"><strong>Credits Added:</strong> ${formattedCredits}</p>
             <p style="margin: 5px 0;"><strong>Method:</strong> ${methodLabel}</p>
             <p style="margin: 5px 0;"><strong>Transaction ID:</strong> ${transaction_id.slice(0, 8)}...</p>
           </div>
           
           <div style="background: linear-gradient(135deg, #10b981, #059669); padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
             <p style="margin: 0; font-size: 14px; color: rgba(255,255,255,0.8);">Your New Balance</p>
-            <p style="margin: 5px 0 0 0; font-size: 28px; font-weight: bold; color: white;">${formattedBalance}</p>
+            <p style="margin: 5px 0 0 0; font-size: 28px; font-weight: bold; color: white;">${formattedCurrentCredits}</p>
           </div>
           
           <p style="color: #a3a3a3; font-size: 14px; text-align: center;">Thank you for using Yunchi Checker.</p>
@@ -173,7 +173,7 @@ Thank you for using Yunchi Checker!
     }
 
     if (userEmail) {
-      emailSent = await sendEmail(userEmail, "✅ Your Topup Has Been Approved!", emailHtml);
+      emailSent = await sendEmail(userEmail, "✅ Your Credits Have Been Added!", emailHtml);
       console.log("Email sent for completed:", emailSent);
     }
 
@@ -181,9 +181,9 @@ Thank you for using Yunchi Checker!
     const { error: notifError } = await supabaseAdmin.from("notifications").insert({
       user_id,
       type: "topup_approved",
-      title: "Topup Approved",
-      message: `Your ${formattedAmount} topup via ${methodLabel} has been approved. New balance: ${formattedBalance}`,
-      metadata: { transaction_id, amount, payment_method, new_balance: currentBalance }
+      title: "Credits Added",
+      message: `${formattedCredits} have been added via ${methodLabel}. New balance: ${formattedCurrentCredits}`,
+      metadata: { transaction_id, amount, payment_method, new_credits: currentCredits }
     });
 
     if (notifError) {

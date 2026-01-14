@@ -289,11 +289,11 @@ export type Database = {
       }
       profiles: {
         Row: {
-          balance: number
           ban_reason: string | null
           banned_at: string | null
           banned_until: string | null
           created_at: string
+          credits: number
           id: string
           is_banned: boolean
           name: string | null
@@ -304,11 +304,11 @@ export type Database = {
           username: string | null
         }
         Insert: {
-          balance?: number
           ban_reason?: string | null
           banned_at?: string | null
           banned_until?: string | null
           created_at?: string
+          credits?: number
           id?: string
           is_banned?: boolean
           name?: string | null
@@ -319,11 +319,11 @@ export type Database = {
           username?: string | null
         }
         Update: {
-          balance?: number
           ban_reason?: string | null
           banned_at?: string | null
           banned_until?: string | null
           created_at?: string
+          credits?: number
           id?: string
           is_banned?: boolean
           name?: string | null

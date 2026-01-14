@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
-  Wallet, 
+  Coins, 
   TrendingUp, 
   TrendingDown, 
   Clock, 
@@ -33,7 +33,7 @@ interface CardCheck {
 interface Transaction {
   id: string;
   type: "topup" | "check";
-  amount: number;
+  credits: number;
   method?: string;
   gateway?: string;
   date: string;
@@ -41,7 +41,7 @@ interface Transaction {
 }
 
 const Balance = () => {
-  const [balance, setBalance] = useState<number>(0);
+  const [credits, setCredits] = useState<number>(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
@@ -52,14 +52,14 @@ const Balance = () => {
     
     setUserId(user.id);
 
-    // Fetch balance
+    // Fetch credits
     const { data: profile } = await supabase
       .from("profiles")
-      .select("balance")
+      .select("credits")
       .eq("user_id", user.id)
       .maybeSingle();
     
-    setBalance(profile?.balance || 0);
+    setCredits(profile?.credits || 0);
 
     // Fetch topup transactions
     const { data: topups } = await supabase
@@ -83,7 +83,7 @@ const Balance = () => {
         allTransactions.push({
           id: tx.id,
           type: "topup",
-          amount: tx.status === "completed" ? tx.amount : 0,
+          credits: tx.status === "completed" ? tx.amount : 0,
           method: tx.payment_method,
           date: tx.created_at,
           status: tx.status
@@ -96,7 +96,7 @@ const Balance = () => {
         allTransactions.push({
           id: check.id,
           type: "check",
-          amount: -0.50, // Default check cost
+          credits: -5, // Default check cost in credits
           gateway: check.gateway,
           date: check.created_at,
           status: check.status
@@ -117,12 +117,12 @@ const Balance = () => {
     fetchData();
   }, []);
 
-  // Real-time subscription for balance updates
+  // Real-time subscription for credits updates
   useEffect(() => {
     if (!userId) return;
 
     const profileChannel = supabase
-      .channel('balance-updates')
+      .channel('credits-updates')
       .on(
         'postgres_changes',
         {
@@ -132,9 +132,9 @@ const Balance = () => {
           filter: `user_id=eq.${userId}`
         },
         (payload) => {
-          console.log('Balance updated:', payload);
-          if (payload.new && typeof payload.new.balance === 'number') {
-            setBalance(payload.new.balance);
+          console.log('Credits updated:', payload);
+          if (payload.new && typeof payload.new.credits === 'number') {
+            setCredits(payload.new.credits);
           }
         }
       )
@@ -199,11 +199,11 @@ const Balance = () => {
   }, [userId]);
 
   const completedTopups = transactions.filter(t => t.type === "topup" && t.status === "completed");
-  const totalDeposits = completedTopups.reduce((sum, t) => sum + t.amount, 0);
-  const totalSpent = Math.abs(
+  const totalCreditsAdded = completedTopups.reduce((sum, t) => sum + t.credits, 0);
+  const totalCreditsUsed = Math.abs(
     transactions
       .filter(t => t.type === "check" && t.status === "completed")
-      .reduce((sum, t) => sum + t.amount, 0)
+      .reduce((sum, t) => sum + t.credits, 0)
   );
   const totalChecks = transactions.filter(t => t.type === "check").length;
 
@@ -239,8 +239,8 @@ const Balance = () => {
   return (
     <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-foreground">Balance & History</h1>
-        <p className="text-sm sm:text-base text-muted-foreground mt-1">View your balance and transaction history</p>
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-foreground">Credits & History</h1>
+        <p className="text-sm sm:text-base text-muted-foreground mt-1">View your credits and transaction history</p>
       </div>
 
       {/* Stats Cards */}
@@ -248,27 +248,28 @@ const Balance = () => {
         <Card className="bg-gradient-to-br from-primary/20 to-primary/5 border-primary/30 col-span-2 sm:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
-              Current Balance
+              Current Credits
             </CardTitle>
-            <Wallet className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
+            <Coins className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
           </CardHeader>
           <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
-            <div className="text-2xl sm:text-3xl font-bold text-primary">
-              ${balance.toFixed(2)}
+            <div className="text-2xl sm:text-3xl font-bold text-primary flex items-center gap-1">
+              {credits.toLocaleString()}
+              <span className="text-sm font-normal text-muted-foreground">credits</span>
             </div>
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Available funds</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Available to use</p>
           </CardContent>
         </Card>
 
         <Card className="bg-card border-border">
           <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
-              Total Deposits
+              Credits Added
             </CardTitle>
             <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
           </CardHeader>
           <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
-            <div className="text-lg sm:text-2xl font-bold text-green-500">${totalDeposits.toFixed(2)}</div>
+            <div className="text-lg sm:text-2xl font-bold text-green-500">{totalCreditsAdded.toLocaleString()}</div>
             <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">All time</p>
           </CardContent>
         </Card>
@@ -276,12 +277,12 @@ const Balance = () => {
         <Card className="bg-card border-border">
           <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
-              Total Spent
+              Credits Used
             </CardTitle>
             <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-destructive" />
           </CardHeader>
           <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
-            <div className="text-lg sm:text-2xl font-bold text-destructive">${totalSpent.toFixed(2)}</div>
+            <div className="text-lg sm:text-2xl font-bold text-destructive">{totalCreditsUsed.toLocaleString()}</div>
             <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">All time</p>
           </CardContent>
         </Card>
@@ -349,20 +350,22 @@ const Balance = () => {
                     </div>
                     <div className="min-w-0">
                       <p className="font-medium text-xs sm:text-sm truncate">
-                        {tx.type === "topup" ? `Topup via ${tx.method}` : `Check - ${tx.gateway}`}
+                        {tx.type === "topup" ? `Credit Purchase via ${tx.method}` : `Check - ${tx.gateway}`}
                       </p>
                       <p className="text-[10px] sm:text-sm text-muted-foreground">{formatDate(tx.date)}</p>
                     </div>
                   </div>
                   <div className="text-right shrink-0 ml-2">
-                    <p className={`font-bold text-xs sm:text-base ${
+                    <p className={`font-bold text-xs sm:text-base flex items-center gap-1 justify-end ${
                       tx.type === "topup" 
                         ? tx.status === "completed" 
                           ? "text-green-500" 
                           : "text-muted-foreground"
                         : "text-foreground"
                     }`}>
-                      {tx.type === "topup" ? "+" : ""}{tx.type === "topup" ? tx.amount.toFixed(2) : tx.amount.toFixed(2)} <span className="hidden sm:inline">USD</span>
+                      {tx.type === "topup" ? "+" : ""}{tx.credits}
+                      <Coins className="h-3 w-3 sm:hidden" />
+                      <span className="hidden sm:inline">credits</span>
                     </p>
                     <Badge
                       variant="outline"
