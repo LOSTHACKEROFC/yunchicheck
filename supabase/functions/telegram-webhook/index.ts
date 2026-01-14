@@ -1644,7 +1644,138 @@ This action will:
         });
       }
 
-      // Handle verification callback
+      // Handle topup accept/reject callbacks
+      if (callbackData.startsWith("topup_accept_") || callbackData.startsWith("topup_reject_")) {
+        const callbackChatId = update.callback_query.message?.chat.id.toString();
+        
+        if (callbackChatId !== ADMIN_CHAT_ID) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can approve/reject topups");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        const isAccept = callbackData.startsWith("topup_accept_");
+        const transactionId = callbackData.replace(isAccept ? "topup_accept_" : "topup_reject_", "");
+
+        // Get transaction details
+        const { data: transaction, error: txError } = await supabase
+          .from("topup_transactions")
+          .select("*")
+          .eq("id", transactionId)
+          .single();
+
+        if (txError || !transaction) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Transaction not found");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        if (transaction.status !== "pending") {
+          await answerCallbackQuery(update.callback_query.id, `⚠️ Transaction already ${transaction.status}`);
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        const newStatus = isAccept ? "completed" : "failed";
+
+        if (isAccept) {
+          // Call handle_topup_completion function to update status and balance
+          const { error: rpcError } = await supabase.rpc("handle_topup_completion", {
+            p_transaction_id: transactionId,
+          });
+
+          if (rpcError) {
+            console.error("Error completing topup:", rpcError);
+            await answerCallbackQuery(update.callback_query.id, "❌ Failed to process topup");
+            return new Response(JSON.stringify({ ok: true }), {
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
+          }
+        } else {
+          // Just update status to failed
+          const { error: updateError } = await supabase
+            .from("topup_transactions")
+            .update({ 
+              status: "failed", 
+              updated_at: new Date().toISOString() 
+            })
+            .eq("id", transactionId);
+
+          if (updateError) {
+            console.error("Error rejecting topup:", updateError);
+            await answerCallbackQuery(update.callback_query.id, "❌ Failed to reject topup");
+            return new Response(JSON.stringify({ ok: true }), {
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
+          }
+        }
+
+        // Notify user via the notify-topup-status edge function
+        try {
+          const notifyUrl = `${SUPABASE_URL}/functions/v1/notify-topup-status`;
+          await fetch(notifyUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            },
+            body: JSON.stringify({
+              transaction_id: transactionId,
+              user_id: transaction.user_id,
+              amount: transaction.amount,
+              status: newStatus,
+              payment_method: transaction.payment_method,
+            }),
+          });
+        } catch (notifyError) {
+          console.error("Error notifying user:", notifyError);
+        }
+
+        // Update Telegram message to remove buttons
+        if (update.callback_query.message?.message_id) {
+          try {
+            // Get user info for the updated caption
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("username, name")
+              .eq("user_id", transaction.user_id)
+              .single();
+
+            const username = profile?.username || profile?.name || "Unknown User";
+            const statusEmoji = isAccept ? "✅" : "❌";
+            const statusText = isAccept ? "APPROVED" : "REJECTED";
+
+            await fetch(
+              `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageCaption`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  chat_id: callbackChatId,
+                  message_id: update.callback_query.message.message_id,
+                  caption: `${statusEmoji} <b>Top-Up ${statusText}</b>\n\n<b>Transaction ID:</b>\n<code>${transactionId}</code>\n\n<b>👤 User:</b> ${username}\n<b>💵 Amount:</b> $${transaction.amount}\n\n<i>Processed by admin</i>`,
+                  parse_mode: "HTML",
+                  reply_markup: { inline_keyboard: [] },
+                }),
+              }
+            );
+          } catch (error) {
+            console.error("Error updating message:", error);
+          }
+        }
+
+        await answerCallbackQuery(
+          update.callback_query.id,
+          isAccept ? "✅ Topup approved and balance updated" : "❌ Topup rejected"
+        );
+
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
       if (callbackData.startsWith("verify_")) {
         const verificationCode = callbackData.replace("verify_", "");
         const chatId = update.callback_query.message?.chat.id.toString();
