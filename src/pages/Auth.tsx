@@ -7,8 +7,15 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { MessageCircle, CheckCircle, Clock, ExternalLink, Loader2, XCircle, AlertCircle, ArrowLeft, Mail } from "lucide-react";
+import { MessageCircle, CheckCircle, Clock, ExternalLink, Loader2, XCircle, AlertCircle, ArrowLeft, Mail, Ban } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -73,6 +80,9 @@ const Auth = () => {
   const [telegramIdStatus, setTelegramIdStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
   const [telegramIdError, setTelegramIdError] = useState<string>("");
   const telegramIdCheckTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // Banned user dialog state
+  const [showBannedDialog, setShowBannedDialog] = useState(false);
 
   // Telegram profile state
   const [telegramProfile, setTelegramProfile] = useState<{
@@ -762,7 +772,9 @@ const Auth = () => {
           if (profile?.is_banned) {
             // Sign out the banned user immediately
             await supabase.auth.signOut();
-            throw new Error("Your account has been banned. Please contact support if you believe this is a mistake.");
+            setShowBannedDialog(true);
+            setLoading(false);
+            return;
           }
         }
         
@@ -1531,6 +1543,44 @@ const Auth = () => {
           )}
         </div>
       </div>
+
+      {/* Banned User Dialog */}
+      <Dialog open={showBannedDialog} onOpenChange={setShowBannedDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader className="text-center">
+            <div className="mx-auto w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
+              <Ban className="h-8 w-8 text-red-500" />
+            </div>
+            <DialogTitle className="text-xl text-center">Account Banned</DialogTitle>
+            <DialogDescription className="text-center space-y-2">
+              <p className="text-base">
+                Your account has been banned by Support.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                You need to contact support to unban your account.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 mt-4">
+            <Button
+              className="w-full"
+              onClick={() => {
+                window.open("https://t.me/8496943061", "_blank");
+              }}
+            >
+              <MessageCircle className="mr-2 h-4 w-4" />
+              Contact Support
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setShowBannedDialog(false)}
+            >
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
