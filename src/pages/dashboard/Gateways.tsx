@@ -1744,7 +1744,7 @@ const Gateways = () => {
                 </div>
               </CardHeader>
               <CardContent className="p-4 pt-2 space-y-3">
-                <ScrollArea className="h-48 rounded border border-border">
+                <ScrollArea className="h-[200px] sm:h-[300px] rounded border border-border">
                   <div className="p-2 space-y-1 font-mono text-xs">
                     {bulkResults.map((r, i) => (
                       <div 
