@@ -844,7 +844,25 @@ const Gateways = () => {
         }
       }
       
-      // Pattern 6: Mixed separators (CardNumber|MM/YY|CVC or CardNumber|MM/YY/CVC)
+      // Pattern 6: Track data format (CardNumber=YYMM) - auto-convert to standard format
+      if (!cardData) {
+        const trackMatch = trimmedLine.match(/^(\d{13,16})=(\d{4})(?:\d*)?$/);
+        if (trackMatch) {
+          const [, card, yymm] = trackMatch;
+          // Extract YY and MM from YYMM format (e.g., 2611 = year 26, month 11)
+          const year = yymm.slice(0, 2);
+          const month = yymm.slice(2, 4);
+          cardData = {
+            card,
+            month: month.padStart(2, '0'),
+            year: year,
+            cvv: "000",
+            originalCvv: ""
+          };
+        }
+      }
+      
+      // Pattern 7: Mixed separators (CardNumber|MM/YY|CVC or CardNumber|MM/YY/CVC)
       if (!cardData) {
         cardData = extractCardComponents(trimmedLine, !isAuthGateway);
       }
