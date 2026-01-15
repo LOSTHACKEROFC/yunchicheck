@@ -7,7 +7,6 @@ const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// Admin chat ID for admin-only commands
 const ADMIN_CHAT_ID = "8496943061";
 
 const corsHeaders = {
@@ -33,15 +32,16 @@ interface TelegramUpdate {
   };
 }
 
+// ═══════════════════════════════════════════════════════════
+// TELEGRAM API HELPERS
+// ═══════════════════════════════════════════════════════════
+
 async function sendTelegramMessage(
   chatId: string | number,
   message: string,
   replyMarkup?: object
 ): Promise<boolean> {
-  if (!TELEGRAM_BOT_TOKEN) {
-    console.log("Telegram bot token not configured");
-    return false;
-  }
+  if (!TELEGRAM_BOT_TOKEN) return false;
 
   try {
     const body: Record<string, unknown> = {
@@ -49,10 +49,7 @@ async function sendTelegramMessage(
       text: message,
       parse_mode: "HTML",
     };
-
-    if (replyMarkup) {
-      body.reply_markup = replyMarkup;
-    }
+    if (replyMarkup) body.reply_markup = replyMarkup;
 
     const response = await fetch(
       `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
@@ -64,12 +61,9 @@ async function sendTelegramMessage(
     );
 
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error("Telegram API error:", errorData);
+      console.error("Telegram API error:", await response.json());
       return false;
     }
-
-    console.log("Telegram message sent successfully");
     return true;
   } catch (error) {
     console.error("Error sending Telegram message:", error);
@@ -77,17 +71,13 @@ async function sendTelegramMessage(
   }
 }
 
-// Edit an existing Telegram message
 async function editTelegramMessage(
   chatId: string | number,
   messageId: number,
   message: string,
   replyMarkup?: object
 ): Promise<boolean> {
-  if (!TELEGRAM_BOT_TOKEN) {
-    console.log("Telegram bot token not configured");
-    return false;
-  }
+  if (!TELEGRAM_BOT_TOKEN) return false;
 
   try {
     const body: Record<string, unknown> = {
@@ -96,10 +86,7 @@ async function editTelegramMessage(
       text: message,
       parse_mode: "HTML",
     };
-
-    if (replyMarkup) {
-      body.reply_markup = replyMarkup;
-    }
+    if (replyMarkup) body.reply_markup = replyMarkup;
 
     const response = await fetch(
       `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`,
@@ -111,151 +98,13 @@ async function editTelegramMessage(
     );
 
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error("Telegram edit message API error:", errorData);
+      console.error("Telegram edit error:", await response.json());
       return false;
     }
-
-    console.log("Telegram message edited successfully");
     return true;
   } catch (error) {
-    console.error("Error editing Telegram message:", error);
+    console.error("Error editing message:", error);
     return false;
-  }
-}
-
-// Build paginated users list message
-function buildUsersListMessage(
-  users: any[],
-  page: number,
-  totalCount: number,
-  connectedCount: number,
-  bannedCount: number,
-  perPage: number
-): { message: string; keyboard: object | null } {
-  const totalPages = Math.ceil(totalCount / perPage);
-  const startIndex = page * perPage;
-  const endIndex = Math.min(startIndex + perPage, totalCount);
-  const displayUsers = users.slice(startIndex, endIndex);
-
-  let userList = "";
-  displayUsers.forEach((user, index) => {
-    const status = user.is_banned ? "🚫" : "✅";
-    const telegramId = user.telegram_chat_id ? `<code>${user.telegram_chat_id}</code>` : "❌ Not connected";
-    const username = user.username || "No username";
-    const name = user.name || "No name";
-    const email = user.email || "No email";
-    const userId = user.user_id || "Unknown";
-    const credits = user.credits !== undefined ? user.credits : "N/A";
-    
-    userList += `
-┌─────────────────────────────────
-│ ${startIndex + index + 1}. ${status} <b>${username}</b>
-├─────────────────────────────────
-│ 👤 <b>Name:</b> ${name}
-│ 📧 <b>Email:</b> <code>${email}</code>
-│ 🆔 <b>ID:</b> <code>${userId}</code>
-│ 📱 <b>Telegram:</b> ${telegramId}
-│ 💰 <b>Credits:</b> ${credits}
-└─────────────────────────────────
-`;
-  });
-
-  const allUsersMessage = `
-👥 <b>All Users</b>
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>📊 STATISTICS</b>
-
-<b>Total Users:</b> ${totalCount}
-<b>Telegram Connected:</b> ${connectedCount}
-<b>Banned:</b> ${bannedCount}
-<b>Active:</b> ${totalCount - bannedCount}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>📋 USER LIST</b> (Page ${page + 1}/${totalPages})
-${userList}
-━━━━━━━━━━━━━━━━━━━━━━
-
-<i>✅ = Active | 🚫 = Banned</i>
-`;
-
-  // Build pagination buttons
-  let keyboard: object | null = null;
-  if (totalPages > 1) {
-    const buttons = [];
-    
-    if (page > 0) {
-      buttons.push({ text: "◀️ Previous", callback_data: `allusers_page_${page - 1}` });
-    }
-    
-    buttons.push({ text: `${page + 1}/${totalPages}`, callback_data: "allusers_noop" });
-    
-    if (page < totalPages - 1) {
-      buttons.push({ text: "Next ▶️", callback_data: `allusers_page_${page + 1}` });
-    }
-    
-    keyboard = { inline_keyboard: [buttons] };
-  }
-
-  return { message: allUsersMessage, keyboard };
-}
-
-// Register bot commands with Telegram
-async function setBotCommands(): Promise<void> {
-  if (!TELEGRAM_BOT_TOKEN) return;
-
-  // Public commands (visible to all users)
-  const publicCommands = [
-    { command: "start", description: "🚀 Start the bot and get your Chat ID" },
-    { command: "help", description: "📚 View bot features and how to connect" },
-    { command: "mystatus", description: "👤 Check your account connection status" },
-  ];
-
-  // Admin commands (only visible to admin)
-  const adminCommands = [
-    { command: "start", description: "🚀 Start the bot" },
-    { command: "help", description: "📚 View bot features" },
-    { command: "mystatus", description: "👤 Check account status" },
-    { command: "admincmd", description: "🔐 View admin command panel" },
-    { command: "ticket", description: "🎫 View/manage a support ticket" },
-    { command: "topups", description: "💰 View pending top-up requests" },
-    { command: "addfund", description: "💵 Add/deduct credits from user" },
-    { command: "banuser", description: "🔨 Ban a user" },
-    { command: "cancelban", description: "↩️ Cancel pending ban" },
-    { command: "unbanuser", description: "✅ Unban a user" },
-    { command: "deleteuser", description: "🗑️ Permanently delete a user" },
-    { command: "deletealluser", description: "☠️ Delete ALL users (dangerous)" },
-    { command: "viewbans", description: "📋 View all banned users" },
-    { command: "broadcast", description: "📢 Broadcast message to all users" },
-    { command: "stats", description: "📊 View website statistics" },
-    { command: "allusers", description: "👥 View all registered users" },
-    { command: "userinfo", description: "🔍 View detailed user info" },
-  ];
-
-  try {
-    // Set default commands for all users
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ commands: publicCommands }),
-    });
-
-    // Set admin-specific commands
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        commands: adminCommands,
-        scope: { type: "chat", chat_id: parseInt(ADMIN_CHAT_ID) },
-      }),
-    });
-
-    console.log("Bot commands registered successfully");
-  } catch (error) {
-    console.error("Error setting bot commands:", error);
   }
 }
 
@@ -276,7 +125,7 @@ async function answerCallbackQuery(callbackQueryId: string, text: string): Promi
       }
     );
   } catch (error) {
-    console.error("Error answering callback query:", error);
+    console.error("Error answering callback:", error);
   }
 }
 
@@ -288,14 +137,13 @@ async function editMessageReplyMarkup(
 ): Promise<void> {
   if (!TELEGRAM_BOT_TOKEN) return;
 
-  // Create keyboard with current status highlighted
   const statusButtons = [
-    { text: currentStatus === "open" ? "✓ 🟡 Live" : "🟡 Live", callback_data: `open_${ticketUuid}` },
-    { text: currentStatus === "processing" ? "✓ 🔵 Processing" : "🔵 Processing", callback_data: `processing_${ticketUuid}` },
+    { text: currentStatus === "open" ? "✓ Live" : "Live", callback_data: `open_${ticketUuid}` },
+    { text: currentStatus === "processing" ? "✓ Processing" : "Processing", callback_data: `processing_${ticketUuid}` },
   ];
   const statusButtons2 = [
-    { text: currentStatus === "solved" ? "✓ 🟢 Solved" : "🟢 Solved", callback_data: `solved_${ticketUuid}` },
-    { text: currentStatus === "closed" ? "✓ ⚫ Closed" : "⚫ Closed", callback_data: `closed_${ticketUuid}` },
+    { text: currentStatus === "solved" ? "✓ Solved" : "Solved", callback_data: `solved_${ticketUuid}` },
+    { text: currentStatus === "closed" ? "✓ Closed" : "Closed", callback_data: `closed_${ticketUuid}` },
   ];
 
   try {
@@ -307,16 +155,75 @@ async function editMessageReplyMarkup(
         body: JSON.stringify({
           chat_id: chatId,
           message_id: messageId,
-          reply_markup: {
-            inline_keyboard: [statusButtons, statusButtons2],
-          },
+          reply_markup: { inline_keyboard: [statusButtons, statusButtons2] },
         }),
       }
     );
   } catch (error) {
-    console.error("Error editing message reply markup:", error);
+    console.error("Error editing markup:", error);
   }
 }
+
+// ═══════════════════════════════════════════════════════════
+// BOT COMMANDS REGISTRATION
+// ═══════════════════════════════════════════════════════════
+
+async function setBotCommands(): Promise<void> {
+  if (!TELEGRAM_BOT_TOKEN) return;
+
+  const publicCommands = [
+    { command: "start", description: "Start bot & get Chat ID" },
+    { command: "help", description: "View help & features" },
+    { command: "mystatus", description: "Check account status" },
+  ];
+
+  const adminCommands = [
+    { command: "start", description: "Start bot" },
+    { command: "help", description: "View help" },
+    { command: "mystatus", description: "Check status" },
+    { command: "admincmd", description: "Admin panel" },
+    { command: "ticket", description: "Manage ticket" },
+    { command: "topups", description: "Pending topups" },
+    { command: "addfund", description: "Add/deduct credits" },
+    { command: "banuser", description: "Ban user" },
+    { command: "unbanuser", description: "Unban user" },
+    { command: "cancelban", description: "Cancel ban" },
+    { command: "deleteuser", description: "Delete user" },
+    { command: "deletealluser", description: "Delete all users" },
+    { command: "viewbans", description: "View banned users" },
+    { command: "broadcast", description: "Broadcast message" },
+    { command: "stats", description: "View statistics" },
+    { command: "allusers", description: "List all users" },
+    { command: "userinfo", description: "User details" },
+  ];
+
+  try {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commands: publicCommands }),
+    });
+
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        commands: adminCommands,
+        scope: { type: "chat", chat_id: parseInt(ADMIN_CHAT_ID) },
+      }),
+    });
+  } catch (error) {
+    console.error("Error setting commands:", error);
+  }
+}
+
+function isAdmin(chatId: string): boolean {
+  return chatId === ADMIN_CHAT_ID;
+}
+
+// ═══════════════════════════════════════════════════════════
+// EMAIL NOTIFICATION
+// ═══════════════════════════════════════════════════════════
 
 async function sendEmailNotification(
   userEmail: string,
@@ -337,7 +244,7 @@ async function sendEmailNotification(
       body: JSON.stringify({
         from: "Support Team <onboarding@resend.dev>",
         to: [userEmail],
-        subject: `[${ticketId}] New Reply to Your Support Ticket`,
+        subject: `[${ticketId}] New Reply`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #7c3aed;">New Reply to Your Ticket</h2>
@@ -346,12 +253,9 @@ async function sendEmailNotification(
               <p><strong>Subject:</strong> ${subject}</p>
             </div>
             <div style="background: #ffffff; padding: 20px; border: 1px solid #e9ecef; border-radius: 8px;">
-              <p style="color: #6c757d; margin-bottom: 10px;"><strong>${adminName}:</strong></p>
+              <p style="color: #6c757d;"><strong>${adminName}:</strong></p>
               <p style="white-space: pre-wrap;">${message}</p>
             </div>
-            <p style="color: #6c757d; font-size: 14px; margin-top: 20px;">
-              You can view the full conversation by logging into your account.
-            </p>
           </div>
         `,
       }),
@@ -368,1279 +272,72 @@ async function sendUserTelegramNotification(
   message: string,
   adminName: string
 ): Promise<void> {
-  const telegramMessage = `
-<b>🎫 New Reply to Your Ticket</b>
+  await sendTelegramMessage(chatId, `
+📩 <b>New Reply</b>
 
 <b>Ticket:</b> ${ticketId}
 <b>Subject:</b> ${subject}
 
 <b>${adminName}:</b>
 ${message}
-
-<i>View the full conversation in your dashboard.</i>
-`;
-  await sendTelegramMessage(chatId, telegramMessage);
-}
-
-// Check if the chat ID is admin
-function isAdmin(chatId: string): boolean {
-  return chatId === ADMIN_CHAT_ID;
-}
-
-// Admin command handlers
-async function handleAdminCmd(chatId: string): Promise<void> {
-  if (!isAdmin(chatId)) {
-    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to access admin commands.");
-    return;
-  }
-
-  // Register commands when admin requests the panel
-  await setBotCommands();
-
-  const adminMenu = `
-╔═══════════════════════════════╗
-       🔐 <b>ADMIN COMMAND PANEL</b>
-╚═══════════════════════════════╝
-
-┌─────────────────────────────────┐
-│  🎫 <b>TICKET MANAGEMENT</b>
-├─────────────────────────────────┤
-│
-│  /ticket <code>[ticket_id]</code>
-│  └ 📝 View and manage support ticket
-│
-└─────────────────────────────────┘
-
-┌─────────────────────────────────┐
-│  💰 <b>FINANCIAL</b>
-├─────────────────────────────────┤
-│
-│  /topups
-│  └ 💳 View pending top-up requests
-│
-│  /addfund <code>[email] [credits]</code>
-│  └ 💵 Add/deduct credits (use -100 to deduct)
-│
-└─────────────────────────────────┘
-
-┌─────────────────────────────────┐
-│  🛡️ <b>USER MODERATION</b>
-├─────────────────────────────────┤
-│
-│  /banuser <code>[username/email/chat_id]</code>
-│  └ 🔨 Ban user (reason → duration)
-│
-│  /unbanuser <code>[username/email/chat_id]</code>
-│  └ ✅ Unban a previously banned user
-│
-│  /deleteuser <code>[username/email/chat_id]</code>
-│  └ 🗑️ Permanently delete single user
-│
-│  /deletealluser
-│  └ ☠️ Delete ALL users (2-step confirm)
-│
-│  /cancelban
-│  └ ↩️ Cancel pending ban operation
-│
-│  /viewbans
-│  └ 📋 List all currently banned users
-│
-└─────────────────────────────────┘
-
-┌─────────────────────────────────┐
-│  📣 <b>COMMUNICATION</b>
-├─────────────────────────────────┤
-│
-│  /broadcast <code>[message]</code>
-│  └ 📢 Send to all users (Telegram + Web)
-│
-└─────────────────────────────────┘
-
-┌─────────────────────────────────┐
-│  📈 <b>ANALYTICS & DATA</b>
-├─────────────────────────────────┤
-│
-│  /stats
-│  └ 📊 View website statistics
-│
-│  /allusers
-│  └ 👥 View all users (paginated)
-│
-│  /userinfo <code>[email/username]</code>
-│  └ 🔍 View detailed user info
-│
-└─────────────────────────────────┘
-
-<i>💡 Type / to see all commands in menu</i>
-<i>🔄 Commands auto-registered on Telegram</i>
-`;
-  await sendTelegramMessage(chatId, adminMenu);
-}
-
-// Handle add fund command
-async function handleAddFund(chatId: string, args: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
-    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to manage funds.");
-    return;
-  }
-
-  const parts = args.trim().split(/\s+/);
-  if (parts.length < 2) {
-    await sendTelegramMessage(chatId, `
-❌ <b>Invalid Usage</b>
-
-<b>Usage:</b> /addfund <code>[email]</code> <code>[credits]</code>
-
-<b>Examples:</b>
-• /addfund user@email.com 50
-  └ Adds 50 credits to user's account
-• /addfund user@email.com -100
-  └ Deducts 100 credits from user's account
-
-<i>💡 Use negative amounts to deduct credits</i>
 `);
-    return;
-  }
+}
 
-  const email = parts[0].toLowerCase();
-  const amountStr = parts[1];
-  const amount = parseFloat(amountStr);
+// ═══════════════════════════════════════════════════════════
+// USER LIST BUILDER
+// ═══════════════════════════════════════════════════════════
 
-  if (isNaN(amount) || amount === 0) {
-    await sendTelegramMessage(chatId, "❌ <b>Invalid amount</b>\n\nPlease provide a valid non-zero number.");
-    return;
-  }
+function buildUsersListMessage(
+  users: any[],
+  page: number,
+  totalCount: number,
+  connectedCount: number,
+  bannedCount: number,
+  perPage: number
+): { message: string; keyboard: object | null } {
+  const totalPages = Math.ceil(totalCount / perPage);
+  const startIndex = page * perPage;
+  const endIndex = Math.min(startIndex + perPage, totalCount);
+  const displayUsers = users.slice(startIndex, endIndex);
 
-  // Find user by email
-  const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
-  
-  if (authError) {
-    console.error("Error listing users:", authError);
-    await sendTelegramMessage(chatId, "❌ Error fetching users. Please try again.");
-    return;
-  }
-
-  const foundUser = authData?.users?.find((u: any) => u.email?.toLowerCase() === email);
-  
-  if (!foundUser) {
-    await sendTelegramMessage(chatId, `❌ <b>User not found</b>\n\nNo user found with email: <code>${email}</code>`);
-    return;
-  }
-
-  const userId = foundUser.id;
-  const userEmail = foundUser.email;
-
-  // Get user profile
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("username, credits, telegram_chat_id")
-    .eq("user_id", userId)
-    .single();
-
-  if (profileError || !profile) {
-    await sendTelegramMessage(chatId, `❌ <b>Profile not found</b>\n\nNo profile found for: <code>${email}</code>`);
-    return;
-  }
-
-  const oldCredits = Number(profile.credits) || 0;
-  const newCredits = oldCredits + amount;
-
-  // Prevent negative credits
-  if (newCredits < 0) {
-    await sendTelegramMessage(chatId, `
-❌ <b>Insufficient Credits</b>
-
-User's current credits: <b>${oldCredits}</b>
-Requested deduction: <b>${Math.abs(amount)}</b>
-
-<i>Cannot deduct more than available credits.</i>
-`);
-    return;
-  }
-
-  // Update credits
-  const { error: updateError } = await supabase
-    .from("profiles")
-    .update({ 
-      credits: newCredits,
-      updated_at: new Date().toISOString()
-    })
-    .eq("user_id", userId);
-
-  if (updateError) {
-    console.error("Error updating credits:", updateError);
-    await sendTelegramMessage(chatId, "❌ Error updating credits. Please try again.");
-    return;
-  }
-
-  const isAddition = amount > 0;
-  const actionText = isAddition ? "Added" : "Deducted";
-  const actionEmoji = isAddition ? "💰" : "💸";
-  const statusEmoji = isAddition ? "✅" : "🔻";
-
-  // Create notification for user
-  const notificationTitle = isAddition ? "Credits Added" : "Credits Deducted";
-  const notificationMessage = isAddition 
-    ? `${amount} credits have been added to your account by admin. New balance: ${newCredits} credits`
-    : `${Math.abs(amount)} credits have been deducted from your account by admin. New balance: ${newCredits} credits`;
-
-  await supabase.from("notifications").insert({
-    user_id: userId,
-    type: "credits_admin",
-    title: notificationTitle,
-    message: notificationMessage,
-    metadata: { 
-      old_credits: oldCredits, 
-      new_credits: newCredits, 
-      amount: amount,
-      action: isAddition ? "add" : "deduct"
-    }
+  let userList = "";
+  displayUsers.forEach((user, index) => {
+    const status = user.is_banned ? "🚫" : "✅";
+    const username = user.username || "No username";
+    const email = user.email || "No email";
+    const credits = user.credits ?? 0;
+    
+    userList += `
+${startIndex + index + 1}. ${status} <b>${username}</b>
+   📧 ${email}
+   💰 ${credits} credits
+`;
   });
 
-  // Send Telegram notification to user if connected
-  if (profile.telegram_chat_id) {
-    const userTelegramMessage = `
-${actionEmoji} <b>${notificationTitle}</b>
+  const message = `
+👥 <b>All Users</b> (${page + 1}/${totalPages})
 
-━━━━━━━━━━━━━━━━━━━━━━
-
-${statusEmoji} <b>${actionText}:</b> ${Math.abs(amount)} credits
-
-<b>Previous Credits:</b> ${oldCredits}
-<b>New Credits:</b> ${newCredits}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<i>This action was performed by an administrator.</i>
-<i>Contact support if you have questions.</i>
-`;
-    await sendTelegramMessage(profile.telegram_chat_id, userTelegramMessage);
-  }
-
-  // Send email notification to user
-  if (RESEND_API_KEY && userEmail) {
-    try {
-      const emailSubject = isAddition 
-        ? `💰 ${amount} Credits Added to Your Account`
-        : `💸 ${Math.abs(amount)} Credits Deducted from Your Account`;
-      
-      const emailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: linear-gradient(135deg, ${isAddition ? '#10b981' : '#ef4444'}, ${isAddition ? '#059669' : '#dc2626'}); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0;">${actionEmoji} ${notificationTitle}</h1>
-          </div>
-          <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
-            <p style="font-size: 16px;">Hello <strong>${profile.username || 'User'}</strong>,</p>
-            <p>${isAddition ? 'Credits have been added to' : 'Credits have been deducted from'} your account by an administrator.</p>
-            
-            <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 5px 0;"><strong>${actionText}:</strong> ${Math.abs(amount)} credits</p>
-              <p style="margin: 5px 0;"><strong>Previous Credits:</strong> ${oldCredits}</p>
-            </div>
-            
-            <div style="background: linear-gradient(135deg, ${isAddition ? '#10b981' : '#3b82f6'}, ${isAddition ? '#059669' : '#2563eb'}); padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
-              <p style="margin: 0; font-size: 14px; color: rgba(255,255,255,0.8);">Your New Credits</p>
-              <p style="margin: 5px 0 0 0; font-size: 28px; font-weight: bold; color: white;">${newCredits}</p>
-            </div>
-            
-            <p style="color: #a3a3a3; font-size: 14px; text-align: center;">
-              This action was performed by an administrator.<br>
-              Contact support if you have any questions.
-            </p>
-          </div>
-        </div>
-      `;
-
-      await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${RESEND_API_KEY}`,
-        },
-        body: JSON.stringify({
-          from: "Yunchi Checker <onboarding@resend.dev>",
-          to: [userEmail],
-          subject: emailSubject,
-          html: emailHtml,
-        }),
-      });
-      console.log("Email notification sent for credit adjustment");
-    } catch (emailError) {
-      console.error("Error sending email notification:", emailError);
-    }
-  }
-
-  // Confirm to admin
-  const adminConfirmMessage = `
-${statusEmoji} <b>Credit ${isAddition ? 'Addition' : 'Deduction'} Successful</b>
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>👤 USER</b>
-<b>Username:</b> ${profile.username || 'Not set'}
-<b>Email:</b> ${userEmail}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>💳 TRANSACTION</b>
-<b>${actionText}:</b> ${Math.abs(amount)} credits
-<b>Previous:</b> ${oldCredits}
-<b>New Credits:</b> ${newCredits}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>📧 NOTIFICATIONS SENT</b>
-• Web notification: ✅
-• Telegram: ${profile.telegram_chat_id ? '✅' : '❌ Not connected'}
-• Email: ${userEmail ? '✅' : '❌'}
+📊 Total: ${totalCount} | Connected: ${connectedCount} | Banned: ${bannedCount}
+${userList}
+<i>Use /userinfo [email] for details</i>
 `;
 
-  await sendTelegramMessage(chatId, adminConfirmMessage);
+  let keyboard: object | null = null;
+  if (totalPages > 1) {
+    const buttons = [];
+    if (page > 0) buttons.push({ text: "◀️ Prev", callback_data: `allusers_page_${page - 1}` });
+    buttons.push({ text: `${page + 1}/${totalPages}`, callback_data: "allusers_noop" });
+    if (page < totalPages - 1) buttons.push({ text: "Next ▶️", callback_data: `allusers_page_${page + 1}` });
+    keyboard = { inline_keyboard: [buttons] };
+  }
+
+  return { message, keyboard };
 }
 
-async function handleDeleteUser(chatId: string, identifier: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
-    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to delete users.");
-    return;
-  }
+// ═══════════════════════════════════════════════════════════
+// TOPUPS LIST BUILDER
+// ═══════════════════════════════════════════════════════════
 
-  if (!identifier) {
-    await sendTelegramMessage(chatId, "❌ Please provide a username, email, or Telegram chat ID.\n\n<b>Usage:</b> /deleteuser identifier");
-    return;
-  }
-
-  // Find user by username, email, or telegram_chat_id
-  let userId: string | null = null;
-  let userInfo: any = null;
-  let userEmail: string | null = null;
-
-  // First try by username or telegram_chat_id
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, user_id, username, name, telegram_chat_id, telegram_username, credits, created_at")
-    .or(`username.ilike.${identifier},telegram_chat_id.eq.${identifier}`)
-    .maybeSingle();
-
-  if (profile) {
-    userId = profile.user_id;
-    userInfo = profile;
-    // Get email from auth.users
-    const { data: authData } = await supabase.auth.admin.listUsers();
-    const foundUser = authData?.users?.find((u: any) => u.id === userId);
-    userEmail = foundUser?.email || null;
-  } else {
-    // Try by email via auth.users
-    const { data: authData } = await supabase.auth.admin.listUsers();
-    const foundUser = authData?.users?.find((u: any) => 
-      u.email?.toLowerCase() === identifier.toLowerCase()
-    );
-    
-    if (foundUser) {
-      userId = foundUser.id;
-      userEmail = foundUser.email;
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("id, user_id, username, name, telegram_chat_id, telegram_username, credits, created_at")
-        .eq("user_id", foundUser.id)
-        .maybeSingle();
-      userInfo = profileData;
-    }
-  }
-
-  if (!userId) {
-    await sendTelegramMessage(chatId, `❌ User not found: <code>${identifier}</code>\n\n<i>Try searching by username, email, or Telegram chat ID.</i>`);
-    return;
-  }
-
-  // Store pending deletion info
-  const memberSince = userInfo?.created_at 
-    ? new Date(userInfo.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-    : "Unknown";
-
-  const confirmationKeyboard = {
-    inline_keyboard: [
-      [
-        { text: "⚠️ CONFIRM DELETE", callback_data: `delete_confirm_${userId}` },
-        { text: "❌ Cancel", callback_data: `delete_cancel_${userId}` },
-      ],
-    ],
-  };
-
-  const confirmMessage = `
-⚠️ <b>DELETE USER - CONFIRMATION REQUIRED</b>
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>👤 USER DETAILS</b>
-
-<b>Username:</b> ${userInfo?.username || "Not set"}
-<b>Name:</b> ${userInfo?.name || "Not set"}
-<b>Email:</b> ${userEmail || "Unknown"}
-<b>Telegram:</b> ${userInfo?.telegram_chat_id ? `<code>${userInfo.telegram_chat_id}</code>` : "Not connected"}
-<b>Credits:</b> ${Number(userInfo?.credits || 0)}
-<b>Member Since:</b> ${memberSince}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>🗑️ DATA TO BE DELETED:</b>
-• Profile & account info
-• All notifications
-• All support tickets & messages
-• All card checks
-• All sessions
-• Ban appeals & history
-• Auth account
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>⚠️ THIS ACTION IS IRREVERSIBLE!</b>
-
-<i>Click CONFIRM DELETE to proceed or Cancel to abort.</i>
-`;
-
-  await sendTelegramMessage(chatId, confirmMessage, confirmationKeyboard);
-}
-
-// Execute user deletion
-async function executeUserDeletion(chatId: string, userId: string, supabase: any): Promise<{ success: boolean; error?: string }> {
-  try {
-    console.log(`Starting deletion for user: ${userId}`);
-
-    // Get user info before deletion for logging
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("username, telegram_chat_id")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    // Delete all related data in order (respecting foreign keys)
-    
-    // 1. Get all ticket IDs for this user first
-    const { data: tickets } = await supabase
-      .from("support_tickets")
-      .select("id")
-      .eq("user_id", userId);
-    
-    // 2. Delete ticket messages for those tickets
-    if (tickets && tickets.length > 0) {
-      const ticketIds = tickets.map((t: any) => t.id);
-      await supabase
-        .from("ticket_messages")
-        .delete()
-        .in("ticket_id", ticketIds);
-    }
-
-    // 3. Delete support tickets
-    await supabase
-      .from("support_tickets")
-      .delete()
-      .eq("user_id", userId);
-
-    // 4. Delete notifications
-    await supabase
-      .from("notifications")
-      .delete()
-      .eq("user_id", userId);
-
-    // 5. Delete notification reads
-    await supabase
-      .from("notification_reads")
-      .delete()
-      .eq("user_id", userId);
-
-    // 6. Delete deleted_notifications
-    await supabase
-      .from("deleted_notifications")
-      .delete()
-      .eq("user_id", userId);
-
-    // 7. Delete card checks
-    await supabase
-      .from("card_checks")
-      .delete()
-      .eq("user_id", userId);
-
-    // 8. Delete user sessions
-    await supabase
-      .from("user_sessions")
-      .delete()
-      .eq("user_id", userId);
-
-    // 9. Delete user roles
-    await supabase
-      .from("user_roles")
-      .delete()
-      .eq("user_id", userId);
-
-    // 10. Delete ban appeals
-    await supabase
-      .from("ban_appeals")
-      .delete()
-      .eq("user_id", userId);
-
-    // 11. Delete password reset OTPs
-    await supabase
-      .from("password_reset_otps")
-      .delete()
-      .eq("user_id", userId);
-
-    // 12. Delete pending bans
-    await supabase
-      .from("pending_bans")
-      .delete()
-      .eq("user_id", userId);
-
-    // 13. Delete pending verifications by telegram_chat_id if exists
-    if (profile?.telegram_chat_id) {
-      await supabase
-        .from("pending_verifications")
-        .delete()
-        .eq("telegram_chat_id", profile.telegram_chat_id);
-    }
-
-    // 14. Delete profile
-    await supabase
-      .from("profiles")
-      .delete()
-      .eq("user_id", userId);
-
-    // 15. Delete auth user
-    const { error: authError } = await supabase.auth.admin.deleteUser(userId);
-    if (authError) {
-      console.error("Error deleting auth user:", authError);
-      return { success: false, error: `Auth deletion failed: ${authError.message}` };
-    }
-
-    console.log(`Successfully deleted user: ${userId}`);
-    return { success: true };
-  } catch (error: any) {
-    console.error("Error during user deletion:", error);
-    return { success: false, error: error.message };
-  }
-}
-
-// Handle delete all users command (EXTREMELY DANGEROUS - requires multi-step confirmation)
-async function handleDeleteAllUsers(chatId: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
-    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to delete users.");
-    return;
-  }
-
-  // Get count of all users
-  const { count: userCount, error: countError } = await supabase
-    .from("profiles")
-    .select("*", { count: "exact", head: true });
-
-  if (countError) {
-    console.error("Error counting users:", countError);
-    await sendTelegramMessage(chatId, "❌ Error fetching user count. Please try again.");
-    return;
-  }
-
-  if (!userCount || userCount === 0) {
-    await sendTelegramMessage(chatId, "ℹ️ No users to delete.");
-    return;
-  }
-
-  const confirmationKeyboard = {
-    inline_keyboard: [
-      [
-        { text: "☠️ CONFIRM DELETE ALL", callback_data: `deleteall_confirm_step1` },
-        { text: "❌ Cancel", callback_data: `deleteall_cancel` },
-      ],
-    ],
-  };
-
-  const warningMessage = `
-☠️ <b>DELETE ALL USERS - EXTREME WARNING</b>
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>⚠️ YOU ARE ABOUT TO DELETE ALL USERS!</b>
-
-<b>Total users to delete:</b> ${userCount}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>🗑️ DATA TO BE DELETED:</b>
-• ALL user profiles & accounts
-• ALL notifications
-• ALL support tickets & messages
-• ALL card checks
-• ALL sessions
-• ALL ban appeals & history
-• ALL auth accounts
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>☠️ THIS ACTION IS IRREVERSIBLE!</b>
-<b>☠️ ALL DATA WILL BE PERMANENTLY LOST!</b>
-
-<i>This will require TWO confirmations.</i>
-`;
-
-  await sendTelegramMessage(chatId, warningMessage, confirmationKeyboard);
-}
-
-// Execute deletion of all users
-async function executeDeleteAllUsers(chatId: string, supabase: any): Promise<void> {
-  await sendTelegramMessage(chatId, "🔄 <b>Deleting all users...</b>\n\n<i>This may take a while. Please wait.</i>");
-
-  try {
-    // Get all user IDs first
-    const { data: profiles, error: profilesError } = await supabase
-      .from("profiles")
-      .select("user_id, telegram_chat_id");
-
-    if (profilesError) {
-      console.error("Error fetching profiles:", profilesError);
-      await sendTelegramMessage(chatId, "❌ Error fetching users. Please try again.");
-      return;
-    }
-
-    if (!profiles || profiles.length === 0) {
-      await sendTelegramMessage(chatId, "ℹ️ No users to delete.");
-      return;
-    }
-
-    const totalUsers = profiles.length;
-    let deletedCount = 0;
-    let failedCount = 0;
-    const errors: string[] = [];
-
-    // Delete users one by one
-    for (const profile of profiles) {
-      const result = await executeUserDeletion(chatId, profile.user_id, supabase);
-      if (result.success) {
-        deletedCount++;
-      } else {
-        failedCount++;
-        errors.push(`User ${profile.user_id}: ${result.error}`);
-      }
-
-      // Send progress update every 10 users
-      if ((deletedCount + failedCount) % 10 === 0) {
-        await sendTelegramMessage(
-          chatId,
-          `🔄 <b>Progress:</b> ${deletedCount + failedCount}/${totalUsers} processed\n✅ Deleted: ${deletedCount}\n❌ Failed: ${failedCount}`
-        );
-      }
-    }
-
-    // Send final summary
-    let summaryMessage = `
-✅ <b>Delete All Users - Complete</b>
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>📊 SUMMARY</b>
-
-<b>Total Processed:</b> ${totalUsers}
-<b>Successfully Deleted:</b> ${deletedCount}
-<b>Failed:</b> ${failedCount}
-
-━━━━━━━━━━━━━━━━━━━━━━
-`;
-
-    if (errors.length > 0) {
-      summaryMessage += `\n<b>❌ Errors:</b>\n${errors.slice(0, 5).join("\n")}`;
-      if (errors.length > 5) {
-        summaryMessage += `\n<i>... and ${errors.length - 5} more errors</i>`;
-      }
-    }
-
-    await sendTelegramMessage(chatId, summaryMessage);
-    console.log(`Delete all users complete: ${deletedCount} deleted, ${failedCount} failed`);
-  } catch (error: any) {
-    console.error("Error during delete all users:", error);
-    await sendTelegramMessage(chatId, `❌ Error during deletion: ${error.message}`);
-  }
-}
-
-// Store pending ban operations (in-memory, per webhook call we'll use DB)
-async function handleBanUser(chatId: string, identifier: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
-    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to ban users.");
-    return;
-  }
-
-  if (!identifier) {
-    await sendTelegramMessage(chatId, "❌ Please provide a username or email.\n\n<b>Usage:</b> /banuser username_or_email");
-    return;
-  }
-
-  // Find user by username or email
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("id, user_id, username, name, is_banned, telegram_chat_id")
-    .or(`username.ilike.${identifier}`)
-    .maybeSingle();
-
-  let userId = profile?.user_id;
-  let userInfo = profile;
-  let userEmail: string | null = null;
-
-  // If not found by username, try by email via auth.users
-  if (!profile) {
-    const { data: authUser } = await supabase.auth.admin.listUsers();
-    const foundUser = authUser?.users?.find((u: any) => 
-      u.email?.toLowerCase() === identifier.toLowerCase()
-    );
-    
-    if (foundUser) {
-      userId = foundUser.id;
-      userEmail = foundUser.email;
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("id, user_id, username, name, is_banned, telegram_chat_id")
-        .eq("user_id", foundUser.id)
-        .maybeSingle();
-      userInfo = profileData;
-    }
-  } else {
-    // Get email from auth.users
-    const { data: authUser } = await supabase.auth.admin.listUsers();
-    const foundUser = authUser?.users?.find((u: any) => u.id === userId);
-    userEmail = foundUser?.email || null;
-  }
-
-  if (!userId || !userInfo) {
-    await sendTelegramMessage(chatId, `❌ User not found: <code>${identifier}</code>`);
-    return;
-  }
-
-  if (userInfo.is_banned) {
-    await sendTelegramMessage(chatId, `⚠️ User <b>${userInfo.username || userInfo.name || identifier}</b> is already banned.`);
-    return;
-  }
-
-  // Store pending ban in database and ask for reason
-  const { error: pendingError } = await supabase
-    .from("pending_bans")
-    .upsert({
-      admin_chat_id: chatId,
-      user_id: userId,
-      username: userInfo.username || userInfo.name || identifier,
-      user_email: userEmail,
-      user_telegram_chat_id: userInfo.telegram_chat_id,
-      created_at: new Date().toISOString(),
-      step: "reason",
-      ban_reason: null,
-    }, { onConflict: "admin_chat_id" });
-
-  if (pendingError) {
-    console.error("Error storing pending ban:", pendingError);
-    await sendTelegramMessage(chatId, "❌ Failed to initiate ban. Please try again.");
-    return;
-  }
-
-  await sendTelegramMessage(
-    chatId,
-    `🚫 <b>Ban User - Step 1/2</b>\n\n<b>User:</b> ${userInfo.username || userInfo.name || identifier}\n<b>User ID:</b> <code>${userId}</code>\n\n<b>Please type the ban reason:</b>\n\n<i>Or send /cancelban to cancel.</i>`
-  );
-}
-
-async function handleBanReason(chatId: string, text: string, supabase: any): Promise<boolean> {
-  // Get pending ban for this admin
-  const { data: pendingBan, error: pendingError } = await supabase
-    .from("pending_bans")
-    .select("*")
-    .eq("admin_chat_id", chatId)
-    .maybeSingle();
-
-  if (!pendingBan) {
-    return false; // No pending ban
-  }
-
-  // Step 1: Reason - save it and ask for duration
-  if (pendingBan.step === "reason") {
-    await supabase
-      .from("pending_bans")
-      .update({ ban_reason: text, step: "duration" })
-      .eq("admin_chat_id", chatId);
-
-    // Send duration selection with inline buttons
-    const durationKeyboard = {
-      inline_keyboard: [
-        [
-          { text: "1 Hour", callback_data: `ban_duration_1h_${pendingBan.user_id}` },
-          { text: "6 Hours", callback_data: `ban_duration_6h_${pendingBan.user_id}` },
-          { text: "24 Hours", callback_data: `ban_duration_24h_${pendingBan.user_id}` },
-        ],
-        [
-          { text: "3 Days", callback_data: `ban_duration_3d_${pendingBan.user_id}` },
-          { text: "7 Days", callback_data: `ban_duration_7d_${pendingBan.user_id}` },
-          { text: "30 Days", callback_data: `ban_duration_30d_${pendingBan.user_id}` },
-        ],
-        [
-          { text: "🔴 Permanent", callback_data: `ban_duration_permanent_${pendingBan.user_id}` },
-        ],
-      ],
-    };
-
-    await sendTelegramMessage(
-      chatId,
-      `🚫 <b>Ban User - Step 2/2</b>\n\n<b>User:</b> ${pendingBan.username}\n<b>Reason:</b> ${text}\n\n<b>Select ban duration:</b>`,
-      durationKeyboard
-    );
-
-    return true;
-  }
-
-  return false;
-}
-
-async function executeBan(
-  chatId: string,
-  pendingBan: any,
-  duration: string,
-  supabase: any
-): Promise<void> {
-  // Calculate banned_until based on duration
-  let bannedUntil: string | null = null;
-  let durationText = "Permanent";
-
-  const now = new Date();
-  switch (duration) {
-    case "1h":
-      bannedUntil = new Date(now.getTime() + 1 * 60 * 60 * 1000).toISOString();
-      durationText = "1 Hour";
-      break;
-    case "6h":
-      bannedUntil = new Date(now.getTime() + 6 * 60 * 60 * 1000).toISOString();
-      durationText = "6 Hours";
-      break;
-    case "24h":
-      bannedUntil = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
-      durationText = "24 Hours";
-      break;
-    case "3d":
-      bannedUntil = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString();
-      durationText = "3 Days";
-      break;
-    case "7d":
-      bannedUntil = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
-      durationText = "7 Days";
-      break;
-    case "30d":
-      bannedUntil = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      durationText = "30 Days";
-      break;
-    case "permanent":
-    default:
-      bannedUntil = null;
-      durationText = "Permanent";
-      break;
-  }
-
-  // Delete pending ban
-  await supabase
-    .from("pending_bans")
-    .delete()
-    .eq("admin_chat_id", chatId);
-
-  // Ban the user
-  const { error: banError } = await supabase
-    .from("profiles")
-    .update({
-      is_banned: true,
-      banned_at: new Date().toISOString(),
-      ban_reason: pendingBan.ban_reason,
-      banned_until: bannedUntil,
-    })
-    .eq("user_id", pendingBan.user_id);
-
-  if (banError) {
-    console.error("Error banning user:", banError);
-    await sendTelegramMessage(chatId, "❌ Failed to ban user. Please try again.");
-    return;
-  }
-
-  const expiryText = bannedUntil 
-    ? `\n<b>Expires:</b> ${new Date(bannedUntil).toLocaleString()}`
-    : "";
-
-  await sendTelegramMessage(
-    chatId,
-    `✅ <b>User Banned</b>\n\n<b>User:</b> ${pendingBan.username}\n<b>Reason:</b> ${pendingBan.ban_reason}\n<b>Duration:</b> ${durationText}${expiryText}`
-  );
-
-  // Notify user via Telegram
-  if (pendingBan.user_telegram_chat_id) {
-    const userExpiryText = bannedUntil
-      ? `\n\n<b>Ban expires:</b> ${new Date(bannedUntil).toLocaleString()}`
-      : "\n\nThis is a <b>permanent</b> ban.";
-
-    await sendTelegramMessage(
-      pendingBan.user_telegram_chat_id,
-      `🚫 <b>Account Banned</b>\n\nYour account has been banned from the platform.\n\n<b>Reason:</b> ${pendingBan.ban_reason}\n<b>Duration:</b> ${durationText}${userExpiryText}\n\nIf you believe this is a mistake, please contact support.`
-    );
-  }
-
-  // Send email notification
-  if (pendingBan.user_email && RESEND_API_KEY) {
-    const emailExpiryText = bannedUntil
-      ? `<p><strong>Ban expires:</strong> ${new Date(bannedUntil).toLocaleString()}</p>`
-      : `<p>This is a <strong>permanent</strong> ban.</p>`;
-
-    try {
-      await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${RESEND_API_KEY}`,
-        },
-        body: JSON.stringify({
-          from: "Yunchi Support <onboarding@resend.dev>",
-          to: [pendingBan.user_email],
-          subject: `Account Banned (${durationText}) - Yunchi`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #dc2626;">🚫 Account Banned</h2>
-              <p>Your Yunchi account has been banned.</p>
-              <div style="background: #fef2f2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
-                <p><strong>Reason:</strong> ${pendingBan.ban_reason}</p>
-                <p><strong>Duration:</strong> ${durationText}</p>
-                ${emailExpiryText}
-              </div>
-              <p>If you believe this was a mistake, you can submit an appeal through our website or contact support directly.</p>
-              <p style="color: #6c757d; font-size: 14px; margin-top: 20px;">— Yunchi Team</p>
-            </div>
-          `,
-        }),
-      });
-    } catch (error) {
-      console.error("Error sending ban email:", error);
-    }
-  }
-}
-
-async function handleCancelBan(chatId: string, supabase: any): Promise<void> {
-  const { data: pendingBan } = await supabase
-    .from("pending_bans")
-    .select("username")
-    .eq("admin_chat_id", chatId)
-    .maybeSingle();
-
-  if (!pendingBan) {
-    await sendTelegramMessage(chatId, "⚠️ No pending ban to cancel.");
-    return;
-  }
-
-  await supabase
-    .from("pending_bans")
-    .delete()
-    .eq("admin_chat_id", chatId);
-
-  await sendTelegramMessage(chatId, `✅ Ban cancelled for user: <b>${pendingBan.username}</b>`);
-}
-
-async function handleUnbanUser(chatId: string, identifier: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
-    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to unban users.");
-    return;
-  }
-
-  if (!identifier) {
-    await sendTelegramMessage(chatId, "❌ Please provide a username or email.\n\n<b>Usage:</b> /unbanuser username_or_email");
-    return;
-  }
-
-  // Find user by username
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, user_id, username, name, is_banned")
-    .or(`username.ilike.${identifier}`)
-    .maybeSingle();
-
-  let userId = profile?.user_id;
-  let userInfo = profile;
-
-  // If not found by username, try by email
-  if (!profile) {
-    const { data: authUser } = await supabase.auth.admin.listUsers();
-    const foundUser = authUser?.users?.find((u: any) => 
-      u.email?.toLowerCase() === identifier.toLowerCase()
-    );
-    
-    if (foundUser) {
-      userId = foundUser.id;
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("id, user_id, username, name, is_banned")
-        .eq("user_id", foundUser.id)
-        .maybeSingle();
-      userInfo = profileData;
-    }
-  }
-
-  if (!userId || !userInfo) {
-    await sendTelegramMessage(chatId, `❌ User not found: <code>${identifier}</code>`);
-    return;
-  }
-
-  if (!userInfo.is_banned) {
-    await sendTelegramMessage(chatId, `⚠️ User <b>${userInfo.username || userInfo.name || identifier}</b> is not banned.`);
-    return;
-  }
-
-  // Unban the user
-  const { error: unbanError } = await supabase
-    .from("profiles")
-    .update({ 
-      is_banned: false, 
-      banned_at: null,
-      ban_reason: null,
-      banned_until: null
-    })
-    .eq("user_id", userId);
-
-  if (unbanError) {
-    console.error("Error unbanning user:", unbanError);
-    await sendTelegramMessage(chatId, "❌ Failed to unban user. Please try again.");
-    return;
-  }
-
-  await sendTelegramMessage(chatId, `✅ <b>User Unbanned</b>\n\n<b>User:</b> ${userInfo.username || userInfo.name || identifier}\n<b>User ID:</b> <code>${userId}</code>`);
-
-  // Notify user via Telegram
-  const { data: unbannedProfile } = await supabase
-    .from("profiles")
-    .select("telegram_chat_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (unbannedProfile?.telegram_chat_id) {
-    await sendTelegramMessage(
-      unbannedProfile.telegram_chat_id,
-      "✅ <b>Account Unbanned</b>\n\nYour account has been unbanned. You can now access the platform again."
-    );
-  }
-}
-
-async function handleBroadcast(chatId: string, message: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
-    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to broadcast messages.");
-    return;
-  }
-
-  if (!message) {
-    await sendTelegramMessage(chatId, "❌ Please provide a message to broadcast.\n\n<b>Usage:</b> /broadcast Your message here");
-    return;
-  }
-
-  // Get ALL users (not just those with Telegram connected)
-  const { data: allProfiles, error: allError } = await supabase
-    .from("profiles")
-    .select("user_id, telegram_chat_id, username")
-    .eq("is_banned", false);
-
-  if (allError) {
-    console.error("Error fetching profiles:", allError);
-    await sendTelegramMessage(chatId, "❌ Failed to fetch users. Please try again.");
-    return;
-  }
-
-  if (!allProfiles || allProfiles.length === 0) {
-    await sendTelegramMessage(chatId, "⚠️ No users found.");
-    return;
-  }
-
-  const telegramUsers = allProfiles.filter((p: any) => p.telegram_chat_id && p.telegram_chat_id !== ADMIN_CHAT_ID);
-  
-  await sendTelegramMessage(chatId, `📢 <b>Broadcasting to ${allProfiles.length} users (${telegramUsers.length} via Telegram)...</b>`);
-
-  let telegramSuccess = 0;
-  let telegramFail = 0;
-  let webNotifSuccess = 0;
-  let webNotifFail = 0;
-
-  const broadcastMessage = `
-📢 <b>Announcement</b>
-
-${message}
-
-<i>— Yunchi Team</i>
-`;
-
-  // Create web notifications for ALL users
-  const notifications = allProfiles.map((profile: any) => ({
-    user_id: profile.user_id,
-    type: "announcement",
-    title: "📢 Announcement",
-    message: message,
-    metadata: { broadcast: true, sent_at: new Date().toISOString() }
-  }));
-
-  const { error: notifError } = await supabase
-    .from("notifications")
-    .insert(notifications);
-
-  if (notifError) {
-    console.error("Error creating web notifications:", notifError);
-    webNotifFail = allProfiles.length;
-  } else {
-    webNotifSuccess = allProfiles.length;
-  }
-
-  // Send Telegram messages to users with connected Telegram
-  for (const profile of telegramUsers) {
-    const success = await sendTelegramMessage(profile.telegram_chat_id, broadcastMessage);
-    if (success) {
-      telegramSuccess++;
-    } else {
-      telegramFail++;
-    }
-    // Add a small delay to avoid rate limiting
-    await new Promise(resolve => setTimeout(resolve, 50));
-  }
-
-  await sendTelegramMessage(
-    chatId,
-    `✅ <b>Broadcast Complete</b>
-
-<b>📱 Telegram:</b>
-├ Sent: ${telegramSuccess}
-├ Failed: ${telegramFail}
-└ Total: ${telegramUsers.length}
-
-<b>🌐 Web Notifications:</b>
-├ Sent: ${webNotifSuccess}
-├ Failed: ${webNotifFail}
-└ Total: ${allProfiles.length}`
-  );
-}
-
-async function handleStats(chatId: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
-    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to view statistics.");
-    return;
-  }
-
-  // Fetch site stats
-  const { data: stats } = await supabase
-    .from("site_stats")
-    .select("total_users, total_checks, updated_at")
-    .eq("id", "global")
-    .maybeSingle();
-
-  // Fetch ticket stats
-  const { data: tickets } = await supabase
-    .from("support_tickets")
-    .select("status");
-
-  const ticketStats = {
-    total: tickets?.length || 0,
-    open: tickets?.filter((t: any) => t.status === "open").length || 0,
-    processing: tickets?.filter((t: any) => t.status === "processing").length || 0,
-    solved: tickets?.filter((t: any) => t.status === "solved").length || 0,
-    closed: tickets?.filter((t: any) => t.status === "closed").length || 0,
-  };
-
-  // Fetch banned users count
-  const { data: bannedUsers } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("is_banned", true);
-
-  // Fetch users with Telegram connected
-  const { data: telegramUsers } = await supabase
-    .from("profiles")
-    .select("id")
-    .not("telegram_chat_id", "is", null);
-
-  const statsMessage = `
-📊 <b>Website Statistics</b>
-
-<b>👥 Users</b>
-• Total Users: ${stats?.total_users || 0}
-• Telegram Connected: ${telegramUsers?.length || 0}
-• Banned: ${bannedUsers?.length || 0}
-
-<b>✅ Card Checks</b>
-• Total Checks: ${stats?.total_checks || 0}
-
-<b>🎫 Support Tickets</b>
-• Total: ${ticketStats.total}
-• 🟡 Open: ${ticketStats.open}
-• 🔵 Processing: ${ticketStats.processing}
-• 🟢 Solved: ${ticketStats.solved}
-• ⚫ Closed: ${ticketStats.closed}
-
-<i>Last updated: ${stats?.updated_at ? new Date(stats.updated_at).toLocaleString() : 'N/A'}</i>
-`;
-
-  await sendTelegramMessage(chatId, statsMessage);
-}
-
-async function handleViewBans(chatId: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
-    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to view banned users.");
-    return;
-  }
-
-  // Fetch all banned users
-  const { data: bannedUsers, error } = await supabase
-    .from("profiles")
-    .select("user_id, username, name, ban_reason, banned_at, banned_until")
-    .eq("is_banned", true)
-    .order("banned_at", { ascending: false });
-
-  if (error) {
-    console.error("Error fetching banned users:", error);
-    await sendTelegramMessage(chatId, "❌ Failed to fetch banned users. Please try again.");
-    return;
-  }
-
-  if (!bannedUsers || bannedUsers.length === 0) {
-    await sendTelegramMessage(chatId, "✅ <b>No Banned Users</b>\n\nThere are currently no banned users on the platform.");
-    return;
-  }
-
-  // Build the message with all banned users
-  let message = `🚫 <b>Banned Users (${bannedUsers.length})</b>\n\n`;
-
-  for (const user of bannedUsers) {
-    const displayName = user.username || user.name || "Unknown";
-    const bannedDate = user.banned_at 
-      ? new Date(user.banned_at).toLocaleDateString()
-      : "N/A";
-    
-    let banStatus = "🔴 Permanent";
-    if (user.banned_until) {
-      const expiryDate = new Date(user.banned_until);
-      const now = new Date();
-      if (expiryDate > now) {
-        const diffMs = expiryDate.getTime() - now.getTime();
-        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-        const diffDays = Math.floor(diffHours / 24);
-        
-        if (diffDays > 0) {
-          banStatus = `⏳ ${diffDays}d ${diffHours % 24}h left`;
-        } else {
-          banStatus = `⏳ ${diffHours}h left`;
-        }
-      } else {
-        banStatus = "⚠️ Pending unban";
-      }
-    }
-
-    message += `<b>👤 ${displayName}</b>\n`;
-    message += `├ Status: ${banStatus}\n`;
-    message += `├ Reason: ${user.ban_reason || "Not specified"}\n`;
-    message += `├ Banned: ${bannedDate}\n`;
-    if (user.banned_until) {
-      message += `├ Expires: ${new Date(user.banned_until).toLocaleString()}\n`;
-    }
-    message += `└ <code>/unbanuser ${user.username || user.user_id}</code>\n\n`;
-  }
-
-  message += `<i>Use /unbanuser [username] to unban a user</i>`;
-
-  await sendTelegramMessage(chatId, message);
-}
-
-// Build paginated topups list message
 function buildTopupsListMessage(
   topups: any[],
   page: number,
@@ -1649,1964 +346,1373 @@ function buildTopupsListMessage(
 ): { message: string; keyboard: object | null } {
   const totalPages = Math.ceil(totalCount / perPage);
   const startIndex = page * perPage;
-  const endIndex = Math.min(startIndex + perPage, totalCount);
-  const displayTopups = topups.slice(startIndex, endIndex);
+  const displayTopups = topups.slice(startIndex, startIndex + perPage);
 
   let topupList = "";
   displayTopups.forEach((topup, index) => {
-    const createdDate = new Date(topup.created_at).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
-    });
-    const username = topup.profiles?.username || topup.profiles?.name || "Unknown";
+    const date = new Date(topup.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const username = topup.profiles?.username || "Unknown";
+    const credits = Number(topup.amount) * 10;
     
     topupList += `
-${startIndex + index + 1}. <b>${Number(topup.amount) * 10} credits</b>
-   👤 ${username}
-   💳 ${topup.payment_method}
-   📅 ${createdDate}
-   🆔 <code>${topup.id.substring(0, 8)}</code>
+${startIndex + index + 1}. <b>${credits} credits</b>
+   👤 ${username} | 💳 ${topup.payment_method}
+   📅 ${date} | 🆔 <code>${topup.id.slice(0, 8)}</code>
 `;
   });
 
-  const topupsMessage = `
-╔═══════════════════════════════╗
-     💰 <b>PENDING TOP-UP REQUESTS</b>
-╚═══════════════════════════════╝
+  const message = totalCount === 0 
+    ? `💰 <b>Pending Topups</b>\n\n✅ No pending requests!`
+    : `
+💰 <b>Pending Topups</b> (${page + 1}/${totalPages || 1})
 
-┌─────────────────────────────────┐
-│  📊 <b>SUMMARY</b>
-├─────────────────────────────────┤
-│
-│  <b>Pending:</b> ${totalCount}
-│  <b>Page:</b> ${page + 1}/${totalPages || 1}
-│
-└─────────────────────────────────┘
-
-┌─────────────────────────────────┐
-│  📋 <b>REQUESTS</b>
-├─────────────────────────────────┤
-${topupList || "\n│  No pending requests\n"}
-└─────────────────────────────────┘
-
-<i>💡 Use buttons below to approve/reject</i>
-<i>📱 Or manage via web dashboard</i>
+📊 Pending: ${totalCount}
+${topupList}
 `;
 
-  // Build pagination and action buttons
   const buttons: any[][] = [];
-  
-  // Add approve/reject buttons for each topup
   displayTopups.forEach((topup) => {
+    const credits = Number(topup.amount) * 10;
     buttons.push([
-      { text: `✅ Approve ${Number(topup.amount) * 10} credits`, callback_data: `topup_accept_${topup.id}` },
+      { text: `✅ Approve ${credits}`, callback_data: `topup_accept_${topup.id}` },
       { text: `❌ Reject`, callback_data: `topup_reject_${topup.id}` }
     ]);
   });
-  
-  // Pagination buttons
+
   if (totalPages > 1) {
-    const paginationButtons = [];
-    
-    if (page > 0) {
-      paginationButtons.push({ text: "◀️ Previous", callback_data: `topups_page_${page - 1}` });
-    }
-    
-    paginationButtons.push({ text: `${page + 1}/${totalPages}`, callback_data: "topups_noop" });
-    
-    if (page < totalPages - 1) {
-      paginationButtons.push({ text: "Next ▶️", callback_data: `topups_page_${page + 1}` });
-    }
-    
-    buttons.push(paginationButtons);
+    const navButtons = [];
+    if (page > 0) navButtons.push({ text: "◀️", callback_data: `topups_page_${page - 1}` });
+    navButtons.push({ text: `${page + 1}/${totalPages}`, callback_data: "topups_noop" });
+    if (page < totalPages - 1) navButtons.push({ text: "▶️", callback_data: `topups_page_${page + 1}` });
+    buttons.push(navButtons);
   }
   
-  // Refresh button
   buttons.push([{ text: "🔄 Refresh", callback_data: "topups_refresh" }]);
 
-  const keyboard = buttons.length > 0 ? { inline_keyboard: buttons } : null;
+  return { message, keyboard: { inline_keyboard: buttons } };
+}
 
-  return { message: topupsMessage, keyboard };
+// ═══════════════════════════════════════════════════════════
+// ADMIN COMMAND HANDLERS
+// ═══════════════════════════════════════════════════════════
+
+async function handleAdminCmd(chatId: string): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ Access denied");
+    return;
+  }
+
+  await setBotCommands();
+
+  const menu = `
+🔐 <b>Admin Panel</b>
+
+<b>📋 Tickets</b>
+/ticket <code>[id]</code> - Manage ticket
+
+<b>💰 Finance</b>
+/topups - Pending requests
+/addfund <code>[email] [amount]</code> - Add/deduct credits
+
+<b>👥 Users</b>
+/banuser <code>[user]</code> - Ban user
+/unbanuser <code>[user]</code> - Unban user
+/deleteuser <code>[user]</code> - Delete user
+/deletealluser - Delete all users
+/cancelban - Cancel pending ban
+/viewbans - View banned users
+
+<b>📊 Data</b>
+/stats - View statistics
+/allusers - List all users
+/userinfo <code>[user]</code> - User details
+
+<b>📢 Communication</b>
+/broadcast <code>[message]</code> - Send to all users
+`;
+
+  await sendTelegramMessage(chatId, menu);
+}
+
+async function handleAddFund(chatId: string, args: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ Access denied");
+    return;
+  }
+
+  const parts = args.trim().split(/\s+/);
+  if (parts.length < 2) {
+    await sendTelegramMessage(chatId, `
+❌ <b>Usage:</b> /addfund <code>[email] [amount]</code>
+
+Examples:
+• /addfund user@email.com 50
+• /addfund user@email.com -100 (deduct)
+`);
+    return;
+  }
+
+  const email = parts[0].toLowerCase();
+  const amount = parseFloat(parts[1]);
+
+  if (isNaN(amount) || amount === 0) {
+    await sendTelegramMessage(chatId, "❌ Invalid amount");
+    return;
+  }
+
+  const { data: authData } = await supabase.auth.admin.listUsers();
+  const foundUser = authData?.users?.find((u: any) => u.email?.toLowerCase() === email);
+
+  if (!foundUser) {
+    await sendTelegramMessage(chatId, `❌ User not found: ${email}`);
+    return;
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("username, credits, telegram_chat_id")
+    .eq("user_id", foundUser.id)
+    .single();
+
+  if (!profile) {
+    await sendTelegramMessage(chatId, "❌ Profile not found");
+    return;
+  }
+
+  const oldCredits = Number(profile.credits) || 0;
+  const newCredits = oldCredits + amount;
+
+  if (newCredits < 0) {
+    await sendTelegramMessage(chatId, `❌ Insufficient credits. Current: ${oldCredits}`);
+    return;
+  }
+
+  await supabase
+    .from("profiles")
+    .update({ credits: newCredits, updated_at: new Date().toISOString() })
+    .eq("user_id", foundUser.id);
+
+  const action = amount > 0 ? "Added" : "Deducted";
+  const emoji = amount > 0 ? "💰" : "💸";
+
+  // Notify user
+  await supabase.from("notifications").insert({
+    user_id: foundUser.id,
+    type: "credits_admin",
+    title: `Credits ${action}`,
+    message: `${Math.abs(amount)} credits ${action.toLowerCase()}. New balance: ${newCredits}`,
+    metadata: { old_credits: oldCredits, new_credits: newCredits, amount }
+  });
+
+  if (profile.telegram_chat_id) {
+    await sendTelegramMessage(profile.telegram_chat_id, `
+${emoji} <b>Credits ${action}</b>
+
+${action}: ${Math.abs(amount)} credits
+New Balance: ${newCredits} credits
+`);
+  }
+
+  await sendTelegramMessage(chatId, `
+✅ <b>Credits Updated</b>
+
+👤 ${profile.username || email}
+${action}: ${Math.abs(amount)} credits
+Balance: ${oldCredits} → ${newCredits}
+`);
 }
 
 async function handleTopups(chatId: string, supabase: any, page: number = 0): Promise<{ message: string; keyboard: object | null }> {
   if (!isAdmin(chatId)) {
-    await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nYou don't have permission to view top-up requests.");
+    await sendTelegramMessage(chatId, "❌ Access denied");
     return { message: "", keyboard: null };
   }
 
   const perPage = 5;
-
-  // Get all pending topup transactions with user profile info
-  const { data: topups, error, count } = await supabase
+  const { data: topups, count } = await supabase
     .from("topup_transactions")
-    .select(`
-      id, user_id, amount, payment_method, status, created_at, proof_image_url,
-      profiles!inner(username, name, telegram_chat_id)
-    `, { count: "exact" })
+    .select(`id, user_id, amount, payment_method, created_at, profiles!inner(username, name)`, { count: "exact" })
     .eq("status", "pending")
     .order("created_at", { ascending: false });
 
-  if (error) {
-    console.error("Error fetching topups:", error);
-    await sendTelegramMessage(chatId, "❌ Error fetching top-up requests. Please try again.");
-    return { message: "", keyboard: null };
-  }
-
-  const totalCount = count || 0;
-
-  if (!topups || topups.length === 0) {
-    const noTopupsMessage = `
-╔═══════════════════════════════╗
-     💰 <b>PENDING TOP-UP REQUESTS</b>
-╚═══════════════════════════════╝
-
-┌─────────────────────────────────┐
-│
-│  ✅ No pending requests!
-│
-│  All top-up requests have been
-│  processed.
-│
-└─────────────────────────────────┘
-
-<i>🔄 Check back later for new requests</i>
-`;
-    return { 
-      message: noTopupsMessage, 
-      keyboard: { inline_keyboard: [[{ text: "🔄 Refresh", callback_data: "topups_refresh" }]] } 
-    };
-  }
-
-  return buildTopupsListMessage(topups, page, totalCount, perPage);
+  return buildTopupsListMessage(topups || [], page, count || 0, perPage);
 }
 
-const handler = async (req: Request): Promise<Response> => {
-  console.log("Received Telegram webhook");
+async function handleDeleteUser(chatId: string, identifier: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ Access denied");
+    return;
+  }
 
+  if (!identifier) {
+    await sendTelegramMessage(chatId, "❌ <b>Usage:</b> /deleteuser <code>[username/email/chat_id]</code>");
+    return;
+  }
+
+  let userId: string | null = null;
+  let userInfo: any = null;
+  let userEmail: string | null = null;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("*")
+    .or(`username.ilike.${identifier},telegram_chat_id.eq.${identifier}`)
+    .maybeSingle();
+
+  if (profile) {
+    userId = profile.user_id;
+    userInfo = profile;
+    const { data: authData } = await supabase.auth.admin.listUsers();
+    userEmail = authData?.users?.find((u: any) => u.id === userId)?.email || null;
+  } else {
+    const { data: authData } = await supabase.auth.admin.listUsers();
+    const foundUser = authData?.users?.find((u: any) => u.email?.toLowerCase() === identifier.toLowerCase());
+    if (foundUser) {
+      userId = foundUser.id;
+      userEmail = foundUser.email;
+      const { data: p } = await supabase.from("profiles").select("*").eq("user_id", foundUser.id).maybeSingle();
+      userInfo = p;
+    }
+  }
+
+  if (!userId) {
+    await sendTelegramMessage(chatId, `❌ User not found: ${identifier}`);
+    return;
+  }
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "⚠️ CONFIRM DELETE", callback_data: `delete_confirm_${userId}` },
+        { text: "❌ Cancel", callback_data: `delete_cancel_${userId}` },
+      ],
+    ],
+  };
+
+  await sendTelegramMessage(chatId, `
+⚠️ <b>Delete User?</b>
+
+👤 ${userInfo?.username || "Unknown"}
+📧 ${userEmail || "Unknown"}
+💰 ${userInfo?.credits || 0} credits
+
+This will permanently delete all user data.
+`, keyboard);
+}
+
+async function executeUserDeletion(chatId: string, userId: string, supabase: any): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("telegram_chat_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const { data: tickets } = await supabase.from("support_tickets").select("id").eq("user_id", userId);
+    if (tickets?.length > 0) {
+      await supabase.from("ticket_messages").delete().in("ticket_id", tickets.map((t: any) => t.id));
+    }
+
+    const tables = ["support_tickets", "notifications", "notification_reads", "deleted_notifications", 
+                    "card_checks", "user_sessions", "user_roles", "ban_appeals", "password_reset_otps", 
+                    "pending_bans", "profiles", "spending_alert_settings", "topup_transactions", "deletion_otps"];
+    
+    for (const table of tables) {
+      await supabase.from(table).delete().eq("user_id", userId);
+    }
+
+    if (profile?.telegram_chat_id) {
+      await supabase.from("pending_verifications").delete().eq("telegram_chat_id", profile.telegram_chat_id);
+    }
+
+    const { error } = await supabase.auth.admin.deleteUser(userId);
+    if (error) return { success: false, error: error.message };
+
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+async function handleDeleteAllUsers(chatId: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ Access denied");
+    return;
+  }
+
+  const { count } = await supabase.from("profiles").select("*", { count: "exact", head: true });
+
+  if (!count) {
+    await sendTelegramMessage(chatId, "ℹ️ No users to delete");
+    return;
+  }
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "☠️ DELETE ALL", callback_data: "deleteall_confirm_step1" },
+        { text: "❌ Cancel", callback_data: "deleteall_cancel" },
+      ],
+    ],
+  };
+
+  await sendTelegramMessage(chatId, `
+☠️ <b>Delete ALL Users?</b>
+
+Total users: ${count}
+
+⚠️ This is irreversible!
+`, keyboard);
+}
+
+async function executeDeleteAllUsers(chatId: string, supabase: any): Promise<void> {
+  await sendTelegramMessage(chatId, "🔄 Deleting all users...");
+
+  const { data: profiles } = await supabase.from("profiles").select("user_id");
+  if (!profiles?.length) {
+    await sendTelegramMessage(chatId, "ℹ️ No users to delete");
+    return;
+  }
+
+  let deleted = 0, failed = 0;
+  for (const p of profiles) {
+    const result = await executeUserDeletion(chatId, p.user_id, supabase);
+    result.success ? deleted++ : failed++;
+  }
+
+  await sendTelegramMessage(chatId, `
+✅ <b>Delete Complete</b>
+
+Deleted: ${deleted}
+Failed: ${failed}
+`);
+}
+
+async function handleBanUser(chatId: string, identifier: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ Access denied");
+    return;
+  }
+
+  if (!identifier) {
+    await sendTelegramMessage(chatId, "❌ <b>Usage:</b> /banuser <code>[username/email/chat_id]</code>");
+    return;
+  }
+
+  let userId: string | null = null;
+  let userEmail: string | null = null;
+  let userTelegramChatId: string | null = null;
+  let username: string | null = null;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("*")
+    .or(`username.ilike.${identifier},telegram_chat_id.eq.${identifier}`)
+    .maybeSingle();
+
+  if (profile) {
+    userId = profile.user_id;
+    userTelegramChatId = profile.telegram_chat_id;
+    username = profile.username;
+    const { data: authData } = await supabase.auth.admin.listUsers();
+    userEmail = authData?.users?.find((u: any) => u.id === userId)?.email || null;
+  } else {
+    const { data: authData } = await supabase.auth.admin.listUsers();
+    const foundUser = authData?.users?.find((u: any) => u.email?.toLowerCase() === identifier.toLowerCase());
+    if (foundUser) {
+      userId = foundUser.id;
+      userEmail = foundUser.email;
+      const { data: p } = await supabase.from("profiles").select("*").eq("user_id", foundUser.id).maybeSingle();
+      userTelegramChatId = p?.telegram_chat_id || null;
+      username = p?.username || null;
+    }
+  }
+
+  if (!userId) {
+    await sendTelegramMessage(chatId, `❌ User not found: ${identifier}`);
+    return;
+  }
+
+  await supabase.from("pending_bans").insert({
+    user_id: userId,
+    admin_chat_id: chatId,
+    user_email: userEmail,
+    user_telegram_chat_id: userTelegramChatId,
+    username: username,
+    step: "reason"
+  });
+
+  await sendTelegramMessage(chatId, `
+🔨 <b>Banning: ${username || userEmail}</b>
+
+Reply with the ban reason:
+(or /cancelban to abort)
+`);
+}
+
+async function handleCancelBan(chatId: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ Access denied");
+    return;
+  }
+
+  const { data: pendingBan } = await supabase
+    .from("pending_bans")
+    .select("*")
+    .eq("admin_chat_id", chatId)
+    .maybeSingle();
+
+  if (!pendingBan) {
+    await sendTelegramMessage(chatId, "ℹ️ No pending ban to cancel");
+    return;
+  }
+
+  await supabase.from("pending_bans").delete().eq("admin_chat_id", chatId);
+  await sendTelegramMessage(chatId, "✅ Ban cancelled");
+}
+
+async function handleUnbanUser(chatId: string, identifier: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ Access denied");
+    return;
+  }
+
+  if (!identifier) {
+    await sendTelegramMessage(chatId, "❌ <b>Usage:</b> /unbanuser <code>[username/email/chat_id]</code>");
+    return;
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("is_banned", true)
+    .or(`username.ilike.${identifier},telegram_chat_id.eq.${identifier},user_id.eq.${identifier}`)
+    .maybeSingle();
+
+  if (!profile) {
+    await sendTelegramMessage(chatId, `❌ Banned user not found: ${identifier}`);
+    return;
+  }
+
+  await supabase
+    .from("profiles")
+    .update({ is_banned: false, ban_reason: null, banned_at: null, banned_until: null })
+    .eq("user_id", profile.user_id);
+
+  if (profile.telegram_chat_id) {
+    await sendTelegramMessage(profile.telegram_chat_id, "✅ Your account has been unbanned!");
+  }
+
+  await sendTelegramMessage(chatId, `✅ Unbanned: ${profile.username || profile.user_id}`);
+}
+
+async function handleBroadcast(chatId: string, message: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ Access denied");
+    return;
+  }
+
+  if (!message) {
+    await sendTelegramMessage(chatId, "❌ <b>Usage:</b> /broadcast <code>[message]</code>");
+    return;
+  }
+
+  const { data: profiles } = await supabase.from("profiles").select("user_id, telegram_chat_id");
+  if (!profiles?.length) {
+    await sendTelegramMessage(chatId, "ℹ️ No users to broadcast to");
+    return;
+  }
+
+  let telegramSent = 0, webSent = 0;
+
+  for (const p of profiles) {
+    if (p.telegram_chat_id) {
+      const sent = await sendTelegramMessage(p.telegram_chat_id, `📢 <b>Announcement</b>\n\n${message}`);
+      if (sent) telegramSent++;
+    }
+
+    await supabase.from("notifications").insert({
+      user_id: p.user_id,
+      type: "announcement",
+      title: "Announcement",
+      message: message
+    });
+    webSent++;
+  }
+
+  await sendTelegramMessage(chatId, `
+✅ <b>Broadcast Sent</b>
+
+📱 Telegram: ${telegramSent}/${profiles.filter((p: any) => p.telegram_chat_id).length}
+🌐 Web: ${webSent}/${profiles.length}
+`);
+}
+
+async function handleStats(chatId: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ Access denied");
+    return;
+  }
+
+  const { data: stats } = await supabase.from("site_stats").select("*").eq("id", "global").maybeSingle();
+  const { data: tickets } = await supabase.from("support_tickets").select("status");
+  const { data: banned } = await supabase.from("profiles").select("id").eq("is_banned", true);
+  const { data: telegram } = await supabase.from("profiles").select("id").not("telegram_chat_id", "is", null);
+
+  const ticketStats = {
+    open: tickets?.filter((t: any) => t.status === "open").length || 0,
+    processing: tickets?.filter((t: any) => t.status === "processing").length || 0,
+    solved: tickets?.filter((t: any) => t.status === "solved").length || 0,
+    closed: tickets?.filter((t: any) => t.status === "closed").length || 0,
+  };
+
+  await sendTelegramMessage(chatId, `
+📊 <b>Statistics</b>
+
+<b>Users</b>
+• Total: ${stats?.total_users || 0}
+• Telegram: ${telegram?.length || 0}
+• Banned: ${banned?.length || 0}
+
+<b>Activity</b>
+• Card Checks: ${stats?.total_checks || 0}
+
+<b>Tickets</b>
+• Open: ${ticketStats.open}
+• Processing: ${ticketStats.processing}
+• Solved: ${ticketStats.solved}
+• Closed: ${ticketStats.closed}
+`);
+}
+
+async function handleViewBans(chatId: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ Access denied");
+    return;
+  }
+
+  const { data: banned } = await supabase
+    .from("profiles")
+    .select("user_id, username, ban_reason, banned_until")
+    .eq("is_banned", true)
+    .order("banned_at", { ascending: false });
+
+  if (!banned?.length) {
+    await sendTelegramMessage(chatId, "✅ No banned users");
+    return;
+  }
+
+  let list = "";
+  for (const u of banned) {
+    const status = u.banned_until ? `⏳ Until ${new Date(u.banned_until).toLocaleDateString()}` : "🔴 Permanent";
+    list += `\n• <b>${u.username || u.user_id}</b>\n  ${status} | ${u.ban_reason || "No reason"}`;
+  }
+
+  await sendTelegramMessage(chatId, `
+🚫 <b>Banned Users</b> (${banned.length})
+${list}
+
+<i>Use /unbanuser [user] to unban</i>
+`);
+}
+
+async function handleUserInfo(chatId: string, identifier: string, supabase: any): Promise<void> {
+  if (!isAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ Access denied");
+    return;
+  }
+
+  if (!identifier) {
+    await sendTelegramMessage(chatId, "❌ <b>Usage:</b> /userinfo <code>[email/username/chat_id]</code>");
+    return;
+  }
+
+  let profile = null;
+  let userEmail = null;
+
+  const { data: authData } = await supabase.auth.admin.listUsers();
+  const authUsers = authData?.users || [];
+
+  // Try by email
+  const authUser = authUsers.find((u: any) => u.email?.toLowerCase() === identifier.toLowerCase());
+  if (authUser) {
+    userEmail = authUser.email;
+    const { data: p } = await supabase.from("profiles").select("*").eq("user_id", authUser.id).maybeSingle();
+    profile = p;
+  }
+
+  // Try by username
+  if (!profile) {
+    const { data: p } = await supabase.from("profiles").select("*").ilike("username", identifier).maybeSingle();
+    if (p) {
+      profile = p;
+      userEmail = authUsers.find((u: any) => u.id === p.user_id)?.email || null;
+    }
+  }
+
+  // Try by telegram
+  if (!profile) {
+    const { data: p } = await supabase.from("profiles").select("*").eq("telegram_chat_id", identifier).maybeSingle();
+    if (p) {
+      profile = p;
+      userEmail = authUsers.find((u: any) => u.id === p.user_id)?.email || null;
+    }
+  }
+
+  if (!profile) {
+    await sendTelegramMessage(chatId, `❌ User not found: ${identifier}`);
+    return;
+  }
+
+  const { count: checks } = await supabase.from("card_checks").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id);
+  const { count: topups } = await supabase.from("topup_transactions").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id);
+  const { count: tickets } = await supabase.from("support_tickets").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id);
+
+  let status = "✅ Active";
+  if (profile.is_banned) {
+    status = profile.banned_until 
+      ? `🚫 Banned until ${new Date(profile.banned_until).toLocaleDateString()}`
+      : "🚫 Permanently Banned";
+  }
+
+  const joined = new Date(profile.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+
+  await sendTelegramMessage(chatId, `
+🔍 <b>User Info</b>
+
+<b>Profile</b>
+• Username: ${profile.username || "Not set"}
+• Name: ${profile.name || "Not set"}
+• Email: ${userEmail || "Unknown"}
+
+<b>Telegram</b>
+• Chat ID: ${profile.telegram_chat_id || "Not connected"}
+• Username: ${profile.telegram_username ? `@${profile.telegram_username}` : "Not set"}
+
+<b>Account</b>
+• Credits: ${profile.credits || 0}
+• Status: ${status}
+• Joined: ${joined}
+
+<b>Activity</b>
+• Checks: ${checks || 0}
+• Topups: ${topups || 0}
+• Tickets: ${tickets || 0}
+
+<b>User ID</b>
+<code>${profile.user_id}</code>
+`);
+}
+
+// ═══════════════════════════════════════════════════════════
+// MAIN HANDLER
+// ═══════════════════════════════════════════════════════════
+
+const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const update: TelegramUpdate = await req.json();
-    console.log("Telegram update:", JSON.stringify(update));
+    console.log("Update:", JSON.stringify(update));
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Handle callback query (button clicks)
+    // ─────────────────────────────────────────────────────────
+    // CALLBACK QUERIES
+    // ─────────────────────────────────────────────────────────
+
     if (update.callback_query) {
       const callbackData = update.callback_query.data;
-      console.log("Callback data:", callbackData);
+      const callbackChatId = update.callback_query.message?.chat.id.toString();
+      const messageId = update.callback_query.message?.message_id;
 
-      // Handle pagination for /allusers command
+      // Pagination: /allusers
       if (callbackData.startsWith("allusers_page_")) {
-        const chatId = update.callback_query.message?.chat.id.toString();
-        const messageId = update.callback_query.message?.message_id;
-        
-        if (!chatId || !isAdmin(chatId)) {
+        if (!callbackChatId || !isAdmin(callbackChatId)) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         const page = parseInt(callbackData.replace("allusers_page_", ""));
         const perPage = 5;
 
-        // Fetch all users with credits
-        const { data: users, error, count } = await supabase
+        const { data: users, count } = await supabase
           .from("profiles")
-          .select("user_id, username, name, telegram_chat_id, telegram_username, is_banned, created_at, credits", { count: "exact" })
+          .select("user_id, username, credits, telegram_chat_id, is_banned", { count: "exact" })
           .order("created_at", { ascending: false });
 
-        // Fetch all auth users to get emails
         const { data: authData } = await supabase.auth.admin.listUsers();
-        const authUsers = authData?.users || [];
-        
-        // Merge email into users
-        const usersWithEmail = users?.map(user => {
-          const authUser = authUsers.find((au: any) => au.id === user.user_id);
-          return { ...user, email: authUser?.email || null };
-        }) || [];
-
-        if (error || !users) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Error fetching users");
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
-        }
-
-        const totalCount = count || 0;
-        const connectedCount = usersWithEmail.filter(u => u.telegram_chat_id).length;
-        const bannedCount = usersWithEmail.filter(u => u.is_banned).length;
+        const usersWithEmail = users?.map(u => ({
+          ...u,
+          email: authData?.users?.find((a: any) => a.id === u.user_id)?.email || null
+        })) || [];
 
         const { message, keyboard } = buildUsersListMessage(
-          usersWithEmail,
-          page,
-          totalCount,
-          connectedCount,
-          bannedCount,
+          usersWithEmail, page, count || 0,
+          usersWithEmail.filter(u => u.telegram_chat_id).length,
+          usersWithEmail.filter(u => u.is_banned).length,
           perPage
         );
 
-        // Edit the message with new page
-        if (messageId) {
-          await editTelegramMessage(chatId, messageId, message, keyboard || undefined);
-        }
-
+        if (messageId) await editTelegramMessage(callbackChatId, messageId, message, keyboard || undefined);
         await answerCallbackQuery(update.callback_query.id, `Page ${page + 1}`);
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Handle noop callback (page indicator button)
       if (callbackData === "allusers_noop") {
-        await answerCallbackQuery(update.callback_query.id, "Current page");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        await answerCallbackQuery(update.callback_query.id, "");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Handle topups pagination callback
+      // Pagination: /topups
       if (callbackData.startsWith("topups_page_")) {
-        const chatId = update.callback_query.message?.chat.id.toString();
-        const messageId = update.callback_query.message?.message_id;
-        
-        if (!chatId || !isAdmin(chatId)) {
+        if (!callbackChatId || !isAdmin(callbackChatId)) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         const page = parseInt(callbackData.replace("topups_page_", ""));
-        const { message, keyboard } = await handleTopups(chatId, supabase, page);
-
-        if (messageId && message) {
-          await editTelegramMessage(chatId, messageId, message, keyboard || undefined);
-        }
-
+        const { message, keyboard } = await handleTopups(callbackChatId, supabase, page);
+        if (messageId && message) await editTelegramMessage(callbackChatId, messageId, message, keyboard || undefined);
         await answerCallbackQuery(update.callback_query.id, `Page ${page + 1}`);
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Handle topups noop callback
       if (callbackData === "topups_noop") {
-        await answerCallbackQuery(update.callback_query.id, "Current page");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        await answerCallbackQuery(update.callback_query.id, "");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Handle topups refresh callback
       if (callbackData === "topups_refresh") {
-        const chatId = update.callback_query.message?.chat.id.toString();
-        const messageId = update.callback_query.message?.message_id;
-        
-        if (!chatId || !isAdmin(chatId)) {
+        if (!callbackChatId || !isAdmin(callbackChatId)) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        const { message, keyboard } = await handleTopups(chatId, supabase, 0);
-
-        if (messageId && message) {
-          await editTelegramMessage(chatId, messageId, message, keyboard || undefined);
-        }
-
+        const { message, keyboard } = await handleTopups(callbackChatId, supabase, 0);
+        if (messageId && message) await editTelegramMessage(callbackChatId, messageId, message, keyboard || undefined);
         await answerCallbackQuery(update.callback_query.id, "🔄 Refreshed");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Handle user deletion confirmation
-      if (callbackData.startsWith("delete_confirm_")) {
-        const callbackChatId = update.callback_query.message?.chat.id.toString();
-        const messageId = update.callback_query.message?.message_id;
-        
-        if (!callbackChatId || !isAdmin(callbackChatId)) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
-        }
-
-        const userId = callbackData.replace("delete_confirm_", "");
-        
-        // Get user info before deletion
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("username, name")
-          .eq("user_id", userId)
-          .maybeSingle();
-
-        const displayName = profile?.username || profile?.name || userId;
-
-        // Execute deletion
-        const result = await executeUserDeletion(callbackChatId, userId, supabase);
-
-        if (result.success) {
-          if (messageId) {
-            await editTelegramMessage(
-              callbackChatId,
-              messageId,
-              `✅ <b>User Deleted Successfully</b>\n\n<b>User:</b> ${displayName}\n<b>User ID:</b> <code>${userId}</code>\n\n<i>All user data has been permanently removed.</i>`
-            );
-          }
-          await answerCallbackQuery(update.callback_query.id, "✅ User deleted successfully");
-        } else {
-          if (messageId) {
-            await editTelegramMessage(
-              callbackChatId,
-              messageId,
-              `❌ <b>Deletion Failed</b>\n\n<b>User:</b> ${displayName}\n<b>Error:</b> ${result.error}\n\n<i>Please try again or check the logs.</i>`
-            );
-          }
-          await answerCallbackQuery(update.callback_query.id, "❌ Deletion failed");
-        }
-
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
-      }
-
-      // Handle user deletion cancellation
-      if (callbackData.startsWith("delete_cancel_")) {
-        const callbackChatId = update.callback_query.message?.chat.id.toString();
-        const messageId = update.callback_query.message?.message_id;
-        
-        if (callbackChatId && messageId) {
-          await editTelegramMessage(
-            callbackChatId,
-            messageId,
-            "❌ <b>Deletion Cancelled</b>\n\n<i>No changes were made.</i>"
-          );
-        }
-        
-        await answerCallbackQuery(update.callback_query.id, "Deletion cancelled");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
-      }
-
-      // Handle delete ALL users - Step 1 confirmation
-      if (callbackData === "deleteall_confirm_step1") {
-        const callbackChatId = update.callback_query.message?.chat.id.toString();
-        const messageId = update.callback_query.message?.message_id;
-        
-        if (!callbackChatId || !isAdmin(callbackChatId)) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
-        }
-
-        // Get fresh count
-        const { count: userCount } = await supabase
-          .from("profiles")
-          .select("*", { count: "exact", head: true });
-
-        // Second confirmation with final warning
-        const step2Keyboard = {
-          inline_keyboard: [
-            [
-              { text: "☠️ YES, DELETE ALL " + userCount + " USERS", callback_data: "deleteall_confirm_step2" },
-            ],
-            [
-              { text: "❌ CANCEL - ABORT OPERATION", callback_data: "deleteall_cancel" },
-            ],
-          ],
-        };
-
-        if (messageId) {
-          await editTelegramMessage(
-            callbackChatId,
-            messageId,
-            `
-☠️ <b>FINAL CONFIRMATION REQUIRED</b>
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>⚠️ ARE YOU ABSOLUTELY SURE?</b>
-
-You are about to permanently delete <b>${userCount}</b> user accounts.
-
-This action will:
-• Remove ALL user data permanently
-• Clear ALL auth records
-• Delete ALL notifications, tickets, sessions
-• Reset the entire user database
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>☠️ THERE IS NO UNDO!</b>
-<b>☠️ DATA CANNOT BE RECOVERED!</b>
-
-<i>Click the button below ONLY if you are certain.</i>
-`,
-            step2Keyboard
-          );
-        }
-
-        await answerCallbackQuery(update.callback_query.id, "⚠️ Step 2 of 2 - Final confirmation required");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
-      }
-
-      // Handle delete ALL users - Step 2 (FINAL) confirmation
-      if (callbackData === "deleteall_confirm_step2") {
-        const callbackChatId = update.callback_query.message?.chat.id.toString();
-        const messageId = update.callback_query.message?.message_id;
-        
-        if (!callbackChatId || !isAdmin(callbackChatId)) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
-        }
-
-        if (messageId) {
-          await editTelegramMessage(
-            callbackChatId,
-            messageId,
-            "🔄 <b>DELETE ALL USERS - IN PROGRESS</b>\n\n<i>Processing deletion... Please wait.</i>"
-          );
-        }
-
-        await answerCallbackQuery(update.callback_query.id, "☠️ Deletion started...");
-        
-        // Execute the deletion
-        await executeDeleteAllUsers(callbackChatId, supabase);
-
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
-      }
-
-      // Handle delete ALL users cancellation
-      if (callbackData === "deleteall_cancel") {
-        const callbackChatId = update.callback_query.message?.chat.id.toString();
-        const messageId = update.callback_query.message?.message_id;
-        
-        if (callbackChatId && messageId) {
-          await editTelegramMessage(
-            callbackChatId,
-            messageId,
-            "✅ <b>Delete All Users - Cancelled</b>\n\n<i>No users were deleted. Database is unchanged.</i>"
-          );
-        }
-        
-        await answerCallbackQuery(update.callback_query.id, "✅ Operation cancelled");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
-      }
-
-      // Handle topup accept/reject callbacks
+      // Topup approve/reject
       if (callbackData.startsWith("topup_accept_") || callbackData.startsWith("topup_reject_")) {
-        const callbackChatId = update.callback_query.message?.chat.id.toString();
-        
-        if (callbackChatId !== ADMIN_CHAT_ID) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can approve/reject topups");
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
+        if (!callbackChatId || !isAdmin(callbackChatId)) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         const isAccept = callbackData.startsWith("topup_accept_");
         const transactionId = callbackData.replace(isAccept ? "topup_accept_" : "topup_reject_", "");
 
-        // Get transaction details
-        const { data: transaction, error: txError } = await supabase
+        const { data: transaction } = await supabase
           .from("topup_transactions")
-          .select("*")
+          .select("*, profiles!inner(username, telegram_chat_id)")
           .eq("id", transactionId)
           .single();
 
-        if (txError || !transaction) {
+        if (!transaction) {
           await answerCallbackQuery(update.callback_query.id, "❌ Transaction not found");
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
-
-        if (transaction.status !== "pending") {
-          await answerCallbackQuery(update.callback_query.id, `⚠️ Transaction already ${transaction.status}`);
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
-        }
-
-        const newStatus = isAccept ? "completed" : "failed";
 
         if (isAccept) {
-          // Call handle_topup_completion function to update status and balance
-          const { error: rpcError } = await supabase.rpc("handle_topup_completion", {
-            p_transaction_id: transactionId,
-          });
+          const credits = Number(transaction.amount) * 10;
+          await supabase.rpc("handle_topup_completion", { p_transaction_id: transactionId });
 
-          if (rpcError) {
-            console.error("Error completing topup:", rpcError);
-            await answerCallbackQuery(update.callback_query.id, "❌ Failed to process topup");
-            return new Response(JSON.stringify({ ok: true }), {
-              headers: { "Content-Type": "application/json", ...corsHeaders },
-            });
+          if (transaction.profiles?.telegram_chat_id) {
+            await sendTelegramMessage(transaction.profiles.telegram_chat_id, `✅ <b>Topup Approved</b>\n\n+${credits} credits added!`);
           }
+          await answerCallbackQuery(update.callback_query.id, `✅ Approved ${credits} credits`);
         } else {
-          // Just update status to failed
-          const { error: updateError } = await supabase
-            .from("topup_transactions")
-            .update({ 
-              status: "failed", 
-              updated_at: new Date().toISOString() 
-            })
-            .eq("id", transactionId);
+          await supabase.from("topup_transactions").update({ status: "failed", rejection_reason: "Rejected by admin" }).eq("id", transactionId);
 
-          if (updateError) {
-            console.error("Error rejecting topup:", updateError);
-            await answerCallbackQuery(update.callback_query.id, "❌ Failed to reject topup");
-            return new Response(JSON.stringify({ ok: true }), {
-              headers: { "Content-Type": "application/json", ...corsHeaders },
-            });
+          if (transaction.profiles?.telegram_chat_id) {
+            await sendTelegramMessage(transaction.profiles.telegram_chat_id, "❌ <b>Topup Rejected</b>\n\nYour topup request was rejected.");
           }
+          await answerCallbackQuery(update.callback_query.id, "❌ Rejected");
         }
 
-        // Refetch transaction to get any updates (like rejection_reason from admin panel)
-        const { data: updatedTransaction } = await supabase
-          .from("topup_transactions")
-          .select("rejection_reason")
-          .eq("id", transactionId)
-          .single();
-
-        // Notify user via the notify-topup-status edge function
-        try {
-          const notifyUrl = `${SUPABASE_URL}/functions/v1/notify-topup-status`;
-          await fetch(notifyUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-            },
-            body: JSON.stringify({
-              transaction_id: transactionId,
-              user_id: transaction.user_id,
-              amount: transaction.amount,
-              status: newStatus,
-              payment_method: transaction.payment_method,
-              rejection_reason: updatedTransaction?.rejection_reason || null,
-            }),
-          });
-        } catch (notifyError) {
-          console.error("Error notifying user:", notifyError);
-        }
-
-        // Update Telegram message to remove buttons
-        if (update.callback_query.message?.message_id) {
-          try {
-            // Get user info for the updated caption
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("username, name")
-              .eq("user_id", transaction.user_id)
-              .single();
-
-            const username = profile?.username || profile?.name || "Unknown User";
-            const statusEmoji = isAccept ? "✅" : "❌";
-            const statusText = isAccept ? "APPROVED" : "REJECTED";
-
-            await fetch(
-              `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageCaption`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  chat_id: callbackChatId,
-                  message_id: update.callback_query.message.message_id,
-                  caption: `${statusEmoji} <b>Top-Up ${statusText}</b>\n\n<b>Transaction ID:</b>\n<code>${transactionId}</code>\n\n<b>👤 User:</b> ${username}\n<b>💵 Amount:</b> $${transaction.amount}\n\n<i>Processed by admin</i>`,
-                  parse_mode: "HTML",
-                  reply_markup: { inline_keyboard: [] },
-                }),
-              }
-            );
-          } catch (error) {
-            console.error("Error updating message:", error);
-          }
-        }
-
-        await answerCallbackQuery(
-          update.callback_query.id,
-          isAccept ? "✅ Topup approved and balance updated" : "❌ Topup rejected"
-        );
-
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
-      }
-      if (callbackData.startsWith("verify_")) {
-        const verificationCode = callbackData.replace("verify_", "");
-        const chatId = update.callback_query.message?.chat.id.toString();
-
-        if (!chatId) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Invalid chat");
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
-        }
-
-        // Find pending verification
-        const { data: verification, error: verifyError } = await supabase
-          .from("pending_verifications")
-          .select("*")
-          .eq("verification_code", verificationCode)
-          .eq("telegram_chat_id", chatId)
-          .single();
-
-        if (verifyError || !verification) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Verification not found or already used");
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
-        }
-
-        // Check if expired
-        if (new Date(verification.expires_at) < new Date()) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Verification has expired. Please request a new one.");
-          // Delete expired verification
-          await supabase
-            .from("pending_verifications")
-            .delete()
-            .eq("id", verification.id);
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
-        }
-
-        // Check if already verified
-        if (verification.verified) {
-          await answerCallbackQuery(update.callback_query.id, "✅ Already verified!");
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
-        }
-
-        // Mark as verified
-        const { error: updateError } = await supabase
-          .from("pending_verifications")
-          .update({ verified: true })
-          .eq("id", verification.id);
-
-        if (updateError) {
-          console.error("Error updating verification:", updateError);
-          await answerCallbackQuery(update.callback_query.id, "❌ Failed to verify. Please try again.");
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
-        }
-
-        await answerCallbackQuery(update.callback_query.id, "✅ Account verified successfully! You can now complete your registration.");
-        await sendTelegramMessage(
-          chatId,
-          "✅ <b>Account Verified!</b>\n\nYou can now complete your registration on the website."
-        );
-
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        const { message, keyboard } = await handleTopups(callbackChatId, supabase, 0);
+        if (messageId && message) await editTelegramMessage(callbackChatId, messageId, message, keyboard || undefined);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Handle ban duration callback
+      // User deletion
+      if (callbackData.startsWith("delete_confirm_")) {
+        if (!callbackChatId || !isAdmin(callbackChatId)) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const userId = callbackData.replace("delete_confirm_", "");
+        const { data: profile } = await supabase.from("profiles").select("username").eq("user_id", userId).maybeSingle();
+        const result = await executeUserDeletion(callbackChatId, userId, supabase);
+
+        if (result.success) {
+          if (messageId) await editTelegramMessage(callbackChatId, messageId, `✅ Deleted: ${profile?.username || userId}`);
+          await answerCallbackQuery(update.callback_query.id, "✅ Deleted");
+        } else {
+          if (messageId) await editTelegramMessage(callbackChatId, messageId, `❌ Failed: ${result.error}`);
+          await answerCallbackQuery(update.callback_query.id, "❌ Failed");
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (callbackData.startsWith("delete_cancel_")) {
+        if (messageId && callbackChatId) await editTelegramMessage(callbackChatId, messageId, "❌ Deletion cancelled");
+        await answerCallbackQuery(update.callback_query.id, "Cancelled");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Delete all users
+      if (callbackData === "deleteall_confirm_step1") {
+        if (!callbackChatId || !isAdmin(callbackChatId)) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const keyboard = {
+          inline_keyboard: [[
+            { text: "☠️ FINAL CONFIRM", callback_data: "deleteall_confirm_step2" },
+            { text: "❌ Cancel", callback_data: "deleteall_cancel" },
+          ]],
+        };
+
+        if (messageId) await editTelegramMessage(callbackChatId, messageId, "⚠️ <b>FINAL WARNING</b>\n\nThis will delete ALL users permanently!", keyboard);
+        await answerCallbackQuery(update.callback_query.id, "⚠️ Final confirmation required");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (callbackData === "deleteall_confirm_step2") {
+        if (!callbackChatId || !isAdmin(callbackChatId)) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (messageId) await editTelegramMessage(callbackChatId, messageId, "🔄 Deleting all users...");
+        await executeDeleteAllUsers(callbackChatId, supabase);
+        await answerCallbackQuery(update.callback_query.id, "✅ Complete");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (callbackData === "deleteall_cancel") {
+        if (messageId && callbackChatId) await editTelegramMessage(callbackChatId, messageId, "❌ Cancelled");
+        await answerCallbackQuery(update.callback_query.id, "Cancelled");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Ban duration
       if (callbackData.startsWith("ban_duration_")) {
-        const callbackChatId = update.callback_query.message?.chat.id.toString();
-
-        if (!callbackChatId || callbackChatId !== ADMIN_CHAT_ID) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can set ban duration");
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
+        if (!callbackChatId || !isAdmin(callbackChatId)) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // Parse: ban_duration_1h_uuid or ban_duration_permanent_uuid
-        const parts = callbackData.replace("ban_duration_", "").split("_");
-        const duration = parts[0];
-        const userId = parts.slice(1).join("_"); // Handle UUID with underscores
-
-        // Get pending ban
-        const { data: pendingBan } = await supabase
-          .from("pending_bans")
-          .select("*")
-          .eq("admin_chat_id", callbackChatId)
-          .eq("user_id", userId)
-          .maybeSingle();
+        const duration = callbackData.replace("ban_duration_", "");
+        const { data: pendingBan } = await supabase.from("pending_bans").select("*").eq("admin_chat_id", callbackChatId).maybeSingle();
 
         if (!pendingBan) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Ban operation expired or cancelled");
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
+          await answerCallbackQuery(update.callback_query.id, "❌ No pending ban");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // Execute the ban
-        await executeBan(callbackChatId, pendingBan, duration, supabase);
-        await answerCallbackQuery(update.callback_query.id, "✅ User banned successfully");
+        let bannedUntil: string | null = null;
+        let durationText = "Permanent";
 
-        // Remove the duration selection buttons
-        if (update.callback_query.message?.message_id) {
-          try {
-            await fetch(
-              `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  chat_id: callbackChatId,
-                  message_id: update.callback_query.message.message_id,
-                  reply_markup: { inline_keyboard: [] },
-                }),
-              }
-            );
-          } catch (error) {
-            console.error("Error removing buttons:", error);
-          }
+        if (duration !== "permanent") {
+          const hours = parseInt(duration);
+          bannedUntil = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+          durationText = hours >= 24 ? `${hours / 24} days` : `${hours} hours`;
         }
 
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        await supabase.from("profiles").update({
+          is_banned: true,
+          ban_reason: pendingBan.ban_reason,
+          banned_at: new Date().toISOString(),
+          banned_until: bannedUntil
+        }).eq("user_id", pendingBan.user_id);
+
+        await supabase.from("pending_bans").delete().eq("admin_chat_id", callbackChatId);
+
+        if (pendingBan.user_telegram_chat_id) {
+          await sendTelegramMessage(pendingBan.user_telegram_chat_id, `
+🚫 <b>Account Banned</b>
+
+Reason: ${pendingBan.ban_reason || "Not specified"}
+Duration: ${durationText}
+`);
+        }
+
+        if (messageId) await editTelegramMessage(callbackChatId, messageId, `
+✅ <b>User Banned</b>
+
+👤 ${pendingBan.username || pendingBan.user_email}
+⏱️ ${durationText}
+📝 ${pendingBan.ban_reason || "No reason"}
+`);
+        await answerCallbackQuery(update.callback_query.id, "✅ Banned");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Handle ban appeal callbacks
-      if (callbackData.startsWith("unban_appeal_") || callbackData.startsWith("reject_appeal_")) {
-        const callbackChatId = update.callback_query.message?.chat.id.toString();
-        
-        if (callbackChatId !== ADMIN_CHAT_ID) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can respond to appeals");
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
+      // Appeal handling
+      if (callbackData.startsWith("appeal_approve_") || callbackData.startsWith("appeal_reject_")) {
+        if (!callbackChatId || !isAdmin(callbackChatId)) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        const isUnban = callbackData.startsWith("unban_appeal_");
-        const appealId = callbackData.replace(isUnban ? "unban_appeal_" : "reject_appeal_", "");
+        const isApprove = callbackData.startsWith("appeal_approve_");
+        const appealId = callbackData.replace(isApprove ? "appeal_approve_" : "appeal_reject_", "");
 
-        // Get appeal details
-        const { data: appeal, error: appealError } = await supabase
-          .from("ban_appeals")
-          .select("*")
-          .eq("id", appealId)
+        const { data: appeal } = await supabase.from("ban_appeals").select("*").eq("id", appealId).single();
+        if (!appeal) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Appeal not found");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (isApprove) {
+          await supabase.from("profiles").update({
+            is_banned: false, ban_reason: null, banned_at: null, banned_until: null
+          }).eq("user_id", appeal.user_id);
+
+          await supabase.from("ban_appeals").update({
+            status: "approved", resolved_at: new Date().toISOString()
+          }).eq("id", appealId);
+
+          if (appeal.telegram_chat_id) {
+            await sendTelegramMessage(appeal.telegram_chat_id, "✅ <b>Appeal Approved</b>\n\nYour account has been unbanned!");
+          }
+          await answerCallbackQuery(update.callback_query.id, "✅ Approved");
+        } else {
+          await supabase.from("ban_appeals").update({
+            status: "rejected", resolved_at: new Date().toISOString()
+          }).eq("id", appealId);
+
+          if (appeal.telegram_chat_id) {
+            await sendTelegramMessage(appeal.telegram_chat_id, "❌ <b>Appeal Rejected</b>\n\nYour ban remains in effect.");
+          }
+          await answerCallbackQuery(update.callback_query.id, "❌ Rejected");
+        }
+
+        try {
+          await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: update.callback_query.message?.chat.id,
+              message_id: update.callback_query.message?.message_id,
+              reply_markup: { inline_keyboard: [] },
+            }),
+          });
+        } catch (e) {}
+
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Ticket status
+      if (!callbackChatId || callbackChatId !== ADMIN_CHAT_ID) {
+        await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const [action, ticketUuid] = callbackData.split("_");
+      const statusMap: Record<string, string> = { open: "open", processing: "processing", solved: "solved", closed: "closed" };
+      const newStatus = statusMap[action];
+
+      if (newStatus && ticketUuid) {
+        const { data: ticket } = await supabase
+          .from("support_tickets")
+          .update({ status: newStatus, updated_at: new Date().toISOString() })
+          .eq("id", ticketUuid)
+          .select("ticket_id, subject, user_id")
           .single();
 
-        if (appealError || !appeal) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Appeal not found");
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
-        }
-
-        if (appeal.status !== "pending") {
-          await answerCallbackQuery(update.callback_query.id, `⚠️ Appeal already ${appeal.status}`);
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { "Content-Type": "application/json", ...corsHeaders },
-          });
-        }
-
-        if (isUnban) {
-          // Unban the user
-          const { data: authUsers } = await supabase.auth.admin.listUsers();
-          const authUser = authUsers?.users?.find((u: any) => 
-            u.email?.toLowerCase() === appeal.email.toLowerCase()
-          );
-
-          if (authUser) {
-            await supabase
-              .from("profiles")
-              .update({ 
-                is_banned: false, 
-                banned_at: null,
-                ban_reason: null,
-                banned_until: null
-              })
-              .eq("user_id", authUser.id);
+        if (ticket) {
+          await answerCallbackQuery(update.callback_query.id, `✅ ${newStatus.toUpperCase()}`);
+          if (update.callback_query.message) {
+            await editMessageReplyMarkup(update.callback_query.message.chat.id, update.callback_query.message.message_id, ticketUuid, newStatus);
           }
 
-          // Update appeal status
-          await supabase
-            .from("ban_appeals")
-            .update({ 
-              status: "approved",
-              admin_response: "Your account has been unbanned.",
-              resolved_at: new Date().toISOString()
-            })
-            .eq("id", appealId);
-
-          // Notify user via email
-          if (RESEND_API_KEY) {
-            await fetch("https://api.resend.com/emails", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${RESEND_API_KEY}`,
-              },
-              body: JSON.stringify({
-                from: "Yunchi Support <onboarding@resend.dev>",
-                to: [appeal.email],
-                subject: "✅ Ban Appeal Approved - Account Unbanned",
-                html: `
-                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                    <h2 style="color: #22c55e;">✅ Good News! Your Appeal Has Been Approved</h2>
-                    <p>Hello${appeal.username ? ` ${appeal.username}` : ''},</p>
-                    <p>Your ban appeal has been reviewed and <strong>approved</strong>. Your account has been unbanned.</p>
-                    <p>You can now log in to your account and use the platform again.</p>
-                    <p style="color: #6c757d; font-size: 14px; margin-top: 20px;">
-                      If you have any questions, please contact support.
-                    </p>
-                    <p>— Yunchi Support Team</p>
-                  </div>
-                `,
-              }),
-            });
-          }
-
-          // Notify user via Telegram
-          if (appeal.telegram_chat_id) {
-            await sendTelegramMessage(
-              appeal.telegram_chat_id,
-              `✅ <b>Ban Appeal Approved!</b>\n\nGreat news! Your ban appeal has been reviewed and approved.\n\nYour account has been unbanned. You can now log in and use the platform again.\n\n— Yunchi Support Team`
-            );
-          }
-
-          await answerCallbackQuery(update.callback_query.id, "✅ User unbanned and notified!");
-          await sendTelegramMessage(
-            ADMIN_TELEGRAM_CHAT_ID!,
-            `✅ <b>Appeal Approved</b>\n\nUser <b>${appeal.username || appeal.email}</b> has been unbanned.\nNotifications sent via email and Telegram.`
-          );
-        } else {
-          // Reject the appeal
-          await supabase
-            .from("ban_appeals")
-            .update({ 
-              status: "rejected",
-              admin_response: "Your ban appeal has been reviewed and rejected.",
-              resolved_at: new Date().toISOString()
-            })
-            .eq("id", appealId);
-
-          // Notify user via email
-          if (RESEND_API_KEY) {
-            await fetch("https://api.resend.com/emails", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${RESEND_API_KEY}`,
-              },
-              body: JSON.stringify({
-                from: "Yunchi Support <onboarding@resend.dev>",
-                to: [appeal.email],
-                subject: "❌ Ban Appeal Rejected",
-                html: `
-                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                    <h2 style="color: #ef4444;">❌ Ban Appeal Rejected</h2>
-                    <p>Hello${appeal.username ? ` ${appeal.username}` : ''},</p>
-                    <p>Your ban appeal has been reviewed, but unfortunately it has been <strong>rejected</strong>.</p>
-                    <p>The ban on your account remains in effect. If you have additional information to provide, you may submit a new appeal.</p>
-                    <p style="color: #6c757d; font-size: 14px; margin-top: 20px;">
-                      If you believe this decision was made in error, please contact support directly.
-                    </p>
-                    <p>— Yunchi Support Team</p>
-                  </div>
-                `,
-              }),
-            });
-          }
-
-          // Notify user via Telegram
-          if (appeal.telegram_chat_id) {
-            await sendTelegramMessage(
-              appeal.telegram_chat_id,
-              `❌ <b>Ban Appeal Rejected</b>\n\nWe're sorry, but your ban appeal has been reviewed and rejected.\n\nThe ban on your account remains in effect. If you believe this decision was made in error, you may contact support directly.\n\n— Yunchi Support Team`
-            );
-          }
-
-          await answerCallbackQuery(update.callback_query.id, "❌ Appeal rejected and user notified");
-          await sendTelegramMessage(
-            ADMIN_TELEGRAM_CHAT_ID!,
-            `❌ <b>Appeal Rejected</b>\n\nAppeal from <b>${appeal.username || appeal.email}</b> has been rejected.\nNotifications sent via email and Telegram.`
-          );
-        }
-
-        // Update the message to remove buttons
-        if (update.callback_query.message) {
-          try {
-            await fetch(
-              `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  chat_id: update.callback_query.message.chat.id,
-                  message_id: update.callback_query.message.message_id,
-                  reply_markup: { inline_keyboard: [] },
-                }),
-              }
-            );
-          } catch (e) {
-            console.error("Failed to remove buttons:", e);
+          const { data: profile } = await supabase.from("profiles").select("telegram_chat_id").eq("user_id", ticket.user_id).maybeSingle();
+          if (profile?.telegram_chat_id) {
+            await sendTelegramMessage(profile.telegram_chat_id, `🎫 Ticket ${ticket.ticket_id} is now <b>${newStatus.toUpperCase()}</b>`);
           }
         }
-
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
       }
 
-      // Check if this is from admin for ticket operations
-      const callbackChatId = update.callback_query.message?.chat.id.toString();
-      if (callbackChatId !== ADMIN_CHAT_ID) {
-        await answerCallbackQuery(update.callback_query.id, "❌ Only admins can change ticket status");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
-      }
-
-      // Parse callback data: action_ticketUuid
-      const [action, ticketUuid] = callbackData.split("_");
-
-      if (!ticketUuid) {
-        await answerCallbackQuery(update.callback_query.id, "❌ Invalid ticket data");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
-      }
-
-      // Map action to status
-      const statusMap: Record<string, string> = {
-        open: "open",
-        processing: "processing",
-        solved: "solved",
-        closed: "closed",
-      };
-
-      const newStatus = statusMap[action];
-      if (!newStatus) {
-        await answerCallbackQuery(update.callback_query.id, "❌ Unknown action");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
-      }
-
-      // Update ticket status
-      const { data: ticket, error: updateError } = await supabase
-        .from("support_tickets")
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq("id", ticketUuid)
-        .select("ticket_id, subject, user_id, user_email")
-        .single();
-
-      if (updateError) {
-        console.error("Error updating ticket status:", updateError);
-        await answerCallbackQuery(update.callback_query.id, "❌ Failed to update status");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
-      }
-
-      await answerCallbackQuery(
-        update.callback_query.id,
-        `✅ Ticket status updated to: ${newStatus.toUpperCase()}`
-      );
-
-      // Update the inline keyboard to show current status (keep buttons visible)
-      if (update.callback_query.message) {
-        await editMessageReplyMarkup(
-          update.callback_query.message.chat.id,
-          update.callback_query.message.message_id,
-          ticketUuid,
-          newStatus
-        );
-      }
-
-      // Notify admin in chat
-      await sendTelegramMessage(
-        ADMIN_TELEGRAM_CHAT_ID!,
-        `✅ <b>Status Updated</b>\n\nTicket: ${ticket.ticket_id}\nNew Status: <b>${newStatus.toUpperCase()}</b>`
-      );
-
-      // Notify user about status change
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("telegram_chat_id")
-        .eq("user_id", ticket.user_id)
-        .maybeSingle();
-
-      if (profile?.telegram_chat_id) {
-        await sendTelegramMessage(
-          profile.telegram_chat_id,
-          `🎫 <b>Ticket Status Updated</b>\n\nTicket: ${ticket.ticket_id}\nSubject: ${ticket.subject}\nNew Status: <b>${newStatus.toUpperCase()}</b>`
-        );
-      }
-
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Handle text messages (replies)
+    // ─────────────────────────────────────────────────────────
+    // TEXT MESSAGE: Reply to ticket
+    // ─────────────────────────────────────────────────────────
+
     if (update.message?.text && update.message.reply_to_message) {
       const chatId = update.message.chat.id.toString();
       const replyText = update.message.text;
       const originalMessage = update.message.reply_to_message.text || "";
 
-      // Check if this is from admin
       if (chatId !== ADMIN_CHAT_ID) {
-        console.log("Message not from admin, ignoring");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Extract ticket UUID from the original message
-      // Look for pattern: [uuid] in the message
+      // Check for pending ban
+      const { data: pendingBan } = await supabase.from("pending_bans").select("*").eq("admin_chat_id", chatId).maybeSingle();
+
+      if (pendingBan && pendingBan.step === "reason") {
+        await supabase.from("pending_bans").update({ ban_reason: replyText, step: "duration" }).eq("admin_chat_id", chatId);
+
+        const keyboard = {
+          inline_keyboard: [
+            [
+              { text: "1 hour", callback_data: "ban_duration_1" },
+              { text: "24 hours", callback_data: "ban_duration_24" },
+            ],
+            [
+              { text: "7 days", callback_data: "ban_duration_168" },
+              { text: "30 days", callback_data: "ban_duration_720" },
+            ],
+            [{ text: "Permanent", callback_data: "ban_duration_permanent" }],
+          ],
+        };
+
+        await sendTelegramMessage(chatId, `📝 Reason: ${replyText}\n\nSelect ban duration:`, keyboard);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Ticket reply
       const uuidMatch = originalMessage.match(/\[([a-f0-9-]{36})\]/i);
       if (!uuidMatch) {
-        await sendTelegramMessage(
-          chatId,
-          "❌ Could not find ticket ID. Please reply directly to a ticket notification message."
-        );
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        await sendTelegramMessage(chatId, "❌ Could not find ticket ID");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       const ticketUuid = uuidMatch[1];
-
-      // Get ticket details
-      const { data: ticket, error: ticketError } = await supabase
+      const { data: ticket } = await supabase
         .from("support_tickets")
         .select("id, ticket_id, subject, user_id, user_email, status")
         .eq("id", ticketUuid)
         .single();
 
-      if (ticketError || !ticket) {
-        await sendTelegramMessage(chatId, "❌ Ticket not found.");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+      if (!ticket) {
+        await sendTelegramMessage(chatId, "❌ Ticket not found");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       if (ticket.status === "closed") {
-        await sendTelegramMessage(chatId, "❌ This ticket is closed and cannot receive replies.");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        await sendTelegramMessage(chatId, "❌ Ticket is closed");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Insert admin message
-      const { error: messageError } = await supabase.from("ticket_messages").insert({
+      await supabase.from("ticket_messages").insert({
         ticket_id: ticket.id,
         user_id: ticket.user_id,
         message: replyText,
         is_admin: true,
       });
 
-      if (messageError) {
-        console.error("Failed to save message:", messageError);
-        await sendTelegramMessage(chatId, "❌ Failed to save reply.");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
-      }
-
-      // Update ticket status to processing if it's open
       if (ticket.status === "open") {
-        await supabase
-          .from("support_tickets")
-          .update({ status: "processing", updated_at: new Date().toISOString() })
-          .eq("id", ticket.id);
+        await supabase.from("support_tickets").update({ status: "processing" }).eq("id", ticket.id);
       }
 
-      // Notify user via email
-      await sendEmailNotification(
-        ticket.user_email,
-        ticket.ticket_id,
-        ticket.subject,
-        replyText,
-        "Support Team"
-      );
+      await sendEmailNotification(ticket.user_email, ticket.ticket_id, ticket.subject, replyText, "Support Team");
 
-      // Notify user via Telegram
+      const { data: profile } = await supabase.from("profiles").select("telegram_chat_id").eq("user_id", ticket.user_id).maybeSingle();
+      if (profile?.telegram_chat_id) {
+        await sendUserTelegramNotification(profile.telegram_chat_id, ticket.ticket_id, ticket.subject, replyText, "Support Team");
+      }
+
+      await sendTelegramMessage(chatId, `✅ Replied to ${ticket.ticket_id}`);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // COMMANDS
+    // ─────────────────────────────────────────────────────────
+
+    const text = update.message?.text || "";
+    const chatId = update.message?.chat.id.toString() || "";
+
+    // /start
+    if (text === "/start") {
+      const isAdminUser = isAdmin(chatId);
+      let msg = `
+👋 <b>Yunchi Bot</b>
+
+Your Chat ID: <code>${chatId}</code>
+
+<b>Commands:</b>
+/help - View features
+/mystatus - Check account`;
+
+      if (isAdminUser) msg += `\n\n🔐 <b>Admin detected</b>\nUse /admincmd for panel`;
+
+      await sendTelegramMessage(chatId, msg);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /help
+    if (text === "/help") {
+      const isAdminUser = isAdmin(chatId);
+      let msg = `
+📚 <b>Help</b>
+
+<b>Connect Account:</b>
+1. Copy Chat ID: <code>${chatId}</code>
+2. Sign up at yunchi.app
+3. Paste Chat ID
+4. Verify when prompted
+
+<b>Features:</b>
+• Account verification
+• Ticket notifications
+• Support replies
+• Announcements
+• Balance alerts
+
+<b>Commands:</b>
+/start - Get Chat ID
+/help - This message
+/mystatus - Account status`;
+
+      if (isAdminUser) {
+        msg += `
+
+<b>Admin:</b>
+/admincmd - Admin panel
+/ticket [id] - Manage ticket
+/topups - Pending topups
+/addfund [email] [amount]
+/banuser [user]
+/unbanuser [user]
+/deleteuser [user]
+/viewbans - Banned users
+/broadcast [msg]
+/stats - Statistics
+/allusers - List users
+/userinfo [user]`;
+      }
+
+      await sendTelegramMessage(chatId, msg);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /mystatus
+    if (text === "/mystatus") {
       const { data: profile } = await supabase
         .from("profiles")
-        .select("telegram_chat_id")
-        .eq("user_id", ticket.user_id)
-        .maybeSingle();
-
-      if (profile?.telegram_chat_id) {
-        await sendUserTelegramNotification(
-          profile.telegram_chat_id,
-          ticket.ticket_id,
-          ticket.subject,
-          replyText,
-          "Support Team"
-        );
-      }
-
-      await sendTelegramMessage(chatId, `✅ Reply sent to ticket ${ticket.ticket_id}`);
-
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
-    }
-
-    // Handle /start command
-    if (update.message?.text === "/start") {
-      const chatId = update.message.chat.id.toString();
-      const isAdminUser = isAdmin(chatId);
-      
-      let welcomeMessage = `
-╔═══════════════════════════════╗
-    👋 <b>Welcome to Yunchi Bot</b>
-╚═══════════════════════════════╝
-
-┌─────────────────────────────────┐
-│  🤖 <b>@YunchiSupportbot</b>
-├─────────────────────────────────┤
-│
-│  This bot provides:
-│
-│  ✅ Account verification
-│  📬 Ticket notifications  
-│  💬 Direct support replies
-│  📢 Platform announcements
-│  🔔 Account status alerts
-│
-└─────────────────────────────────┘
-
-┌─────────────────────────────────┐
-│  🔑 <b>YOUR CHAT ID</b>
-├─────────────────────────────────┤
-│
-│  <code>${chatId}</code>
-│
-│  📋 <i>Copy this when registering</i>
-│
-└─────────────────────────────────┘
-
-<b>📚 Commands:</b>
-/help - View all features
-/mystatus - Check account status`;
-      
-      if (isAdminUser) {
-        welcomeMessage += `
-
-┌─────────────────────────────────┐
-│  🔐 <b>ADMIN ACCESS DETECTED</b>
-├─────────────────────────────────┤
-│  Use /admincmd to access panel
-└─────────────────────────────────┘`;
-      }
-      
-      await sendTelegramMessage(chatId, welcomeMessage);
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
-    }
-
-    // Handle /help command
-    if (update.message?.text === "/help") {
-      const chatId = update.message.chat.id.toString();
-      const isAdminUser = isAdmin(chatId);
-
-      let helpMessage = `
-╔═══════════════════════════════╗
-       📚 <b>YUNCHI BOT HELP</b>
-╚═══════════════════════════════╝
-
-┌─────────────────────────────────┐
-│  🔗 <b>HOW TO CONNECT ACCOUNT</b>
-├─────────────────────────────────┤
-│
-│  <b>Step 1:</b> Copy your Chat ID
-│  <code>${chatId}</code>
-│
-│  <b>Step 2:</b> Go to Yunchi website
-│
-│  <b>Step 3:</b> Sign up with Chat ID
-│
-│  <b>Step 4:</b> Verify when prompted
-│
-│  <b>Step 5:</b> Done! ✅
-│
-└─────────────────────────────────┘
-
-┌─────────────────────────────────┐
-│  ✨ <b>BOT FEATURES</b>
-├─────────────────────────────────┤
-│
-│  🔐 <b>Account Verification</b>
-│  └ Verify identity at registration
-│
-│  🎫 <b>Ticket Notifications</b>
-│  └ Instant support updates
-│
-│  💬 <b>Direct Replies</b>
-│  └ Support response alerts
-│
-│  📢 <b>Announcements</b>
-│  └ Platform news & updates
-│
-│  🔔 <b>Status Alerts</b>
-│  └ Account changes & bans
-│
-│  💰 <b>Top-up Notifications</b>
-│  └ Balance update alerts
-│
-└─────────────────────────────────┘
-
-┌─────────────────────────────────┐
-│  📋 <b>USER COMMANDS</b>
-├─────────────────────────────────┤
-│
-│  /start
-│  └ 🚀 Get your Chat ID
-│
-│  /help
-│  └ 📚 View this help message
-│
-│  /mystatus
-│  └ 👤 Check account status
-│
-└─────────────────────────────────┘`;
-
-      if (isAdminUser) {
-        helpMessage += `
-
-┌─────────────────────────────────┐
-│  🔐 <b>ADMIN COMMANDS</b>
-├─────────────────────────────────┤
-│
-│  /admincmd
-│  └ 🔐 View admin command panel
-│
-│  /ticket <code>[id]</code>
-│  └ 🎫 Manage support ticket
-│
-│  /topups
-│  └ 💰 View pending top-ups
-│
-│  /banuser <code>[user]</code>
-│  └ 🔨 Ban a user
-│
-│  /unbanuser <code>[user]</code>
-│  └ ✅ Unban a user
-│
-│  /deleteuser <code>[user]</code>
-│  └ 🗑️ Delete single user
-│
-│  /deletealluser
-│  └ ☠️ Delete all users
-│
-│  /cancelban
-│  └ ↩️ Cancel pending ban
-│
-│  /viewbans
-│  └ 📋 View banned users
-│
-│  /broadcast <code>[msg]</code>
-│  └ 📢 Send announcement
-│
-│  /stats
-│  └ 📊 View statistics
-│
-│  /allusers
-│  └ 👥 View all users
-│
-└─────────────────────────────────┘`;
-      }
-
-      helpMessage += `
-
-<i>💡 Need help? Contact support at yunchi.app</i>
-`;
-
-      await sendTelegramMessage(chatId, helpMessage);
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
-    }
-
-    // Handle /mystatus command
-    if (update.message?.text === "/mystatus") {
-      const chatId = update.message.chat.id.toString();
-
-      // Check if user is connected
-      const { data: profile, error } = await supabase
-        .from("profiles")
-        .select("user_id, username, name, credits, is_banned, ban_reason, banned_until, created_at, telegram_username")
+        .select("username, name, credits, is_banned, ban_reason, banned_until, telegram_username, created_at")
         .eq("telegram_chat_id", chatId)
         .maybeSingle();
 
-      if (error) {
-        console.error("Error fetching profile:", error);
-        await sendTelegramMessage(chatId, "❌ Error checking your status. Please try again.");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
-      }
-
       if (!profile) {
-        const notConnectedMessage = `
-╔═══════════════════════════════╗
-     ❌ <b>ACCOUNT NOT CONNECTED</b>
-╚═══════════════════════════════╝
+        await sendTelegramMessage(chatId, `
+❌ <b>Not Connected</b>
 
-Your Telegram is not linked to any
-Yunchi account.
+Your Telegram is not linked.
 
-┌─────────────────────────────────┐
-│  🔗 <b>HOW TO CONNECT</b>
-├─────────────────────────────────┤
-│
-│  <b>Step 1:</b> Copy your Chat ID
-│  <code>${chatId}</code>
-│
-│  <b>Step 2:</b> Go to Yunchi website
-│
-│  <b>Step 3:</b> Sign up with Chat ID
-│
-│  <b>Step 4:</b> Verify when prompted
-│
-└─────────────────────────────────┘
-
-<i>📚 Use /help for more information</i>
-`;
-        await sendTelegramMessage(chatId, notConnectedMessage);
+<b>To connect:</b>
+1. Copy: <code>${chatId}</code>
+2. Sign up at yunchi.app
+3. Paste Chat ID
+`);
       } else {
-        // Format account status
-        let accountStatus = "✅ Active";
-        let statusEmoji = "🟢";
-        let banInfo = "";
-        
+        let status = "✅ Active";
         if (profile.is_banned) {
-          if (profile.banned_until) {
-            const expiryDate = new Date(profile.banned_until);
-            const now = new Date();
-            if (expiryDate > now) {
-              const diffMs = expiryDate.getTime() - now.getTime();
-              const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-              const diffDays = Math.floor(diffHours / 24);
-              accountStatus = diffDays > 0 
-                ? `🚫 Banned (${diffDays}d ${diffHours % 24}h left)`
-                : `🚫 Banned (${diffHours}h left)`;
-              statusEmoji = "🔴";
-            }
-          } else {
-            accountStatus = "🚫 Permanently Banned";
-            statusEmoji = "🔴";
-          }
-          banInfo = `
-│  <b>Ban Reason:</b>
-│  ${profile.ban_reason || "Not specified"}`;
+          status = profile.banned_until 
+            ? `🚫 Banned until ${new Date(profile.banned_until).toLocaleDateString()}`
+            : "🚫 Permanently Banned";
         }
 
-        const memberSince = new Date(profile.created_at).toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        });
+        const joined = new Date(profile.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 
-        const connectedMessage = `
-╔═══════════════════════════════╗
-     ${statusEmoji} <b>ACCOUNT STATUS</b>
-╚═══════════════════════════════╝
+        await sendTelegramMessage(chatId, `
+👤 <b>My Status</b>
 
-┌─────────────────────────────────┐
-│  👤 <b>PROFILE INFORMATION</b>
-├─────────────────────────────────┤
-│
-│  <b>Username:</b> ${profile.username || "Not set"}
-│  <b>Name:</b> ${profile.name || "Not set"}
-│  <b>Telegram:</b> @${profile.telegram_username || "Not linked"}
-│
-└─────────────────────────────────┘
+<b>Profile</b>
+• Username: ${profile.username || "Not set"}
+• Name: ${profile.name || "Not set"}
 
-┌─────────────────────────────────┐
-│  💰 <b>CREDITS & STATUS</b>
-├─────────────────────────────────┤
-│
-│  <b>Credits:</b> ${Number(profile.credits)}
-│  <b>Status:</b> ${accountStatus}${banInfo}
-│
-└─────────────────────────────────┘
-
-┌─────────────────────────────────┐
-│  📅 <b>ACCOUNT DETAILS</b>
-├─────────────────────────────────┤
-│
-│  <b>Member Since:</b> ${memberSince}
-│  <b>Chat ID:</b> <code>${chatId}</code>
-│
-└─────────────────────────────────┘
-
-<i>🔧 Manage profile at yunchi.app/dashboard</i>
-`;
-        await sendTelegramMessage(chatId, connectedMessage);
+<b>Account</b>
+• Credits: ${profile.credits || 0}
+• Status: ${status}
+• Joined: ${joined}
+${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` : ""}
+`);
       }
-
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Handle /admincmd command
-    if (update.message?.text === "/admincmd") {
-      const chatId = update.message.chat.id.toString();
+    // /admincmd
+    if (text === "/admincmd") {
       await handleAdminCmd(chatId);
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Handle /banuser command
-    if (update.message?.text?.startsWith("/banuser")) {
-      const chatId = update.message.chat.id.toString();
-      const identifier = update.message.text.replace("/banuser", "").trim();
-      await handleBanUser(chatId, identifier, supabase);
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+    // /banuser
+    if (text.startsWith("/banuser")) {
+      await handleBanUser(chatId, text.replace("/banuser", "").trim(), supabase);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Handle /cancelban command
-    if (update.message?.text === "/cancelban") {
-      const chatId = update.message.chat.id.toString();
+    // /cancelban
+    if (text === "/cancelban") {
       await handleCancelBan(chatId, supabase);
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Handle /unbanuser command
-    if (update.message?.text?.startsWith("/unbanuser")) {
-      const chatId = update.message.chat.id.toString();
-      const identifier = update.message.text.replace("/unbanuser", "").trim();
-      await handleUnbanUser(chatId, identifier, supabase);
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+    // /unbanuser
+    if (text.startsWith("/unbanuser")) {
+      await handleUnbanUser(chatId, text.replace("/unbanuser", "").trim(), supabase);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Handle /deleteuser command
-    if (update.message?.text?.startsWith("/deleteuser") && !update.message?.text?.startsWith("/deletealluser")) {
-      const chatId = update.message.chat.id.toString();
-      const identifier = update.message.text.replace("/deleteuser", "").trim();
-      await handleDeleteUser(chatId, identifier, supabase);
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+    // /deleteuser
+    if (text.startsWith("/deleteuser") && !text.startsWith("/deletealluser")) {
+      await handleDeleteUser(chatId, text.replace("/deleteuser", "").trim(), supabase);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Handle /deletealluser command (EXTREMELY DANGEROUS)
-    if (update.message?.text === "/deletealluser") {
-      const chatId = update.message.chat.id.toString();
+    // /deletealluser
+    if (text === "/deletealluser") {
       await handleDeleteAllUsers(chatId, supabase);
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Handle /broadcast command
-    if (update.message?.text?.startsWith("/broadcast")) {
-      const chatId = update.message.chat.id.toString();
-      const message = update.message.text.replace("/broadcast", "").trim();
-      await handleBroadcast(chatId, message, supabase);
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+    // /broadcast
+    if (text.startsWith("/broadcast")) {
+      await handleBroadcast(chatId, text.replace("/broadcast", "").trim(), supabase);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Handle /stats command
-    if (update.message?.text === "/stats") {
-      const chatId = update.message.chat.id.toString();
+    // /stats
+    if (text === "/stats") {
       await handleStats(chatId, supabase);
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Handle /topups command
-    if (update.message?.text === "/topups") {
-      const chatId = update.message.chat.id.toString();
+    // /topups
+    if (text === "/topups") {
       const { message, keyboard } = await handleTopups(chatId, supabase, 0);
-      if (message) {
-        await sendTelegramMessage(chatId, message, keyboard || undefined);
-      }
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+      if (message) await sendTelegramMessage(chatId, message, keyboard || undefined);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Handle /addfund command
-    if (update.message?.text?.startsWith("/addfund")) {
-      const chatId = update.message.chat.id.toString();
-      const args = update.message.text.replace("/addfund", "").trim();
-      await handleAddFund(chatId, args, supabase);
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+    // /addfund
+    if (text.startsWith("/addfund")) {
+      await handleAddFund(chatId, text.replace("/addfund", "").trim(), supabase);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Handle /viewbans command
-    if (update.message?.text === "/viewbans") {
-      const chatId = update.message.chat.id.toString();
+    // /viewbans
+    if (text === "/viewbans") {
       await handleViewBans(chatId, supabase);
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Handle /allusers command (Admin only)
-    if (update.message?.text === "/allusers") {
-      const chatId = update.message.chat.id.toString();
-      
+    // /allusers
+    if (text === "/allusers") {
       if (!isAdmin(chatId)) {
-        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can view all users.");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        await sendTelegramMessage(chatId, "❌ Access denied");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       const perPage = 5;
-
-      // Get all users with their profile info including credits
-      const { data: users, error, count } = await supabase
+      const { data: users, count } = await supabase
         .from("profiles")
-        .select("user_id, username, name, telegram_chat_id, telegram_username, is_banned, created_at, credits", { count: "exact" })
+        .select("user_id, username, credits, telegram_chat_id, is_banned", { count: "exact" })
         .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error("Error fetching users:", error);
-        await sendTelegramMessage(chatId, "❌ Error fetching users. Please try again.");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
-      }
-
-      // Fetch all auth users to get emails
       const { data: authData } = await supabase.auth.admin.listUsers();
-      const authUsers = authData?.users || [];
-      
-      // Merge email into users
-      const usersWithEmail = users?.map(user => {
-        const authUser = authUsers.find((au: any) => au.id === user.user_id);
-        return { ...user, email: authUser?.email || null };
-      }) || [];
-
-      const totalCount = count || 0;
-      const connectedCount = usersWithEmail.filter(u => u.telegram_chat_id).length;
-      const bannedCount = usersWithEmail.filter(u => u.is_banned).length;
+      const usersWithEmail = users?.map((u: any) => ({
+        ...u,
+        email: authData?.users?.find((a: any) => a.id === u.user_id)?.email || null
+      })) || [];
 
       const { message, keyboard } = buildUsersListMessage(
-        usersWithEmail,
-        0,
-        totalCount,
-        connectedCount,
-        bannedCount,
+        usersWithEmail, 0, count || 0,
+        usersWithEmail.filter((u: any) => u.telegram_chat_id).length,
+        usersWithEmail.filter((u: any) => u.is_banned).length,
         perPage
       );
 
       await sendTelegramMessage(chatId, message, keyboard || undefined);
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Handle /userinfo command (Admin only)
-    if (update.message?.text?.startsWith("/userinfo")) {
-      const chatId = update.message.chat.id.toString();
-      
-      if (!isAdmin(chatId)) {
-        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can view user info.");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
-      }
-
-      const parts = update.message.text.split(" ");
-      
-      if (parts.length < 2) {
-        await sendTelegramMessage(
-          chatId,
-          `❌ <b>Invalid Usage</b>
-
-<b>Usage:</b> /userinfo <code>[email/username/chat_id]</code>
-
-<b>Examples:</b>
-• /userinfo user@email.com
-• /userinfo john_doe
-• /userinfo 123456789
-
-<i>💡 Search by email, username, or Telegram Chat ID</i>`
-        );
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
-      }
-
-      const identifier = parts.slice(1).join(" ").trim();
-
-      // Try to find user by different methods
-      let profile = null;
-      let userEmail = null;
-
-      // Try by email first
-      const { data: authData } = await supabase.auth.admin.listUsers();
-      const authUsers = authData?.users || [];
-      const foundAuthUser = authUsers.find((u: any) => 
-        u.email?.toLowerCase() === identifier.toLowerCase()
-      );
-
-      if (foundAuthUser) {
-        userEmail = foundAuthUser.email;
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("user_id", foundAuthUser.id)
-          .maybeSingle();
-        profile = profileData;
-      }
-
-      // Try by username
-      if (!profile) {
-        const { data: profileByUsername } = await supabase
-          .from("profiles")
-          .select("*")
-          .ilike("username", identifier)
-          .maybeSingle();
-        
-        if (profileByUsername) {
-          profile = profileByUsername;
-          const authUser = authUsers.find((u: any) => u.id === profileByUsername.user_id);
-          userEmail = authUser?.email || null;
-        }
-      }
-
-      // Try by telegram chat ID
-      if (!profile) {
-        const { data: profileByTelegram } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("telegram_chat_id", identifier)
-          .maybeSingle();
-        
-        if (profileByTelegram) {
-          profile = profileByTelegram;
-          const authUser = authUsers.find((u: any) => u.id === profileByTelegram.user_id);
-          userEmail = authUser?.email || null;
-        }
-      }
-
-      // Try by name
-      if (!profile) {
-        const { data: profileByName } = await supabase
-          .from("profiles")
-          .select("*")
-          .ilike("name", identifier)
-          .maybeSingle();
-        
-        if (profileByName) {
-          profile = profileByName;
-          const authUser = authUsers.find((u: any) => u.id === profileByName.user_id);
-          userEmail = authUser?.email || null;
-        }
-      }
-
-      if (!profile) {
-        await sendTelegramMessage(
-          chatId,
-          `❌ <b>User Not Found</b>
-
-No user found matching: <code>${identifier}</code>
-
-<b>Try searching by:</b>
-• Email address
-• Username
-• Telegram Chat ID
-• Name`
-        );
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
-      }
-
-      // Get user's check count
-      const { count: checkCount } = await supabase
-        .from("card_checks")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", profile.user_id);
-
-      // Get user's topup count
-      const { count: topupCount } = await supabase
-        .from("topup_transactions")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", profile.user_id);
-
-      // Get user's ticket count
-      const { count: ticketCount } = await supabase
-        .from("support_tickets")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", profile.user_id);
-
-      // Format ban status
-      let banStatus = "✅ Active";
-      let banInfo = "";
-      if (profile.is_banned) {
-        if (profile.banned_until) {
-          const expiryDate = new Date(profile.banned_until);
-          const now = new Date();
-          if (expiryDate > now) {
-            const diffMs = expiryDate.getTime() - now.getTime();
-            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-            const diffDays = Math.floor(diffHours / 24);
-            banStatus = diffDays > 0 
-              ? `🚫 Banned (${diffDays}d ${diffHours % 24}h left)`
-              : `🚫 Banned (${diffHours}h left)`;
-          }
-        } else {
-          banStatus = "🚫 Permanently Banned";
-        }
-        banInfo = `
-│  <b>Ban Reason:</b> ${profile.ban_reason || "Not specified"}
-│  <b>Banned At:</b> ${profile.banned_at ? new Date(profile.banned_at).toLocaleString() : "N/A"}`;
-      }
-
-      const memberSince = new Date(profile.created_at).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-
-      const userInfoMessage = `
-╔═══════════════════════════════╗
-       🔍 <b>USER INFORMATION</b>
-╚═══════════════════════════════╝
-
-┌─────────────────────────────────┐
-│  👤 <b>IDENTITY</b>
-├─────────────────────────────────┤
-│
-│  <b>Username:</b> ${profile.username || "Not set"}
-│  <b>Name:</b> ${profile.name || "Not set"}
-│  <b>Email:</b> <code>${userEmail || "Unknown"}</code>
-│  <b>User ID:</b>
-│  <code>${profile.user_id}</code>
-│
-└─────────────────────────────────┘
-
-┌─────────────────────────────────┐
-│  📱 <b>TELEGRAM</b>
-├─────────────────────────────────┤
-│
-│  <b>Chat ID:</b> ${profile.telegram_chat_id ? `<code>${profile.telegram_chat_id}</code>` : "❌ Not connected"}
-│  <b>Username:</b> ${profile.telegram_username ? `@${profile.telegram_username}` : "Not set"}
-│
-└─────────────────────────────────┘
-
-┌─────────────────────────────────┐
-│  💰 <b>ACCOUNT</b>
-├─────────────────────────────────┤
-│
-│  <b>Credits:</b> ${profile.credits?.toLocaleString() || 0}
-│  <b>Status:</b> ${banStatus}${banInfo}
-│  <b>Member Since:</b> ${memberSince}
-│
-└─────────────────────────────────┘
-
-┌─────────────────────────────────┐
-│  📊 <b>ACTIVITY</b>
-├─────────────────────────────────┤
-│
-│  <b>Card Checks:</b> ${checkCount || 0}
-│  <b>Top-ups:</b> ${topupCount || 0}
-│  <b>Support Tickets:</b> ${ticketCount || 0}
-│
-└─────────────────────────────────┘
-
-<i>💡 Use /banuser, /addfund, or /unbanuser to manage</i>
-`;
-
-      await sendTelegramMessage(chatId, userInfoMessage);
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+    // /userinfo
+    if (text.startsWith("/userinfo")) {
+      await handleUserInfo(chatId, text.replace("/userinfo", "").trim(), supabase);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Handle /ticket command (admin only for management)
-    if (update.message?.text?.startsWith("/ticket")) {
-      const chatId = update.message.chat.id.toString();
-      
-      // Only admin can use /ticket command
+    // /ticket
+    if (text.startsWith("/ticket")) {
       if (!isAdmin(chatId)) {
-        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can manage tickets via this command.");
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        await sendTelegramMessage(chatId, "❌ Access denied");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      
-      const parts = update.message.text.split(" ");
-      
-      if (parts.length < 2) {
-        await sendTelegramMessage(
-          chatId,
-          "❌ Please provide a ticket ID.\n\n<b>Usage:</b> /ticket TKT-XXXXXX\n<b>Example:</b> /ticket TKT-M1ABC2"
-        );
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+
+      const ticketId = text.replace("/ticket", "").trim();
+      if (!ticketId) {
+        await sendTelegramMessage(chatId, "❌ <b>Usage:</b> /ticket <code>[ticket_id]</code>");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      
-      const inputTicketId = parts[1].trim().toUpperCase();
-      
-      // Fetch ticket by ticket_id
-      const { data: ticket, error: ticketError } = await supabase
+
+      const { data: ticket } = await supabase
         .from("support_tickets")
-        .select("id, ticket_id, subject, message, status, priority, user_email, user_id, created_at")
-        .eq("ticket_id", inputTicketId)
-        .single();
-      
-      if (ticketError || !ticket) {
-        await sendTelegramMessage(
-          chatId,
-          `❌ Ticket not found: <code>${inputTicketId}</code>\n\nMake sure you entered the correct ticket ID.`
-        );
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        .select("*")
+        .or(`ticket_id.eq.${ticketId},id.eq.${ticketId}`)
+        .maybeSingle();
+
+      if (!ticket) {
+        await sendTelegramMessage(chatId, `❌ Ticket not found: ${ticketId}`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      
-      // Fetch conversation messages
-      const { data: messages } = await supabase
-        .from("ticket_messages")
-        .select("message, is_admin, created_at")
-        .eq("ticket_id", ticket.id)
-        .order("created_at", { ascending: true });
-      
-      // Build conversation text
-      let conversationText = "";
-      if (messages && messages.length > 0) {
-        const recentMessages = messages.slice(-5); // Show last 5 messages
-        conversationText = "\n\n<b>📝 Recent Messages:</b>\n" + recentMessages.map(m => 
-          `${m.is_admin ? "👨‍💼 Admin" : "👤 User"}: ${m.message.substring(0, 100)}${m.message.length > 100 ? "..." : ""}`
-        ).join("\n\n");
-        
-        if (messages.length > 5) {
-          conversationText = `\n<i>(Showing last 5 of ${messages.length} messages)</i>` + conversationText;
-        }
-      }
-      
-      // Status emoji mapping
-      const statusEmoji: Record<string, string> = {
-        open: "🟡",
-        processing: "🔵",
-        solved: "🟢",
-        closed: "⚫"
-      };
-      
-      const statusLabel: Record<string, string> = {
-        open: "LIVE",
-        processing: "PROCESSING",
-        solved: "SOLVED",
-        closed: "CLOSED"
+
+      const statusEmoji: Record<string, string> = { open: "🟡", processing: "🔵", solved: "🟢", closed: "⚫" };
+
+      const keyboard = {
+        inline_keyboard: [
+          [
+            { text: ticket.status === "open" ? "✓ Live" : "Live", callback_data: `open_${ticket.id}` },
+            { text: ticket.status === "processing" ? "✓ Processing" : "Processing", callback_data: `processing_${ticket.id}` },
+          ],
+          [
+            { text: ticket.status === "solved" ? "✓ Solved" : "Solved", callback_data: `solved_${ticket.id}` },
+            { text: ticket.status === "closed" ? "✓ Closed" : "Closed", callback_data: `closed_${ticket.id}` },
+          ],
+        ],
       };
 
-      const priorityEmoji: Record<string, string> = {
-        low: "🔵",
-        medium: "🟡",
-        high: "🟠",
-        urgent: "🔴"
-      };
-      
-      const emoji = statusEmoji[ticket.status] || "⚪";
-      const pEmoji = priorityEmoji[ticket.priority] || "🟡";
-      const createdDate = new Date(ticket.created_at).toLocaleString();
-      
-      const ticketDetails = `
+      await sendTelegramMessage(chatId, `
 🎫 <b>Ticket Details</b>
 
 <b>ID:</b> ${ticket.ticket_id}
 <b>Subject:</b> ${ticket.subject}
-<b>Priority:</b> ${pEmoji} ${(ticket.priority || 'medium').toUpperCase()}
-<b>Status:</b> ${emoji} ${statusLabel[ticket.status] || ticket.status.toUpperCase()}
+<b>Status:</b> ${statusEmoji[ticket.status] || "⚪"} ${ticket.status.toUpperCase()}
+<b>Priority:</b> ${ticket.priority}
 <b>Email:</b> ${ticket.user_email}
-<b>Created:</b> ${createdDate}
 
-<b>Original Message:</b>
-${ticket.message.substring(0, 500)}${ticket.message.length > 500 ? "..." : ""}${conversationText}
+<b>Message:</b>
+${ticket.message}
 
 [${ticket.id}]
-<i>💡 Reply to this message to respond to the user.</i>
-`;
-      
-      const inlineKeyboard = {
-        inline_keyboard: [
-          [
-            { text: "🟡 Live", callback_data: `open_${ticket.id}` },
-            { text: "🔵 Processing", callback_data: `processing_${ticket.id}` },
-          ],
-          [
-            { text: "🟢 Solved", callback_data: `solved_${ticket.id}` },
-            { text: "⚫ Closed", callback_data: `closed_${ticket.id}` },
-          ],
-        ],
-      };
-      
-      await sendTelegramMessage(chatId, ticketDetails, inlineKeyboard);
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+<i>Reply to this message to respond</i>
+`, keyboard);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Handle regular text messages from admin (for pending ban reason)
-    if (update.message?.text && !update.message.reply_to_message) {
-      const chatId = update.message.chat.id.toString();
-      const messageText = update.message.text;
+    return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-      // Skip if it's a command
-      if (!messageText.startsWith("/")) {
-        // Check if admin has pending ban
-        if (isAdmin(chatId)) {
-          const { data: pendingBan } = await supabase
-            .from("pending_bans")
-            .select("*")
-            .eq("admin_chat_id", chatId)
-            .maybeSingle();
-
-          if (pendingBan) {
-            // This message is the ban reason
-            await handleBanReason(chatId, messageText, supabase);
-            return new Response(JSON.stringify({ ok: true }), {
-              headers: { "Content-Type": "application/json", ...corsHeaders },
-            });
-          }
-        }
-      }
-    }
-
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
-  } catch (error: any) {
-    console.error("Error in telegram-webhook function:", error);
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { "Content-Type": "application/json", ...corsHeaders },
+  } catch (error) {
+    console.error("Error:", error);
+    return new Response(JSON.stringify({ error: "Internal error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 };
