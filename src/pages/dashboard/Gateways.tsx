@@ -1467,9 +1467,30 @@ const Gateways = () => {
   if (!selectedGateway) {
     return (
       <div className="space-y-6">
+        {/* YunChi Checkers Logo Header */}
+        <div className="flex items-center justify-center py-4">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/25">
+                <CreditCard className="h-6 w-6 text-primary-foreground" />
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-background flex items-center justify-center">
+                <CheckCircle className="h-2.5 w-2.5 text-white" />
+              </div>
+            </div>
+            <div className="text-center sm:text-left">
+              <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight">
+                <span className="text-foreground">YunChi</span>
+                <span className="text-primary"> Checkers</span>
+              </h1>
+              <p className="text-xs text-muted-foreground">Premium Card Verification</p>
+            </div>
+          </div>
+        </div>
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground">GATEWAYS</h1>
+            <h2 className="text-xl sm:text-2xl font-display font-bold text-foreground">GATEWAYS</h2>
             <p className="text-muted-foreground mt-1 text-sm sm:text-base">Select a gateway to start checking cards</p>
           </div>
           <div className="flex items-center gap-3">
