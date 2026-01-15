@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import confetti from "canvas-confetti";
+import { useLiveCardSound } from "@/hooks/useLiveCardSound";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -222,6 +223,9 @@ const Gateways = () => {
   const [liveIndicator, setLiveIndicator] = useState(false);
 
   const onlineCount = gateways.filter(g => g.status === "online").length;
+  
+  // Live card sound hook
+  const { playLiveSound } = useLiveCardSound();
 
   // BIN lookup state
   const [binInfo, setBinInfo] = useState<BinInfo>(defaultBinInfo);
@@ -478,6 +482,8 @@ const Gateways = () => {
       setUserCredits(prev => prev - CREDIT_COST);
 
       if (checkResult.status === "live") {
+        // Play live card sound
+        playLiveSound();
         // Trigger confetti celebration for live cards
         confetti({
           particleCount: 100,
@@ -624,6 +630,11 @@ const Gateways = () => {
           cardMasked: maskCard(cardData.card),
           fullCard: `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`
         };
+
+        // Play sound for each live card in bulk check
+        if (checkStatus === "live") {
+          playLiveSound();
+        }
 
         setBulkResults(prev => [...prev, bulkResult]);
         setBulkProgress(((i + 1) / cards.length) * 100);
