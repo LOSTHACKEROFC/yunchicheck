@@ -959,6 +959,17 @@ const Gateways = () => {
     reader.onload = (e) => {
       const content = e.target?.result as string;
       if (content) {
+        // Parse cards first to validate file content
+        const isAuth = selectedGateway?.type === "auth";
+        const newCards = parseCards(content, isAuth);
+        
+        // Reject file if no valid cards found
+        if (newCards.length === 0) {
+          const formatHint = isAuth ? "card|mm|yy or card|mm|yy|cvv" : "card|mm|yy|cvv";
+          toast.error(`File rejected: No valid card data found. Expected format: ${formatHint}`);
+          return;
+        }
+        
         // Append to existing input or set as new
         if (bulkInput.trim()) {
           setBulkInput(prev => prev + '\n' + content);
@@ -966,9 +977,6 @@ const Gateways = () => {
           setBulkInput(content);
         }
         
-        // Parse and show count - check if auth gateway is selected
-        const isAuth = selectedGateway?.type === "auth";
-        const newCards = parseCards(content, isAuth);
         toast.success(`Loaded ${newCards.length} valid cards from file`);
       }
     };
