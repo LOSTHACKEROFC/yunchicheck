@@ -38,73 +38,109 @@ const Pricing = () => {
 
   const plans = [
     {
-      name: t.starter || "Starter",
-      credits: "100",
-      price: "$10",
-      pricePerCredit: "$0.10",
+      name: "Starter",
+      credits: "350",
+      price: "$25",
+      pricePerCredit: "$0.071",
       description: t.perfectForBeginners || "Perfect for beginners",
       icon: Zap,
       popular: false,
-      checksCount: "100",
+      checksCount: "350",
       features: [
-        { text: "100 Credits", included: true },
-        { text: "100 Card Checks", included: true },
+        { text: "350 Credits", included: true },
+        { text: "350 Card Checks", included: true },
         { text: t.allGateways || "All Gateways", included: true },
         { text: t.basicSupport || "Basic Support", included: true },
         { text: t.priorityQueue || "Priority Queue", included: false },
       ],
     },
     {
-      name: t.professional || "Professional",
-      credits: "500",
-      price: "$45",
-      pricePerCredit: "$0.09",
-      description: t.mostPopularChoice || "Most popular choice",
+      name: "Basic",
+      credits: "1,500",
+      price: "$100",
+      pricePerCredit: "$0.067",
+      description: "Great value pack",
       icon: Crown,
-      popular: true,
-      checksCount: "500",
-      savings: "10%",
+      popular: false,
+      checksCount: "1,500",
+      savings: "6%",
       features: [
-        { text: "500 Credits", included: true },
-        { text: "500 Card Checks", included: true },
+        { text: "1,500 Credits", included: true },
+        { text: "1,500 Card Checks", included: true },
         { text: t.allGateways || "All Gateways", included: true },
         { text: t.prioritySupport || "Priority Support", included: true },
+        { text: t.priorityQueue || "Priority Queue", included: false },
+      ],
+    },
+    {
+      name: t.professional || "Professional",
+      credits: "9,000",
+      price: "$500",
+      pricePerCredit: "$0.056",
+      description: t.mostPopularChoice || "Most popular choice",
+      icon: Rocket,
+      popular: true,
+      checksCount: "9,000",
+      savings: "22%",
+      features: [
+        { text: "9,000 Credits", included: true },
+        { text: "9,000 Card Checks", included: true },
+        { text: t.allGateways || "All Gateways", included: true },
+        { text: t.vipSupport || "VIP Support", included: true },
+        { text: t.priorityQueue || "Priority Queue", included: true },
+      ],
+    },
+    {
+      name: "Business",
+      credits: "45,000",
+      price: "$2,000",
+      pricePerCredit: "$0.044",
+      description: t.forPowerUsers || "For power users",
+      icon: Layers,
+      popular: false,
+      checksCount: "45,000",
+      savings: "38%",
+      features: [
+        { text: "45,000 Credits", included: true },
+        { text: "45,000 Card Checks", included: true },
+        { text: t.allGateways || "All Gateways", included: true },
+        { text: t.vipSupport || "VIP Support", included: true },
         { text: t.priorityQueue || "Priority Queue", included: true },
       ],
     },
     {
       name: t.enterprise || "Enterprise",
-      credits: "1000",
-      price: "$80",
-      pricePerCredit: "$0.08",
-      description: t.forPowerUsers || "For power users",
-      icon: Rocket,
+      credits: "145,000",
+      price: "$5,000",
+      pricePerCredit: "$0.034",
+      description: "High-volume solution",
+      icon: Layers,
       popular: false,
-      checksCount: "1000",
-      savings: "20%",
+      checksCount: "145,000",
+      savings: "52%",
       features: [
-        { text: "1000 Credits", included: true },
-        { text: "1000 Card Checks", included: true },
+        { text: "145,000 Credits", included: true },
+        { text: "145,000 Card Checks", included: true },
         { text: t.allGateways || "All Gateways", included: true },
-        { text: t.vipSupport || "VIP Support", included: true },
+        { text: "Dedicated Support", included: true },
         { text: t.priorityQueue || "Priority Queue", included: true },
       ],
     },
     {
-      name: "Bulk",
-      credits: "2500",
-      price: "$180",
-      pricePerCredit: "$0.072",
-      description: "For high-volume users",
+      name: "Ultimate",
+      credits: "710,000",
+      price: "$15,000",
+      pricePerCredit: "$0.021",
+      description: "Maximum value",
       icon: Layers,
       popular: false,
-      checksCount: "2500",
-      savings: "28%",
+      checksCount: "710,000",
+      savings: "70%",
       features: [
-        { text: "2500 Credits", included: true },
-        { text: "2500 Card Checks", included: true },
+        { text: "710,000 Credits", included: true },
+        { text: "710,000 Card Checks", included: true },
         { text: t.allGateways || "All Gateways", included: true },
-        { text: t.vipSupport || "VIP Support", included: true },
+        { text: "Dedicated Support", included: true },
         { text: t.priorityQueue || "Priority Queue", included: true },
       ],
     },
@@ -156,13 +192,13 @@ const Pricing = () => {
         </div>
 
         {/* Plans Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 max-w-6xl mx-auto">
-          {plans.map((plan, planIndex) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 max-w-7xl mx-auto">
+          {plans.map((plan) => (
             <Card
               key={plan.name}
               className={`bg-card border-border relative transition-all hover:border-primary/50 ${
-                plan.popular ? "border-primary shadow-glow sm:scale-105 order-first sm:order-none lg:order-none" : ""
-              } ${planIndex === 2 ? "sm:col-span-2 lg:col-span-1" : ""}`}
+                plan.popular ? "border-primary shadow-glow sm:scale-105" : ""
+              }`}
             >
               {plan.popular && (
                 <div className="absolute -top-2.5 sm:-top-3 left-1/2 -translate-x-1/2">

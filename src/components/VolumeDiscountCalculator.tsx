@@ -5,14 +5,16 @@ import { Label } from "@/components/ui/label";
 import { Calculator, TrendingDown, Package, Check } from "lucide-react";
 
 const packages = [
-  { name: "Starter", credits: 100, price: 10, pricePerCredit: 0.10 },
-  { name: "Professional", credits: 500, price: 45, pricePerCredit: 0.09 },
-  { name: "Enterprise", credits: 1000, price: 80, pricePerCredit: 0.08 },
-  { name: "Bulk", credits: 2500, price: 180, pricePerCredit: 0.072 },
+  { name: "Starter", credits: 350, price: 25, pricePerCredit: 0.071 },
+  { name: "Basic", credits: 1500, price: 100, pricePerCredit: 0.067 },
+  { name: "Professional", credits: 9000, price: 500, pricePerCredit: 0.056 },
+  { name: "Business", credits: 45000, price: 2000, pricePerCredit: 0.044 },
+  { name: "Enterprise", credits: 145000, price: 5000, pricePerCredit: 0.034 },
+  { name: "Ultimate", credits: 710000, price: 15000, pricePerCredit: 0.021 },
 ];
 
 const VolumeDiscountCalculator = () => {
-  const [desiredCredits, setDesiredCredits] = useState<number>(500);
+  const [desiredCredits, setDesiredCredits] = useState<number>(5000);
 
   const recommendation = useMemo(() => {
     if (!desiredCredits || desiredCredits <= 0) return null;
@@ -97,7 +99,7 @@ const VolumeDiscountCalculator = () => {
             id="credits"
             type="number"
             min={1}
-            max={50000}
+            max={1000000}
             value={desiredCredits}
             onChange={(e) => setDesiredCredits(parseInt(e.target.value) || 0)}
             className="bg-background/50 border-border text-foreground"
@@ -170,7 +172,7 @@ const VolumeDiscountCalculator = () => {
         {recommendation && recommendation.savings <= 0 && (
           <div className="text-center py-4 text-muted-foreground text-sm">
             <p>Enter a larger amount to see volume discounts!</p>
-            <p className="text-xs mt-1">Savings start at 500+ credits</p>
+            <p className="text-xs mt-1">Savings start at 1,500+ credits</p>
           </div>
         )}
       </div>
