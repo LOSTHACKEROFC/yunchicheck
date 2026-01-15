@@ -40,7 +40,7 @@ interface GatewayStats {
   credits: number;
 }
 
-const CREDIT_COST_PER_CHECK = 5;
+const CREDIT_COST_PER_CHECK = 1;
 
 const CreditUsage = () => {
   const [checks, setChecks] = useState<CardCheck[]>([]);
