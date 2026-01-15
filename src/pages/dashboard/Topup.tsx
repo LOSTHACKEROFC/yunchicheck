@@ -2,6 +2,14 @@ import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   ArrowUpCircle, 
   Bitcoin, 
@@ -15,7 +23,8 @@ import {
   Upload,
   ImageIcon,
   X,
-  Coins
+  Coins,
+  RefreshCw
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -48,6 +57,8 @@ const creditPackages = [
   { credits: 1000, price: 60, popular: false },
 ];
 
+const ITEMS_PER_PAGE = 20;
+
 const Topup = () => {
   const [selectedPackage, setSelectedPackage] = useState<typeof creditPackages[0] | null>(null);
   const [selectedMethod, setSelectedMethod] = useState("");
@@ -55,32 +66,73 @@ const Topup = () => {
   const [transactions, setTransactions] = useState<TopupTransaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingTransactions, setLoadingTransactions] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [currentTransaction, setCurrentTransaction] = useState<TopupTransaction | null>(null);
   const [proofImage, setProofImage] = useState<File | null>(null);
   const [proofPreview, setProofPreview] = useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+  const [statusFilter, setStatusFilter] = useState<"all" | "completed" | "pending" | "failed">("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Filter transactions based on status
+  const filteredTransactions = transactions.filter(tx => {
+    if (statusFilter === "all") return true;
+    return tx.status === statusFilter;
+  });
+
   // Fetch transactions
-  useEffect(() => {
-    const fetchTransactions = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+  const fetchTransactions = async (loadMore = false) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-      const { data, error } = await supabase
-        .from('topup_transactions')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(10);
+    if (!loadMore) {
+      setLoadingTransactions(true);
+    }
 
-      if (error) {
-        console.error('Error fetching transactions:', error);
+    // Get total count
+    const { count } = await supabase
+      .from('topup_transactions')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+
+    setTotalCount(count || 0);
+
+    const offset = loadMore ? transactions.length : 0;
+
+    const { data, error } = await supabase
+      .from('topup_transactions')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + ITEMS_PER_PAGE - 1);
+
+    if (error) {
+      console.error('Error fetching transactions:', error);
+    } else {
+      const newData = data || [];
+      if (loadMore) {
+        setTransactions(prev => {
+          const existingIds = new Set(prev.map(t => t.id));
+          const uniqueNew = newData.filter(t => !existingIds.has(t.id));
+          return [...prev, ...uniqueNew];
+        });
       } else {
-        setTransactions(data || []);
+        setTransactions(newData);
       }
-      setLoadingTransactions(false);
-    };
+      setHasMore(newData.length === ITEMS_PER_PAGE && (offset + newData.length) < (count || 0));
+    }
+    setLoadingTransactions(false);
+    setLoadingMore(false);
+  };
 
+  const loadMoreTransactions = async () => {
+    setLoadingMore(true);
+    await fetchTransactions(true);
+  };
+
+  useEffect(() => {
     fetchTransactions();
   }, []);
 
@@ -539,41 +591,79 @@ const Topup = () => {
         {/* Recent Transactions */}
         <Card className="bg-card border-border">
           <CardHeader className="p-3 sm:p-6">
-            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-              <History className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-              Recent Purchases
-            </CardTitle>
+            <div className="flex flex-col gap-3">
+              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                <History className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+                Recent Purchases
+                {totalCount > 0 && (
+                  <span className="text-xs text-muted-foreground font-normal ml-auto">
+                    {filteredTransactions.length} of {transactions.length}
+                  </span>
+                )}
+              </CardTitle>
+              <Select value={statusFilter} onValueChange={(value: "all" | "completed" | "pending" | "failed") => setStatusFilter(value)}>
+                <SelectTrigger className="w-full h-8 text-xs">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </CardHeader>
           <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
             {loadingTransactions ? (
               <div className="flex items-center justify-center py-6 sm:py-8">
                 <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-primary" />
               </div>
-            ) : transactions.length === 0 ? (
+            ) : filteredTransactions.length === 0 ? (
               <div className="text-center py-6 sm:py-8 text-muted-foreground">
                 <Clock className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-2 sm:mb-3 opacity-50" />
-                <p className="text-sm sm:text-base">No purchases yet</p>
+                <p className="text-sm sm:text-base">{statusFilter === "all" ? "No purchases yet" : `No ${statusFilter} purchases`}</p>
               </div>
             ) : (
-              <div className="space-y-2 sm:space-y-3">
-                {transactions.slice(0, 5).map((tx) => (
-                  <div
-                    key={tx.id}
-                    className="flex items-center justify-between p-2 sm:p-3 rounded-lg bg-secondary/50 border border-border"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium text-xs sm:text-sm flex items-center gap-1">
-                        <Coins className="h-3 w-3 text-primary" />
-                        {tx.amount} Credits
-                      </p>
-                      <p className="text-[10px] sm:text-xs text-muted-foreground">
-                        {format(new Date(tx.created_at), "MMM d, HH:mm")}
-                      </p>
+              <ScrollArea className="h-[300px] sm:h-[400px] pr-2">
+                <div className="space-y-2 sm:space-y-3">
+                  {filteredTransactions.map((tx) => (
+                    <div
+                      key={tx.id}
+                      className="flex items-center justify-between p-2 sm:p-3 rounded-lg bg-secondary/50 border border-border"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-xs sm:text-sm flex items-center gap-1">
+                          <Coins className="h-3 w-3 text-primary" />
+                          {tx.amount} Credits
+                        </p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground">
+                          {format(new Date(tx.created_at), "MMM d, HH:mm")}
+                        </p>
+                      </div>
+                      {getStatusBadge(tx.status)}
                     </div>
-                    {getStatusBadge(tx.status)}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                  {hasMore && statusFilter === "all" && (
+                    <Button 
+                      variant="outline" 
+                      className="w-full text-xs" 
+                      size="sm"
+                      onClick={loadMoreTransactions}
+                      disabled={loadingMore}
+                    >
+                      {loadingMore ? (
+                        <>
+                          <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        <>Load More ({totalCount - transactions.length} remaining)</>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </ScrollArea>
             )}
           </CardContent>
         </Card>
