@@ -1874,6 +1874,17 @@ const Gateways = () => {
                       }`}>
                         {check.result === 'live' ? 'L' : check.result === 'dead' ? 'D' : '?'}
                       </span>
+                      {/* Card Brand Badge */}
+                      {check.fullCard && (() => {
+                        const cardNum = check.fullCard.split('|')[0] || '';
+                        const { brand, brandColor } = detectCardBrandLocal(cardNum);
+                        const brandShort = brand === "Mastercard" ? "MC" : brand === "Diners Club" ? "DC" : brand === "UnionPay" ? "UP" : brand.slice(0, 4).toUpperCase();
+                        return (
+                          <span className={`shrink-0 text-[6px] font-bold px-1 py-0.5 rounded text-white ${brandColor}`}>
+                            {brandShort}
+                          </span>
+                        );
+                      })()}
                       <span className="text-[8px] font-mono text-muted-foreground truncate">
                         {check.fullCard || '••••'}
                       </span>
