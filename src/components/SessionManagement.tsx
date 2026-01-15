@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Monitor, Smartphone, Globe, Clock, LogOut, Shield, Loader2 } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -169,75 +170,77 @@ const SessionManagement = () => {
             </Button>
           )}
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent>
           {sessions.length === 0 ? (
             <p className="text-muted-foreground text-center py-4">
               No active sessions found
             </p>
           ) : (
-            <div className="space-y-3">
-              {sessions.map((session) => (
-                <div
-                  key={session.id}
-                  className={`flex items-center justify-between p-4 rounded-lg border ${
-                    session.is_current 
-                      ? "border-primary/50 bg-primary/5" 
-                      : "border-border bg-secondary/30"
-                  }`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={`p-2 rounded-full ${
-                      session.is_current ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
-                    }`}>
-                      {getDeviceIcon(session.os)}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">
-                          {session.browser || "Unknown Browser"}
-                          {session.os && ` on ${session.os}`}
-                        </span>
-                        {session.is_current && (
-                          <Badge variant="default" className="text-xs">
-                            Current
-                          </Badge>
-                        )}
+            <ScrollArea className="h-[300px] sm:h-[400px] pr-2">
+              <div className="space-y-3 pr-2">
+                {sessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className={`flex items-center justify-between p-4 rounded-lg border ${
+                      session.is_current 
+                        ? "border-primary/50 bg-primary/5" 
+                        : "border-border bg-secondary/30"
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`p-2 rounded-full ${
+                        session.is_current ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+                      }`}>
+                        {getDeviceIcon(session.os)}
                       </div>
-                      <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
-                        {session.ip_address && (
-                          <span className="flex items-center gap-1">
-                            <Globe className="h-3 w-3" />
-                            {session.ip_address}
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">
+                            {session.browser || "Unknown Browser"}
+                            {session.os && ` on ${session.os}`}
                           </span>
-                        )}
-                        {session.location && (
-                          <span>{session.location}</span>
-                        )}
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {formatDate(session.last_active)}
-                        </span>
+                          {session.is_current && (
+                            <Badge variant="default" className="text-xs">
+                              Current
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
+                          {session.ip_address && (
+                            <span className="flex items-center gap-1">
+                              <Globe className="h-3 w-3" />
+                              {session.ip_address}
+                            </span>
+                          )}
+                          {session.location && (
+                            <span>{session.location}</span>
+                          )}
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {formatDate(session.last_active)}
+                          </span>
+                        </div>
                       </div>
                     </div>
+                    {!session.is_current && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRevokeClick(session)}
+                        disabled={revoking === session.id}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        {revoking === session.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <LogOut className="h-4 w-4" />
+                        )}
+                      </Button>
+                    )}
                   </div>
-                  {!session.is_current && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRevokeClick(session)}
-                      disabled={revoking === session.id}
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                    >
-                      {revoking === session.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <LogOut className="h-4 w-4" />
-                      )}
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </ScrollArea>
           )}
         </CardContent>
       </Card>
