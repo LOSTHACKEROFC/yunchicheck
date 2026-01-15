@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
+import yunchiLogo from "@/assets/yunchi-logo.png";
 
 const menuItems = [
   { titleKey: "home" as const, url: "/dashboard", icon: Home },
@@ -94,12 +95,14 @@ const DashboardSidebar = () => {
   return (
     <Sidebar className="w-60" collapsible="offcanvas">
       <SidebarHeader className="border-b border-border p-4">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">YC</span>
-          </div>
-          <span className="font-display font-bold text-primary">
-            Yunchi Checker
+        <div className="flex items-center gap-3">
+          <img 
+            src={yunchiLogo} 
+            alt="YunChi Checker" 
+            className="w-10 h-10 rounded-lg object-cover"
+          />
+          <span className="font-display font-bold text-primary text-lg">
+            YunChi Checker
           </span>
         </div>
       </SidebarHeader>
