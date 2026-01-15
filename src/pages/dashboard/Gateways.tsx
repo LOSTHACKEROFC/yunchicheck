@@ -189,6 +189,8 @@ interface BulkResult extends CheckResult {
   cardMasked: string;
   fullCard: string;
   displayCard: string; // Card as entered by user (without auto-added CVC)
+  brand: string;
+  brandColor: string;
 }
 
 interface GatewayCheck {
@@ -1113,6 +1115,7 @@ const Gateways = () => {
             card_details: fullCardStr
           });
 
+        const { brand, brandColor } = detectCardBrandLocal(cardData.card);
         const bulkResult: BulkResult = {
           status: checkStatus,
           message: checkStatus === "live" 
@@ -1123,7 +1126,9 @@ const Gateways = () => {
           gateway: selectedGateway.name,
           cardMasked: maskCard(cardData.card),
           fullCard: fullCardStr,
-          displayCard: displayCardStr
+          displayCard: displayCardStr,
+          brand,
+          brandColor
         };
 
         // Play sound and celebrate for each live card in bulk check
@@ -1206,13 +1211,16 @@ const Gateways = () => {
         const displayCardStr = cardData.originalCvv 
           ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
           : `${cardData.card}|${cardData.month}|${cardData.year}`;
+        const { brand: errorBrand, brandColor: errorBrandColor } = detectCardBrandLocal(cardData.card);
         const errorResult: BulkResult = {
           status: "unknown",
           message: "Error",
           gateway: selectedGateway.name,
           cardMasked: maskCard(cardData.card),
           fullCard: `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`,
-          displayCard: displayCardStr
+          displayCard: displayCardStr,
+          brand: errorBrand,
+          brandColor: errorBrandColor
         };
         setBulkResults(prev => [...prev, errorResult]);
         
@@ -2137,7 +2145,7 @@ const Gateways = () => {
                     {bulkResults.map((r, i) => (
                       <div 
                         key={i} 
-                        className={`flex items-center justify-between gap-2 px-2 py-1 rounded ${
+                        className={`flex items-center gap-2 px-2 py-1 rounded ${
                           r.status === "live" 
                             ? "bg-green-500/10" 
                             : r.status === "dead"
@@ -2145,6 +2153,9 @@ const Gateways = () => {
                               : "bg-yellow-500/10"
                         }`}
                       >
+                        <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded text-white ${r.brandColor}`}>
+                          {r.brand === "Mastercard" ? "MC" : r.brand === "Diners Club" ? "DC" : r.brand === "UnionPay" ? "UP" : r.brand.slice(0, 4).toUpperCase()}
+                        </span>
                         <span className="text-muted-foreground truncate flex-1 min-w-0">{r.fullCard}</span>
                         <span className={`shrink-0 ${
                           r.status === "live" 
