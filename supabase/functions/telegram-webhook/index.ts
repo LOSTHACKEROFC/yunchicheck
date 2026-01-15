@@ -195,6 +195,9 @@ async function setBotCommands(): Promise<void> {
     { command: "stats", description: "View statistics" },
     { command: "allusers", description: "List all users" },
     { command: "userinfo", description: "User details" },
+    { command: "grantadmin", description: "Grant admin access" },
+    { command: "revokeadmin", description: "Revoke admin access" },
+    { command: "admins", description: "List all admins" },
   ];
 
   try {
@@ -217,6 +220,36 @@ async function setBotCommands(): Promise<void> {
   }
 }
 
+// Super admin check (hardcoded)
+function isSuperAdmin(chatId: string): boolean {
+  return chatId === ADMIN_CHAT_ID;
+}
+
+// Check if user is admin (super admin OR has admin role via telegram_chat_id)
+async function isAdminAsync(chatId: string, supabase: any): Promise<boolean> {
+  // Super admin always has access
+  if (chatId === ADMIN_CHAT_ID) return true;
+
+  // Check if this telegram chat ID belongs to a user with admin role
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("user_id")
+    .eq("telegram_chat_id", chatId)
+    .maybeSingle();
+
+  if (!profile) return false;
+
+  const { data: role } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", profile.user_id)
+    .eq("role", "admin")
+    .maybeSingle();
+
+  return !!role;
+}
+
+// Legacy sync function for backward compatibility
 function isAdmin(chatId: string): boolean {
   return chatId === ADMIN_CHAT_ID;
 }
@@ -396,15 +429,16 @@ ${topupList}
 // ADMIN COMMAND HANDLERS
 // ═══════════════════════════════════════════════════════════
 
-async function handleAdminCmd(chatId: string): Promise<void> {
-  if (!isAdmin(chatId)) {
+async function handleAdminCmd(chatId: string, supabase: any): Promise<void> {
+  const hasAccess = await isAdminAsync(chatId, supabase);
+  if (!hasAccess) {
     await sendTelegramMessage(chatId, "❌ Access denied");
     return;
   }
 
   await setBotCommands();
 
-  const menu = `
+  let menu = `
 🔐 <b>Admin Panel</b>
 
 <b>📋 Tickets</b>
@@ -428,14 +462,222 @@ async function handleAdminCmd(chatId: string): Promise<void> {
 /userinfo <code>[user]</code> - User details
 
 <b>📢 Communication</b>
-/broadcast <code>[message]</code> - Send to all users
-`;
+/broadcast <code>[message]</code> - Send to all users`;
+
+  // Super admin only commands
+  if (isSuperAdmin(chatId)) {
+    menu += `
+
+<b>🛡️ Admin Management</b> <i>(Super Admin)</i>
+/grantadmin <code>[chat_id]</code> - Grant admin
+/revokeadmin <code>[chat_id]</code> - Revoke admin
+/admins - List all admins`;
+  }
 
   await sendTelegramMessage(chatId, menu);
 }
 
+// ═══════════════════════════════════════════════════════════
+// ADMIN MANAGEMENT HANDLERS
+// ═══════════════════════════════════════════════════════════
+
+async function handleGrantAdmin(chatId: string, args: string, supabase: any): Promise<void> {
+  if (!isSuperAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ Only super admin can grant admin access");
+    return;
+  }
+
+  const targetChatId = args.trim();
+  if (!targetChatId) {
+    await sendTelegramMessage(chatId, `
+❌ <b>Usage:</b> /grantadmin <code>[telegram_chat_id]</code>
+
+Example: /grantadmin 123456789
+`);
+    return;
+  }
+
+  // Find user by telegram chat ID
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("user_id, username, telegram_username")
+    .eq("telegram_chat_id", targetChatId)
+    .maybeSingle();
+
+  if (!profile) {
+    await sendTelegramMessage(chatId, `❌ No user found with Telegram Chat ID: ${targetChatId}`);
+    return;
+  }
+
+  // Check if already admin
+  const { data: existingRole } = await supabase
+    .from("user_roles")
+    .select("id")
+    .eq("user_id", profile.user_id)
+    .eq("role", "admin")
+    .maybeSingle();
+
+  if (existingRole) {
+    await sendTelegramMessage(chatId, `⚠️ User <b>${profile.username || targetChatId}</b> is already an admin`);
+    return;
+  }
+
+  // Grant admin role
+  const { error } = await supabase
+    .from("user_roles")
+    .insert({ user_id: profile.user_id, role: "admin" });
+
+  if (error) {
+    console.error("Error granting admin:", error);
+    await sendTelegramMessage(chatId, "❌ Failed to grant admin access");
+    return;
+  }
+
+  // Notify the new admin
+  await sendTelegramMessage(targetChatId, `
+🎉 <b>Admin Access Granted</b>
+
+You have been granted admin access to the bot.
+Use /admincmd to view available commands.
+`);
+
+  await sendTelegramMessage(chatId, `
+✅ <b>Admin Granted</b>
+
+<b>User:</b> ${profile.username || "Unknown"}
+<b>Telegram:</b> @${profile.telegram_username || targetChatId}
+<b>Chat ID:</b> <code>${targetChatId}</code>
+
+User can now use admin commands.
+`);
+}
+
+async function handleRevokeAdmin(chatId: string, args: string, supabase: any): Promise<void> {
+  if (!isSuperAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ Only super admin can revoke admin access");
+    return;
+  }
+
+  const targetChatId = args.trim();
+  if (!targetChatId) {
+    await sendTelegramMessage(chatId, `
+❌ <b>Usage:</b> /revokeadmin <code>[telegram_chat_id]</code>
+
+Example: /revokeadmin 123456789
+`);
+    return;
+  }
+
+  if (targetChatId === ADMIN_CHAT_ID) {
+    await sendTelegramMessage(chatId, "❌ Cannot revoke super admin access");
+    return;
+  }
+
+  // Find user by telegram chat ID
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("user_id, username, telegram_username")
+    .eq("telegram_chat_id", targetChatId)
+    .maybeSingle();
+
+  if (!profile) {
+    await sendTelegramMessage(chatId, `❌ No user found with Telegram Chat ID: ${targetChatId}`);
+    return;
+  }
+
+  // Check if user is admin
+  const { data: existingRole } = await supabase
+    .from("user_roles")
+    .select("id")
+    .eq("user_id", profile.user_id)
+    .eq("role", "admin")
+    .maybeSingle();
+
+  if (!existingRole) {
+    await sendTelegramMessage(chatId, `⚠️ User <b>${profile.username || targetChatId}</b> is not an admin`);
+    return;
+  }
+
+  // Revoke admin role
+  const { error } = await supabase
+    .from("user_roles")
+    .delete()
+    .eq("user_id", profile.user_id)
+    .eq("role", "admin");
+
+  if (error) {
+    console.error("Error revoking admin:", error);
+    await sendTelegramMessage(chatId, "❌ Failed to revoke admin access");
+    return;
+  }
+
+  // Notify the former admin
+  await sendTelegramMessage(targetChatId, `
+⚠️ <b>Admin Access Revoked</b>
+
+Your admin access has been revoked.
+`);
+
+  await sendTelegramMessage(chatId, `
+✅ <b>Admin Revoked</b>
+
+<b>User:</b> ${profile.username || "Unknown"}
+<b>Telegram:</b> @${profile.telegram_username || targetChatId}
+<b>Chat ID:</b> <code>${targetChatId}</code>
+
+User can no longer use admin commands.
+`);
+}
+
+async function handleListAdmins(chatId: string, supabase: any): Promise<void> {
+  if (!isSuperAdmin(chatId)) {
+    await sendTelegramMessage(chatId, "❌ Only super admin can view admin list");
+    return;
+  }
+
+  // Get all users with admin role
+  const { data: adminRoles } = await supabase
+    .from("user_roles")
+    .select("user_id")
+    .eq("role", "admin");
+
+  const adminUserIds = adminRoles?.map((r: any) => r.user_id) || [];
+
+  let adminList = `
+👑 <b>Super Admin</b>
+   🆔 <code>${ADMIN_CHAT_ID}</code>
+`;
+
+  if (adminUserIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("user_id, username, telegram_username, telegram_chat_id")
+      .in("user_id", adminUserIds);
+
+    if (profiles && profiles.length > 0) {
+      adminList += `
+<b>Granted Admins</b> (${profiles.length})
+`;
+      profiles.forEach((p: any, i: number) => {
+        adminList += `
+${i + 1}. <b>${p.username || "Unknown"}</b>
+   @${p.telegram_username || "N/A"} | 🆔 <code>${p.telegram_chat_id || "N/A"}</code>`;
+      });
+    }
+  } else {
+    adminList += `
+<i>No additional admins granted</i>`;
+  }
+
+  await sendTelegramMessage(chatId, `
+🛡️ <b>Admin List</b>
+${adminList}
+`);
+}
+
 async function handleAddFund(chatId: string, args: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
+  const hasAccess = await isAdminAsync(chatId, supabase);
+  if (!hasAccess) {
     await sendTelegramMessage(chatId, "❌ Access denied");
     return;
   }
@@ -523,7 +765,8 @@ Balance: ${oldCredits} → ${newCredits}
 }
 
 async function handleTopups(chatId: string, supabase: any, page: number = 0): Promise<{ message: string; keyboard: object | null }> {
-  if (!isAdmin(chatId)) {
+  const hasAccess = await isAdminAsync(chatId, supabase);
+  if (!hasAccess) {
     await sendTelegramMessage(chatId, "❌ Access denied");
     return { message: "", keyboard: null };
   }
@@ -539,7 +782,8 @@ async function handleTopups(chatId: string, supabase: any, page: number = 0): Pr
 }
 
 async function handleDeleteUser(chatId: string, identifier: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
+  const hasAccess = await isAdminAsync(chatId, supabase);
+  if (!hasAccess) {
     await sendTelegramMessage(chatId, "❌ Access denied");
     return;
   }
@@ -635,7 +879,8 @@ async function executeUserDeletion(chatId: string, userId: string, supabase: any
 }
 
 async function handleDeleteAllUsers(chatId: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
+  const hasAccess = await isAdminAsync(chatId, supabase);
+  if (!hasAccess) {
     await sendTelegramMessage(chatId, "❌ Access denied");
     return;
   }
@@ -689,7 +934,8 @@ Failed: ${failed}
 }
 
 async function handleBanUser(chatId: string, identifier: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
+  const hasAccess = await isAdminAsync(chatId, supabase);
+  if (!hasAccess) {
     await sendTelegramMessage(chatId, "❌ Access denied");
     return;
   }
@@ -751,7 +997,8 @@ Reply with the ban reason:
 }
 
 async function handleCancelBan(chatId: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
+  const hasAccess = await isAdminAsync(chatId, supabase);
+  if (!hasAccess) {
     await sendTelegramMessage(chatId, "❌ Access denied");
     return;
   }
@@ -772,7 +1019,8 @@ async function handleCancelBan(chatId: string, supabase: any): Promise<void> {
 }
 
 async function handleUnbanUser(chatId: string, identifier: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
+  const hasAccess = await isAdminAsync(chatId, supabase);
+  if (!hasAccess) {
     await sendTelegramMessage(chatId, "❌ Access denied");
     return;
   }
@@ -807,7 +1055,8 @@ async function handleUnbanUser(chatId: string, identifier: string, supabase: any
 }
 
 async function handleBroadcast(chatId: string, message: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
+  const hasAccess = await isAdminAsync(chatId, supabase);
+  if (!hasAccess) {
     await sendTelegramMessage(chatId, "❌ Access denied");
     return;
   }
@@ -849,7 +1098,8 @@ async function handleBroadcast(chatId: string, message: string, supabase: any): 
 }
 
 async function handleStats(chatId: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
+  const hasAccess = await isAdminAsync(chatId, supabase);
+  if (!hasAccess) {
     await sendTelegramMessage(chatId, "❌ Access denied");
     return;
   }
@@ -886,7 +1136,8 @@ async function handleStats(chatId: string, supabase: any): Promise<void> {
 }
 
 async function handleViewBans(chatId: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
+  const hasAccess = await isAdminAsync(chatId, supabase);
+  if (!hasAccess) {
     await sendTelegramMessage(chatId, "❌ Access denied");
     return;
   }
@@ -917,7 +1168,8 @@ ${list}
 }
 
 async function handleUserInfo(chatId: string, identifier: string, supabase: any): Promise<void> {
-  if (!isAdmin(chatId)) {
+  const hasAccess = await isAdminAsync(chatId, supabase);
+  if (!hasAccess) {
     await sendTelegramMessage(chatId, "❌ Access denied");
     return;
   }
@@ -1042,10 +1294,13 @@ const handler = async (req: Request): Promise<Response> => {
       const callbackData = update.callback_query.data;
       const callbackChatId = update.callback_query.message?.chat.id.toString();
       const messageId = update.callback_query.message?.message_id;
+      
+      // Check admin status once for all callback handlers
+      const isCallbackAdmin = callbackChatId ? await isAdminAsync(callbackChatId, supabase) : false;
 
       // Pagination: /allusers
       if (callbackData.startsWith("allusers_page_")) {
-        if (!callbackChatId || !isAdmin(callbackChatId)) {
+        if (!callbackChatId || !isCallbackAdmin) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -1083,7 +1338,7 @@ const handler = async (req: Request): Promise<Response> => {
 
       // Pagination: /topups
       if (callbackData.startsWith("topups_page_")) {
-        if (!callbackChatId || !isAdmin(callbackChatId)) {
+        if (!callbackChatId || !isCallbackAdmin) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -1101,7 +1356,7 @@ const handler = async (req: Request): Promise<Response> => {
       }
 
       if (callbackData === "topups_refresh") {
-        if (!callbackChatId || !isAdmin(callbackChatId)) {
+        if (!callbackChatId || !isCallbackAdmin) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -1114,7 +1369,7 @@ const handler = async (req: Request): Promise<Response> => {
 
       // Topup approve/reject
       if (callbackData.startsWith("topup_accept_") || callbackData.startsWith("topup_reject_")) {
-        if (!callbackChatId || !isAdmin(callbackChatId)) {
+        if (!callbackChatId || !isCallbackAdmin) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -1157,7 +1412,7 @@ const handler = async (req: Request): Promise<Response> => {
 
       // User deletion
       if (callbackData.startsWith("delete_confirm_")) {
-        if (!callbackChatId || !isAdmin(callbackChatId)) {
+        if (!callbackChatId || !isCallbackAdmin) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -1184,7 +1439,7 @@ const handler = async (req: Request): Promise<Response> => {
 
       // Delete all users
       if (callbackData === "deleteall_confirm_step1") {
-        if (!callbackChatId || !isAdmin(callbackChatId)) {
+        if (!callbackChatId || !isCallbackAdmin) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -1202,7 +1457,7 @@ const handler = async (req: Request): Promise<Response> => {
       }
 
       if (callbackData === "deleteall_confirm_step2") {
-        if (!callbackChatId || !isAdmin(callbackChatId)) {
+        if (!callbackChatId || !isCallbackAdmin) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -1221,7 +1476,7 @@ const handler = async (req: Request): Promise<Response> => {
 
       // Ban duration
       if (callbackData.startsWith("ban_duration_")) {
-        if (!callbackChatId || !isAdmin(callbackChatId)) {
+        if (!callbackChatId || !isCallbackAdmin) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -1274,7 +1529,7 @@ Duration: ${durationText}
 
       // Appeal handling
       if (callbackData.startsWith("appeal_approve_") || callbackData.startsWith("appeal_reject_")) {
-        if (!callbackChatId || !isAdmin(callbackChatId)) {
+        if (!callbackChatId || !isCallbackAdmin) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -1329,7 +1584,7 @@ Duration: ${durationText}
 
       // Userinfo quick actions
       if (callbackData.startsWith("userinfo_ban_")) {
-        if (!callbackChatId || !isAdmin(callbackChatId)) {
+        if (!callbackChatId || !isCallbackAdmin) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -1367,7 +1622,7 @@ Reply with the ban reason:
       }
 
       if (callbackData.startsWith("userinfo_unban_")) {
-        if (!callbackChatId || !isAdmin(callbackChatId)) {
+        if (!callbackChatId || !isCallbackAdmin) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -1392,7 +1647,7 @@ Reply with the ban reason:
       }
 
       if (callbackData.startsWith("userinfo_addcredits_")) {
-        if (!callbackChatId || !isAdmin(callbackChatId)) {
+        if (!callbackChatId || !isCallbackAdmin) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -1419,7 +1674,7 @@ Examples:
       }
 
       if (callbackData.startsWith("userinfo_delete_")) {
-        if (!callbackChatId || !isAdmin(callbackChatId)) {
+        if (!callbackChatId || !isCallbackAdmin) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -1684,7 +1939,25 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
 
     // /admincmd
     if (text === "/admincmd") {
-      await handleAdminCmd(chatId);
+      await handleAdminCmd(chatId, supabase);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /grantadmin
+    if (text.startsWith("/grantadmin")) {
+      await handleGrantAdmin(chatId, text.replace("/grantadmin", "").trim(), supabase);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /revokeadmin
+    if (text.startsWith("/revokeadmin")) {
+      await handleRevokeAdmin(chatId, text.replace("/revokeadmin", "").trim(), supabase);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /admins
+    if (text === "/admins") {
+      await handleListAdmins(chatId, supabase);
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -1751,7 +2024,8 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
 
     // /allusers
     if (text === "/allusers") {
-      if (!isAdmin(chatId)) {
+      const hasAccess = await isAdminAsync(chatId, supabase);
+      if (!hasAccess) {
         await sendTelegramMessage(chatId, "❌ Access denied");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -1787,7 +2061,8 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
 
     // /ticket
     if (text.startsWith("/ticket")) {
-      if (!isAdmin(chatId)) {
+      const hasAccess = await isAdminAsync(chatId, supabase);
+      if (!hasAccess) {
         await sendTelegramMessage(chatId, "❌ Access denied");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
