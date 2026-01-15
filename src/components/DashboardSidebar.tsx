@@ -96,12 +96,15 @@ const DashboardSidebar = () => {
     <Sidebar className="w-60" collapsible="offcanvas">
       <SidebarHeader className="border-b border-border p-4">
         <div className="flex items-center gap-3">
-          <img 
-            src={yunchiLogo} 
-            alt="YunChi Checker" 
-            className="w-10 h-10 rounded-lg object-cover"
-          />
-          <span className="font-display font-bold text-primary text-lg">
+          <div className="relative">
+            <img 
+              src={yunchiLogo} 
+              alt="YunChi Checker" 
+              className="w-14 h-14 rounded-xl object-cover shadow-lg shadow-primary/30"
+            />
+            <div className="absolute inset-0 rounded-xl bg-primary/10 animate-pulse pointer-events-none" />
+          </div>
+          <span className="font-display font-bold text-primary text-lg drop-shadow-[0_0_8px_hsl(var(--primary)/0.5)]">
             YunChi Checker
           </span>
         </div>
