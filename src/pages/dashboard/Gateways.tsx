@@ -804,18 +804,86 @@ const Gateways = () => {
     setBulkChecking(false);
     setBulkPaused(false);
     
-    // Count live cards and trigger confetti celebration
-    const liveCount = bulkResults.filter(r => r.status === 'live').length + 
-      (bulkResults.length === 0 ? 0 : 0); // Include current batch
-    
-    // Get final live count from state after all results
+    // Trigger final celebration after a short delay to ensure all results are counted
     setTimeout(() => {
       setBulkResults(prev => {
         const finalLiveCount = prev.filter(r => r.status === 'live').length;
         const bloodRedColors = ['#dc2626', '#ef4444', '#b91c1c', '#991b1b', '#7f1d1d', '#fca5a5'];
         
-        if (finalLiveCount >= 3) {
-          // Epic blood rain celebration for 3+ live cards
+        if (finalLiveCount >= 5) {
+          // MEGA celebration for 5+ live cards - Epic blood rain
+          playLiveSoundIfEnabled();
+          
+          const duration = 4000;
+          const end = Date.now() + duration;
+          
+          // Initial massive explosion
+          confetti({
+            particleCount: 200,
+            spread: 180,
+            origin: { y: 0.5 },
+            colors: bloodRedColors,
+            gravity: 0.5,
+            scalar: 1.5
+          });
+          
+          // Delayed center burst
+          setTimeout(() => {
+            confetti({
+              particleCount: 150,
+              spread: 120,
+              origin: { y: 0.6, x: 0.5 },
+              colors: bloodRedColors,
+              gravity: 0.7
+            });
+          }, 200);
+          
+          const frame = () => {
+            // Side cannons with varying intensity
+            confetti({
+              particleCount: 8,
+              angle: 60,
+              spread: 55,
+              origin: { x: 0, y: Math.random() * 0.4 + 0.3 },
+              colors: bloodRedColors,
+              gravity: 1.2,
+              scalar: 1.2
+            });
+            confetti({
+              particleCount: 8,
+              angle: 120,
+              spread: 55,
+              origin: { x: 1, y: Math.random() * 0.4 + 0.3 },
+              colors: bloodRedColors,
+              gravity: 1.2,
+              scalar: 1.2
+            });
+            
+            // Blood rain from top
+            confetti({
+              particleCount: 4,
+              spread: 40,
+              origin: { x: Math.random(), y: 0 },
+              colors: bloodRedColors,
+              gravity: 2.5,
+              startVelocity: 20,
+              ticks: 80
+            });
+            
+            if (Date.now() < end) {
+              requestAnimationFrame(frame);
+            }
+          };
+          frame();
+          
+          toast.success(`🔥 EPIC! ${finalLiveCount} LIVE CARDS FOUND! 🔥`, {
+            description: "Bulk check completed successfully!"
+          });
+          
+        } else if (finalLiveCount >= 3) {
+          // Epic blood rain celebration for 3-4 live cards
+          playLiveSoundIfEnabled();
+          
           const duration = 3000;
           const end = Date.now() + duration;
           
@@ -830,7 +898,6 @@ const Gateways = () => {
           });
           
           const frame = () => {
-            // Side cannons with varying intensity
             confetti({
               particleCount: 5,
               angle: 60,
@@ -850,7 +917,6 @@ const Gateways = () => {
               scalar: 1.1
             });
             
-            // Random top drops for blood rain effect
             if (Math.random() > 0.5) {
               confetti({
                 particleCount: 3,
@@ -868,40 +934,52 @@ const Gateways = () => {
             }
           };
           frame();
+          
+          toast.success(`🎉 ${finalLiveCount} LIVE CARDS FOUND!`, {
+            description: "Bulk check completed!"
+          });
+          
         } else if (finalLiveCount >= 1) {
           // Dramatic burst for 1-2 live cards
+          playLiveSoundIfEnabled();
+          
           confetti({
-            particleCount: 100,
-            spread: 90,
+            particleCount: 120,
+            spread: 100,
             origin: { y: 0.6 },
             colors: bloodRedColors,
-            gravity: 0.9,
+            gravity: 0.8,
             scalar: 1.2
           });
           
           // Side accents
           setTimeout(() => {
             confetti({
-              particleCount: 40,
+              particleCount: 50,
               angle: 60,
-              spread: 40,
+              spread: 50,
               origin: { x: 0, y: 0.6 },
               colors: bloodRedColors
             });
             confetti({
-              particleCount: 40,
+              particleCount: 50,
               angle: 120,
-              spread: 40,
+              spread: 50,
               origin: { x: 1, y: 0.6 },
               colors: bloodRedColors
             });
           }, 100);
+          
+          toast.success(`✅ ${finalLiveCount} LIVE CARD${finalLiveCount > 1 ? 'S' : ''} FOUND!`, {
+            description: "Bulk check completed!"
+          });
+        } else {
+          toast.info(`Bulk check completed. No live cards found.`);
         }
+        
         return prev;
       });
-    }, 100);
-    
-    toast.success(`Bulk check completed! Processed ${bulkAbortRef.current ? bulkCurrentIndex : cards.length} cards.`);
+    }, 200);
     
     // Refresh history after bulk check
     fetchGatewayHistory(selectedGateway.id);
