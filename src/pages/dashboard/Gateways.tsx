@@ -984,7 +984,7 @@ const Gateways = () => {
         
         // Reject file if no valid cards found
         if (newCards.length === 0) {
-          const formatHint = isAuth ? "card|mm|yy or card|mm|yy|cvv" : "card|mm|yy|cvv";
+          const formatHint = isAuth ? "card|mm|yy, card=YYMM, or card|mm|yy|cvv" : "card|mm|yy|cvv";
           toast.error(`File rejected: No valid card data found. Expected format: ${formatHint}`);
           return;
         }
@@ -1023,7 +1023,7 @@ const Gateways = () => {
     const isAuthGateway = selectedGateway.type === "auth";
     const cards = parseCards(bulkInput, isAuthGateway);
     if (cards.length === 0) {
-      const formatHint = isAuthGateway ? "card|mm|yy or card|mm|yy|cvv" : "card|mm|yy|cvv";
+      const formatHint = isAuthGateway ? "card|mm|yy, card=YYMM, or card|mm|yy|cvv" : "card|mm|yy|cvv";
       toast.error(`No valid cards found. Use format: ${formatHint}`);
       return;
     }
@@ -1976,14 +1976,14 @@ const Gateways = () => {
                   </div>
                 </div>
                 <Textarea
-                  placeholder="Supports multiple formats:&#10;card|mm|yy|cvv&#10;card mm yyyy cvv&#10;Fullz data with card details"
+                  placeholder="Supports multiple formats:&#10;card|mm|yy|cvv&#10;card=YYMM (track data)&#10;card mm yyyy cvv&#10;Fullz data with card details"
                   value={bulkInput}
                   onChange={(e) => setBulkInput(e.target.value)}
                   className="mt-1 font-mono text-xs h-40 resize-none"
                   disabled={bulkChecking}
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  Formats: {selectedGateway?.type === "auth" ? "card|mm|yy (CVC optional), " : ""}card|mm|yy|cvv, card mm yyyy cvv, Fullz — {parseCards(bulkInput, selectedGateway?.type === "auth").length} valid cards detected
+                  Formats: {selectedGateway?.type === "auth" ? "card|mm|yy, card=YYMM (CVC optional), " : ""}card|mm|yy|cvv, card mm yyyy cvv, Fullz — {parseCards(bulkInput, selectedGateway?.type === "auth").length} valid cards detected
                 </p>
               </div>
 
