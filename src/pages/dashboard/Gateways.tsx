@@ -1249,18 +1249,33 @@ const Gateways = () => {
                         </p>
                       </div>
                     </div>
-                    <Badge 
-                      variant="outline" 
-                      className={`text-[10px] uppercase font-semibold ${
-                        check.result === 'live' 
-                          ? 'border-green-500/30 text-green-500 bg-green-500/10' 
-                          : check.result === 'dead'
-                            ? 'border-red-500/30 text-red-500 bg-red-500/10'
-                            : 'border-yellow-500/30 text-yellow-500 bg-yellow-500/10'
-                      }`}
-                    >
-                      {check.result || 'Unknown'}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      {check.fullCard && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 hover:bg-primary/20"
+                          onClick={() => {
+                            navigator.clipboard.writeText(check.fullCard!);
+                            toast.success("Card copied to clipboard");
+                          }}
+                        >
+                          <Copy className="h-3 w-3 text-muted-foreground" />
+                        </Button>
+                      )}
+                      <Badge 
+                        variant="outline" 
+                        className={`text-[10px] uppercase font-semibold ${
+                          check.result === 'live' 
+                            ? 'border-green-500/30 text-green-500 bg-green-500/10' 
+                            : check.result === 'dead'
+                              ? 'border-red-500/30 text-red-500 bg-red-500/10'
+                              : 'border-yellow-500/30 text-yellow-500 bg-yellow-500/10'
+                        }`}
+                      >
+                        {check.result || 'Unknown'}
+                      </Badge>
+                    </div>
                   </div>
                 ))}
               </div>
