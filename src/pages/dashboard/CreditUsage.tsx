@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import CreditUsageCharts from "@/components/CreditUsageCharts";
 import SpendingAlertSettings from "@/components/SpendingAlertSettings";
 
@@ -356,52 +357,54 @@ const CreditUsage = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
-          <div className="space-y-2 sm:space-y-3">
-            {checks.length === 0 ? (
-              <div className="text-center py-6 sm:py-8 text-muted-foreground">
-                <CreditCard className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-2 sm:mb-3 opacity-50" />
-                <p className="text-sm sm:text-base">No checks found</p>
-                <p className="text-xs sm:text-sm mt-1">Your credit usage history will appear here</p>
-              </div>
-            ) : (
-              checks.slice(0, 50).map((check) => (
-                <div
-                  key={check.id}
-                  className="flex items-center justify-between p-2 sm:p-4 rounded-lg bg-secondary/50 border border-border transition-all hover:bg-secondary/70"
-                >
-                  <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 bg-primary/20">
-                      {getStatusIcon(check.status)}
+          {checks.length === 0 ? (
+            <div className="text-center py-6 sm:py-8 text-muted-foreground">
+              <CreditCard className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-2 sm:mb-3 opacity-50" />
+              <p className="text-sm sm:text-base">No checks found</p>
+              <p className="text-xs sm:text-sm mt-1">Your credit usage history will appear here</p>
+            </div>
+          ) : (
+            <ScrollArea className="h-[400px] sm:h-[500px] pr-3">
+              <div className="space-y-2 sm:space-y-3">
+                {checks.slice(0, 100).map((check) => (
+                  <div
+                    key={check.id}
+                    className="flex items-center justify-between p-2 sm:p-4 rounded-lg bg-secondary/50 border border-border transition-all hover:bg-secondary/70"
+                  >
+                    <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 bg-primary/20">
+                        {getStatusIcon(check.status)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-xs sm:text-sm truncate">
+                          {getGatewayDisplayName(check.gateway)}
+                        </p>
+                        <p className="text-[10px] sm:text-sm text-muted-foreground">{formatDate(check.created_at)}</p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="font-medium text-xs sm:text-sm truncate">
-                        {getGatewayDisplayName(check.gateway)}
+                    <div className="text-right shrink-0 ml-2">
+                      <p className="font-bold text-xs sm:text-base text-foreground flex items-center gap-1 justify-end">
+                        -{CREDIT_COST_PER_CHECK}
+                        <Coins className="h-3 w-3 sm:hidden" />
+                        <span className="hidden sm:inline">credits</span>
                       </p>
-                      <p className="text-[10px] sm:text-sm text-muted-foreground">{formatDate(check.created_at)}</p>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] sm:text-xs ${getStatusBadgeClass(check.status)}`}
+                      >
+                        {check.status}
+                      </Badge>
                     </div>
                   </div>
-                  <div className="text-right shrink-0 ml-2">
-                    <p className="font-bold text-xs sm:text-base text-foreground flex items-center gap-1 justify-end">
-                      -{CREDIT_COST_PER_CHECK}
-                      <Coins className="h-3 w-3 sm:hidden" />
-                      <span className="hidden sm:inline">credits</span>
-                    </p>
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] sm:text-xs ${getStatusBadgeClass(check.status)}`}
-                    >
-                      {check.status}
-                    </Badge>
-                  </div>
-                </div>
-              ))
-            )}
-            {checks.length > 50 && (
-              <p className="text-center text-sm text-muted-foreground py-2">
-                Showing first 50 of {checks.length} checks
-              </p>
-            )}
-          </div>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
+          {checks.length > 100 && (
+            <p className="text-center text-sm text-muted-foreground py-2">
+              Showing first 100 of {checks.length} checks
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>
