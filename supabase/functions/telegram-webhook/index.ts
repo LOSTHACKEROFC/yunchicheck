@@ -34,6 +34,57 @@ interface TelegramUpdate {
 }
 
 // ═══════════════════════════════════════════════════════════
+// EMAIL HELPERS
+// ═══════════════════════════════════════════════════════════
+
+async function sendUnbanEmail(email: string, username: string | null): Promise<void> {
+  if (!RESEND_API_KEY) return;
+
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: "Yunchi Support <onboarding@resend.dev>",
+        to: [email],
+        subject: "✅ Your Account Has Been Unbanned",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="text-align: center; margin-bottom: 30px;">
+              <h1 style="color: #22c55e; margin: 0;">✅ Account Restored</h1>
+            </div>
+            
+            <p style="color: #333; font-size: 16px;">Hello${username ? ` <strong>${username}</strong>` : ''},</p>
+            
+            <p style="color: #333; font-size: 16px;">Great news! Your account ban has been lifted and your access has been fully restored.</p>
+            
+            <div style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); border-radius: 12px; padding: 20px; margin: 25px 0; text-align: center;">
+              <p style="color: white; font-size: 18px; margin: 0; font-weight: bold;">You can now log in and use the platform again!</p>
+            </div>
+            
+            <p style="color: #666; font-size: 14px; margin-top: 30px;">
+              Please ensure you follow our terms of service to maintain your account in good standing.
+            </p>
+            
+            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+            
+            <p style="color: #999; font-size: 12px; text-align: center;">
+              — Yunchi Team
+            </p>
+          </div>
+        `,
+      }),
+    });
+    console.log(`Unban email sent to ${email}`);
+  } catch (error) {
+    console.error("Error sending unban email:", error);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
 // TELEGRAM API HELPERS
 // ═══════════════════════════════════════════════════════════
 
@@ -1308,8 +1359,18 @@ async function handleUnbanUser(chatId: string, identifier: string, supabase: any
     .update({ is_banned: false, ban_reason: null, banned_at: null, banned_until: null })
     .eq("user_id", profile.user_id);
 
+  // Get user email for notification
+  const { data: authUsers } = await supabase.auth.admin.listUsers();
+  const userEmail = authUsers?.users?.find((u: any) => u.id === profile.user_id)?.email;
+
+  // Send Telegram notification
   if (profile.telegram_chat_id) {
     await sendTelegramMessage(profile.telegram_chat_id, "✅ Your account has been unbanned!");
+  }
+
+  // Send email notification
+  if (userEmail) {
+    await sendUnbanEmail(userEmail, profile.username);
   }
 
   await sendTelegramMessage(chatId, `✅ Unbanned: ${profile.username || profile.user_id}`);
@@ -1822,6 +1883,12 @@ Duration: ${durationText}
           if (appeal.telegram_chat_id) {
             await sendTelegramMessage(appeal.telegram_chat_id, "✅ <b>Appeal Approved</b>\n\nYour account has been unbanned!");
           }
+
+          // Send email notification
+          if (appeal.email) {
+            await sendUnbanEmail(appeal.email, appeal.username);
+          }
+
           await answerCallbackQuery(update.callback_query.id, "✅ Approved");
         } else {
           await supabase.from("ban_appeals").update({
@@ -1904,8 +1971,17 @@ Reply with the ban reason:
           banned_until: null
         }).eq("user_id", userId);
 
+        // Get user email for notification
+        const { data: authData } = await supabase.auth.admin.listUsers();
+        const userEmail = authData?.users?.find((u: any) => u.id === userId)?.email;
+
         if (profile?.telegram_chat_id) {
           await sendTelegramMessage(profile.telegram_chat_id, "✅ Your account has been unbanned!");
+        }
+
+        // Send email notification
+        if (userEmail) {
+          await sendUnbanEmail(userEmail, profile?.username || null);
         }
 
         await sendTelegramMessage(callbackChatId, `✅ Unbanned: ${profile?.username || userId}`);
