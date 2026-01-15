@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -477,6 +478,13 @@ const Gateways = () => {
       setUserCredits(prev => prev - CREDIT_COST);
 
       if (checkResult.status === "live") {
+        // Trigger confetti celebration for live cards
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#22c55e', '#4ade80', '#86efac', '#ffffff']
+        });
         toast.success("Card is LIVE!", { description: checkResult.message });
       } else if (checkResult.status === "dead") {
         toast.error("Card is DEAD", { description: checkResult.message });
