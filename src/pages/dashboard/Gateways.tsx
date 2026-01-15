@@ -99,7 +99,7 @@ interface Gateway {
 const gateways: Gateway[] = [
   { 
     id: "stripe_auth",
-    name: "STRIPE AUTH", 
+    name: "YUNCHI AUTH", 
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Amex",
@@ -111,7 +111,7 @@ const gateways: Gateway[] = [
   },
   { 
     id: "stripe_preauth",
-    name: "STRIPE PRE-AUTH", 
+    name: "YUNCHI PRE AUTH", 
     type: "preauth",
     status: "online", 
     cardTypes: "Visa/MC/Amex",
@@ -123,7 +123,7 @@ const gateways: Gateway[] = [
   },
   { 
     id: "braintree_auth",
-    name: "BRAINTREE AUTH", 
+    name: "YUNCHI AUTH 2", 
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Discover",
