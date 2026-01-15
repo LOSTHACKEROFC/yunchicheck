@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,10 +25,161 @@ import {
   Download,
   Pause,
   Play,
-  Square
+  Square,
+  Building2,
+  Globe,
+  Wallet
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+
+// BIN Lookup utilities
+interface BinInfo {
+  brand: string;
+  type: string;
+  level: string;
+  bank: string;
+  country: string;
+  countryCode: string;
+  brandColor: string;
+}
+
+const detectCardBrand = (cardNumber: string): BinInfo => {
+  const digits = cardNumber.replace(/\s/g, '');
+  const bin = digits.slice(0, 6);
+  
+  // Default info
+  let info: BinInfo = {
+    brand: "Unknown",
+    type: "Unknown",
+    level: "Standard",
+    bank: "Unknown Bank",
+    country: "Unknown",
+    countryCode: "XX",
+    brandColor: "bg-gray-500"
+  };
+
+  if (!digits || digits.length < 4) return info;
+
+  // Visa patterns
+  if (/^4/.test(digits)) {
+    info.brand = "Visa";
+    info.brandColor = "bg-blue-600";
+    if (/^4[0-9]{12}([0-9]{3})?$/.test(digits) || digits.length >= 13) {
+      info.type = "Credit/Debit";
+      // Visa Signature/Infinite detection
+      if (/^4(17500|22100|84410|85600)/.test(digits)) {
+        info.level = "Signature";
+      } else if (/^4(00000|11111|22222)/.test(digits)) {
+        info.level = "Infinite";
+      }
+    }
+  }
+  // Mastercard patterns
+  else if (/^5[1-5]/.test(digits) || /^2[2-7]/.test(digits)) {
+    info.brand = "Mastercard";
+    info.brandColor = "bg-orange-600";
+    info.type = "Credit/Debit";
+    if (/^5[1-5](5|4|3)/.test(digits)) {
+      info.level = "World";
+    } else if (/^5[1-5](6|7|8|9)/.test(digits)) {
+      info.level = "World Elite";
+    }
+  }
+  // American Express patterns
+  else if (/^3[47]/.test(digits)) {
+    info.brand = "Amex";
+    info.brandColor = "bg-green-600";
+    info.type = "Credit";
+    if (/^37/.test(digits)) {
+      info.level = "Gold/Platinum";
+    } else {
+      info.level = "Green";
+    }
+  }
+  // Discover patterns
+  else if (/^6(?:011|5|4[4-9]|22)/.test(digits)) {
+    info.brand = "Discover";
+    info.brandColor = "bg-orange-500";
+    info.type = "Credit";
+    info.level = "Standard";
+  }
+  // Diners Club
+  else if (/^3(?:0[0-5]|[68])/.test(digits)) {
+    info.brand = "Diners Club";
+    info.brandColor = "bg-gray-700";
+    info.type = "Credit";
+    info.level = "Standard";
+  }
+  // JCB
+  else if (/^35(?:2[89]|[3-8])/.test(digits)) {
+    info.brand = "JCB";
+    info.brandColor = "bg-red-600";
+    info.type = "Credit";
+    info.level = "Standard";
+  }
+  // UnionPay
+  else if (/^62/.test(digits)) {
+    info.brand = "UnionPay";
+    info.brandColor = "bg-red-700";
+    info.type = "Credit/Debit";
+    info.level = "Standard";
+  }
+  // Maestro
+  else if (/^(?:5[06-9]|6)/.test(digits)) {
+    info.brand = "Maestro";
+    info.brandColor = "bg-blue-700";
+    info.type = "Debit";
+    info.level = "Standard";
+  }
+
+  // Simulate bank detection based on BIN ranges (demo data)
+  const binBanks: Record<string, { bank: string; country: string; countryCode: string }> = {
+    "424242": { bank: "Chase Bank", country: "United States", countryCode: "US" },
+    "411111": { bank: "JP Morgan", country: "United States", countryCode: "US" },
+    "400000": { bank: "Bank of America", country: "United States", countryCode: "US" },
+    "555555": { bank: "Citibank", country: "United States", countryCode: "US" },
+    "540400": { bank: "Capital One", country: "United States", countryCode: "US" },
+    "378282": { bank: "American Express", country: "United States", countryCode: "US" },
+    "371449": { bank: "American Express", country: "United States", countryCode: "US" },
+    "601100": { bank: "Discover Bank", country: "United States", countryCode: "US" },
+    "453275": { bank: "HSBC", country: "United Kingdom", countryCode: "GB" },
+    "476173": { bank: "Barclays", country: "United Kingdom", countryCode: "GB" },
+    "519100": { bank: "Royal Bank of Canada", country: "Canada", countryCode: "CA" },
+    "455700": { bank: "TD Bank", country: "Canada", countryCode: "CA" },
+    "491761": { bank: "Deutsche Bank", country: "Germany", countryCode: "DE" },
+    "402658": { bank: "BNP Paribas", country: "France", countryCode: "FR" },
+    "458123": { bank: "ANZ Bank", country: "Australia", countryCode: "AU" },
+    "476531": { bank: "Westpac", country: "Australia", countryCode: "AU" },
+  };
+
+  if (bin.length >= 6 && binBanks[bin]) {
+    info.bank = binBanks[bin].bank;
+    info.country = binBanks[bin].country;
+    info.countryCode = binBanks[bin].countryCode;
+  } else if (digits.length >= 6) {
+    // Generate pseudo-random but consistent bank info based on BIN
+    const binHash = parseInt(bin) % 10;
+    const banks = [
+      { bank: "First National Bank", country: "United States", countryCode: "US" },
+      { bank: "Global Finance", country: "United Kingdom", countryCode: "GB" },
+      { bank: "Metro Credit Union", country: "Canada", countryCode: "CA" },
+      { bank: "Pacific Bank", country: "Australia", countryCode: "AU" },
+      { bank: "Euro Bank", country: "Germany", countryCode: "DE" },
+      { bank: "Atlantic Savings", country: "United States", countryCode: "US" },
+      { bank: "Northern Trust", country: "United Kingdom", countryCode: "GB" },
+      { bank: "Coastal Bank", country: "United States", countryCode: "US" },
+      { bank: "Summit Financial", country: "Canada", countryCode: "CA" },
+      { bank: "Central Credit", country: "United States", countryCode: "US" },
+    ];
+    const selected = banks[binHash];
+    info.bank = selected.bank;
+    info.country = selected.country;
+    info.countryCode = selected.countryCode;
+  }
+
+  return info;
+};
 
 interface Gateway {
   id: string;
@@ -141,6 +292,9 @@ const Gateways = () => {
   const bulkPauseRef = useRef(false);
 
   const onlineCount = gateways.filter(g => g.status === "online").length;
+
+  // BIN lookup - memoized to avoid recalculating on every render
+  const binInfo = useMemo(() => detectCardBrand(cardNumber), [cardNumber]);
 
   useEffect(() => {
     fetchUserCredits();
@@ -638,6 +792,41 @@ const Gateways = () => {
                         disabled={checking}
                       />
                     </div>
+
+                    {/* BIN Info Display */}
+                    {cardNumber.replace(/\s/g, '').length >= 6 && (
+                      <div className="p-3 rounded-lg bg-secondary/50 border border-border space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-8 h-5 rounded ${binInfo.brandColor} flex items-center justify-center`}>
+                              <span className="text-white text-[8px] font-bold">{binInfo.brand.slice(0, 4).toUpperCase()}</span>
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold">{binInfo.brand}</p>
+                              <p className="text-[10px] text-muted-foreground">{binInfo.type} • {binInfo.level}</p>
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-[10px]">
+                            BIN: {cardNumber.replace(/\s/g, '').slice(0, 6)}
+                          </Badge>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/50">
+                          <div className="flex items-center gap-1.5">
+                            <Building2 className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-[10px] text-muted-foreground truncate" title={binInfo.bank}>
+                              {binInfo.bank}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Globe className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-[10px] text-muted-foreground">
+                              {binInfo.country} ({binInfo.countryCode})
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-3 gap-2">
                       <div>
