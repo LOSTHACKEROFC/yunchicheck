@@ -55,6 +55,7 @@ export interface Translations {
   // Sidebar
   home: string;
   profile: string;
+  buyCredits: string;
   topup: string;
   balanceAndHistory: string;
   creditUsage: string;
@@ -177,6 +178,7 @@ const translations: Record<Language, Translations> = {
     viewAllTickets: "View all tickets",
     home: "Home",
     profile: "Profile",
+    buyCredits: "Buy Credits",
     topup: "Topup",
     balanceAndHistory: "Balance & History",
     creditUsage: "Credit Usage",
@@ -292,6 +294,7 @@ const translations: Record<Language, Translations> = {
     viewAllTickets: "Ver todos los tickets",
     home: "Inicio",
     profile: "Perfil",
+    buyCredits: "Comprar Créditos",
     topup: "Recargar",
     balanceAndHistory: "Saldo e Historial",
     creditUsage: "Uso de Créditos",
@@ -407,6 +410,7 @@ const translations: Record<Language, Translations> = {
     viewAllTickets: "Voir tous les tickets",
     home: "Accueil",
     profile: "Profil",
+    buyCredits: "Acheter des Crédits",
     topup: "Recharger",
     balanceAndHistory: "Solde et Historique",
     creditUsage: "Utilisation des Crédits",
@@ -522,6 +526,7 @@ const translations: Record<Language, Translations> = {
     viewAllTickets: "Alle Tickets anzeigen",
     home: "Startseite",
     profile: "Profil",
+    buyCredits: "Credits Kaufen",
     topup: "Aufladen",
     balanceAndHistory: "Kontostand & Verlauf",
     creditUsage: "Kreditnutzung",
@@ -637,6 +642,7 @@ const translations: Record<Language, Translations> = {
     viewAllTickets: "عرض جميع التذاكر",
     home: "الرئيسية",
     profile: "الملف الشخصي",
+    buyCredits: "شراء أرصدة",
     topup: "شحن",
     balanceAndHistory: "الرصيد والسجل",
     creditUsage: "استخدام الرصيد",
@@ -752,6 +758,7 @@ const translations: Record<Language, Translations> = {
     viewAllTickets: "查看所有工单",
     home: "首页",
     profile: "个人资料",
+    buyCredits: "购买积分",
     topup: "充值",
     balanceAndHistory: "余额与历史",
     creditUsage: "积分使用",
