@@ -977,7 +977,7 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
 
   const joined = new Date(profile.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 
-  await sendTelegramMessage(chatId, `
+  const userInfoMessage = `
 🔍 <b>User Info</b>
 
 <b>Profile</b>
@@ -1001,7 +1001,22 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
 
 <b>User ID</b>
 <code>${profile.user_id}</code>
-`);
+`;
+
+  // Quick action buttons
+  const actionButtons = {
+    inline_keyboard: [
+      [
+        { text: profile.is_banned ? "✅ Unban" : "🚫 Ban", callback_data: `userinfo_${profile.is_banned ? "unban" : "ban"}_${profile.user_id}` },
+        { text: "💰 Add Credits", callback_data: `userinfo_addcredits_${profile.user_id}` },
+      ],
+      [
+        { text: "🗑️ Delete User", callback_data: `userinfo_delete_${profile.user_id}` },
+      ],
+    ],
+  };
+
+  await sendTelegramMessage(chatId, userInfoMessage, actionButtons);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1309,6 +1324,127 @@ Duration: ${durationText}
           });
         } catch (e) {}
 
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Userinfo quick actions
+      if (callbackData.startsWith("userinfo_ban_")) {
+        if (!callbackChatId || !isAdmin(callbackChatId)) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const userId = callbackData.replace("userinfo_ban_", "");
+        const { data: profile } = await supabase.from("profiles").select("*").eq("user_id", userId).maybeSingle();
+        
+        if (!profile) {
+          await answerCallbackQuery(update.callback_query.id, "❌ User not found");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Get user email
+        const { data: authData } = await supabase.auth.admin.listUsers();
+        const userEmail = authData?.users?.find((u: any) => u.id === userId)?.email || null;
+
+        // Start ban flow
+        await supabase.from("pending_bans").insert({
+          user_id: userId,
+          admin_chat_id: callbackChatId,
+          user_email: userEmail,
+          user_telegram_chat_id: profile.telegram_chat_id,
+          username: profile.username,
+          step: "reason"
+        });
+
+        await sendTelegramMessage(callbackChatId, `
+🔨 <b>Banning: ${profile.username || userEmail}</b>
+
+Reply with the ban reason:
+(or /cancelban to abort)
+`);
+        await answerCallbackQuery(update.callback_query.id, "Enter ban reason");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (callbackData.startsWith("userinfo_unban_")) {
+        if (!callbackChatId || !isAdmin(callbackChatId)) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const userId = callbackData.replace("userinfo_unban_", "");
+        const { data: profile } = await supabase.from("profiles").select("username, telegram_chat_id").eq("user_id", userId).maybeSingle();
+
+        await supabase.from("profiles").update({
+          is_banned: false,
+          ban_reason: null,
+          banned_at: null,
+          banned_until: null
+        }).eq("user_id", userId);
+
+        if (profile?.telegram_chat_id) {
+          await sendTelegramMessage(profile.telegram_chat_id, "✅ Your account has been unbanned!");
+        }
+
+        await sendTelegramMessage(callbackChatId, `✅ Unbanned: ${profile?.username || userId}`);
+        await answerCallbackQuery(update.callback_query.id, "✅ Unbanned");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (callbackData.startsWith("userinfo_addcredits_")) {
+        if (!callbackChatId || !isAdmin(callbackChatId)) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const userId = callbackData.replace("userinfo_addcredits_", "");
+        const { data: profile } = await supabase.from("profiles").select("username, credits").eq("user_id", userId).maybeSingle();
+        const { data: authData } = await supabase.auth.admin.listUsers();
+        const userEmail = authData?.users?.find((u: any) => u.id === userId)?.email || "user";
+
+        await sendTelegramMessage(callbackChatId, `
+💰 <b>Add Credits</b>
+
+👤 ${profile?.username || userEmail}
+💳 Current: ${profile?.credits || 0} credits
+
+<b>Usage:</b> /addfund <code>${userEmail} [amount]</code>
+
+Examples:
+• /addfund ${userEmail} 50
+• /addfund ${userEmail} -100 (deduct)
+`);
+        await answerCallbackQuery(update.callback_query.id, "Use /addfund command");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (callbackData.startsWith("userinfo_delete_")) {
+        if (!callbackChatId || !isAdmin(callbackChatId)) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const userId = callbackData.replace("userinfo_delete_", "");
+        const { data: profile } = await supabase.from("profiles").select("username").eq("user_id", userId).maybeSingle();
+
+        const keyboard = {
+          inline_keyboard: [[
+            { text: "✅ Confirm Delete", callback_data: `delete_confirm_${userId}` },
+            { text: "❌ Cancel", callback_data: `delete_cancel_${userId}` },
+          ]],
+        };
+
+        await sendTelegramMessage(callbackChatId, `
+🗑️ <b>Delete User?</b>
+
+👤 ${profile?.username || userId}
+
+⚠️ This will permanently delete:
+• User account
+• All profile data
+• Transaction history
+`, keyboard);
+        await answerCallbackQuery(update.callback_query.id, "Confirm deletion");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
