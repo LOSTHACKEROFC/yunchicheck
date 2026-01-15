@@ -4,6 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   Coins, 
   TrendingUp, 
@@ -66,6 +73,15 @@ const Balance = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
+  const [typeFilter, setTypeFilter] = useState<"all" | "topup" | "check">("all");
+
+  // Filter transactions based on type
+  const filteredTransactions = transactions.filter(tx => {
+    if (typeFilter === "all") return true;
+    return tx.type === typeFilter;
+  });
+
+  const filteredCount = filteredTransactions.length;
 
   const fetchData = async (loadMore = false) => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -360,30 +376,44 @@ const Balance = () => {
       {/* Transaction History */}
       <Card className="bg-card border-border">
         <CardHeader className="p-3 sm:p-6">
-          <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-            <History className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-            Transaction History
-            <Badge variant="outline" className="ml-1 sm:ml-2 text-[10px] sm:text-xs">
-              Live
-            </Badge>
-            {totalCount > 0 && (
-              <span className="text-xs text-muted-foreground font-normal ml-auto">
-                {transactions.length} of {totalCount}
-              </span>
-            )}
-          </CardTitle>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <History className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+              Transaction History
+              <Badge variant="outline" className="ml-1 sm:ml-2 text-[10px] sm:text-xs">
+                Live
+              </Badge>
+            </CardTitle>
+            <div className="flex items-center gap-2 sm:ml-auto">
+              <Select value={typeFilter} onValueChange={(value: "all" | "topup" | "check") => setTypeFilter(value)}>
+                <SelectTrigger className="w-[140px] h-8 text-xs">
+                  <SelectValue placeholder="Filter by type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Transactions</SelectItem>
+                  <SelectItem value="topup">Top-ups Only</SelectItem>
+                  <SelectItem value="check">Checks Only</SelectItem>
+                </SelectContent>
+              </Select>
+              {totalCount > 0 && (
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {filteredCount} of {transactions.length}
+                </span>
+              )}
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
-          {transactions.length === 0 ? (
+          {filteredTransactions.length === 0 ? (
             <div className="text-center py-6 sm:py-8 text-muted-foreground">
               <Clock className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-2 sm:mb-3 opacity-50" />
-              <p className="text-sm sm:text-base">No transactions yet</p>
+              <p className="text-sm sm:text-base">{typeFilter === "all" ? "No transactions yet" : `No ${typeFilter === "topup" ? "top-ups" : "checks"} found`}</p>
               <p className="text-xs sm:text-sm mt-1">Your transaction history will appear here</p>
             </div>
           ) : (
             <ScrollArea className="h-[400px] sm:h-[500px] pr-3">
               <div className="space-y-2 sm:space-y-3">
-                {transactions.map((tx) => (
+                {filteredTransactions.map((tx) => (
                   <div
                     key={tx.id}
                     className="flex items-center justify-between p-2 sm:p-4 rounded-lg bg-secondary/50 border border-border transition-all hover:bg-secondary/70"
