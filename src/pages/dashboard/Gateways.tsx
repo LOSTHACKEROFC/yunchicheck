@@ -76,14 +76,28 @@ const defaultBinInfo: BinInfo = {
 const detectCardBrandLocal = (cardNumber: string): { brand: string; brandColor: string } => {
   const digits = cardNumber.replace(/\s/g, '');
   
+  // Visa - starts with 4
   if (/^4/.test(digits)) return { brand: "Visa", brandColor: "bg-blue-600" };
+  // Mastercard - starts with 51-55 or 2221-2720
   if (/^5[1-5]/.test(digits) || /^2[2-7]/.test(digits)) return { brand: "Mastercard", brandColor: "bg-orange-600" };
+  // American Express - starts with 34 or 37
   if (/^3[47]/.test(digits)) return { brand: "Amex", brandColor: "bg-green-600" };
+  // UnionPay - starts with 62 or 81
+  if (/^62/.test(digits) || /^81/.test(digits)) return { brand: "UnionPay", brandColor: "bg-red-700" };
+  // Discover - starts with 6011, 644-649, 65, or 622126-622925
   if (/^6(?:011|5|4[4-9]|22)/.test(digits)) return { brand: "Discover", brandColor: "bg-orange-500" };
-  if (/^3(?:0[0-5]|[68])/.test(digits)) return { brand: "Diners Club", brandColor: "bg-gray-700" };
+  // JCB - starts with 3528-3589
   if (/^35(?:2[89]|[3-8])/.test(digits)) return { brand: "JCB", brandColor: "bg-red-600" };
-  if (/^62/.test(digits)) return { brand: "UnionPay", brandColor: "bg-red-700" };
-  if (/^(?:5[06-9]|6)/.test(digits)) return { brand: "Maestro", brandColor: "bg-blue-700" };
+  // Diners Club - starts with 300-305, 36, 38
+  if (/^3(?:0[0-5]|[68])/.test(digits)) return { brand: "Diners Club", brandColor: "bg-gray-700" };
+  // RuPay - starts with 60, 65, 81, 82, 508
+  if (/^(?:60|65|81|82|508)/.test(digits)) return { brand: "RuPay", brandColor: "bg-blue-800" };
+  // Mir - starts with 2200-2204
+  if (/^220[0-4]/.test(digits)) return { brand: "Mir", brandColor: "bg-green-700" };
+  // Elo - starts with various ranges
+  if (/^(?:4011|4312|4389|5041|5066|5067|509|627780|636368)/.test(digits)) return { brand: "Elo", brandColor: "bg-yellow-600" };
+  // Maestro - starts with 50, 56-69
+  if (/^(?:5[06-9]|6[0-9])/.test(digits)) return { brand: "Maestro", brandColor: "bg-blue-700" };
   
   return { brand: "Unknown", brandColor: "bg-gray-500" };
 };
