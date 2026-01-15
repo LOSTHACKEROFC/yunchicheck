@@ -860,24 +860,47 @@ const Gateways = () => {
               <History className="h-4 w-4 text-primary" />
               Recent Checks
             </CardTitle>
-            {gatewayHistory.length > 0 && (
-              <div className="flex items-center gap-2">
-                <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-[10px]">
-                  <ShieldCheck className="h-3 w-3 mr-1" />
-                  {gatewayHistory.filter(c => c.result === 'live').length} Live
-                </Badge>
-                <Badge className="bg-red-500/20 text-red-500 border-red-500/30 text-[10px]">
-                  <ShieldX className="h-3 w-3 mr-1" />
-                  {gatewayHistory.filter(c => c.result === 'dead').length} Dead
-                </Badge>
-                {gatewayHistory.filter(c => c.result === 'unknown' || !c.result).length > 0 && (
-                  <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30 text-[10px]">
-                    <AlertTriangle className="h-3 w-3 mr-1" />
-                    {gatewayHistory.filter(c => c.result === 'unknown' || !c.result).length} Unknown
+            {gatewayHistory.length > 0 && (() => {
+              const liveCount = gatewayHistory.filter(c => c.result === 'live').length;
+              const deadCount = gatewayHistory.filter(c => c.result === 'dead').length;
+              const unknownCount = gatewayHistory.filter(c => c.result === 'unknown' || !c.result).length;
+              const totalValidChecks = liveCount + deadCount;
+              const successRate = totalValidChecks > 0 ? Math.round((liveCount / totalValidChecks) * 100) : 0;
+              
+              return (
+                <div className="flex items-center gap-2">
+                  {totalValidChecks > 0 && (
+                    <Badge 
+                      variant="outline" 
+                      className={`text-[10px] font-semibold ${
+                        successRate >= 70 
+                          ? 'border-green-500/50 text-green-500' 
+                          : successRate >= 40 
+                            ? 'border-yellow-500/50 text-yellow-500'
+                            : 'border-red-500/50 text-red-500'
+                      }`}
+                    >
+                      <Activity className="h-3 w-3 mr-1" />
+                      {successRate}% Success
+                    </Badge>
+                  )}
+                  <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-[10px]">
+                    <ShieldCheck className="h-3 w-3 mr-1" />
+                    {liveCount} Live
                   </Badge>
-                )}
-              </div>
-            )}
+                  <Badge className="bg-red-500/20 text-red-500 border-red-500/30 text-[10px]">
+                    <ShieldX className="h-3 w-3 mr-1" />
+                    {deadCount} Dead
+                  </Badge>
+                  {unknownCount > 0 && (
+                    <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30 text-[10px]">
+                      <AlertTriangle className="h-3 w-3 mr-1" />
+                      {unknownCount} Unknown
+                    </Badge>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </CardHeader>
         <CardContent className="p-4 pt-2">
