@@ -182,11 +182,13 @@ interface CheckResult {
   message: string;
   gateway: string;
   card?: string;
+  displayCard?: string; // Card as entered by user (without auto-added CVC)
 }
 
 interface BulkResult extends CheckResult {
   cardMasked: string;
   fullCard: string;
+  displayCard: string; // Card as entered by user (without auto-added CVC)
 }
 
 interface GatewayCheck {
@@ -196,6 +198,7 @@ interface GatewayCheck {
   status: string;
   result: string | null;
   fullCard?: string;
+  displayCard?: string; // Card as entered by user (without auto-added CVC)
 }
 
 const Gateways = () => {
@@ -438,7 +441,13 @@ const Gateways = () => {
       toast.error("Invalid expiration date");
       return false;
     }
-    if (cvv.length < 3 || cvv.length > 4) {
+    // Allow empty CVV for auth gateways (will use 000 internally)
+    const isAuthGateway = selectedGateway?.type === "auth";
+    if (!isAuthGateway && (cvv.length < 3 || cvv.length > 4)) {
+      toast.error("Invalid CVV");
+      return false;
+    }
+    if (cvv.length > 0 && (cvv.length < 3 || cvv.length > 4)) {
       toast.error("Invalid CVV");
       return false;
     }
@@ -486,7 +495,13 @@ const Gateways = () => {
 
       const checkStatus = await simulateCheck();
 
-      const fullCardString = `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${cvv}`;
+      // For auth gateways, use 000 as CVV internally if not provided
+      const internalCvv = cvv || "000";
+      const fullCardString = `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${internalCvv}`;
+      // Display card as entered by user (without auto-added CVC)
+      const displayCardString = cvv 
+        ? `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${cvv}`
+        : `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}`;
 
       await supabase
         .from('card_checks')
@@ -506,7 +521,8 @@ const Gateways = () => {
             ? "Card declined or invalid"
             : "Unable to verify - try another gateway",
         gateway: selectedGateway.name,
-        card: fullCardString
+        card: fullCardString,
+        displayCard: displayCardString
       };
 
       setResult(checkResult);
@@ -577,7 +593,8 @@ const Gateways = () => {
         gateway: selectedGateway.id,
         status: 'completed',
         result: checkStatus,
-        fullCard: fullCardString
+        fullCard: fullCardString,
+        displayCard: displayCardString
       };
       setGatewayHistory(prev => [newCheck, ...prev].slice(0, 50));
 
@@ -601,13 +618,14 @@ const Gateways = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Bulk checking functions - Enhanced parser for multiple formats with intelligent separator detection
-  const parseCards = (input: string): { card: string; month: string; year: string; cvv: string }[] => {
+  // Returns cards with optional CVV (empty string if not provided, for auth gateway support)
+  const parseCards = (input: string, isAuthGateway: boolean = false): { card: string; month: string; year: string; cvv: string; originalCvv: string }[] => {
     const lines = input.trim().split('\n').filter(line => line.trim());
-    const cards: { card: string; month: string; year: string; cvv: string }[] = [];
+    const cards: { card: string; month: string; year: string; cvv: string; originalCvv: string }[] = [];
     const seenCards = new Set<string>();
 
-    // Helper function to normalize and extract card components
-    const extractCardComponents = (line: string): { card: string; month: string; year: string; cvv: string } | null => {
+    // Helper function to normalize and extract card components (with optional CVV)
+    const extractCardComponents = (line: string, requireCvv: boolean): { card: string; month: string; year: string; cvv: string; originalCvv: string } | null => {
       // First, try to find the card number (13-16 digits)
       const cardNumMatch = line.match(/\b(\d{13,16})\b/);
       if (!cardNumMatch) return null;
@@ -616,19 +634,15 @@ const Gateways = () => {
       const cardEndIndex = line.indexOf(cardNum) + cardNum.length;
       const afterCard = line.slice(cardEndIndex);
       
-      // Try various separator patterns to extract MM, YY, CVV
-      // Supports: | / - . space and combinations like |MM/YY|CVV
-      
-      // Pattern: Any separator followed by 1-2 digit month, separator, 2-4 digit year, separator, 3-4 digit cvv
-      // This captures mixed separators like |MM/YY|CVV or |MM/YY/CVV
-      const mixedPatterns = [
+      // Try patterns with CVV first
+      const mixedPatternsWithCvv = [
         // CardNumber|MM/YY|CVC or CardNumber|MM/YY/CVC
         /^[\|\-\.\s\/]+(\d{1,2})[\s\/\-\.]+(\d{2,4})[\|\-\.\s\/]+(\d{3,4})\b/,
         // Standard single separator: |, /, -, ., or space
         /^[\|\-\.\s\/]+(\d{1,2})[\|\-\.\s\/]+(\d{2,4})[\|\-\.\s\/]+(\d{3,4})\b/,
       ];
       
-      for (const pattern of mixedPatterns) {
+      for (const pattern of mixedPatternsWithCvv) {
         const match = afterCard.match(pattern);
         if (match) {
           const [, month, year, cvv] = match;
@@ -638,8 +652,36 @@ const Gateways = () => {
               card: cardNum,
               month: month.padStart(2, '0'),
               year: year.length === 4 ? year.slice(2) : year,
-              cvv
+              cvv,
+              originalCvv: cvv
             };
+          }
+        }
+      }
+      
+      // If CVV not required, try patterns without CVV (for auth gateways)
+      if (!requireCvv) {
+        const mixedPatternsNoCvv = [
+          // CardNumber|MM/YY or CardNumber|MM-YY (no CVV)
+          /^[\|\-\.\s\/]+(\d{1,2})[\s\/\-\.]+(\d{2,4})(?:[\|\-\.\s\/]*$|[^\d]|$)/,
+          // Standard single separator without CVV
+          /^[\|\-\.\s\/]+(\d{1,2})[\|\-\.\s\/]+(\d{2,4})(?:[\|\-\.\s\/]*$|[^\d]|$)/,
+        ];
+        
+        for (const pattern of mixedPatternsNoCvv) {
+          const match = afterCard.match(pattern);
+          if (match) {
+            const [, month, year] = match;
+            const monthNum = parseInt(month);
+            if (monthNum >= 1 && monthNum <= 12) {
+              return {
+                card: cardNum,
+                month: month.padStart(2, '0'),
+                year: year.length === 4 ? year.slice(2) : year,
+                cvv: "000", // Auto-add 000 internally
+                originalCvv: "" // No CVV was provided
+              };
+            }
           }
         }
       }
@@ -651,9 +693,9 @@ const Gateways = () => {
       const trimmedLine = line.trim();
       
       // Try to extract card data using multiple patterns
-      let cardData: { card: string; month: string; year: string; cvv: string } | null = null;
+      let cardData: { card: string; month: string; year: string; cvv: string; originalCvv: string } | null = null;
       
-      // Pattern 1: Pipe-delimited (CardNumber|MM|YY|CVC or CardNumber|MM|YYYY|CVC)
+      // Pattern 1: Pipe-delimited with CVV (CardNumber|MM|YY|CVC or CardNumber|MM|YYYY|CVC)
       const pipeMatch = trimmedLine.match(/^(\d{13,16})\|(\d{1,2})\|(\d{2,4})\|(\d{3,4})/);
       if (pipeMatch) {
         const [, card, month, year, cvv] = pipeMatch;
@@ -661,11 +703,27 @@ const Gateways = () => {
           card,
           month: month.padStart(2, '0'),
           year: year.length === 4 ? year.slice(2) : year,
-          cvv
+          cvv,
+          originalCvv: cvv
         };
       }
       
-      // Pattern 2: Space-delimited (CardNumber MM YY CVC or CardNumber MM YYYY CVC)
+      // Pattern 1b: Pipe-delimited without CVV (CardNumber|MM|YY) - for auth gateways
+      if (!cardData && isAuthGateway) {
+        const pipeNoCvvMatch = trimmedLine.match(/^(\d{13,16})\|(\d{1,2})\|(\d{2,4})(?:\||$|\s*$)/);
+        if (pipeNoCvvMatch) {
+          const [, card, month, year] = pipeNoCvvMatch;
+          cardData = {
+            card,
+            month: month.padStart(2, '0'),
+            year: year.length === 4 ? year.slice(2) : year,
+            cvv: "000",
+            originalCvv: ""
+          };
+        }
+      }
+      
+      // Pattern 2: Space-delimited with CVV (CardNumber MM YY CVC or CardNumber MM YYYY CVC)
       if (!cardData) {
         const spaceMatch = trimmedLine.match(/^(\d{13,16})\s+(\d{1,2})\s+(\d{2,4})\s+(\d{3,4})/);
         if (spaceMatch) {
@@ -674,12 +732,28 @@ const Gateways = () => {
             card,
             month: month.padStart(2, '0'),
             year: year.length === 4 ? year.slice(2) : year,
-            cvv
+            cvv,
+            originalCvv: cvv
           };
         }
       }
       
-      // Pattern 3: Forward slash delimited (CardNumber/MM/YY/CVC)
+      // Pattern 2b: Space-delimited without CVV (CardNumber MM YY) - for auth gateways
+      if (!cardData && isAuthGateway) {
+        const spaceNoCvvMatch = trimmedLine.match(/^(\d{13,16})\s+(\d{1,2})\s+(\d{2,4})(?:\s*$)/);
+        if (spaceNoCvvMatch) {
+          const [, card, month, year] = spaceNoCvvMatch;
+          cardData = {
+            card,
+            month: month.padStart(2, '0'),
+            year: year.length === 4 ? year.slice(2) : year,
+            cvv: "000",
+            originalCvv: ""
+          };
+        }
+      }
+      
+      // Pattern 3: Forward slash delimited with CVV (CardNumber/MM/YY/CVC)
       if (!cardData) {
         const slashMatch = trimmedLine.match(/^(\d{13,16})\/(\d{1,2})\/(\d{2,4})\/(\d{3,4})/);
         if (slashMatch) {
@@ -688,12 +762,28 @@ const Gateways = () => {
             card,
             month: month.padStart(2, '0'),
             year: year.length === 4 ? year.slice(2) : year,
-            cvv
+            cvv,
+            originalCvv: cvv
           };
         }
       }
       
-      // Pattern 4: Dash-delimited (CardNumber-MM-YY-CVC)
+      // Pattern 3b: Forward slash delimited without CVV (CardNumber/MM/YY) - for auth gateways
+      if (!cardData && isAuthGateway) {
+        const slashNoCvvMatch = trimmedLine.match(/^(\d{13,16})\/(\d{1,2})\/(\d{2,4})(?:\/|$|\s*$)/);
+        if (slashNoCvvMatch) {
+          const [, card, month, year] = slashNoCvvMatch;
+          cardData = {
+            card,
+            month: month.padStart(2, '0'),
+            year: year.length === 4 ? year.slice(2) : year,
+            cvv: "000",
+            originalCvv: ""
+          };
+        }
+      }
+      
+      // Pattern 4: Dash-delimited with CVV (CardNumber-MM-YY-CVC)
       if (!cardData) {
         const dashMatch = trimmedLine.match(/^(\d{13,16})\-(\d{1,2})\-(\d{2,4})\-(\d{3,4})/);
         if (dashMatch) {
@@ -702,12 +792,28 @@ const Gateways = () => {
             card,
             month: month.padStart(2, '0'),
             year: year.length === 4 ? year.slice(2) : year,
-            cvv
+            cvv,
+            originalCvv: cvv
           };
         }
       }
       
-      // Pattern 5: Dot-delimited (CardNumber.MM.YY.CVC)
+      // Pattern 4b: Dash-delimited without CVV (CardNumber-MM-YY) - for auth gateways
+      if (!cardData && isAuthGateway) {
+        const dashNoCvvMatch = trimmedLine.match(/^(\d{13,16})\-(\d{1,2})\-(\d{2,4})(?:\-|$|\s*$)/);
+        if (dashNoCvvMatch) {
+          const [, card, month, year] = dashNoCvvMatch;
+          cardData = {
+            card,
+            month: month.padStart(2, '0'),
+            year: year.length === 4 ? year.slice(2) : year,
+            cvv: "000",
+            originalCvv: ""
+          };
+        }
+      }
+      
+      // Pattern 5: Dot-delimited with CVV (CardNumber.MM.YY.CVC)
       if (!cardData) {
         const dotMatch = trimmedLine.match(/^(\d{13,16})\.(\d{1,2})\.(\d{2,4})\.(\d{3,4})/);
         if (dotMatch) {
@@ -716,14 +822,30 @@ const Gateways = () => {
             card,
             month: month.padStart(2, '0'),
             year: year.length === 4 ? year.slice(2) : year,
-            cvv
+            cvv,
+            originalCvv: cvv
+          };
+        }
+      }
+      
+      // Pattern 5b: Dot-delimited without CVV (CardNumber.MM.YY) - for auth gateways
+      if (!cardData && isAuthGateway) {
+        const dotNoCvvMatch = trimmedLine.match(/^(\d{13,16})\.(\d{1,2})\.(\d{2,4})(?:\.|$|\s*$)/);
+        if (dotNoCvvMatch) {
+          const [, card, month, year] = dotNoCvvMatch;
+          cardData = {
+            card,
+            month: month.padStart(2, '0'),
+            year: year.length === 4 ? year.slice(2) : year,
+            cvv: "000",
+            originalCvv: ""
           };
         }
       }
       
       // Pattern 6: Mixed separators (CardNumber|MM/YY|CVC or CardNumber|MM/YY/CVC)
       if (!cardData) {
-        cardData = extractCardComponents(trimmedLine);
+        cardData = extractCardComponents(trimmedLine, !isAuthGateway);
       }
 
       // Pattern 7: Fullz extraction - look for card number + exp + cvv anywhere in line
@@ -779,12 +901,14 @@ const Gateways = () => {
             }
           }
           
-          if (expMonth && expYear && cvvNum) {
+          // For auth gateways, allow cards without CVV in Fullz extraction
+          if (expMonth && expYear && (cvvNum || isAuthGateway)) {
             cardData = {
               card: cardNum,
               month: expMonth.padStart(2, '0'),
               year: expYear.length === 4 ? expYear.slice(2) : expYear,
-              cvv: cvvNum
+              cvv: cvvNum || "000",
+              originalCvv: cvvNum
             };
           }
         }
@@ -793,16 +917,19 @@ const Gateways = () => {
       // Validate and add the card
       if (cardData) {
         const monthNum = parseInt(cardData.month);
+        const cvvValid = isAuthGateway 
+          ? (cardData.cvv.length >= 3 && cardData.cvv.length <= 4) // Internal CVV will be 000 if not provided
+          : (cardData.cvv.length >= 3 && cardData.cvv.length <= 4);
+        
         if (
           cardData.card.length >= 13 && 
           cardData.card.length <= 16 && 
           monthNum >= 1 && 
           monthNum <= 12 && 
           cardData.year.length === 2 &&
-          cardData.cvv.length >= 3 && 
-          cardData.cvv.length <= 4
+          cvvValid
         ) {
-          const cardKey = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
+          const cardKey = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv || 'nocvv'}`;
           if (!seenCards.has(cardKey)) {
             seenCards.add(cardKey);
             cards.push(cardData);
@@ -839,8 +966,9 @@ const Gateways = () => {
           setBulkInput(content);
         }
         
-        // Parse and show count
-        const newCards = parseCards(content);
+        // Parse and show count - check if auth gateway is selected
+        const isAuth = selectedGateway?.type === "auth";
+        const newCards = parseCards(content, isAuth);
         toast.success(`Loaded ${newCards.length} valid cards from file`);
       }
     };
@@ -865,9 +993,11 @@ const Gateways = () => {
       return;
     }
 
-    const cards = parseCards(bulkInput);
+    const isAuthGateway = selectedGateway.type === "auth";
+    const cards = parseCards(bulkInput, isAuthGateway);
     if (cards.length === 0) {
-      toast.error("No valid cards found. Use format: card|mm|yy|cvv");
+      const formatHint = isAuthGateway ? "card|mm|yy or card|mm|yy|cvv" : "card|mm|yy|cvv";
+      toast.error(`No valid cards found. Use format: ${formatHint}`);
       return;
     }
 
@@ -931,6 +1061,10 @@ const Gateways = () => {
         const checkStatus = await simulateCheck();
 
         const fullCardStr = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
+        // Display card as entered by user (without auto-added CVC)
+        const displayCardStr = cardData.originalCvv 
+          ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
+          : `${cardData.card}|${cardData.month}|${cardData.year}`;
         
         // Log check with result and card details
         await supabase
@@ -952,7 +1086,8 @@ const Gateways = () => {
               : "Unknown",
           gateway: selectedGateway.name,
           cardMasked: maskCard(cardData.card),
-          fullCard: `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`
+          fullCard: fullCardStr,
+          displayCard: displayCardStr
         };
 
         // Play sound and celebrate for each live card in bulk check
@@ -999,7 +1134,8 @@ const Gateways = () => {
           gateway: selectedGateway.id,
           status: 'completed',
           result: checkStatus,
-          fullCard: bulkResult.fullCard
+          fullCard: bulkResult.fullCard,
+          displayCard: bulkResult.displayCard
         };
         setGatewayHistory(prev => [newCheck, ...prev].slice(0, 50));
 
@@ -1031,12 +1167,16 @@ const Gateways = () => {
 
       } catch (error) {
         console.error('Bulk check error:', error);
+        const displayCardStr = cardData.originalCvv 
+          ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
+          : `${cardData.card}|${cardData.month}|${cardData.year}`;
         const errorResult: BulkResult = {
           status: "unknown",
           message: "Error",
           gateway: selectedGateway.name,
           cardMasked: maskCard(cardData.card),
-          fullCard: `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`
+          fullCard: `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`,
+          displayCard: displayCardStr
         };
         setBulkResults(prev => [...prev, errorResult]);
         
@@ -1795,7 +1935,7 @@ const Gateways = () => {
                   disabled={bulkChecking}
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  Formats: card|mm|yy|cvv, card mm yyyy cvv, Fullz — {parseCards(bulkInput).length} valid cards detected
+                  Formats: {selectedGateway?.type === "auth" ? "card|mm|yy (CVC optional), " : ""}card|mm|yy|cvv, card mm yyyy cvv, Fullz — {parseCards(bulkInput, selectedGateway?.type === "auth").length} valid cards detected
                 </p>
               </div>
 
