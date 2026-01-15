@@ -193,6 +193,7 @@ interface GatewayCheck {
   gateway: string;
   status: string;
   result: string | null;
+  fullCard?: string;
 }
 
 const Gateways = () => {
@@ -552,8 +553,16 @@ const Gateways = () => {
         toast.warning("Check inconclusive", { description: checkResult.message });
       }
 
-      // Refresh history after check
-      fetchGatewayHistory(selectedGateway.id);
+      // Add to local history with full card info
+      const newCheck: GatewayCheck = {
+        id: crypto.randomUUID(),
+        created_at: new Date().toISOString(),
+        gateway: selectedGateway.id,
+        status: 'completed',
+        result: checkStatus,
+        fullCard: fullCardString
+      };
+      setGatewayHistory(prev => [newCheck, ...prev].slice(0, 50));
 
     } catch (error) {
       console.error('Check error:', error);
@@ -728,6 +737,17 @@ const Gateways = () => {
             gravity: 1.2
           });
         }
+
+        // Add to local history with full card info
+        const newCheck: GatewayCheck = {
+          id: crypto.randomUUID(),
+          created_at: new Date().toISOString(),
+          gateway: selectedGateway.id,
+          status: 'completed',
+          result: checkStatus,
+          fullCard: bulkResult.fullCard
+        };
+        setGatewayHistory(prev => [newCheck, ...prev].slice(0, 50));
 
         setBulkResults(prev => [...prev, bulkResult]);
         setBulkProgress(((i + 1) / cards.length) * 100);
@@ -1218,10 +1238,14 @@ const Gateways = () => {
                           <AlertTriangle className="h-3 w-3 text-yellow-500" />
                         )}
                       </div>
-                      <div>
-                        <p className="text-xs font-medium">Card Check</p>
+                      <div className="flex-1 min-w-0">
+                        {check.fullCard ? (
+                          <p className="text-xs font-mono text-foreground truncate">{check.fullCard}</p>
+                        ) : (
+                          <p className="text-xs font-medium">Card Check</p>
+                        )}
                         <p className="text-[10px] text-muted-foreground">
-                          {format(new Date(check.created_at), 'MMM d, yyyy HH:mm')}
+                          {format(new Date(check.created_at), 'MMM d, HH:mm:ss')}
                         </p>
                       </div>
                     </div>
