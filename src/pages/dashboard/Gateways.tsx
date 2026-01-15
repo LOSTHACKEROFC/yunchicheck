@@ -1339,7 +1339,7 @@ const Gateways = () => {
               No checks performed on this gateway yet
             </p>
           ) : (
-            <ScrollArea className="h-32">
+            <ScrollArea className="h-[200px] sm:h-[300px]">
               <div className="space-y-2">
                 {gatewayHistory.map((check) => (
                   <div 
