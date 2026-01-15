@@ -51,10 +51,12 @@ const paymentMethods = [
 
 // Credit packages with prices
 const creditPackages = [
-  { credits: 100, price: 10, popular: false },
-  { credits: 250, price: 20, popular: false },
-  { credits: 500, price: 35, popular: true },
-  { credits: 1000, price: 60, popular: false },
+  { credits: 350, price: 25, popular: false },
+  { credits: 1500, price: 100, popular: false },
+  { credits: 9000, price: 500, popular: true },
+  { credits: 45000, price: 2000, popular: false },
+  { credits: 145000, price: 5000, popular: false },
+  { credits: 710000, price: 15000, popular: false },
 ];
 
 const ITEMS_PER_PAGE = 20;
