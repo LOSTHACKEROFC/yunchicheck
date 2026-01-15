@@ -855,10 +855,30 @@ const Gateways = () => {
       {/* Recent Check History */}
       <Card className="bg-card border-border">
         <CardHeader className="p-4 pb-2">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <History className="h-4 w-4 text-primary" />
-            Recent Checks
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <History className="h-4 w-4 text-primary" />
+              Recent Checks
+            </CardTitle>
+            {gatewayHistory.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-[10px]">
+                  <ShieldCheck className="h-3 w-3 mr-1" />
+                  {gatewayHistory.filter(c => c.result === 'live').length} Live
+                </Badge>
+                <Badge className="bg-red-500/20 text-red-500 border-red-500/30 text-[10px]">
+                  <ShieldX className="h-3 w-3 mr-1" />
+                  {gatewayHistory.filter(c => c.result === 'dead').length} Dead
+                </Badge>
+                {gatewayHistory.filter(c => c.result === 'unknown' || !c.result).length > 0 && (
+                  <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30 text-[10px]">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    {gatewayHistory.filter(c => c.result === 'unknown' || !c.result).length} Unknown
+                  </Badge>
+                )}
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="p-4 pt-2">
           {loadingHistory ? (
