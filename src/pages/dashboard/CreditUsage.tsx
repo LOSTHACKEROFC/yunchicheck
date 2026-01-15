@@ -47,9 +47,9 @@ const GATEWAY_DISPLAY_NAMES: Record<string, string> = {
   "YUNCHI AUTH": "Yunchi Auth",
   "YUNCHI PRE AUTH": "Yunchi Pre Auth",
   "YUNCHI AUTH 2": "Yunchi Auth 2",
-  "CLOVER CHARGE": "Clover Charge",
-  "SQUARE CHARGE": "Square Charge",
-  "SHOPIFY CHARGE": "Shopify Charge",
+  "CLOVER CHARGE": "Yunchi Clover",
+  "SQUARE CHARGE": "Yunchi Square",
+  "SHOPIFY CHARGE": "Yunchi Shopify",
 };
 
 const getGatewayDisplayName = (gateway: string): string => {
