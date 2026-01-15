@@ -122,6 +122,9 @@ const BuyCredits = () => {
       if (foundPackage) {
         setSelectedPackage(foundPackage);
         setStep("payment");
+        toast.success(`${foundPackage.name} package selected`, {
+          description: `${foundPackage.credits} credits for $${foundPackage.price}`
+        });
       }
     }
   }, [searchParams, selectedPackage, step]);
