@@ -689,6 +689,15 @@ const Gateways = () => {
       return null;
     };
 
+    // Helper function to get default CVC based on card brand (4 digits for Amex, 3 for others)
+    const getDefaultCvc = (cardNumber: string): string => {
+      // American Express cards start with 34 or 37
+      if (cardNumber.startsWith('34') || cardNumber.startsWith('37')) {
+        return "0000";
+      }
+      return "000";
+    };
+
     for (const line of lines) {
       const trimmedLine = line.trim();
       
@@ -718,7 +727,7 @@ const Gateways = () => {
             card,
             month: month.padStart(2, '0'),
             year: year.length === 4 ? year.slice(2) : year,
-            cvv: "000",
+            cvv: getDefaultCvc(card),
             originalCvv: ""
           };
         }
@@ -748,7 +757,7 @@ const Gateways = () => {
             card,
             month: month.padStart(2, '0'),
             year: year.length === 4 ? year.slice(2) : year,
-            cvv: "000",
+            cvv: getDefaultCvc(card),
             originalCvv: ""
           };
         }
@@ -778,7 +787,7 @@ const Gateways = () => {
             card,
             month: month.padStart(2, '0'),
             year: year.length === 4 ? year.slice(2) : year,
-            cvv: "000",
+            cvv: getDefaultCvc(card),
             originalCvv: ""
           };
         }
@@ -808,7 +817,7 @@ const Gateways = () => {
             card,
             month: month.padStart(2, '0'),
             year: year.length === 4 ? year.slice(2) : year,
-            cvv: "000",
+            cvv: getDefaultCvc(card),
             originalCvv: ""
           };
         }
@@ -838,7 +847,7 @@ const Gateways = () => {
             card,
             month: month.padStart(2, '0'),
             year: year.length === 4 ? year.slice(2) : year,
-            cvv: "000",
+            cvv: getDefaultCvc(card),
             originalCvv: ""
           };
         }
@@ -856,7 +865,7 @@ const Gateways = () => {
             card,
             month: month.padStart(2, '0'),
             year: year,
-            cvv: "000",
+            cvv: getDefaultCvc(card),
             originalCvv: ""
           };
         }
@@ -926,7 +935,7 @@ const Gateways = () => {
               card: cardNum,
               month: expMonth.padStart(2, '0'),
               year: expYear.length === 4 ? expYear.slice(2) : expYear,
-              cvv: cvvNum || "000",
+              cvv: cvvNum || getDefaultCvc(cardNum),
               originalCvv: cvvNum
             };
           }
