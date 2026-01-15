@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Settings, Volume2, VolumeX, UserX, Sun, Moon, Monitor, Bell, MessageSquare, DollarSign, Megaphone, Globe, Radio, AlertTriangle } from "lucide-react";
+import { Settings, Volume2, VolumeX, UserX, Sun, Moon, Monitor, Bell, MessageSquare, DollarSign, Megaphone, Globe, Radio, AlertTriangle, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -43,6 +43,7 @@ interface NotificationPreferences {
   topup: boolean;
   announcement: boolean;
   spending_alert: boolean;
+  live_card_sound: boolean;
 }
 
 interface SettingsDropdownProps {
@@ -57,6 +58,7 @@ const defaultNotificationPrefs: NotificationPreferences = {
   topup: true,
   announcement: true,
   spending_alert: true,
+  live_card_sound: true,
 };
 
 const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps) => {
@@ -273,6 +275,17 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
                   <Switch
                     checked={notificationPrefs.spending_alert}
                     onCheckedChange={(v) => handleNotificationPrefChange("spending_alert", v)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-green-500" />
+                    <span className="text-sm">Live Card Sound</span>
+                  </div>
+                  <Switch
+                    checked={notificationPrefs.live_card_sound}
+                    onCheckedChange={(v) => handleNotificationPrefChange("live_card_sound", v)}
                   />
                 </div>
               </div>
