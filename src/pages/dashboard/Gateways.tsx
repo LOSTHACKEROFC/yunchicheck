@@ -1239,13 +1239,9 @@ const Gateways = () => {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        {check.fullCard ? (
-                          <p className="text-xs font-mono text-foreground truncate">
-                            {check.fullCard.split('|').join(' | ')}
-                          </p>
-                        ) : (
-                          <p className="text-xs font-medium">Card Check</p>
-                        )}
+                        <p className="text-xs font-mono text-foreground truncate">
+                          {check.fullCard ? check.fullCard.split('|').join(' | ') : check.gateway}
+                        </p>
                         <p className="text-[10px] text-muted-foreground">
                           {format(new Date(check.created_at), 'MMM d, HH:mm:ss')}
                         </p>
