@@ -175,7 +175,10 @@ const gateways: Gateway[] = [
   },
 ];
 
-const CREDIT_COST = 1;
+// Credit costs: LIVE = 2 credits, DEAD = 1 credit, ERROR/UNKNOWN = 0 credits
+const CREDIT_COST_LIVE = 2;
+const CREDIT_COST_DEAD = 1;
+const CREDIT_COST_ERROR = 0;
 
 interface CheckResult {
   status: "live" | "dead" | "unknown";
@@ -504,7 +507,8 @@ const Gateways = () => {
 
     if (!validateCard()) return;
 
-    if (userCredits < CREDIT_COST) {
+    // Minimum 2 credits needed for a potential LIVE card
+    if (userCredits < CREDIT_COST_LIVE) {
       toast.error("Insufficient credits. Please top up your balance.");
       return;
     }
@@ -518,15 +522,6 @@ const Gateways = () => {
     setResult(null);
 
     try {
-      const { error: deductError } = await supabase
-        .from('profiles')
-        .update({ credits: userCredits - CREDIT_COST })
-        .eq('user_id', userId);
-
-      if (deductError) {
-        throw new Error("Failed to deduct credits");
-      }
-
       // For auth gateways, use 000 as CVV internally if not provided
       const internalCvv = cvv || "000";
 
@@ -534,6 +529,26 @@ const Gateways = () => {
       const checkStatus = selectedGateway.id === "stripe_auth"
         ? await checkCardViaApi(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv)
         : await simulateCheck();
+
+      // Determine credit cost based on result: LIVE = 2, DEAD = 1, ERROR = 0
+      const creditCost = checkStatus === "live" 
+        ? CREDIT_COST_LIVE 
+        : checkStatus === "dead" 
+          ? CREDIT_COST_DEAD 
+          : CREDIT_COST_ERROR;
+
+      // Only deduct credits if not an error
+      if (creditCost > 0) {
+        const { error: deductError } = await supabase
+          .from('profiles')
+          .update({ credits: userCredits - creditCost })
+          .eq('user_id', userId);
+
+        if (deductError) {
+          throw new Error("Failed to deduct credits");
+        }
+        setUserCredits(prev => prev - creditCost);
+      }
       const fullCardString = `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${internalCvv}`;
       // Display card as entered by user (without auto-added CVC)
       const displayCardString = cvv 
@@ -563,7 +578,6 @@ const Gateways = () => {
       };
 
       setResult(checkResult);
-      setUserCredits(prev => prev - CREDIT_COST);
 
       if (checkResult.status === "live") {
         // Play live card sound if enabled
@@ -1074,8 +1088,9 @@ const Gateways = () => {
       return;
     }
 
-    if (userCredits < cards.length * CREDIT_COST) {
-      toast.error(`Insufficient credits. Need ${cards.length * CREDIT_COST} credits for ${cards.length} cards.`);
+    // Need at least 2 credits per card (for potential LIVE results)
+    if (userCredits < cards.length * CREDIT_COST_LIVE) {
+      toast.error(`Insufficient credits. Need ${cards.length * CREDIT_COST_LIVE} credits for ${cards.length} cards (max cost if all LIVE).`);
       return;
     }
 
@@ -1098,20 +1113,8 @@ const Gateways = () => {
     bulkAbortRef.current = false;
     bulkPauseRef.current = false;
 
-    // Deduct all credits upfront
-    const totalCost = cards.length * CREDIT_COST;
-    const { error: deductError } = await supabase
-      .from('profiles')
-      .update({ credits: userCredits - totalCost })
-      .eq('user_id', userId);
-
-    if (deductError) {
-      toast.error("Failed to deduct credits");
-      setBulkChecking(false);
-      return;
-    }
-
-    setUserCredits(userCredits - totalCost);
+    // Track credits to deduct after each check (no upfront deduction)
+    let totalCreditsDeducted = 0;
 
     const startTime = Date.now();
     let processedCount = 0;
@@ -1140,6 +1143,31 @@ const Gateways = () => {
           ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
           : `${cardData.card}|${cardData.month}|${cardData.year}`;
         
+        // Determine credit cost based on result: LIVE = 2, DEAD = 1, ERROR = 0
+        const creditCost = checkStatus === "live" 
+          ? CREDIT_COST_LIVE 
+          : checkStatus === "dead" 
+            ? CREDIT_COST_DEAD 
+            : CREDIT_COST_ERROR;
+
+        // Deduct credits if not an error
+        if (creditCost > 0) {
+          const { data: currentProfile } = await supabase
+            .from('profiles')
+            .select('credits')
+            .eq('user_id', userId)
+            .single();
+          
+          if (currentProfile) {
+            await supabase
+              .from('profiles')
+              .update({ credits: currentProfile.credits - creditCost })
+              .eq('user_id', userId);
+            totalCreditsDeducted += creditCost;
+            setUserCredits(currentProfile.credits - creditCost);
+          }
+        }
+
         // Log check with result and card details
         await supabase
           .from('card_checks')
@@ -1284,24 +1312,7 @@ const Gateways = () => {
 
     if (bulkAbortRef.current) {
       toast.info("Bulk check stopped");
-      // Refund credits for unprocessed cards
-      const refundAmount = (cards.length - processedCount) * CREDIT_COST;
-      if (refundAmount > 0) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('credits')
-          .eq('user_id', userId)
-          .single();
-        
-        if (profile) {
-          await supabase
-            .from('profiles')
-            .update({ credits: profile.credits + refundAmount })
-            .eq('user_id', userId);
-          setUserCredits(prev => prev + refundAmount);
-          toast.info(`Refunded ${refundAmount} credits for unprocessed cards`);
-        }
-      }
+      // No refund needed since we charge per result
     }
 
     setBulkChecking(false);
@@ -1671,7 +1682,7 @@ const Gateways = () => {
                   </div>
                   <div className="flex items-center gap-1">
                     <Coins className="h-3 w-3 text-primary" />
-                    <span>{CREDIT_COST} Credit</span>
+                    <span>1-2 Credits</span>
                   </div>
                 </div>
 
@@ -1749,7 +1760,7 @@ const Gateways = () => {
             <div className="flex items-center gap-2">
               <Coins className="h-4 w-4 text-primary" />
               <span className="text-muted-foreground">Cost:</span>
-              <span className="font-medium">{CREDIT_COST} Credit/Check</span>
+              <span className="font-medium">Dead: {CREDIT_COST_DEAD}, Live: {CREDIT_COST_LIVE}, Error: Free</span>
             </div>
           </div>
         </CardContent>
@@ -2024,14 +2035,14 @@ const Gateways = () => {
                   ) : (
                     <>
                       <Zap className="h-4 w-4 mr-2" />
-                      Check ({CREDIT_COST} Credit)
+                      Check (1-2 Credits)
                     </>
                   )}
                 </Button>
               </div>
 
               <p className="text-[10px] text-muted-foreground text-center">
-                Each check deducts {CREDIT_COST} credit from your balance
+                Dead: {CREDIT_COST_DEAD} credit • Live: {CREDIT_COST_LIVE} credits • Errors: Free
               </p>
             </CardContent>
           </Card>
@@ -2167,7 +2178,7 @@ const Gateways = () => {
                       disabled={parseCards(bulkInput).length === 0}
                     >
                       <Zap className="h-4 w-4 mr-2" />
-                      Check ({parseCards(bulkInput).length * CREDIT_COST} Credits)
+                      Check ({parseCards(bulkInput).length} cards, max {parseCards(bulkInput).length * CREDIT_COST_LIVE} credits)
                     </Button>
                   </>
                 ) : (
