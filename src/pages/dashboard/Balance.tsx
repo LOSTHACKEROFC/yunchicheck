@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Coins, 
   TrendingUp, 
@@ -40,17 +42,26 @@ interface Transaction {
   status: string;
 }
 
+const ITEMS_PER_PAGE = 50;
+
 const Balance = () => {
   const [credits, setCredits] = useState<number>(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
 
-  const fetchData = async () => {
+  const fetchData = async (loadMore = false) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     
     setUserId(user.id);
+
+    if (!loadMore) {
+      setLoading(true);
+    }
 
     // Fetch credits
     const { data: profile } = await supabase
@@ -61,26 +72,41 @@ const Balance = () => {
     
     setCredits(profile?.credits || 0);
 
-    // Fetch topup transactions
+    // Get total counts for pagination
+    const [{ count: topupCount }, { count: checkCount }] = await Promise.all([
+      supabase.from("topup_transactions").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase.from("card_checks").select("id", { count: "exact", head: true }).eq("user_id", user.id)
+    ]);
+
+    const total = (topupCount || 0) + (checkCount || 0);
+    setTotalCount(total);
+
+    // Calculate offset for pagination
+    const currentOffset = loadMore ? transactions.length : 0;
+    const halfPage = Math.ceil(ITEMS_PER_PAGE / 2);
+
+    // Fetch topup transactions with pagination
     const { data: topups } = await supabase
       .from("topup_transactions")
       .select("id, amount, payment_method, status, created_at")
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .range(loadMore ? Math.floor(currentOffset / 2) : 0, loadMore ? Math.floor(currentOffset / 2) + halfPage - 1 : halfPage - 1);
 
-    // Fetch card checks
+    // Fetch card checks with pagination
     const { data: checks } = await supabase
       .from("card_checks")
       .select("id, gateway, status, created_at")
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .range(loadMore ? Math.floor(currentOffset / 2) : 0, loadMore ? Math.floor(currentOffset / 2) + halfPage - 1 : halfPage - 1);
 
     // Combine and sort transactions
-    const allTransactions: Transaction[] = [];
+    const newTransactions: Transaction[] = [];
 
     if (topups) {
       topups.forEach((tx: TopupTransaction) => {
-        allTransactions.push({
+        newTransactions.push({
           id: tx.id,
           type: "topup",
           credits: tx.status === "completed" ? tx.amount : 0,
@@ -93,10 +119,10 @@ const Balance = () => {
 
     if (checks) {
       checks.forEach((check: CardCheck) => {
-        allTransactions.push({
+        newTransactions.push({
           id: check.id,
           type: "check",
-          credits: -1, // Default check cost in credits
+          credits: -1,
           gateway: check.gateway,
           date: check.created_at,
           status: check.status
@@ -105,12 +131,29 @@ const Balance = () => {
     }
 
     // Sort by date descending
-    allTransactions.sort((a, b) => 
+    newTransactions.sort((a, b) => 
       new Date(b.date).getTime() - new Date(a.date).getTime()
     );
 
-    setTransactions(allTransactions);
+    if (loadMore) {
+      setTransactions(prev => {
+        const existingIds = new Set(prev.map(t => t.id));
+        const uniqueNew = newTransactions.filter(t => !existingIds.has(t.id));
+        return [...prev, ...uniqueNew];
+      });
+    } else {
+      setTransactions(newTransactions);
+    }
+
+    const fetchedCount = loadMore ? transactions.length + newTransactions.length : newTransactions.length;
+    setHasMore(newTransactions.length > 0 && fetchedCount < total);
     setLoading(false);
+    setLoadingMore(false);
+  };
+
+  const loadMoreTransactions = async () => {
+    setLoadingMore(true);
+    await fetchData(true);
   };
 
   useEffect(() => {
@@ -161,7 +204,6 @@ const Balance = () => {
         },
         (payload) => {
           console.log('Topup transaction updated:', payload);
-          // Refetch all data to ensure consistency
           fetchData();
         }
       )
@@ -310,74 +352,100 @@ const Balance = () => {
             <Badge variant="outline" className="ml-1 sm:ml-2 text-[10px] sm:text-xs">
               Live
             </Badge>
+            {totalCount > 0 && (
+              <span className="text-xs text-muted-foreground font-normal ml-auto">
+                {transactions.length} of {totalCount}
+              </span>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
-          <div className="space-y-2 sm:space-y-3">
-            {transactions.length === 0 ? (
-              <div className="text-center py-6 sm:py-8 text-muted-foreground">
-                <Clock className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-2 sm:mb-3 opacity-50" />
-                <p className="text-sm sm:text-base">No transactions yet</p>
-                <p className="text-xs sm:text-sm mt-1">Your transaction history will appear here</p>
-              </div>
-            ) : (
-              transactions.map((tx) => (
-                <div
-                  key={tx.id}
-                  className="flex items-center justify-between p-2 sm:p-4 rounded-lg bg-secondary/50 border border-border transition-all hover:bg-secondary/70"
-                >
-                  <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-                    <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 ${
-                      tx.type === "topup" 
-                        ? tx.status === "completed" 
-                          ? "bg-green-500/20" 
-                          : tx.status === "pending"
-                            ? "bg-yellow-500/20"
-                            : "bg-destructive/20"
-                        : "bg-primary/20"
-                    }`}>
-                      {tx.type === "topup" ? (
-                        <ArrowUpRight className={`h-4 w-4 sm:h-5 sm:w-5 ${
-                          tx.status === "completed" 
-                            ? "text-green-500" 
+          {transactions.length === 0 ? (
+            <div className="text-center py-6 sm:py-8 text-muted-foreground">
+              <Clock className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-2 sm:mb-3 opacity-50" />
+              <p className="text-sm sm:text-base">No transactions yet</p>
+              <p className="text-xs sm:text-sm mt-1">Your transaction history will appear here</p>
+            </div>
+          ) : (
+            <ScrollArea className="h-[400px] sm:h-[500px] pr-3">
+              <div className="space-y-2 sm:space-y-3">
+                {transactions.map((tx) => (
+                  <div
+                    key={tx.id}
+                    className="flex items-center justify-between p-2 sm:p-4 rounded-lg bg-secondary/50 border border-border transition-all hover:bg-secondary/70"
+                  >
+                    <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+                      <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 ${
+                        tx.type === "topup" 
+                          ? tx.status === "completed" 
+                            ? "bg-green-500/20" 
                             : tx.status === "pending"
-                              ? "text-yellow-500"
-                              : "text-destructive"
-                        }`} />
-                      ) : (
-                        <ArrowDownRight className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-                      )}
+                              ? "bg-yellow-500/20"
+                              : "bg-destructive/20"
+                          : "bg-primary/20"
+                      }`}>
+                        {tx.type === "topup" ? (
+                          <ArrowUpRight className={`h-4 w-4 sm:h-5 sm:w-5 ${
+                            tx.status === "completed" 
+                              ? "text-green-500" 
+                              : tx.status === "pending"
+                                ? "text-yellow-500"
+                                : "text-destructive"
+                          }`} />
+                        ) : (
+                          <ArrowDownRight className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-xs sm:text-sm truncate">
+                          {tx.type === "topup" ? `Credit Purchase via ${tx.method}` : `Check - ${tx.gateway}`}
+                        </p>
+                        <p className="text-[10px] sm:text-sm text-muted-foreground">{formatDate(tx.date)}</p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="font-medium text-xs sm:text-sm truncate">
-                        {tx.type === "topup" ? `Credit Purchase via ${tx.method}` : `Check - ${tx.gateway}`}
+                    <div className="text-right shrink-0 ml-2">
+                      <p className={`font-bold text-xs sm:text-base flex items-center gap-1 justify-end ${
+                        tx.type === "topup" 
+                          ? tx.status === "completed" 
+                            ? "text-green-500" 
+                            : "text-muted-foreground"
+                          : "text-foreground"
+                      }`}>
+                        {tx.type === "topup" ? "+" : ""}{tx.credits}
+                        <Coins className="h-3 w-3 sm:hidden" />
+                        <span className="hidden sm:inline">credits</span>
                       </p>
-                      <p className="text-[10px] sm:text-sm text-muted-foreground">{formatDate(tx.date)}</p>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] sm:text-xs ${getStatusBadgeClass(tx.status)}`}
+                      >
+                        {tx.status}
+                      </Badge>
                     </div>
                   </div>
-                  <div className="text-right shrink-0 ml-2">
-                    <p className={`font-bold text-xs sm:text-base flex items-center gap-1 justify-end ${
-                      tx.type === "topup" 
-                        ? tx.status === "completed" 
-                          ? "text-green-500" 
-                          : "text-muted-foreground"
-                        : "text-foreground"
-                    }`}>
-                      {tx.type === "topup" ? "+" : ""}{tx.credits}
-                      <Coins className="h-3 w-3 sm:hidden" />
-                      <span className="hidden sm:inline">credits</span>
-                    </p>
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] sm:text-xs ${getStatusBadgeClass(tx.status)}`}
+                ))}
+                {hasMore && (
+                  <div className="pt-2">
+                    <Button 
+                      variant="outline" 
+                      className="w-full" 
+                      onClick={loadMoreTransactions}
+                      disabled={loadingMore}
                     >
-                      {tx.status}
-                    </Badge>
+                      {loadingMore ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        <>Load More ({totalCount - transactions.length} remaining)</>
+                      )}
+                    </Button>
                   </div>
-                </div>
-              ))
-            )}
-          </div>
+                )}
+              </div>
+            </ScrollArea>
+          )}
         </CardContent>
       </Card>
     </div>
