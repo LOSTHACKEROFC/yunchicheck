@@ -224,6 +224,7 @@ const Gateways = () => {
   const [bulkCurrentIndex, setBulkCurrentIndex] = useState(0);
   const [bulkStartTime, setBulkStartTime] = useState<number | null>(null);
   const [bulkEstimatedTime, setBulkEstimatedTime] = useState<string>("");
+  const [workerCount, setWorkerCount] = useState(3); // Default 3 workers (2-5 range)
   const bulkAbortRef = useRef(false);
   const bulkPauseRef = useRef(false);
 
@@ -1097,46 +1098,44 @@ const Gateways = () => {
     bulkAbortRef.current = false;
     bulkPauseRef.current = false;
 
-    let currentCredits = userCredits;
-    let remainingLines = [...originalLines];
-    const startTime = Date.now();
+    // Deduct all credits upfront
+    const totalCost = cards.length * CREDIT_COST;
+    const { error: deductError } = await supabase
+      .from('profiles')
+      .update({ credits: userCredits - totalCost })
+      .eq('user_id', userId);
 
-    for (let i = 0; i < cards.length; i++) {
-      if (bulkAbortRef.current) {
-        toast.info("Bulk check stopped");
-        break;
-      }
+    if (deductError) {
+      toast.error("Failed to deduct credits");
+      setBulkChecking(false);
+      return;
+    }
+
+    setUserCredits(userCredits - totalCost);
+
+    const startTime = Date.now();
+    let processedCount = 0;
+    const allResults: BulkResult[] = [];
+
+    // Worker function to process a single card
+    const processCard = async (cardIndex: number): Promise<BulkResult | null> => {
+      if (bulkAbortRef.current) return null;
 
       while (bulkPauseRef.current && !bulkAbortRef.current) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
 
-      if (bulkAbortRef.current) break;
+      if (bulkAbortRef.current) return null;
 
-      setBulkCurrentIndex(i + 1);
-      const cardData = cards[i];
+      const cardData = cards[cardIndex];
 
       try {
-        // Deduct credit
-        const { error: deductError } = await supabase
-          .from('profiles')
-          .update({ credits: currentCredits - CREDIT_COST })
-          .eq('user_id', userId);
-
-        if (deductError) {
-          throw new Error("Failed to deduct credits");
-        }
-
-        currentCredits -= CREDIT_COST;
-        setUserCredits(currentCredits);
-
         // Use real API for YUNCHI AUTH gateway, simulation for others
         const checkStatus = selectedGateway.id === "stripe_auth"
           ? await checkCardViaApi(cardData.card, cardData.month, cardData.year, cardData.cvv)
           : await simulateCheck();
 
         const fullCardStr = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
-        // Display card as entered by user (without auto-added CVC)
         const displayCardStr = cardData.originalCvv 
           ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
           : `${cardData.card}|${cardData.month}|${cardData.year}`;
@@ -1172,10 +1171,8 @@ const Gateways = () => {
         if (checkStatus === "live") {
           playLiveSoundIfEnabled();
           
-          // Individual blood-red celebration per live card
           const bloodRedColors = ['#dc2626', '#ef4444', '#b91c1c', '#991b1b', '#7f1d1d', '#fca5a5'];
           
-          // Burst from random position for variety
           const xPos = 0.3 + Math.random() * 0.4;
           confetti({
             particleCount: 60,
@@ -1186,7 +1183,6 @@ const Gateways = () => {
             scalar: 1.1
           });
           
-          // Small side accents
           confetti({
             particleCount: 25,
             angle: 60,
@@ -1217,31 +1213,7 @@ const Gateways = () => {
         };
         setGatewayHistory(prev => [newCheck, ...prev].slice(0, 50));
 
-        setBulkResults(prev => [...prev, bulkResult]);
-        setBulkProgress(((i + 1) / cards.length) * 100);
-        
-        // Calculate estimated time remaining
-        const elapsed = Date.now() - startTime;
-        const avgTimePerCard = elapsed / (i + 1);
-        const remainingCards = cards.length - (i + 1);
-        const remainingMs = avgTimePerCard * remainingCards;
-        
-        if (remainingCards > 0) {
-          const remainingSecs = Math.ceil(remainingMs / 1000);
-          if (remainingSecs >= 60) {
-            const mins = Math.floor(remainingSecs / 60);
-            const secs = remainingSecs % 60;
-            setBulkEstimatedTime(`~${mins}m ${secs}s remaining`);
-          } else {
-            setBulkEstimatedTime(`~${remainingSecs}s remaining`);
-          }
-        } else {
-          setBulkEstimatedTime("Finishing...");
-        }
-        
-        // Remove processed card from textarea
-        remainingLines.shift();
-        setBulkInput(remainingLines.join('\n'));
+        return bulkResult;
 
       } catch (error) {
         console.error('Bulk check error:', error);
@@ -1249,8 +1221,8 @@ const Gateways = () => {
           ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
           : `${cardData.card}|${cardData.month}|${cardData.year}`;
         const { brand: errorBrand, brandColor: errorBrandColor } = detectCardBrandLocal(cardData.card);
-        const errorResult: BulkResult = {
-          status: "unknown",
+        return {
+          status: "unknown" as const,
           message: "Error",
           gateway: selectedGateway.name,
           cardMasked: maskCard(cardData.card),
@@ -1259,11 +1231,76 @@ const Gateways = () => {
           brand: errorBrand,
           brandColor: errorBrandColor
         };
-        setBulkResults(prev => [...prev, errorResult]);
+      }
+    };
+
+    // Process cards in parallel batches using workers
+    const activeWorkers = workerCount;
+    let currentIndex = 0;
+
+    const runWorker = async () => {
+      while (currentIndex < cards.length && !bulkAbortRef.current) {
+        const myIndex = currentIndex++;
         
-        // Remove processed card even on error
-        remainingLines.shift();
-        setBulkInput(remainingLines.join('\n'));
+        const result = await processCard(myIndex);
+        
+        if (result) {
+          allResults.push(result);
+          processedCount++;
+          
+          setBulkResults(prev => [...prev, result]);
+          setBulkCurrentIndex(processedCount);
+          setBulkProgress((processedCount / cards.length) * 100);
+          
+          // Calculate estimated time remaining
+          const elapsed = Date.now() - startTime;
+          const avgTimePerCard = elapsed / processedCount;
+          const remainingCards = cards.length - processedCount;
+          const remainingMs = avgTimePerCard * remainingCards / activeWorkers;
+          
+          if (remainingCards > 0) {
+            const remainingSecs = Math.ceil(remainingMs / 1000);
+            if (remainingSecs >= 60) {
+              const mins = Math.floor(remainingSecs / 60);
+              const secs = remainingSecs % 60;
+              setBulkEstimatedTime(`~${mins}m ${secs}s remaining`);
+            } else {
+              setBulkEstimatedTime(`~${remainingSecs}s remaining`);
+            }
+          } else {
+            setBulkEstimatedTime("Finishing...");
+          }
+          
+          // Update remaining lines in textarea
+          const remainingLinesNow = originalLines.slice(processedCount);
+          setBulkInput(remainingLinesNow.join('\n'));
+        }
+      }
+    };
+
+    // Start all workers in parallel
+    const workerPromises = Array(activeWorkers).fill(null).map(() => runWorker());
+    await Promise.all(workerPromises);
+
+    if (bulkAbortRef.current) {
+      toast.info("Bulk check stopped");
+      // Refund credits for unprocessed cards
+      const refundAmount = (cards.length - processedCount) * CREDIT_COST;
+      if (refundAmount > 0) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('credits')
+          .eq('user_id', userId)
+          .single();
+        
+        if (profile) {
+          await supabase
+            .from('profiles')
+            .update({ credits: profile.credits + refundAmount })
+            .eq('user_id', userId);
+          setUserCredits(prev => prev + refundAmount);
+          toast.info(`Refunded ${refundAmount} credits for unprocessed cards`);
+        }
       }
     }
 
@@ -2004,31 +2041,44 @@ const Gateways = () => {
         <TabsContent value="bulk" className="mt-4 space-y-4">
           <Card className="bg-card border-border max-w-2xl">
             <CardContent className="p-4 sm:p-6 space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <Label className="text-xs">Cards (one per line)</Label>
-                  <div>
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      accept=".txt,.csv"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                      disabled={bulkChecking}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-6 px-2 text-[10px] gap-1"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={bulkChecking}
-                    >
-                      <Paperclip className="h-3 w-3" />
-                      Attach File
-                    </Button>
-                  </div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs">Workers:</Label>
+                  <select
+                    value={workerCount}
+                    onChange={(e) => setWorkerCount(Number(e.target.value))}
+                    disabled={bulkChecking}
+                    className="h-7 px-2 text-xs bg-secondary border border-border rounded"
+                  >
+                    {[2, 3, 4, 5].map(n => (
+                      <option key={n} value={n}>{n} Threads</option>
+                    ))}
+                  </select>
                 </div>
+                <div>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept=".txt,.csv"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    disabled={bulkChecking}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 px-2 text-[10px] gap-1"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={bulkChecking}
+                  >
+                    <Paperclip className="h-3 w-3" />
+                    Attach File
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs">Cards (one per line)</Label>
                 <Textarea
                   placeholder="Supports multiple formats:&#10;card|mm|yy|cvv&#10;card=YYMM (track data)&#10;card mm yyyy cvv&#10;Fullz data with card details"
                   value={bulkInput}
