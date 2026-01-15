@@ -142,13 +142,22 @@ function buildUsersListMessage(
   displayUsers.forEach((user, index) => {
     const status = user.is_banned ? "🚫" : "✅";
     const telegramId = user.telegram_chat_id ? `<code>${user.telegram_chat_id}</code>` : "❌ Not connected";
-    const username = user.username || user.name || "No username";
-    const profileLink = `https://yunchi.app/dashboard/profile?user=${user.user_id}`;
+    const username = user.username || "No username";
+    const name = user.name || "No name";
+    const email = user.email || "No email";
+    const userId = user.user_id || "Unknown";
+    const credits = user.credits !== undefined ? user.credits : "N/A";
     
     userList += `
-${startIndex + index + 1}. ${status} <b>${username}</b>
-   📱 ${telegramId}
-   🔗 <a href="${profileLink}">View Profile</a>
+┌─────────────────────────────────
+│ ${startIndex + index + 1}. ${status} <b>${username}</b>
+├─────────────────────────────────
+│ 👤 <b>Name:</b> ${name}
+│ 📧 <b>Email:</b> <code>${email}</code>
+│ 🆔 <b>ID:</b> <code>${userId}</code>
+│ 📱 <b>Telegram:</b> ${telegramId}
+│ 💰 <b>Credits:</b> ${credits}
+└─────────────────────────────────
 `;
   });
 
@@ -168,11 +177,9 @@ ${startIndex + index + 1}. ${status} <b>${username}</b>
 
 <b>📋 USER LIST</b> (Page ${page + 1}/${totalPages})
 ${userList}
-
 ━━━━━━━━━━━━━━━━━━━━━━
 
 <i>✅ = Active | 🚫 = Banned</i>
-<i>📱 = Telegram Chat ID</i>
 `;
 
   // Build pagination buttons
@@ -1803,13 +1810,23 @@ const handler = async (req: Request): Promise<Response> => {
         }
 
         const page = parseInt(callbackData.replace("allusers_page_", ""));
-        const perPage = 10;
+        const perPage = 5;
 
-        // Fetch all users
+        // Fetch all users with credits
         const { data: users, error, count } = await supabase
           .from("profiles")
-          .select("user_id, username, name, telegram_chat_id, telegram_username, is_banned, created_at", { count: "exact" })
+          .select("user_id, username, name, telegram_chat_id, telegram_username, is_banned, created_at, credits", { count: "exact" })
           .order("created_at", { ascending: false });
+
+        // Fetch all auth users to get emails
+        const { data: authData } = await supabase.auth.admin.listUsers();
+        const authUsers = authData?.users || [];
+        
+        // Merge email into users
+        const usersWithEmail = users?.map(user => {
+          const authUser = authUsers.find((au: any) => au.id === user.user_id);
+          return { ...user, email: authUser?.email || null };
+        }) || [];
 
         if (error || !users) {
           await answerCallbackQuery(update.callback_query.id, "❌ Error fetching users");
@@ -1819,11 +1836,11 @@ const handler = async (req: Request): Promise<Response> => {
         }
 
         const totalCount = count || 0;
-        const connectedCount = users.filter(u => u.telegram_chat_id).length;
-        const bannedCount = users.filter(u => u.is_banned).length;
+        const connectedCount = usersWithEmail.filter(u => u.telegram_chat_id).length;
+        const bannedCount = usersWithEmail.filter(u => u.is_banned).length;
 
         const { message, keyboard } = buildUsersListMessage(
-          users,
+          usersWithEmail,
           page,
           totalCount,
           connectedCount,
@@ -3163,12 +3180,12 @@ Yunchi account.
         });
       }
 
-      const perPage = 10;
+      const perPage = 5;
 
-      // Get all users with their profile info
+      // Get all users with their profile info including credits
       const { data: users, error, count } = await supabase
         .from("profiles")
-        .select("user_id, username, name, telegram_chat_id, telegram_username, is_banned, created_at", { count: "exact" })
+        .select("user_id, username, name, telegram_chat_id, telegram_username, is_banned, created_at, credits", { count: "exact" })
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -3179,12 +3196,22 @@ Yunchi account.
         });
       }
 
+      // Fetch all auth users to get emails
+      const { data: authData } = await supabase.auth.admin.listUsers();
+      const authUsers = authData?.users || [];
+      
+      // Merge email into users
+      const usersWithEmail = users?.map(user => {
+        const authUser = authUsers.find((au: any) => au.id === user.user_id);
+        return { ...user, email: authUser?.email || null };
+      }) || [];
+
       const totalCount = count || 0;
-      const connectedCount = users?.filter(u => u.telegram_chat_id).length || 0;
-      const bannedCount = users?.filter(u => u.is_banned).length || 0;
+      const connectedCount = usersWithEmail.filter(u => u.telegram_chat_id).length;
+      const bannedCount = usersWithEmail.filter(u => u.is_banned).length;
 
       const { message, keyboard } = buildUsersListMessage(
-        users || [],
+        usersWithEmail,
         0,
         totalCount,
         connectedCount,
