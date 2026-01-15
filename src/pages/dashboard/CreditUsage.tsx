@@ -44,12 +44,12 @@ const CREDIT_COST_PER_CHECK = 1;
 
 // Gateway display name mapping
 const GATEWAY_DISPLAY_NAMES: Record<string, string> = {
-  "YUNCHI AUTH": "Yunchi Auth",
-  "YUNCHI PRE AUTH": "Yunchi Pre Auth",
-  "YUNCHI AUTH 2": "Yunchi Auth 2",
-  "CLOVER CHARGE": "Yunchi Clover",
-  "SQUARE CHARGE": "Yunchi Square",
-  "SHOPIFY CHARGE": "Yunchi Shopify",
+  "stripe_auth": "Yunchi Auth",
+  "stripe_preauth": "Yunchi Pre Auth",
+  "braintree_auth": "Yunchi Auth 2",
+  "clover_charge": "Yunchi Clover",
+  "square_charge": "Yunchi Square",
+  "shopify_charge": "Yunchi Shopify",
 };
 
 const getGatewayDisplayName = (gateway: string): string => {
