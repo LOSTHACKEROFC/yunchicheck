@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Coins, CreditCard, Activity, ArrowUpCircle, History, HeadphonesIcon, ChevronRight, Users, Zap } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Coins, CreditCard, Activity, ArrowUpCircle, History, HeadphonesIcon, ChevronRight, Users, Zap, TrendingUp } from "lucide-react";
 
 const quickLinks = [
   { title: "Buy Credits", description: "Purchase credit packages", icon: ArrowUpCircle, url: "/dashboard/topup", color: "text-green-500" },
@@ -10,10 +11,17 @@ const quickLinks = [
   { title: "Get Support", description: "Contact our support team", icon: HeadphonesIcon, url: "/dashboard/support", color: "text-yellow-500" },
 ];
 
+interface TodayStats {
+  total: number;
+  live: number;
+  dead: number;
+  unknown: number;
+}
+
 const DashboardHome = () => {
   const [profile, setProfile] = useState<{ username: string | null; credits: number } | null>(null);
   const [stats, setStats] = useState<{ total_users: number; total_checks: number }>({ total_users: 0, total_checks: 0 });
-  const [todayChecks, setTodayChecks] = useState(0);
+  const [todayStats, setTodayStats] = useState<TodayStats>({ total: 0, live: 0, dead: 0, unknown: 0 });
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,24 +40,29 @@ const DashboardHome = () => {
     fetchProfile();
   }, []);
 
-  // Fetch today's checks count and subscribe to real-time updates
+  // Fetch today's checks with results and subscribe to real-time updates
   useEffect(() => {
     if (!userId) return;
 
-    const fetchTodayChecks = async () => {
+    const fetchTodayStats = async () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      const { count } = await supabase
+      const { data } = await supabase
         .from("card_checks")
-        .select("*", { count: "exact", head: true })
+        .select("result")
         .eq("user_id", userId)
         .gte("created_at", today.toISOString());
       
-      setTodayChecks(count || 0);
+      if (data) {
+        const live = data.filter(c => c.result?.toLowerCase().includes('live') || c.result?.toLowerCase().includes('approved')).length;
+        const dead = data.filter(c => c.result?.toLowerCase().includes('dead') || c.result?.toLowerCase().includes('declined')).length;
+        const unknown = data.length - live - dead;
+        setTodayStats({ total: data.length, live, dead, unknown });
+      }
     };
     
-    fetchTodayChecks();
+    fetchTodayStats();
 
     // Subscribe to real-time updates for card_checks
     const channel = supabase
@@ -62,9 +75,30 @@ const DashboardHome = () => {
           table: 'card_checks',
           filter: `user_id=eq.${userId}`
         },
+        (payload) => {
+          const result = (payload.new as { result?: string })?.result || '';
+          const isLive = result.toLowerCase().includes('live') || result.toLowerCase().includes('approved');
+          const isDead = result.toLowerCase().includes('dead') || result.toLowerCase().includes('declined');
+          
+          setTodayStats(prev => ({
+            total: prev.total + 1,
+            live: prev.live + (isLive ? 1 : 0),
+            dead: prev.dead + (isDead ? 1 : 0),
+            unknown: prev.unknown + (!isLive && !isDead ? 1 : 0)
+          }));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'card_checks',
+          filter: `user_id=eq.${userId}`
+        },
         () => {
-          // Increment count on new check
-          setTodayChecks(prev => prev + 1);
+          // Re-fetch on updates to get accurate counts
+          fetchTodayStats();
         }
       )
       .subscribe();
@@ -166,8 +200,8 @@ const DashboardHome = () => {
       </div>
 
       {/* User Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
-        <Card className="bg-card border-border col-span-2 sm:col-span-1">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+        <Card className="bg-card border-border">
           <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
               Your Credits
@@ -189,15 +223,50 @@ const DashboardHome = () => {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
               </span>
-              <span className="hidden xs:inline">Your Checks Today</span>
+              <span className="hidden xs:inline">Checks Today</span>
               <span className="xs:hidden">Today</span>
-              <span className="hidden sm:inline">(Live)</span>
             </CardTitle>
             <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500" />
           </CardHeader>
           <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
-            <div className="text-xl sm:text-2xl font-bold text-blue-500">{todayChecks.toLocaleString()}</div>
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Cards checked today</p>
+            <div className="text-xl sm:text-2xl font-bold text-blue-500">{todayStats.total.toLocaleString()}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Cards checked</p>
+          </CardContent>
+        </Card>
+
+        {/* Live/Dead Ratio Card */}
+        <Card className="bg-gradient-to-br from-emerald-500/20 to-red-500/10 border-emerald-500/30">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="hidden xs:inline">Live/Dead</span>
+              <span className="xs:hidden">L/D</span>
+            </CardTitle>
+            <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="flex items-baseline gap-1">
+              <span className="text-xl sm:text-2xl font-bold text-emerald-500">{todayStats.live}</span>
+              <span className="text-muted-foreground">/</span>
+              <span className="text-xl sm:text-2xl font-bold text-red-500">{todayStats.dead}</span>
+            </div>
+            {todayStats.total > 0 && (
+              <div className="mt-2 space-y-1">
+                <Progress 
+                  value={(todayStats.live / todayStats.total) * 100} 
+                  className="h-1.5 bg-red-500/30"
+                />
+                <p className="text-[10px] sm:text-xs text-muted-foreground">
+                  {((todayStats.live / todayStats.total) * 100).toFixed(1)}% success rate
+                </p>
+              </div>
+            )}
+            {todayStats.total === 0 && (
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">No checks yet</p>
+            )}
           </CardContent>
         </Card>
 
