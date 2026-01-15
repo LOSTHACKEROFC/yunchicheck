@@ -5,10 +5,11 @@ import { User } from "@supabase/supabase-js";
 import DashboardSidebar from "@/components/DashboardSidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import FloatingCardsBackground from "@/components/FloatingCardsBackground";
-import { SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { Outlet } from "react-router-dom";
 import { useSessionTracker } from "@/hooks/useSessionTracker";
-
+import { Menu } from "lucide-react";
+import { Button } from "@/components/ui/button";
 const Dashboard = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -120,17 +121,37 @@ const Dashboard = () => {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full bg-background relative">
-        <FloatingCardsBackground />
-        <DashboardSidebar />
-        <div className="flex-1 flex flex-col relative z-10 min-w-0">
-          <DashboardHeader />
-          <main className="flex-1 p-3 sm:p-4 md:p-6 overflow-auto">
-            <Outlet />
-          </main>
-        </div>
-      </div>
+      <DashboardContent />
     </SidebarProvider>
+  );
+};
+
+const DashboardContent = () => {
+  const { state, setOpen } = useSidebar();
+  const isCollapsed = state === "collapsed";
+
+  return (
+    <div className="min-h-screen flex w-full bg-background relative">
+      <FloatingCardsBackground />
+      <DashboardSidebar />
+      <div className="flex-1 flex flex-col relative z-10 min-w-0">
+        <DashboardHeader />
+        <main className="flex-1 p-3 sm:p-4 md:p-6 overflow-auto">
+          <Outlet />
+        </main>
+      </div>
+      
+      {/* Floating menu button when sidebar is hidden */}
+      {isCollapsed && (
+        <Button
+          onClick={() => setOpen(true)}
+          size="icon"
+          className="fixed bottom-6 left-6 z-50 h-12 w-12 rounded-full shadow-lg bg-primary hover:bg-primary/90 transition-all duration-300 animate-fade-in"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+      )}
+    </div>
   );
 };
 
