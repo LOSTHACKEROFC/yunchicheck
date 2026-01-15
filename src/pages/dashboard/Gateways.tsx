@@ -88,7 +88,7 @@ interface Gateway {
 const gateways: Gateway[] = [
   { 
     id: "stripe_auth",
-    name: "Stripe Auth", 
+    name: "STRIPE AUTH", 
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Amex",
@@ -98,7 +98,7 @@ const gateways: Gateway[] = [
   },
   { 
     id: "stripe_preauth",
-    name: "Stripe Pre-Auth", 
+    name: "STRIPE PRE-AUTH", 
     type: "preauth",
     status: "online", 
     cardTypes: "Visa/MC/Amex",
@@ -108,7 +108,7 @@ const gateways: Gateway[] = [
   },
   { 
     id: "braintree_auth",
-    name: "Braintree Auth", 
+    name: "BRAINTREE AUTH", 
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Discover",
@@ -118,7 +118,7 @@ const gateways: Gateway[] = [
   },
   { 
     id: "clover_charge",
-    name: "Clover Charge", 
+    name: "CLOVER CHARGE", 
     type: "charge",
     status: "online", 
     cardTypes: "Visa/MC",
@@ -128,7 +128,7 @@ const gateways: Gateway[] = [
   },
   { 
     id: "square_charge",
-    name: "Square Charge", 
+    name: "SQUARE CHARGE", 
     type: "charge",
     status: "online", 
     cardTypes: "Visa/MC/Amex",
@@ -138,7 +138,7 @@ const gateways: Gateway[] = [
   },
   { 
     id: "shopify_charge",
-    name: "Shopify Charge", 
+    name: "SHOPIFY CHARGE", 
     type: "charge",
     status: "online", 
     cardTypes: "Visa/MC/Amex/Discover",
