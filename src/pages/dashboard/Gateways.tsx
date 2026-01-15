@@ -600,11 +600,52 @@ const Gateways = () => {
   // File input ref for bulk upload
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Bulk checking functions - Enhanced parser for multiple formats
+  // Bulk checking functions - Enhanced parser for multiple formats with intelligent separator detection
   const parseCards = (input: string): { card: string; month: string; year: string; cvv: string }[] => {
     const lines = input.trim().split('\n').filter(line => line.trim());
     const cards: { card: string; month: string; year: string; cvv: string }[] = [];
     const seenCards = new Set<string>();
+
+    // Helper function to normalize and extract card components
+    const extractCardComponents = (line: string): { card: string; month: string; year: string; cvv: string } | null => {
+      // First, try to find the card number (13-16 digits)
+      const cardNumMatch = line.match(/\b(\d{13,16})\b/);
+      if (!cardNumMatch) return null;
+      
+      const cardNum = cardNumMatch[1];
+      const cardEndIndex = line.indexOf(cardNum) + cardNum.length;
+      const afterCard = line.slice(cardEndIndex);
+      
+      // Try various separator patterns to extract MM, YY, CVV
+      // Supports: | / - . space and combinations like |MM/YY|CVV
+      
+      // Pattern: Any separator followed by 1-2 digit month, separator, 2-4 digit year, separator, 3-4 digit cvv
+      // This captures mixed separators like |MM/YY|CVV or |MM/YY/CVV
+      const mixedPatterns = [
+        // CardNumber|MM/YY|CVC or CardNumber|MM/YY/CVC
+        /^[\|\-\.\s\/]+(\d{1,2})[\s\/\-\.]+(\d{2,4})[\|\-\.\s\/]+(\d{3,4})\b/,
+        // Standard single separator: |, /, -, ., or space
+        /^[\|\-\.\s\/]+(\d{1,2})[\|\-\.\s\/]+(\d{2,4})[\|\-\.\s\/]+(\d{3,4})\b/,
+      ];
+      
+      for (const pattern of mixedPatterns) {
+        const match = afterCard.match(pattern);
+        if (match) {
+          const [, month, year, cvv] = match;
+          const monthNum = parseInt(month);
+          if (monthNum >= 1 && monthNum <= 12) {
+            return {
+              card: cardNum,
+              month: month.padStart(2, '0'),
+              year: year.length === 4 ? year.slice(2) : year,
+              cvv
+            };
+          }
+        }
+      }
+      
+      return null;
+    };
 
     for (const line of lines) {
       const trimmedLine = line.trim();
@@ -612,7 +653,7 @@ const Gateways = () => {
       // Try to extract card data using multiple patterns
       let cardData: { card: string; month: string; year: string; cvv: string } | null = null;
       
-      // Pattern 1: Pipe-delimited (CardNumber|MM|YY|CVC or CardNumber|MM|YYYY|CVC or CardNumber|M|YY|CVC)
+      // Pattern 1: Pipe-delimited (CardNumber|MM|YY|CVC or CardNumber|MM|YYYY|CVC)
       const pipeMatch = trimmedLine.match(/^(\d{13,16})\|(\d{1,2})\|(\d{2,4})\|(\d{3,4})/);
       if (pipeMatch) {
         const [, card, month, year, cvv] = pipeMatch;
@@ -651,8 +692,41 @@ const Gateways = () => {
           };
         }
       }
+      
+      // Pattern 4: Dash-delimited (CardNumber-MM-YY-CVC)
+      if (!cardData) {
+        const dashMatch = trimmedLine.match(/^(\d{13,16})\-(\d{1,2})\-(\d{2,4})\-(\d{3,4})/);
+        if (dashMatch) {
+          const [, card, month, year, cvv] = dashMatch;
+          cardData = {
+            card,
+            month: month.padStart(2, '0'),
+            year: year.length === 4 ? year.slice(2) : year,
+            cvv
+          };
+        }
+      }
+      
+      // Pattern 5: Dot-delimited (CardNumber.MM.YY.CVC)
+      if (!cardData) {
+        const dotMatch = trimmedLine.match(/^(\d{13,16})\.(\d{1,2})\.(\d{2,4})\.(\d{3,4})/);
+        if (dotMatch) {
+          const [, card, month, year, cvv] = dotMatch;
+          cardData = {
+            card,
+            month: month.padStart(2, '0'),
+            year: year.length === 4 ? year.slice(2) : year,
+            cvv
+          };
+        }
+      }
+      
+      // Pattern 6: Mixed separators (CardNumber|MM/YY|CVC or CardNumber|MM/YY/CVC)
+      if (!cardData) {
+        cardData = extractCardComponents(trimmedLine);
+      }
 
-      // Pattern 4: Fullz extraction - look for card number + exp + cvv anywhere in line
+      // Pattern 7: Fullz extraction - look for card number + exp + cvv anywhere in line
       if (!cardData) {
         // Extract 13-16 digit card number
         const cardNumMatch = trimmedLine.match(/\b(\d{13,16})\b/);
@@ -661,8 +735,8 @@ const Gateways = () => {
           
           // Look for expiration patterns: MM/YY, MM/YYYY, MM-YY, MM-YYYY, MMYY, MMYYYY
           const expPatterns = [
-            /\b(0[1-9]|1[0-2])[\/\-]?(20)?(\d{2})\b/,  // MM/YY or MM/YYYY or MMYY
-            /\bexp[:\s]*(0[1-9]|1[0-2])[\/\-]?(20)?(\d{2})\b/i, // EXP: MM/YY
+            /\b(0[1-9]|1[0-2])[\/\-\.]?(20)?(\d{2})\b/,  // MM/YY or MM/YYYY or MMYY
+            /\bexp[:\s]*(0[1-9]|1[0-2])[\/\-\.]?(20)?(\d{2})\b/i, // EXP: MM/YY
           ];
           
           let expMonth = '', expYear = '';
