@@ -1,8 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Resend } from "https://esm.sh/resend@2.0.0";
 
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID");
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+const ADMIN_EMAIL = "losthackerofc@gmail.com";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -109,8 +112,9 @@ const handler = async (req: Request): Promise<Response> => {
 
     const username = profile?.username || profile?.name || "Unknown User";
     const paymentLabel = getPaymentMethodLabel(payment_method);
+    const credits = Number(amount) * 10;
 
-    // Build caption
+    // Build caption for Telegram
     const caption = `
 💰 <b>New Top-Up Payment Proof</b>
 
@@ -121,7 +125,7 @@ const handler = async (req: Request): Promise<Response> => {
 
 <b>👤 User:</b> ${username}
 <b>📧 Email:</b> ${userEmail}
-<b>💵 Amount:</b> $${amount}
+<b>💵 Amount:</b> $${amount} (${credits} credits)
 <b>💳 Method:</b> ${paymentLabel}
 
 ━━━━━━━━━━━━━━━━━━━━━━
@@ -139,7 +143,7 @@ const handler = async (req: Request): Promise<Response> => {
       ],
     };
 
-    // Send photo to admin
+    // Send photo to admin via Telegram
     if (ADMIN_TELEGRAM_CHAT_ID) {
       await sendTelegramPhoto(
         ADMIN_TELEGRAM_CHAT_ID,
@@ -147,6 +151,58 @@ const handler = async (req: Request): Promise<Response> => {
         caption,
         inlineKeyboard
       );
+      console.log("Telegram notification sent to admin");
+    }
+
+    // Send email to admin
+    if (RESEND_API_KEY) {
+      console.log("Sending email notification to admin");
+      const resend = new Resend(RESEND_API_KEY);
+
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #f59e0b, #d97706); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0;">💰 New Payment Proof</h1>
+          </div>
+          <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
+            <p style="font-size: 16px;">A new top-up payment proof has been submitted.</p>
+            
+            <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>Transaction ID:</strong> <code>${transaction_id}</code></p>
+              <p style="margin: 5px 0;"><strong>User:</strong> ${username}</p>
+              <p style="margin: 5px 0;"><strong>Email:</strong> ${userEmail}</p>
+              <p style="margin: 5px 0;"><strong>Amount:</strong> $${amount} (${credits} credits)</p>
+              <p style="margin: 5px 0;"><strong>Method:</strong> ${paymentLabel}</p>
+            </div>
+            
+            <div style="text-align: center; margin: 20px 0;">
+              <p style="color: #a3a3a3; margin-bottom: 15px;">Payment Proof Image:</p>
+              <img src="${proof_image_url}" alt="Payment Proof" style="max-width: 100%; border-radius: 8px; border: 2px solid #3b3b3b;" />
+            </div>
+            
+            <div style="text-align: center; margin-top: 25px;">
+              <a href="https://yunchicheck.lovable.app/dashboard/admin/topups" style="display: inline-block; background: #10b981; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold; margin-right: 10px;">✅ Review in Dashboard</a>
+            </div>
+            
+            <p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 30px;">
+              This is an automated notification from Yunchi Checker.
+            </p>
+          </div>
+        </div>
+      `;
+
+      const emailResult = await resend.emails.send({
+        from: "Yunchi Checker <onboarding@resend.dev>",
+        to: [ADMIN_EMAIL],
+        subject: `💰 New Payment Proof: $${amount} from ${username}`,
+        html: emailHtml,
+      });
+
+      if (emailResult.error) {
+        console.error("Email error:", emailResult.error);
+      } else {
+        console.log("Email notification sent to admin");
+      }
     }
 
     console.log(`Topup proof notification sent for transaction: ${transaction_id}`);
