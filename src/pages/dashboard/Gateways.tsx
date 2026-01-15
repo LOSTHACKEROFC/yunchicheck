@@ -616,6 +616,9 @@ const Gateways = () => {
       return;
     }
 
+    // Store original lines for removal tracking
+    const originalLines = bulkInput.trim().split('\n').filter(line => line.trim());
+
     setBulkChecking(true);
     setBulkPaused(false);
     setBulkResults([]);
@@ -626,6 +629,7 @@ const Gateways = () => {
     bulkPauseRef.current = false;
 
     let currentCredits = userCredits;
+    let remainingLines = [...originalLines];
 
     for (let i = 0; i < cards.length; i++) {
       if (bulkAbortRef.current) {
@@ -719,6 +723,10 @@ const Gateways = () => {
 
         setBulkResults(prev => [...prev, bulkResult]);
         setBulkProgress(((i + 1) / cards.length) * 100);
+        
+        // Remove processed card from textarea
+        remainingLines.shift();
+        setBulkInput(remainingLines.join('\n'));
 
       } catch (error) {
         console.error('Bulk check error:', error);
@@ -730,6 +738,10 @@ const Gateways = () => {
           fullCard: `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`
         };
         setBulkResults(prev => [...prev, errorResult]);
+        
+        // Remove processed card even on error
+        remainingLines.shift();
+        setBulkInput(remainingLines.join('\n'));
       }
     }
 
