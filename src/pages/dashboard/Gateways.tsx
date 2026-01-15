@@ -492,13 +492,54 @@ const Gateways = () => {
       if (checkResult.status === "live") {
         // Play live card sound if enabled
         playLiveSoundIfEnabled();
-        // Trigger confetti celebration for live cards
+        
+        // Advanced blood-red celebration effect
+        const bloodRedColors = ['#dc2626', '#ef4444', '#b91c1c', '#991b1b', '#7f1d1d', '#fca5a5'];
+        
+        // Initial burst from center
         confetti({
-          particleCount: 100,
-          spread: 70,
+          particleCount: 120,
+          spread: 100,
           origin: { y: 0.6 },
-          colors: ['#22c55e', '#4ade80', '#86efac', '#ffffff']
+          colors: bloodRedColors,
+          gravity: 0.8,
+          scalar: 1.2,
+          drift: 0
         });
+        
+        // Delayed side bursts for dramatic effect
+        setTimeout(() => {
+          confetti({
+            particleCount: 50,
+            angle: 60,
+            spread: 55,
+            origin: { x: 0, y: 0.7 },
+            colors: bloodRedColors,
+            gravity: 1
+          });
+          confetti({
+            particleCount: 50,
+            angle: 120,
+            spread: 55,
+            origin: { x: 1, y: 0.7 },
+            colors: bloodRedColors,
+            gravity: 1
+          });
+        }, 150);
+        
+        // Final shower effect
+        setTimeout(() => {
+          confetti({
+            particleCount: 80,
+            spread: 180,
+            origin: { y: 0 },
+            colors: bloodRedColors,
+            gravity: 1.5,
+            startVelocity: 25,
+            ticks: 100
+          });
+        }, 300);
+        
         toast.success("Card is LIVE!", { description: checkResult.message });
       } else if (checkResult.status === "dead") {
         toast.error("Card is DEAD", { description: checkResult.message });
@@ -671,26 +712,56 @@ const Gateways = () => {
     setTimeout(() => {
       setBulkResults(prev => {
         const finalLiveCount = prev.filter(r => r.status === 'live').length;
+        const bloodRedColors = ['#dc2626', '#ef4444', '#b91c1c', '#991b1b', '#7f1d1d', '#fca5a5'];
+        
         if (finalLiveCount >= 3) {
-          // Big celebration for 3+ live cards
-          const duration = 2000;
+          // Epic blood rain celebration for 3+ live cards
+          const duration = 3000;
           const end = Date.now() + duration;
           
+          // Initial explosion
+          confetti({
+            particleCount: 150,
+            spread: 180,
+            origin: { y: 0.5 },
+            colors: bloodRedColors,
+            gravity: 0.6,
+            scalar: 1.3
+          });
+          
           const frame = () => {
+            // Side cannons with varying intensity
             confetti({
-              particleCount: 3,
+              particleCount: 5,
               angle: 60,
-              spread: 55,
-              origin: { x: 0 },
-              colors: ['#22c55e', '#4ade80', '#86efac', '#ffffff']
+              spread: 45,
+              origin: { x: 0, y: Math.random() * 0.4 + 0.3 },
+              colors: bloodRedColors,
+              gravity: 1.2,
+              scalar: 1.1
             });
             confetti({
-              particleCount: 3,
+              particleCount: 5,
               angle: 120,
-              spread: 55,
-              origin: { x: 1 },
-              colors: ['#22c55e', '#4ade80', '#86efac', '#ffffff']
+              spread: 45,
+              origin: { x: 1, y: Math.random() * 0.4 + 0.3 },
+              colors: bloodRedColors,
+              gravity: 1.2,
+              scalar: 1.1
             });
+            
+            // Random top drops for blood rain effect
+            if (Math.random() > 0.5) {
+              confetti({
+                particleCount: 3,
+                spread: 30,
+                origin: { x: Math.random(), y: 0 },
+                colors: bloodRedColors,
+                gravity: 2,
+                startVelocity: 15,
+                ticks: 60
+              });
+            }
             
             if (Date.now() < end) {
               requestAnimationFrame(frame);
@@ -698,13 +769,33 @@ const Gateways = () => {
           };
           frame();
         } else if (finalLiveCount >= 1) {
-          // Small celebration for 1-2 live cards
+          // Dramatic burst for 1-2 live cards
           confetti({
-            particleCount: 80,
-            spread: 60,
+            particleCount: 100,
+            spread: 90,
             origin: { y: 0.6 },
-            colors: ['#22c55e', '#4ade80', '#86efac', '#ffffff']
+            colors: bloodRedColors,
+            gravity: 0.9,
+            scalar: 1.2
           });
+          
+          // Side accents
+          setTimeout(() => {
+            confetti({
+              particleCount: 40,
+              angle: 60,
+              spread: 40,
+              origin: { x: 0, y: 0.6 },
+              colors: bloodRedColors
+            });
+            confetti({
+              particleCount: 40,
+              angle: 120,
+              spread: 40,
+              origin: { x: 1, y: 0.6 },
+              colors: bloodRedColors
+            });
+          }, 100);
         }
         return prev;
       });
@@ -969,12 +1060,12 @@ const Gateways = () => {
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <History className="h-4 w-4 text-primary" />
               Recent Checks
-              {/* Live Indicator */}
+              {/* Live Indicator - Blood Red Theme */}
               <div className="relative flex items-center">
-                <div className={`h-2 w-2 rounded-full bg-green-500 ${liveIndicator ? 'animate-ping' : ''}`} />
-                <div className="absolute h-2 w-2 rounded-full bg-green-500" />
+                <div className={`h-2.5 w-2.5 rounded-full bg-red-600 shadow-[0_0_8px_rgba(220,38,38,0.8)] ${liveIndicator ? 'animate-ping' : ''}`} />
+                <div className="absolute h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.9)]" />
                 {liveIndicator && (
-                  <span className="ml-2 text-[10px] text-green-500 font-medium animate-fade-in">
+                  <span className="ml-2.5 text-[11px] text-red-500 font-bold tracking-wider animate-fade-in drop-shadow-[0_0_4px_rgba(239,68,68,0.8)]">
                     LIVE
                   </span>
                 )}
