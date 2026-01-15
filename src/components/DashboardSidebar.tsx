@@ -23,7 +23,8 @@ import {
   HeadphonesIcon,
   LogOut,
   Shield,
-  History
+  History,
+  ShoppingCart
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -31,6 +32,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 const menuItems = [
   { titleKey: "home" as const, url: "/dashboard", icon: Home },
   { titleKey: "profile" as const, url: "/dashboard/profile", icon: User },
+  { titleKey: "buyCredits" as const, url: "/dashboard/buy", icon: ShoppingCart },
   { titleKey: "topup" as const, url: "/dashboard/topup", icon: ArrowUpCircle },
   { titleKey: "balanceAndHistory" as const, url: "/dashboard/balance", icon: Wallet },
   { titleKey: "creditUsage" as const, url: "/dashboard/usage", icon: History },

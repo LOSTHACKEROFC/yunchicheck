@@ -34,7 +34,7 @@ const Pricing = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const getCtaLink = () => isLoggedIn ? "/dashboard/topup" : "/auth";
+  const getCtaLink = () => isLoggedIn ? "/dashboard/buy" : "/auth";
 
   const plans = [
     {
