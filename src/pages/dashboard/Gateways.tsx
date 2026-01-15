@@ -1262,7 +1262,29 @@ const Gateways = () => {
               </div>
 
               {bulkChecking && (
-                <div className="space-y-2">
+                <div className="space-y-3">
+                  {/* Live Counter */}
+                  <div className="flex items-center justify-center gap-4 py-3 bg-gradient-to-r from-green-500/10 via-green-500/20 to-green-500/10 rounded-lg border border-green-500/30">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="h-5 w-5 text-green-500 animate-pulse" />
+                      <span className="text-sm text-muted-foreground">Live Cards:</span>
+                      <span 
+                        key={bulkResults.filter(r => r.status === 'live').length}
+                        className="text-2xl font-bold text-green-500 animate-scale-in tabular-nums"
+                      >
+                        {bulkResults.filter(r => r.status === 'live').length}
+                      </span>
+                    </div>
+                    <div className="h-8 w-px bg-border" />
+                    <div className="flex items-center gap-2">
+                      <ShieldX className="h-5 w-5 text-red-500" />
+                      <span className="text-sm text-muted-foreground">Dead:</span>
+                      <span className="text-lg font-semibold text-red-500 tabular-nums">
+                        {bulkResults.filter(r => r.status === 'dead').length}
+                      </span>
+                    </div>
+                  </div>
+                  
                   <div className="flex items-center justify-between text-xs">
                     <span>Progress: {bulkCurrentIndex}/{bulkTotal}</span>
                     <span>{Math.round(bulkProgress)}%</span>
