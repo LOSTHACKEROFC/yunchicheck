@@ -214,6 +214,8 @@ const Gateways = () => {
   const [bulkProgress, setBulkProgress] = useState(0);
   const [bulkTotal, setBulkTotal] = useState(0);
   const [bulkCurrentIndex, setBulkCurrentIndex] = useState(0);
+  const [bulkStartTime, setBulkStartTime] = useState<number | null>(null);
+  const [bulkEstimatedTime, setBulkEstimatedTime] = useState<string>("");
   const bulkAbortRef = useRef(false);
   const bulkPauseRef = useRef(false);
 
@@ -625,11 +627,14 @@ const Gateways = () => {
     setBulkProgress(0);
     setBulkTotal(cards.length);
     setBulkCurrentIndex(0);
+    setBulkStartTime(Date.now());
+    setBulkEstimatedTime("Calculating...");
     bulkAbortRef.current = false;
     bulkPauseRef.current = false;
 
     let currentCredits = userCredits;
     let remainingLines = [...originalLines];
+    const startTime = Date.now();
 
     for (let i = 0; i < cards.length; i++) {
       if (bulkAbortRef.current) {
@@ -723,6 +728,25 @@ const Gateways = () => {
 
         setBulkResults(prev => [...prev, bulkResult]);
         setBulkProgress(((i + 1) / cards.length) * 100);
+        
+        // Calculate estimated time remaining
+        const elapsed = Date.now() - startTime;
+        const avgTimePerCard = elapsed / (i + 1);
+        const remainingCards = cards.length - (i + 1);
+        const remainingMs = avgTimePerCard * remainingCards;
+        
+        if (remainingCards > 0) {
+          const remainingSecs = Math.ceil(remainingMs / 1000);
+          if (remainingSecs >= 60) {
+            const mins = Math.floor(remainingSecs / 60);
+            const secs = remainingSecs % 60;
+            setBulkEstimatedTime(`~${mins}m ${secs}s remaining`);
+          } else {
+            setBulkEstimatedTime(`~${remainingSecs}s remaining`);
+          }
+        } else {
+          setBulkEstimatedTime("Finishing...");
+        }
         
         // Remove processed card from textarea
         remainingLines.shift();
@@ -1462,7 +1486,13 @@ const Gateways = () => {
                   
                   <div className="flex items-center justify-between text-xs">
                     <span>Progress: {bulkCurrentIndex}/{bulkTotal}</span>
-                    <span>{Math.round(bulkProgress)}%</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-primary font-medium flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {bulkEstimatedTime}
+                      </span>
+                      <span>{Math.round(bulkProgress)}%</span>
+                    </div>
                   </div>
                   <Progress value={bulkProgress} className="h-2" />
                 </div>
