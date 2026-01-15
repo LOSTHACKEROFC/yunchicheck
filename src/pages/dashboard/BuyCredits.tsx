@@ -112,18 +112,19 @@ const BuyCredits = () => {
   const [uploadingProof, setUploadingProof] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Pre-select package from URL parameter
+  // Pre-select package from URL parameter and auto-advance to payment
   useEffect(() => {
     const packageParam = searchParams.get('package');
-    if (packageParam && !selectedPackage) {
+    if (packageParam && !selectedPackage && step === "select") {
       const foundPackage = creditPackages.find(
         pkg => pkg.name.toLowerCase() === packageParam.toLowerCase()
       );
       if (foundPackage) {
         setSelectedPackage(foundPackage);
+        setStep("payment");
       }
     }
-  }, [searchParams, selectedPackage]);
+  }, [searchParams, selectedPackage, step]);
 
   // Real-time subscription for transaction updates
   useEffect(() => {
