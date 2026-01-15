@@ -4,10 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  Zap, 
+  Medal, 
   Crown, 
-  Rocket, 
-  Layers,
+  Gem, 
+  Star,
   Bitcoin, 
   Banknote, 
   Wallet,
@@ -32,7 +32,7 @@ interface CreditPackage {
   price: number;
   pricePerCredit: string;
   description: string;
-  icon: typeof Zap;
+  icon: typeof Medal;
   popular: boolean;
   savings?: string;
   features: string[];
@@ -40,69 +40,47 @@ interface CreditPackage {
 
 const creditPackages: CreditPackage[] = [
   {
-    name: "Starter",
-    credits: 350,
-    price: 25,
-    pricePerCredit: "$0.071",
-    description: "Perfect for beginners",
-    icon: Zap,
-    popular: false,
-    features: ["350 Card Checks", "All Gateways", "Basic Support"],
-  },
-  {
-    name: "Basic",
+    name: "Silver",
     credits: 1500,
     price: 100,
     pricePerCredit: "$0.067",
-    description: "Great value pack",
-    icon: Crown,
+    description: "Great starter pack",
+    icon: Medal,
     popular: false,
-    savings: "6%",
-    features: ["1,500 Card Checks", "All Gateways", "Priority Support"],
+    features: ["1,500 Card Checks", "All Gateways", "Basic Support"],
   },
   {
-    name: "Professional",
+    name: "Gold",
     credits: 9000,
     price: 500,
     pricePerCredit: "$0.056",
     description: "Most popular choice",
-    icon: Rocket,
+    icon: Crown,
     popular: true,
     savings: "22%",
-    features: ["9,000 Card Checks", "All Gateways", "VIP Support", "Priority Queue"],
+    features: ["9,000 Card Checks", "All Gateways", "Priority Support", "Priority Queue"],
   },
   {
-    name: "Business",
+    name: "Diamond",
     credits: 45000,
     price: 2000,
     pricePerCredit: "$0.044",
     description: "For power users",
-    icon: Layers,
+    icon: Gem,
     popular: false,
     savings: "38%",
     features: ["45,000 Card Checks", "All Gateways", "VIP Support", "Priority Queue"],
   },
   {
-    name: "Enterprise",
+    name: "Elite",
     credits: 145000,
     price: 5000,
     pricePerCredit: "$0.034",
-    description: "High-volume solution",
-    icon: Layers,
+    description: "Ultimate high-volume",
+    icon: Star,
     popular: false,
     savings: "52%",
     features: ["145,000 Card Checks", "All Gateways", "Dedicated Support", "Priority Queue"],
-  },
-  {
-    name: "Ultimate",
-    credits: 710000,
-    price: 15000,
-    pricePerCredit: "$0.021",
-    description: "Maximum value",
-    icon: Layers,
-    popular: false,
-    savings: "70%",
-    features: ["710,000 Card Checks", "All Gateways", "Dedicated Support", "Priority Queue"],
   },
 ];
 
