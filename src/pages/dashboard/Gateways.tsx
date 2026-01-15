@@ -680,9 +680,41 @@ const Gateways = () => {
           fullCard: `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`
         };
 
-        // Play sound for each live card in bulk check if enabled
+        // Play sound and celebrate for each live card in bulk check
         if (checkStatus === "live") {
           playLiveSoundIfEnabled();
+          
+          // Individual blood-red celebration per live card
+          const bloodRedColors = ['#dc2626', '#ef4444', '#b91c1c', '#991b1b', '#7f1d1d', '#fca5a5'];
+          
+          // Burst from random position for variety
+          const xPos = 0.3 + Math.random() * 0.4;
+          confetti({
+            particleCount: 60,
+            spread: 70,
+            origin: { x: xPos, y: 0.6 },
+            colors: bloodRedColors,
+            gravity: 1,
+            scalar: 1.1
+          });
+          
+          // Small side accents
+          confetti({
+            particleCount: 25,
+            angle: 60,
+            spread: 40,
+            origin: { x: 0, y: 0.7 },
+            colors: bloodRedColors,
+            gravity: 1.2
+          });
+          confetti({
+            particleCount: 25,
+            angle: 120,
+            spread: 40,
+            origin: { x: 1, y: 0.7 },
+            colors: bloodRedColors,
+            gravity: 1.2
+          });
         }
 
         setBulkResults(prev => [...prev, bulkResult]);
