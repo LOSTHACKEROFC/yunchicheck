@@ -708,9 +708,10 @@ const Gateways = () => {
         };
       }
       
-      // Pattern 1b: Pipe-delimited without CVV (CardNumber|MM|YY) - for auth gateways
+      // Pattern 1b: Pipe-delimited without CVV (CardNumber|MM|YY or CardNumber|MM|YY|) - for auth gateways
       if (!cardData && isAuthGateway) {
-        const pipeNoCvvMatch = trimmedLine.match(/^(\d{13,16})\|(\d{1,2})\|(\d{2,4})(?:\||$|\s*$)/);
+        // Match cards with trailing pipe or no CVV: 5134148665605189|01|2026| or 5134148665605189|01|2026
+        const pipeNoCvvMatch = trimmedLine.match(/^(\d{13,16})\|(\d{1,2})\|(\d{2,4})\|?\s*$/);
         if (pipeNoCvvMatch) {
           const [, card, month, year] = pipeNoCvvMatch;
           cardData = {
