@@ -57,15 +57,21 @@ export const useSessionTracker = () => {
           },
         });
         
-        // If user not found (deleted), sign out to clear stale session
-        if (error?.message?.includes("401") || data?.code === "USER_NOT_FOUND") {
+        // If user not found (deleted) or auth error, sign out to clear stale session
+        const isAuthError = error?.message?.includes("401") || 
+                           error?.message?.includes("Invalid token") ||
+                           error?.message?.includes("USER_NOT_FOUND") ||
+                           data?.code === "USER_NOT_FOUND" ||
+                           data?.error === "Invalid token";
+        
+        if (isAuthError) {
           console.log("Session invalid, clearing stale auth...");
           await supabase.auth.signOut();
           return;
         }
         
-        // Log only truly unexpected errors
-        if (error && !error.message?.includes("401") && !error.message?.includes("Invalid token")) {
+        // Log only truly unexpected errors (not auth-related)
+        if (error) {
           console.warn("Session tracking error:", error.message);
         }
       } catch {
