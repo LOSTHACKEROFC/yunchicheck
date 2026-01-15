@@ -1340,14 +1340,14 @@ const Gateways = () => {
             </p>
           ) : (
             <ScrollArea className="h-[200px] sm:h-[300px]">
-              <div className="space-y-2">
+              <div className="space-y-1">
                 {gatewayHistory.map((check) => (
                   <div 
                     key={check.id}
-                    className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 border border-border/50"
+                    className={`flex items-center justify-between px-2 py-1.5 rounded-md bg-secondary/30 border border-border/50`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className={`p-1.5 rounded-md ${
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <div className={`p-1 rounded ${
                         check.result === 'live' 
                           ? 'bg-green-500/20' 
                           : check.result === 'dead' 
@@ -1355,39 +1355,37 @@ const Gateways = () => {
                             : 'bg-yellow-500/20'
                       }`}>
                         {check.result === 'live' ? (
-                          <ShieldCheck className="h-3 w-3 text-green-500" />
+                          <ShieldCheck className="h-2.5 w-2.5 text-green-500" />
                         ) : check.result === 'dead' ? (
-                          <ShieldX className="h-3 w-3 text-red-500" />
+                          <ShieldX className="h-2.5 w-2.5 text-red-500" />
                         ) : (
-                          <AlertTriangle className="h-3 w-3 text-yellow-500" />
+                          <AlertTriangle className="h-2.5 w-2.5 text-yellow-500" />
                         )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-mono text-foreground truncate">
-                          {check.fullCard ? check.fullCard.split('|').join(' | ') : '•••• •••• •••• •••• | •• | •• | •••'}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {format(new Date(check.created_at), 'MMM d, HH:mm:ss')}
-                        </p>
-                      </div>
+                      <p className="text-[10px] font-mono text-foreground truncate flex-1">
+                        {check.fullCard ? check.fullCard.split('|').join(' | ') : '•••• •••• •••• ••••'}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[9px] text-muted-foreground hidden sm:inline">
+                        {format(new Date(check.created_at), 'HH:mm')}
+                      </span>
                       {check.fullCard && (
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6 hover:bg-primary/20"
+                          className="h-5 w-5 hover:bg-primary/20"
                           onClick={() => {
                             navigator.clipboard.writeText(check.fullCard!);
                             toast.success("Card copied to clipboard");
                           }}
                         >
-                          <Copy className="h-3 w-3 text-muted-foreground" />
+                          <Copy className="h-2.5 w-2.5 text-muted-foreground" />
                         </Button>
                       )}
                       <Badge 
                         variant="outline" 
-                        className={`text-[10px] uppercase font-semibold ${
+                        className={`text-[8px] px-1 py-0 uppercase font-semibold ${
                           check.result === 'live' 
                             ? 'border-green-500/30 text-green-500 bg-green-500/10' 
                             : check.result === 'dead'
@@ -1395,7 +1393,7 @@ const Gateways = () => {
                               : 'border-yellow-500/30 text-yellow-500 bg-yellow-500/10'
                         }`}
                       >
-                        {check.result || 'Unknown'}
+                        {check.result || '?'}
                       </Badge>
                     </div>
                   </div>
