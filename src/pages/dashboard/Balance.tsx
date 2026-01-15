@@ -44,6 +44,20 @@ interface Transaction {
 
 const ITEMS_PER_PAGE = 50;
 
+// Gateway display name mapping
+const GATEWAY_DISPLAY_NAMES: Record<string, string> = {
+  "stripe_auth": "Yunchi Auth",
+  "stripe_preauth": "Yunchi Pre Auth",
+  "braintree_auth": "Yunchi Auth 2",
+  "clover_charge": "Yunchi Clover",
+  "square_charge": "Yunchi Square",
+  "shopify_charge": "Yunchi Shopify",
+};
+
+const getGatewayDisplayName = (gateway: string): string => {
+  return GATEWAY_DISPLAY_NAMES[gateway] || gateway;
+};
+
 const Balance = () => {
   const [credits, setCredits] = useState<number>(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -398,7 +412,7 @@ const Balance = () => {
                       </div>
                       <div className="min-w-0">
                         <p className="font-medium text-xs sm:text-sm truncate">
-                          {tx.type === "topup" ? `Credit Purchase via ${tx.method}` : `Check - ${tx.gateway}`}
+                          {tx.type === "topup" ? `Credit Purchase via ${tx.method}` : `Check - ${getGatewayDisplayName(tx.gateway || '')}`}
                         </p>
                         <p className="text-[10px] sm:text-sm text-muted-foreground">{formatDate(tx.date)}</p>
                       </div>
