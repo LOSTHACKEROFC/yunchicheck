@@ -47,7 +47,7 @@ const adminItems = [
 const DashboardSidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { state } = useSidebar();
+  const { state, setOpen, isMobile } = useSidebar();
   const { t } = useLanguage();
   const collapsed = state === "collapsed";
   const [isAdmin, setIsAdmin] = useState(false);
@@ -78,6 +78,11 @@ const DashboardSidebar = () => {
       toast.success("Signed out successfully");
       navigate("/auth");
     }
+  };
+
+  const handleMenuClick = () => {
+    // Auto-collapse sidebar when a menu item is clicked
+    setOpen(false);
   };
 
   const isActive = (path: string) => {
@@ -115,6 +120,7 @@ const DashboardSidebar = () => {
                     <NavLink
                       to={item.url}
                       end={item.url === "/dashboard"}
+                      onClick={handleMenuClick}
                       className="flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-secondary"
                       activeClassName="bg-primary/20 text-primary border-l-2 border-primary"
                     >
@@ -146,6 +152,7 @@ const DashboardSidebar = () => {
                     >
                       <NavLink
                         to={item.url}
+                        onClick={handleMenuClick}
                         className="flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-secondary"
                         activeClassName="bg-primary/20 text-primary border-l-2 border-primary"
                       >
