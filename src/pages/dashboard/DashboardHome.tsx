@@ -13,11 +13,14 @@ const quickLinks = [
 const DashboardHome = () => {
   const [profile, setProfile] = useState<{ username: string | null; credits: number } | null>(null);
   const [stats, setStats] = useState<{ total_users: number; total_checks: number }>({ total_users: 0, total_checks: 0 });
+  const [todayChecks, setTodayChecks] = useState(0);
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchProfile = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        setUserId(user.id);
         const { data } = await supabase
           .from("profiles")
           .select("username, credits")
@@ -28,6 +31,48 @@ const DashboardHome = () => {
     };
     fetchProfile();
   }, []);
+
+  // Fetch today's checks count and subscribe to real-time updates
+  useEffect(() => {
+    if (!userId) return;
+
+    const fetchTodayChecks = async () => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const { count } = await supabase
+        .from("card_checks")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .gte("created_at", today.toISOString());
+      
+      setTodayChecks(count || 0);
+    };
+    
+    fetchTodayChecks();
+
+    // Subscribe to real-time updates for card_checks
+    const channel = supabase
+      .channel('today-checks-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'card_checks',
+          filter: `user_id=eq.${userId}`
+        },
+        () => {
+          // Increment count on new check
+          setTodayChecks(prev => prev + 1);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId]);
 
   // Fetch initial stats and subscribe to real-time updates
   useEffect(() => {
@@ -137,16 +182,22 @@ const DashboardHome = () => {
           </CardContent>
         </Card>
 
-        <Card className="bg-card border-border">
+        <Card className="bg-gradient-to-br from-blue-500/20 to-blue-500/5 border-blue-500/30">
           <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+              </span>
               <span className="hidden xs:inline">Your Checks Today</span>
               <span className="xs:hidden">Today</span>
+              <span className="hidden sm:inline">(Live)</span>
             </CardTitle>
-            <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
+            <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500" />
           </CardHeader>
           <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
-            <div className="text-xl sm:text-2xl font-bold text-foreground">0</div>
+            <div className="text-xl sm:text-2xl font-bold text-blue-500">{todayChecks.toLocaleString()}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Cards checked today</p>
           </CardContent>
         </Card>
 
