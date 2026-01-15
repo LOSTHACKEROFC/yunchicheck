@@ -1581,6 +1581,8 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
   }
 
   const { count: checks } = await supabase.from("card_checks").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id);
+  const { count: liveCards } = await supabase.from("card_checks").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id).eq("result", "live");
+  const { count: deadCards } = await supabase.from("card_checks").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id).eq("result", "dead");
   const { count: topups } = await supabase.from("topup_transactions").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id);
   const { count: tickets } = await supabase.from("support_tickets").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id);
 
@@ -1592,6 +1594,7 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
   }
 
   const joined = new Date(profile.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  const successRate = (checks || 0) > 0 ? (((liveCards || 0) / (checks || 1)) * 100).toFixed(1) : "0.0";
 
   const userInfoMessage = `
 🔍 <b>User Info</b>
@@ -1611,9 +1614,12 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
 • Joined: ${joined}
 
 <b>Activity</b>
-• Checks: ${checks || 0}
-• Topups: ${topups || 0}
-• Tickets: ${tickets || 0}
+• Total Checks: ${checks || 0}
+• ✅ Live Cards: ${liveCards || 0}
+• ❌ Dead Cards: ${deadCards || 0}
+• 📈 Success Rate: ${successRate}%
+• 💰 Topups: ${topups || 0}
+• 🎫 Tickets: ${tickets || 0}
 
 <b>User ID</b>
 <code>${profile.user_id}</code>
@@ -2094,7 +2100,7 @@ Examples:
       if (callbackData === "user_mystatus") {
         const { data: profile } = await supabase
           .from("profiles")
-          .select("username, name, credits, is_banned, ban_reason, banned_until, telegram_username, created_at")
+          .select("user_id, username, name, credits, is_banned, ban_reason, banned_until, telegram_username, created_at")
           .eq("telegram_chat_id", callbackChatId)
           .maybeSingle();
 
@@ -2102,6 +2108,12 @@ Examples:
           await answerCallbackQuery(update.callback_query.id, "❌ Account not connected");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
+
+        // Fetch card check stats
+        const { count: totalChecks } = await supabase.from("card_checks").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id);
+        const { count: liveCards } = await supabase.from("card_checks").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id).eq("result", "live");
+        const { count: deadCards } = await supabase.from("card_checks").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id).eq("result", "dead");
+        const successRate = (totalChecks || 0) > 0 ? (((liveCards || 0) / (totalChecks || 1)) * 100).toFixed(1) : "0.0";
 
         let status = "✅ Active";
         if (profile.is_banned) {
@@ -2130,6 +2142,14 @@ Examples:
 │ Status: ${status}
 │ Member since: ${joined}
 ${profile.is_banned && profile.ban_reason ? `│ Reason: ${profile.ban_reason}` : ""}
+└─────────────────────
+
+<b>📊 Card Stats</b>
+┌─────────────────────
+│ Total Checks: ${totalChecks || 0}
+│ ✅ Live Cards: ${liveCards || 0}
+│ ❌ Dead Cards: ${deadCards || 0}
+│ 📈 Success Rate: ${successRate}%
 └─────────────────────
 
 ━━━━━━━━━━━━━━━━━━━━━━
@@ -2971,7 +2991,7 @@ Use /admincmd for staff panel
     if (text === "/mystatus") {
       const { data: profile } = await supabase
         .from("profiles")
-        .select("username, name, credits, is_banned, ban_reason, banned_until, telegram_username, created_at")
+        .select("user_id, username, name, credits, is_banned, ban_reason, banned_until, telegram_username, created_at")
         .eq("telegram_chat_id", chatId)
         .maybeSingle();
 
@@ -2987,6 +3007,12 @@ Your Telegram is not linked.
 3. Paste Chat ID
 `, undefined, messageId);
       } else {
+        // Fetch card check stats
+        const { count: totalChecks } = await supabase.from("card_checks").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id);
+        const { count: liveCards } = await supabase.from("card_checks").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id).eq("result", "live");
+        const { count: deadCards } = await supabase.from("card_checks").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id).eq("result", "dead");
+        const successRate = (totalChecks || 0) > 0 ? (((liveCards || 0) / (totalChecks || 1)) * 100).toFixed(1) : "0.0";
+
         let status = "✅ Active";
         if (profile.is_banned) {
           status = profile.banned_until 
@@ -3008,6 +3034,12 @@ Your Telegram is not linked.
 • Status: ${status}
 • Joined: ${joined}
 ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` : ""}
+
+<b>Card Stats</b>
+• Total Checks: ${totalChecks || 0}
+• ✅ Live Cards: ${liveCards || 0}
+• ❌ Dead Cards: ${deadCards || 0}
+• 📈 Success Rate: ${successRate}%
 `, undefined, messageId);
       }
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
