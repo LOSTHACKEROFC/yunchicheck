@@ -5,12 +5,10 @@ import { Label } from "@/components/ui/label";
 import { Calculator, TrendingDown, Package, Check } from "lucide-react";
 
 const packages = [
-  { name: "Starter", credits: 350, price: 25, pricePerCredit: 0.071 },
-  { name: "Basic", credits: 1500, price: 100, pricePerCredit: 0.067 },
-  { name: "Professional", credits: 9000, price: 500, pricePerCredit: 0.056 },
-  { name: "Business", credits: 45000, price: 2000, pricePerCredit: 0.044 },
-  { name: "Enterprise", credits: 145000, price: 5000, pricePerCredit: 0.034 },
-  { name: "Ultimate", credits: 710000, price: 15000, pricePerCredit: 0.021 },
+  { name: "Silver", credits: 1500, price: 100, pricePerCredit: 0.067 },
+  { name: "Gold", credits: 9000, price: 500, pricePerCredit: 0.056 },
+  { name: "Diamond", credits: 45000, price: 2000, pricePerCredit: 0.044 },
+  { name: "Elite", credits: 145000, price: 5000, pricePerCredit: 0.034 },
 ];
 
 const VolumeDiscountCalculator = () => {
