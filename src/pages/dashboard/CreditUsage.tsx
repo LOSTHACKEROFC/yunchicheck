@@ -42,6 +42,20 @@ interface GatewayStats {
 
 const CREDIT_COST_PER_CHECK = 1;
 
+// Gateway display name mapping
+const GATEWAY_DISPLAY_NAMES: Record<string, string> = {
+  "YUNCHI AUTH": "Yunchi Auth",
+  "YUNCHI PRE AUTH": "Yunchi Pre Auth",
+  "YUNCHI AUTH 2": "Yunchi Auth 2",
+  "CLOVER CHARGE": "Clover Charge",
+  "SQUARE CHARGE": "Square Charge",
+  "SHOPIFY CHARGE": "Shopify Charge",
+};
+
+const getGatewayDisplayName = (gateway: string): string => {
+  return GATEWAY_DISPLAY_NAMES[gateway] || gateway;
+};
+
 const CreditUsage = () => {
   const [checks, setChecks] = useState<CardCheck[]>([]);
   const [loading, setLoading] = useState(true);
@@ -277,7 +291,7 @@ const CreditUsage = () => {
                       <CreditCard className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <p className="font-medium text-sm">{stat.gateway}</p>
+                      <p className="font-medium text-sm">{getGatewayDisplayName(stat.gateway)}</p>
                       <p className="text-xs text-muted-foreground">{stat.count} checks</p>
                     </div>
                   </div>
@@ -318,7 +332,7 @@ const CreditUsage = () => {
             <SelectContent>
               <SelectItem value="all">All gateways</SelectItem>
               {uniqueGateways.map(gateway => (
-                <SelectItem key={gateway} value={gateway}>{gateway}</SelectItem>
+                <SelectItem key={gateway} value={gateway}>{getGatewayDisplayName(gateway)}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -361,7 +375,7 @@ const CreditUsage = () => {
                     </div>
                     <div className="min-w-0">
                       <p className="font-medium text-xs sm:text-sm truncate">
-                        {check.gateway}
+                        {getGatewayDisplayName(check.gateway)}
                       </p>
                       <p className="text-[10px] sm:text-sm text-muted-foreground">{formatDate(check.created_at)}</p>
                     </div>
