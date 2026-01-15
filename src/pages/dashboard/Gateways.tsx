@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,8 @@ import {
   Square,
   Building2,
   Globe,
-  Wallet
+  ArrowLeft,
+  ChevronRight
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -617,466 +618,509 @@ const Gateways = () => {
   const deadCount = bulkResults.filter(r => r.status === "dead").length;
   const unknownCount = bulkResults.filter(r => r.status === "unknown").length;
 
+  // If no gateway selected, show gateway list
+  if (!selectedGateway) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground">GATEWAYS</h1>
+            <p className="text-muted-foreground mt-1 text-sm sm:text-base">Select a gateway to start checking cards</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge variant="outline" className="border-primary/50 text-primary py-1 px-3">
+              <Coins className="h-3 w-3 mr-1" />
+              {userCredits} Credits
+            </Badge>
+            <Badge variant="outline" className="border-green-500/50 text-green-500 py-1 px-3">
+              <Activity className="h-3 w-3 mr-1" />
+              {onlineCount}/{gateways.length} Online
+            </Badge>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {gateways.map((gateway) => (
+            <Card 
+              key={gateway.id} 
+              onClick={() => gateway.status === "online" && setSelectedGateway(gateway)}
+              className={`bg-card border-border transition-all cursor-pointer ${
+                gateway.status !== "online" ? "opacity-50 cursor-not-allowed" : "hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5"
+              }`}
+            >
+              <CardHeader className="pb-2 p-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base font-bold flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-primary" />
+                    {gateway.name}
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    {gateway.status === "online" ? (
+                      <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-[10px]">
+                        ONLINE
+                      </Badge>
+                    ) : gateway.status === "maintenance" ? (
+                      <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30 text-[10px]">
+                        MAINTENANCE
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-red-500/20 text-red-500 border-red-500/30 text-[10px]">
+                        OFFLINE
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-4 pt-0 space-y-3">
+                <div className="flex flex-wrap gap-1.5">
+                  <Badge className={`text-[10px] ${getTypeBadgeClass(gateway.type)}`}>
+                    {getTypeLabel(gateway.type)}
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px]">
+                    {gateway.cardTypes}
+                  </Badge>
+                </div>
+                
+                <p className="text-xs text-muted-foreground">{gateway.description}</p>
+
+                <div className="flex items-center justify-between text-xs pt-2 border-t border-border/50">
+                  <div className="flex items-center gap-1">
+                    <Zap className="h-3 w-3 text-primary" />
+                    <span>{gateway.speed}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <CheckCircle className="h-3 w-3 text-green-500" />
+                    <span className="text-green-500">{gateway.successRate}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Coins className="h-3 w-3 text-primary" />
+                    <span>{CREDIT_COST} Credit</span>
+                  </div>
+                </div>
+
+                {gateway.status === "online" && (
+                  <Button className="w-full mt-2" size="sm">
+                    <span>Open Gateway</span>
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Gateway selected - show card checking interface
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground">Gateways</h1>
-          <p className="text-muted-foreground mt-1 text-sm sm:text-base">Select a gateway and check your cards</p>
+        <div className="flex items-center gap-3">
+          <Button 
+            variant="ghost" 
+            size="icon"
+            onClick={() => {
+              setSelectedGateway(null);
+              clearForm();
+              clearBulk();
+            }}
+            className="shrink-0"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground">{selectedGateway.name}</h1>
+            <p className="text-muted-foreground mt-1 text-sm sm:text-base">{selectedGateway.description}</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <Badge variant="outline" className="border-primary/50 text-primary py-1 px-3">
             <Coins className="h-3 w-3 mr-1" />
             {userCredits} Credits
           </Badge>
-          <Badge variant="outline" className="border-green-500/50 text-green-500 py-1 px-3">
-            <Activity className="h-3 w-3 mr-1" />
-            {onlineCount}/{gateways.length} Online
+          <Badge className={`${getTypeBadgeClass(selectedGateway.type)} py-1 px-3`}>
+            {getTypeLabel(selectedGateway.type)}
           </Badge>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Gateway Selection */}
-        <div className="lg:col-span-2 space-y-4">
-          <h2 className="text-lg font-semibold">Select Gateway</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-            {gateways.map((gateway) => (
-              <Card 
-                key={gateway.id} 
-                onClick={() => gateway.status === "online" && setSelectedGateway(gateway)}
-                className={`bg-card border-border transition-all cursor-pointer ${
-                  gateway.status !== "online" ? "opacity-50 cursor-not-allowed" : "hover:border-primary/50"
-                } ${selectedGateway?.id === gateway.id ? "border-primary ring-2 ring-primary/20" : ""}`}
-              >
-                <CardHeader className="pb-2 p-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base font-bold flex items-center gap-2">
-                      <CreditCard className="h-4 w-4 text-primary" />
-                      {gateway.name}
-                    </CardTitle>
-                    <div className="flex items-center gap-1">
-                      {gateway.status === "online" ? (
-                        <CheckCircle className="h-3 w-3 text-green-500" />
-                      ) : gateway.status === "maintenance" ? (
-                        <Clock className="h-3 w-3 text-yellow-500" />
-                      ) : (
-                        <XCircle className="h-3 w-3 text-destructive" />
-                      )}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-4 pt-0 space-y-3">
-                  <div className="flex flex-wrap gap-1.5">
-                    <Badge className={`text-[10px] ${getTypeBadgeClass(gateway.type)}`}>
-                      {getTypeLabel(gateway.type)}
-                    </Badge>
-                    <Badge variant="outline" className="text-[10px]">
-                      {gateway.cardTypes}
-                    </Badge>
-                  </div>
-                  
-                  <p className="text-xs text-muted-foreground">{gateway.description}</p>
-
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1">
-                      <Zap className="h-3 w-3 text-primary" />
-                      <span>{gateway.speed}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <CheckCircle className="h-3 w-3 text-green-500" />
-                      <span className="text-green-500">{gateway.successRate}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Coins className="h-3 w-3 text-primary" />
-                      <span>{CREDIT_COST} Credit</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+      {/* Gateway Info Card */}
+      <Card className="bg-card border-border">
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-primary" />
+              <span className="text-muted-foreground">Supported:</span>
+              <span className="font-medium">{selectedGateway.cardTypes}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-primary" />
+              <span className="text-muted-foreground">Speed:</span>
+              <span className="font-medium">{selectedGateway.speed}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-green-500" />
+              <span className="text-muted-foreground">Success Rate:</span>
+              <span className="font-medium text-green-500">{selectedGateway.successRate}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Coins className="h-4 w-4 text-primary" />
+              <span className="text-muted-foreground">Cost:</span>
+              <span className="font-medium">{CREDIT_COST} Credit/Check</span>
+            </div>
           </div>
-        </div>
+        </CardContent>
+      </Card>
 
-        {/* Card Check Form */}
-        <div className="space-y-4">
-          <Tabs defaultValue="single" className="w-full">
-            <TabsList className="w-full grid grid-cols-2">
-              <TabsTrigger value="single" className="text-xs sm:text-sm">
-                <CreditCard className="h-3 w-3 mr-1" />
-                Single
-              </TabsTrigger>
-              <TabsTrigger value="bulk" className="text-xs sm:text-sm">
-                <Layers className="h-3 w-3 mr-1" />
-                Bulk
-              </TabsTrigger>
-            </TabsList>
+      {/* Card Check Tabs */}
+      <Tabs defaultValue="single" className="w-full">
+        <TabsList className="w-full grid grid-cols-2 max-w-md">
+          <TabsTrigger value="single" className="text-xs sm:text-sm">
+            <CreditCard className="h-3 w-3 mr-1" />
+            Single Check
+          </TabsTrigger>
+          <TabsTrigger value="bulk" className="text-xs sm:text-sm">
+            <Layers className="h-3 w-3 mr-1" />
+            Bulk Check
+          </TabsTrigger>
+        </TabsList>
 
-            {/* Single Card Check */}
-            <TabsContent value="single" className="mt-4">
-              <Card className="bg-card border-border">
-                <CardContent className="p-4 space-y-4">
-                  {selectedGateway ? (
-                    <div className="flex items-center gap-2 p-3 bg-primary/10 rounded-lg border border-primary/30">
-                      <CreditCard className="h-4 w-4 text-primary" />
-                      <span className="text-sm font-medium">{selectedGateway.name}</span>
-                      <Badge className={`ml-auto text-[10px] ${getTypeBadgeClass(selectedGateway.type)}`}>
-                        {getTypeLabel(selectedGateway.type)}
-                      </Badge>
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-secondary rounded-lg text-center text-sm text-muted-foreground">
-                      Select a gateway to start checking
-                    </div>
-                  )}
+        {/* Single Card Check */}
+        <TabsContent value="single" className="mt-4">
+          <Card className="bg-card border-border max-w-2xl">
+            <CardContent className="p-4 sm:p-6 space-y-4">
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="cardNumber" className="text-xs">Card Number</Label>
+                  <Input
+                    id="cardNumber"
+                    placeholder="4242 4242 4242 4242"
+                    value={cardNumber}
+                    onChange={handleCardNumberChange}
+                    className="mt-1 font-mono"
+                    disabled={checking}
+                  />
+                </div>
 
-                  <div className="space-y-3">
-                    <div>
-                      <Label htmlFor="cardNumber" className="text-xs">Card Number</Label>
-                      <Input
-                        id="cardNumber"
-                        placeholder="4242 4242 4242 4242"
-                        value={cardNumber}
-                        onChange={handleCardNumberChange}
-                        className="mt-1 font-mono"
-                        disabled={checking}
-                      />
-                    </div>
-
-                    {/* BIN Info Display */}
-                    {cardNumber.replace(/\s/g, '').length >= 6 && (
-                      <div className="p-3 rounded-lg bg-secondary/50 border border-border space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-8 h-5 rounded ${binInfo.brandColor} flex items-center justify-center`}>
-                              <span className="text-white text-[8px] font-bold">{binInfo.brand.slice(0, 4).toUpperCase()}</span>
-                            </div>
-                            <div>
-                              <p className="text-sm font-semibold flex items-center gap-1.5">
-                                {binInfo.brand}
-                                {binInfo.isLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground">{binInfo.type} • {binInfo.level}</p>
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end gap-0.5">
-                            <Badge variant="outline" className="text-[10px]">
-                              BIN: {cardNumber.replace(/\s/g, '').slice(0, 6)}
-                            </Badge>
-                            {binInfo.isRealData && (
-                              <span className="text-[9px] text-green-500 flex items-center gap-0.5">
-                                <CheckCircle className="h-2.5 w-2.5" />
-                                Verified
-                              </span>
-                            )}
-                          </div>
+                {/* BIN Info Display */}
+                {cardNumber.replace(/\s/g, '').length >= 6 && (
+                  <div className="p-3 rounded-lg bg-secondary/50 border border-border space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-5 rounded ${binInfo.brandColor} flex items-center justify-center`}>
+                          <span className="text-white text-[8px] font-bold">{binInfo.brand.slice(0, 4).toUpperCase()}</span>
                         </div>
-                        
-                        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/50">
-                          <div className="flex items-center gap-1.5">
-                            <Building2 className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-[10px] text-muted-foreground truncate" title={binInfo.bank}>
-                              {binInfo.isLoading ? "Loading..." : binInfo.bank}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <Globe className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-[10px] text-muted-foreground">
-                              {binInfo.isLoading ? "Loading..." : `${binInfo.country} (${binInfo.countryCode})`}
-                            </span>
-                          </div>
+                        <div>
+                          <p className="text-sm font-semibold flex items-center gap-1.5">
+                            {binInfo.brand}
+                            {binInfo.isLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">{binInfo.type} • {binInfo.level}</p>
                         </div>
                       </div>
-                    )}
-
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <Label htmlFor="expMonth" className="text-xs">Month</Label>
-                        <Input
-                          id="expMonth"
-                          placeholder="MM"
-                          value={expMonth}
-                          onChange={(e) => setExpMonth(e.target.value.replace(/\D/g, '').slice(0, 2))}
-                          className="mt-1 font-mono"
-                          disabled={checking}
-                        />
+                      <div className="flex flex-col items-end gap-0.5">
+                        <Badge variant="outline" className="text-[10px]">
+                          BIN: {cardNumber.replace(/\s/g, '').slice(0, 6)}
+                        </Badge>
+                        {binInfo.isRealData && (
+                          <span className="text-[9px] text-green-500 flex items-center gap-0.5">
+                            <CheckCircle className="h-2.5 w-2.5" />
+                            Verified
+                          </span>
+                        )}
                       </div>
-                      <div>
-                        <Label htmlFor="expYear" className="text-xs">Year</Label>
-                        <Input
-                          id="expYear"
-                          placeholder="YY"
-                          value={expYear}
-                          onChange={(e) => setExpYear(e.target.value.replace(/\D/g, '').slice(0, 2))}
-                          className="mt-1 font-mono"
-                          disabled={checking}
-                        />
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/50">
+                      <div className="flex items-center gap-1.5">
+                        <Building2 className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-[10px] text-muted-foreground truncate" title={binInfo.bank}>
+                          {binInfo.isLoading ? "Loading..." : binInfo.bank}
+                        </span>
                       </div>
-                      <div>
-                        <Label htmlFor="cvv" className="text-xs">CVV</Label>
-                        <Input
-                          id="cvv"
-                          placeholder="123"
-                          value={cvv}
-                          onChange={(e) => setCvv(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                          className="mt-1 font-mono"
-                          type="password"
-                          disabled={checking}
-                        />
+                      <div className="flex items-center gap-1.5">
+                        <Globe className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-[10px] text-muted-foreground">
+                          {binInfo.isLoading ? "Loading..." : `${binInfo.country} (${binInfo.countryCode})`}
+                        </span>
                       </div>
                     </div>
                   </div>
+                )}
 
-                  {result && (
-                    <div className={`p-3 rounded-lg border flex items-start gap-3 ${
-                      result.status === "live" 
-                        ? "bg-green-500/10 border-green-500/30" 
-                        : result.status === "dead"
-                          ? "bg-red-500/10 border-red-500/30"
-                          : "bg-yellow-500/10 border-yellow-500/30"
-                    }`}>
-                      {result.status === "live" ? (
-                        <ShieldCheck className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
-                      ) : result.status === "dead" ? (
-                        <ShieldX className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
-                      ) : (
-                        <AlertTriangle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />
-                      )}
-                      <div>
-                        <p className={`font-semibold text-sm ${
-                          result.status === "live" 
-                            ? "text-green-500" 
-                            : result.status === "dead"
-                              ? "text-red-500"
-                              : "text-yellow-500"
-                        }`}>
-                          {result.status === "live" ? "LIVE" : result.status === "dead" ? "DEAD" : "UNKNOWN"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{result.message}</p>
-                      </div>
-                    </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <Label htmlFor="expMonth" className="text-xs">Month</Label>
+                    <Input
+                      id="expMonth"
+                      placeholder="MM"
+                      value={expMonth}
+                      onChange={(e) => setExpMonth(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                      className="mt-1 font-mono"
+                      disabled={checking}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="expYear" className="text-xs">Year</Label>
+                    <Input
+                      id="expYear"
+                      placeholder="YY"
+                      value={expYear}
+                      onChange={(e) => setExpYear(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                      className="mt-1 font-mono"
+                      disabled={checking}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="cvv" className="text-xs">CVV</Label>
+                    <Input
+                      id="cvv"
+                      placeholder="123"
+                      value={cvv}
+                      onChange={(e) => setCvv(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                      className="mt-1 font-mono"
+                      type="password"
+                      disabled={checking}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {result && (
+                <div className={`p-3 rounded-lg border flex items-start gap-3 ${
+                  result.status === "live" 
+                    ? "bg-green-500/10 border-green-500/30" 
+                    : result.status === "dead"
+                      ? "bg-red-500/10 border-red-500/30"
+                      : "bg-yellow-500/10 border-yellow-500/30"
+                }`}>
+                  {result.status === "live" ? (
+                    <ShieldCheck className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                  ) : result.status === "dead" ? (
+                    <ShieldX className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertTriangle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />
                   )}
+                  <div>
+                    <p className={`font-semibold text-sm ${
+                      result.status === "live" 
+                        ? "text-green-500" 
+                        : result.status === "dead"
+                          ? "text-red-500"
+                          : "text-yellow-500"
+                    }`}>
+                      {result.status === "live" ? "LIVE" : result.status === "dead" ? "DEAD" : "UNKNOWN"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{result.message}</p>
+                  </div>
+                </div>
+              )}
 
-                  <div className="flex gap-2">
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={clearForm}
+                  disabled={checking}
+                >
+                  Clear
+                </Button>
+                <Button
+                  className="flex-1 btn-primary"
+                  onClick={performCheck}
+                  disabled={checking || !cardNumber}
+                >
+                  {checking ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Checking...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="h-4 w-4 mr-2" />
+                      Check ({CREDIT_COST} Credit)
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              <p className="text-[10px] text-muted-foreground text-center">
+                Each check deducts {CREDIT_COST} credit from your balance
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Bulk Card Check */}
+        <TabsContent value="bulk" className="mt-4 space-y-4">
+          <Card className="bg-card border-border max-w-2xl">
+            <CardContent className="p-4 sm:p-6 space-y-4">
+              <div>
+                <Label className="text-xs">Cards (one per line)</Label>
+                <Textarea
+                  placeholder="card|mm|yy|cvv&#10;4242424242424242|12|25|123&#10;5555555555554444|01|26|456"
+                  value={bulkInput}
+                  onChange={(e) => setBulkInput(e.target.value)}
+                  className="mt-1 font-mono text-xs h-40 resize-none"
+                  disabled={bulkChecking}
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Format: card|mm|yy|cvv — {parseCards(bulkInput).length} valid cards detected
+                </p>
+              </div>
+
+              {bulkChecking && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span>Progress: {bulkCurrentIndex}/{bulkTotal}</span>
+                    <span>{Math.round(bulkProgress)}%</span>
+                  </div>
+                  <Progress value={bulkProgress} className="h-2" />
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                {!bulkChecking ? (
+                  <>
                     <Button
                       variant="outline"
                       className="flex-1"
-                      onClick={clearForm}
-                      disabled={checking}
+                      onClick={clearBulk}
+                      disabled={!bulkInput && bulkResults.length === 0}
                     >
                       Clear
                     </Button>
                     <Button
                       className="flex-1 btn-primary"
-                      onClick={performCheck}
-                      disabled={!selectedGateway || checking || !cardNumber}
+                      onClick={startBulkCheck}
+                      disabled={parseCards(bulkInput).length === 0}
                     >
-                      {checking ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Checking...
-                        </>
-                      ) : (
-                        <>
-                          <Zap className="h-4 w-4 mr-2" />
-                          Check ({CREDIT_COST} Credit)
-                        </>
-                      )}
+                      <Zap className="h-4 w-4 mr-2" />
+                      Check ({parseCards(bulkInput).length * CREDIT_COST} Credits)
                     </Button>
-                  </div>
-
-                  <p className="text-[10px] text-muted-foreground text-center">
-                    Each check deducts {CREDIT_COST} credit from your balance
-                  </p>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Bulk Card Check */}
-            <TabsContent value="bulk" className="mt-4 space-y-4">
-              <Card className="bg-card border-border">
-                <CardContent className="p-4 space-y-4">
-                  {selectedGateway ? (
-                    <div className="flex items-center gap-2 p-3 bg-primary/10 rounded-lg border border-primary/30">
-                      <Layers className="h-4 w-4 text-primary" />
-                      <span className="text-sm font-medium">{selectedGateway.name}</span>
-                      <Badge className={`ml-auto text-[10px] ${getTypeBadgeClass(selectedGateway.type)}`}>
-                        Bulk Mode
-                      </Badge>
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-secondary rounded-lg text-center text-sm text-muted-foreground">
-                      Select a gateway to start bulk checking
-                    </div>
-                  )}
-
-                  <div>
-                    <Label className="text-xs">Cards (one per line)</Label>
-                    <Textarea
-                      placeholder="card|mm|yy|cvv&#10;4242424242424242|12|25|123&#10;5555555555554444|01|26|456"
-                      value={bulkInput}
-                      onChange={(e) => setBulkInput(e.target.value)}
-                      className="mt-1 font-mono text-xs h-32 resize-none"
-                      disabled={bulkChecking}
-                    />
-                    <p className="text-[10px] text-muted-foreground mt-1">
-                      Format: card|mm|yy|cvv — {parseCards(bulkInput).length} valid cards detected
-                    </p>
-                  </div>
-
-                  {bulkChecking && (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <span>Progress: {bulkCurrentIndex}/{bulkTotal}</span>
-                        <span>{Math.round(bulkProgress)}%</span>
-                      </div>
-                      <Progress value={bulkProgress} className="h-2" />
-                    </div>
-                  )}
-
-                  <div className="flex gap-2">
-                    {!bulkChecking ? (
-                      <>
-                        <Button
-                          variant="outline"
-                          className="flex-1"
-                          onClick={clearBulk}
-                          disabled={!bulkInput && bulkResults.length === 0}
-                        >
-                          Clear
-                        </Button>
-                        <Button
-                          className="flex-1 btn-primary"
-                          onClick={startBulkCheck}
-                          disabled={!selectedGateway || parseCards(bulkInput).length === 0}
-                        >
-                          <Zap className="h-4 w-4 mr-2" />
-                          Check ({parseCards(bulkInput).length * CREDIT_COST} Credits)
-                        </Button>
-                      </>
+                  </>
+                ) : (
+                  <>
+                    {bulkPaused ? (
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={resumeBulkCheck}
+                      >
+                        <Play className="h-4 w-4 mr-2" />
+                        Resume
+                      </Button>
                     ) : (
-                      <>
-                        {bulkPaused ? (
-                          <Button
-                            variant="outline"
-                            className="flex-1"
-                            onClick={resumeBulkCheck}
-                          >
-                            <Play className="h-4 w-4 mr-2" />
-                            Resume
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            className="flex-1"
-                            onClick={pauseBulkCheck}
-                          >
-                            <Pause className="h-4 w-4 mr-2" />
-                            Pause
-                          </Button>
-                        )}
-                        <Button
-                          variant="destructive"
-                          className="flex-1"
-                          onClick={stopBulkCheck}
-                        >
-                          <Square className="h-4 w-4 mr-2" />
-                          Stop
-                        </Button>
-                      </>
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={pauseBulkCheck}
+                      >
+                        <Pause className="h-4 w-4 mr-2" />
+                        Pause
+                      </Button>
+                    )}
+                    <Button
+                      variant="destructive"
+                      className="flex-1"
+                      onClick={stopBulkCheck}
+                    >
+                      <Square className="h-4 w-4 mr-2" />
+                      Stop
+                    </Button>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Bulk Results */}
+          {bulkResults.length > 0 && (
+            <Card className="bg-card border-border max-w-2xl">
+              <CardHeader className="p-4 pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-semibold">Results</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-xs">
+                      {liveCount} Live
+                    </Badge>
+                    <Badge className="bg-red-500/20 text-red-500 border-red-500/30 text-xs">
+                      {deadCount} Dead
+                    </Badge>
+                    {unknownCount > 0 && (
+                      <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30 text-xs">
+                        {unknownCount} Unknown
+                      </Badge>
                     )}
                   </div>
-                </CardContent>
-              </Card>
-
-              {/* Bulk Results */}
-              {bulkResults.length > 0 && (
-                <Card className="bg-card border-border">
-                  <CardHeader className="p-4 pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-semibold">Results</CardTitle>
-                      <div className="flex items-center gap-2">
-                        <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-xs">
-                          {liveCount} Live
-                        </Badge>
-                        <Badge className="bg-red-500/20 text-red-500 border-red-500/30 text-xs">
-                          {deadCount} Dead
-                        </Badge>
-                        {unknownCount > 0 && (
-                          <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30 text-xs">
-                            {unknownCount} Unknown
-                          </Badge>
-                        )}
+                </div>
+              </CardHeader>
+              <CardContent className="p-4 pt-2 space-y-3">
+                <ScrollArea className="h-48 rounded border border-border">
+                  <div className="p-2 space-y-1 font-mono text-xs">
+                    {bulkResults.map((r, i) => (
+                      <div 
+                        key={i} 
+                        className={`flex items-center justify-between px-2 py-1 rounded ${
+                          r.status === "live" 
+                            ? "bg-green-500/10" 
+                            : r.status === "dead"
+                              ? "bg-red-500/10"
+                              : "bg-yellow-500/10"
+                        }`}
+                      >
+                        <span className="text-muted-foreground">{r.cardMasked}</span>
+                        <span className={
+                          r.status === "live" 
+                            ? "text-green-500 font-semibold" 
+                            : r.status === "dead"
+                              ? "text-red-500 font-semibold"
+                              : "text-yellow-500 font-semibold"
+                        }>
+                          {r.status.toUpperCase()}
+                        </span>
                       </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-4 pt-2 space-y-3">
-                    <ScrollArea className="h-48 rounded border border-border">
-                      <div className="p-2 space-y-1 font-mono text-xs">
-                        {bulkResults.map((r, i) => (
-                          <div 
-                            key={i} 
-                            className={`flex items-center justify-between px-2 py-1 rounded ${
-                              r.status === "live" 
-                                ? "bg-green-500/10" 
-                                : r.status === "dead"
-                                  ? "bg-red-500/10"
-                                  : "bg-yellow-500/10"
-                            }`}
-                          >
-                            <span className="text-muted-foreground">{r.cardMasked}</span>
-                            <span className={
-                              r.status === "live" 
-                                ? "text-green-500 font-semibold" 
-                                : r.status === "dead"
-                                  ? "text-red-500 font-semibold"
-                                  : "text-yellow-500 font-semibold"
-                            }>
-                              {r.status.toUpperCase()}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
+                    ))}
+                  </div>
+                </ScrollArea>
 
-                    <div className="grid grid-cols-3 gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyResults("live")}
-                        disabled={liveCount === 0}
-                        className="text-xs"
-                      >
-                        <Copy className="h-3 w-3 mr-1" />
-                        Live
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyResults("dead")}
-                        disabled={deadCount === 0}
-                        className="text-xs"
-                      >
-                        <Copy className="h-3 w-3 mr-1" />
-                        Dead
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => downloadResults("all")}
-                        className="text-xs"
-                      >
-                        <Download className="h-3 w-3 mr-1" />
-                        All
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </TabsContent>
-          </Tabs>
-        </div>
-      </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyResults("live")}
+                    disabled={liveCount === 0}
+                    className="text-xs"
+                  >
+                    <Copy className="h-3 w-3 mr-1" />
+                    Live
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyResults("dead")}
+                    disabled={deadCount === 0}
+                    className="text-xs"
+                  >
+                    <Copy className="h-3 w-3 mr-1" />
+                    Dead
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => downloadResults("all")}
+                    className="text-xs"
+                  >
+                    <Download className="h-3 w-3 mr-1" />
+                    All
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
