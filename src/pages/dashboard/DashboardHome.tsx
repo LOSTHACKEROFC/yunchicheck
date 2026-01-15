@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Coins, CreditCard, Activity, ArrowUpCircle, History, HeadphonesIcon, ChevronRight, Users, Zap, TrendingUp, CheckCircle, XCircle } from "lucide-react";
+import { Coins, CreditCard, Activity, ArrowUpCircle, History, HeadphonesIcon, ChevronRight, Users, Zap, TrendingUp, CheckCircle, XCircle, Percent } from "lucide-react";
 
 const quickLinks = [
   { title: "Buy Credits", description: "Purchase credit packages", icon: ArrowUpCircle, url: "/dashboard/topup", color: "text-green-500" },
@@ -283,6 +283,29 @@ const DashboardHome = () => {
           <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
             <div className="text-xl sm:text-2xl font-bold text-red-500">{userStats.deadCards.toLocaleString()}</div>
             <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Total dead</p>
+          </CardContent>
+        </Card>
+
+        {/* Success Rate */}
+        <Card className="bg-gradient-to-br from-amber-500/20 to-amber-500/5 border-amber-500/30">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+              </span>
+              <span className="hidden xs:inline">Success Rate</span>
+              <span className="xs:hidden">Rate</span>
+            </CardTitle>
+            <Percent className="h-3 w-3 sm:h-4 sm:w-4 text-amber-500" />
+          </CardHeader>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold text-amber-500">
+              {userStats.liveCards + userStats.deadCards > 0 
+                ? ((userStats.liveCards / (userStats.liveCards + userStats.deadCards)) * 100).toFixed(1)
+                : '0.0'}%
+            </div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Live/Dead ratio</p>
           </CardContent>
         </Card>
 
