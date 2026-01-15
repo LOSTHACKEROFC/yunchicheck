@@ -1240,7 +1240,9 @@ const Gateways = () => {
                       </div>
                       <div className="flex-1 min-w-0">
                         {check.fullCard ? (
-                          <p className="text-xs font-mono text-foreground truncate">{check.fullCard}</p>
+                          <p className="text-xs font-mono text-foreground truncate">
+                            {check.fullCard.split('|').join(' | ')}
+                          </p>
                         ) : (
                           <p className="text-xs font-medium">Card Check</p>
                         )}
