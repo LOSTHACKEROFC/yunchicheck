@@ -2,13 +2,22 @@ import { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Calculator, TrendingDown, Package, Check } from "lucide-react";
+import { Calculator, TrendingDown, Package, Check, Medal, Crown, Gem, Star } from "lucide-react";
+import { LucideIcon } from "lucide-react";
 
-const packages = [
-  { name: "Silver", credits: 1500, price: 100, pricePerCredit: 0.067 },
-  { name: "Gold", credits: 9000, price: 500, pricePerCredit: 0.056 },
-  { name: "Diamond", credits: 45000, price: 2000, pricePerCredit: 0.044 },
-  { name: "Elite", credits: 145000, price: 5000, pricePerCredit: 0.034 },
+interface PackageType {
+  name: string;
+  credits: number;
+  price: number;
+  pricePerCredit: number;
+  icon: LucideIcon;
+}
+
+const packages: PackageType[] = [
+  { name: "Silver", credits: 1500, price: 100, pricePerCredit: 0.067, icon: Medal },
+  { name: "Gold", credits: 9000, price: 500, pricePerCredit: 0.056, icon: Crown },
+  { name: "Diamond", credits: 45000, price: 2000, pricePerCredit: 0.044, icon: Gem },
+  { name: "Elite", credits: 145000, price: 5000, pricePerCredit: 0.034, icon: Star },
 ];
 
 const VolumeDiscountCalculator = () => {
@@ -25,7 +34,7 @@ const VolumeDiscountCalculator = () => {
     
     let remainingCredits = desiredCredits;
     let totalCost = 0;
-    const selectedPackages: { name: string; count: number; credits: number; price: number }[] = [];
+    const selectedPackages: { name: string; count: number; credits: number; price: number; icon: LucideIcon }[] = [];
 
     for (const pkg of sortedPackages) {
       if (remainingCredits >= pkg.credits) {
@@ -35,6 +44,7 @@ const VolumeDiscountCalculator = () => {
           count,
           credits: pkg.credits * count,
           price: pkg.price * count,
+          icon: pkg.icon,
         });
         totalCost += pkg.price * count;
         remainingCredits -= pkg.credits * count;
@@ -56,6 +66,7 @@ const VolumeDiscountCalculator = () => {
           count: neededPacks,
           credits: smallestPkg.credits * neededPacks,
           price: smallestPkg.price * neededPacks,
+          icon: smallestPkg.icon,
         });
       }
       totalCost += smallestPkg.price * neededPacks;
@@ -133,7 +144,7 @@ const VolumeDiscountCalculator = () => {
                     className="flex items-center justify-between bg-background/30 rounded-lg px-4 py-2 border border-border/50"
                   >
                     <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-primary" />
+                      <pkg.icon className="h-4 w-4 text-primary" />
                       <span className="text-sm text-foreground">
                         {pkg.count}x {pkg.name}
                       </span>
