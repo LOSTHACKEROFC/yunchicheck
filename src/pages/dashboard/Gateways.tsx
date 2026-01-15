@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
+import { CardBrandLogo } from "@/components/CardBrandLogo";
 import { 
   CreditCard, 
   CheckCircle, 
@@ -1874,16 +1875,11 @@ const Gateways = () => {
                       }`}>
                         {check.result === 'live' ? 'L' : check.result === 'dead' ? 'D' : '?'}
                       </span>
-                      {/* Card Brand Badge */}
+                      {/* Card Brand Logo */}
                       {check.fullCard && (() => {
                         const cardNum = check.fullCard.split('|')[0] || '';
-                        const { brand, brandColor } = detectCardBrandLocal(cardNum);
-                        const brandShort = brand === "Mastercard" ? "MC" : brand === "Diners Club" ? "DC" : brand === "UnionPay" ? "UP" : brand.slice(0, 4).toUpperCase();
-                        return (
-                          <span className={`shrink-0 text-[6px] font-bold px-1 py-0.5 rounded text-white ${brandColor}`}>
-                            {brandShort}
-                          </span>
-                        );
+                        const { brand } = detectCardBrandLocal(cardNum);
+                        return <CardBrandLogo brand={brand} size="xs" />;
                       })()}
                       <span className="text-[8px] font-mono text-muted-foreground truncate">
                         {check.fullCard || '••••'}
@@ -2345,9 +2341,7 @@ const Gateways = () => {
                               : "bg-yellow-500/10"
                         }`}
                       >
-                        <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded text-white ${r.brandColor}`}>
-                          {r.brand === "Mastercard" ? "MC" : r.brand === "Diners Club" ? "DC" : r.brand === "UnionPay" ? "UP" : r.brand.slice(0, 4).toUpperCase()}
-                        </span>
+                        <CardBrandLogo brand={r.brand} size="sm" />
                         <span className="text-muted-foreground truncate flex-1 min-w-0">{r.fullCard}</span>
                         <span className={`shrink-0 ${
                           r.status === "live" 
