@@ -218,6 +218,7 @@ const Gateways = () => {
   // Gateway history state
   const [gatewayHistory, setGatewayHistory] = useState<GatewayCheck[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [liveIndicator, setLiveIndicator] = useState(false);
 
   const onlineCount = gateways.filter(g => g.status === "online").length;
 
@@ -305,6 +306,10 @@ const Gateways = () => {
             const newCheck = payload.new as { id: string; created_at: string; gateway: string; status: string; result: string };
             // Only add if it's for the current gateway
             if (newCheck.gateway === selectedGateway.id) {
+              // Trigger live indicator pulse
+              setLiveIndicator(true);
+              setTimeout(() => setLiveIndicator(false), 2000);
+              
               setGatewayHistory(prev => {
                 // Avoid duplicates
                 if (prev.some(c => c.id === newCheck.id)) return prev;
@@ -889,6 +894,16 @@ const Gateways = () => {
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <History className="h-4 w-4 text-primary" />
               Recent Checks
+              {/* Live Indicator */}
+              <div className="relative flex items-center">
+                <div className={`h-2 w-2 rounded-full bg-green-500 ${liveIndicator ? 'animate-ping' : ''}`} />
+                <div className="absolute h-2 w-2 rounded-full bg-green-500" />
+                {liveIndicator && (
+                  <span className="ml-2 text-[10px] text-green-500 font-medium animate-fade-in">
+                    LIVE
+                  </span>
+                )}
+              </div>
             </CardTitle>
             {gatewayHistory.length > 0 && (() => {
               const liveCount = gatewayHistory.filter(c => c.result === 'live').length;
