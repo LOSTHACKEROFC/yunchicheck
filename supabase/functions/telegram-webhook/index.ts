@@ -232,6 +232,7 @@ async function setBotCommands(): Promise<void> {
     { command: "broadcast", description: "📢 Broadcast message to all users" },
     { command: "stats", description: "📊 View website statistics" },
     { command: "allusers", description: "👥 View all registered users" },
+    { command: "userinfo", description: "🔍 View detailed user info" },
   ];
 
   try {
@@ -464,6 +465,9 @@ async function handleAdminCmd(chatId: string): Promise<void> {
 │
 │  /allusers
 │  └ 👥 View all users (paginated)
+│
+│  /userinfo <code>[email/username]</code>
+│  └ 🔍 View detailed user info
 │
 └─────────────────────────────────┘
 
@@ -3220,6 +3224,226 @@ Yunchi account.
       );
 
       await sendTelegramMessage(chatId, message, keyboard || undefined);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Handle /userinfo command (Admin only)
+    if (update.message?.text?.startsWith("/userinfo")) {
+      const chatId = update.message.chat.id.toString();
+      
+      if (!isAdmin(chatId)) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can view user info.");
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      const parts = update.message.text.split(" ");
+      
+      if (parts.length < 2) {
+        await sendTelegramMessage(
+          chatId,
+          `❌ <b>Invalid Usage</b>
+
+<b>Usage:</b> /userinfo <code>[email/username/chat_id]</code>
+
+<b>Examples:</b>
+• /userinfo user@email.com
+• /userinfo john_doe
+• /userinfo 123456789
+
+<i>💡 Search by email, username, or Telegram Chat ID</i>`
+        );
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      const identifier = parts.slice(1).join(" ").trim();
+
+      // Try to find user by different methods
+      let profile = null;
+      let userEmail = null;
+
+      // Try by email first
+      const { data: authData } = await supabase.auth.admin.listUsers();
+      const authUsers = authData?.users || [];
+      const foundAuthUser = authUsers.find((u: any) => 
+        u.email?.toLowerCase() === identifier.toLowerCase()
+      );
+
+      if (foundAuthUser) {
+        userEmail = foundAuthUser.email;
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("user_id", foundAuthUser.id)
+          .maybeSingle();
+        profile = profileData;
+      }
+
+      // Try by username
+      if (!profile) {
+        const { data: profileByUsername } = await supabase
+          .from("profiles")
+          .select("*")
+          .ilike("username", identifier)
+          .maybeSingle();
+        
+        if (profileByUsername) {
+          profile = profileByUsername;
+          const authUser = authUsers.find((u: any) => u.id === profileByUsername.user_id);
+          userEmail = authUser?.email || null;
+        }
+      }
+
+      // Try by telegram chat ID
+      if (!profile) {
+        const { data: profileByTelegram } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("telegram_chat_id", identifier)
+          .maybeSingle();
+        
+        if (profileByTelegram) {
+          profile = profileByTelegram;
+          const authUser = authUsers.find((u: any) => u.id === profileByTelegram.user_id);
+          userEmail = authUser?.email || null;
+        }
+      }
+
+      // Try by name
+      if (!profile) {
+        const { data: profileByName } = await supabase
+          .from("profiles")
+          .select("*")
+          .ilike("name", identifier)
+          .maybeSingle();
+        
+        if (profileByName) {
+          profile = profileByName;
+          const authUser = authUsers.find((u: any) => u.id === profileByName.user_id);
+          userEmail = authUser?.email || null;
+        }
+      }
+
+      if (!profile) {
+        await sendTelegramMessage(
+          chatId,
+          `❌ <b>User Not Found</b>
+
+No user found matching: <code>${identifier}</code>
+
+<b>Try searching by:</b>
+• Email address
+• Username
+• Telegram Chat ID
+• Name`
+        );
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      // Get user's check count
+      const { count: checkCount } = await supabase
+        .from("card_checks")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", profile.user_id);
+
+      // Get user's topup count
+      const { count: topupCount } = await supabase
+        .from("topup_transactions")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", profile.user_id);
+
+      // Get user's ticket count
+      const { count: ticketCount } = await supabase
+        .from("support_tickets")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", profile.user_id);
+
+      // Format ban status
+      let banStatus = "✅ Active";
+      let banInfo = "";
+      if (profile.is_banned) {
+        if (profile.banned_until) {
+          const expiryDate = new Date(profile.banned_until);
+          const now = new Date();
+          if (expiryDate > now) {
+            const diffMs = expiryDate.getTime() - now.getTime();
+            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffDays = Math.floor(diffHours / 24);
+            banStatus = diffDays > 0 
+              ? `🚫 Banned (${diffDays}d ${diffHours % 24}h left)`
+              : `🚫 Banned (${diffHours}h left)`;
+          }
+        } else {
+          banStatus = "🚫 Permanently Banned";
+        }
+        banInfo = `
+│  <b>Ban Reason:</b> ${profile.ban_reason || "Not specified"}
+│  <b>Banned At:</b> ${profile.banned_at ? new Date(profile.banned_at).toLocaleString() : "N/A"}`;
+      }
+
+      const memberSince = new Date(profile.created_at).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+
+      const userInfoMessage = `
+╔═══════════════════════════════╗
+       🔍 <b>USER INFORMATION</b>
+╚═══════════════════════════════╝
+
+┌─────────────────────────────────┐
+│  👤 <b>IDENTITY</b>
+├─────────────────────────────────┤
+│
+│  <b>Username:</b> ${profile.username || "Not set"}
+│  <b>Name:</b> ${profile.name || "Not set"}
+│  <b>Email:</b> <code>${userEmail || "Unknown"}</code>
+│  <b>User ID:</b>
+│  <code>${profile.user_id}</code>
+│
+└─────────────────────────────────┘
+
+┌─────────────────────────────────┐
+│  📱 <b>TELEGRAM</b>
+├─────────────────────────────────┤
+│
+│  <b>Chat ID:</b> ${profile.telegram_chat_id ? `<code>${profile.telegram_chat_id}</code>` : "❌ Not connected"}
+│  <b>Username:</b> ${profile.telegram_username ? `@${profile.telegram_username}` : "Not set"}
+│
+└─────────────────────────────────┘
+
+┌─────────────────────────────────┐
+│  💰 <b>ACCOUNT</b>
+├─────────────────────────────────┤
+│
+│  <b>Credits:</b> ${profile.credits?.toLocaleString() || 0}
+│  <b>Status:</b> ${banStatus}${banInfo}
+│  <b>Member Since:</b> ${memberSince}
+│
+└─────────────────────────────────┘
+
+┌─────────────────────────────────┐
+│  📊 <b>ACTIVITY</b>
+├─────────────────────────────────┤
+│
+│  <b>Card Checks:</b> ${checkCount || 0}
+│  <b>Top-ups:</b> ${topupCount || 0}
+│  <b>Support Tickets:</b> ${ticketCount || 0}
+│
+└─────────────────────────────────┘
+
+<i>💡 Use /banuser, /addfund, or /unbanuser to manage</i>
+`;
+
+      await sendTelegramMessage(chatId, userInfoMessage);
       return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
