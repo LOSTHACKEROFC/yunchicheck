@@ -643,6 +643,54 @@ const Gateways = () => {
 
     setBulkChecking(false);
     setBulkPaused(false);
+    
+    // Count live cards and trigger confetti celebration
+    const liveCount = bulkResults.filter(r => r.status === 'live').length + 
+      (bulkResults.length === 0 ? 0 : 0); // Include current batch
+    
+    // Get final live count from state after all results
+    setTimeout(() => {
+      setBulkResults(prev => {
+        const finalLiveCount = prev.filter(r => r.status === 'live').length;
+        if (finalLiveCount >= 3) {
+          // Big celebration for 3+ live cards
+          const duration = 2000;
+          const end = Date.now() + duration;
+          
+          const frame = () => {
+            confetti({
+              particleCount: 3,
+              angle: 60,
+              spread: 55,
+              origin: { x: 0 },
+              colors: ['#22c55e', '#4ade80', '#86efac', '#ffffff']
+            });
+            confetti({
+              particleCount: 3,
+              angle: 120,
+              spread: 55,
+              origin: { x: 1 },
+              colors: ['#22c55e', '#4ade80', '#86efac', '#ffffff']
+            });
+            
+            if (Date.now() < end) {
+              requestAnimationFrame(frame);
+            }
+          };
+          frame();
+        } else if (finalLiveCount >= 1) {
+          // Small celebration for 1-2 live cards
+          confetti({
+            particleCount: 80,
+            spread: 60,
+            origin: { y: 0.6 },
+            colors: ['#22c55e', '#4ade80', '#86efac', '#ffffff']
+          });
+        }
+        return prev;
+      });
+    }, 100);
+    
     toast.success(`Bulk check completed! Processed ${bulkAbortRef.current ? bulkCurrentIndex : cards.length} cards.`);
     
     // Refresh history after bulk check
