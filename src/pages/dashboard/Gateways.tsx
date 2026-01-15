@@ -29,7 +29,13 @@ import {
   Building2,
   Globe,
   ArrowLeft,
-  ChevronRight
+  ChevronRight,
+  Sparkles,
+  Wallet,
+  Store,
+  ShoppingBag,
+  CircleDollarSign,
+  type LucideIcon
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -84,6 +90,8 @@ interface Gateway {
   speed: string;
   successRate: string;
   description: string;
+  icon: LucideIcon;
+  iconColor: string;
 }
 
 const gateways: Gateway[] = [
@@ -95,7 +103,9 @@ const gateways: Gateway[] = [
     cardTypes: "Visa/MC/Amex",
     speed: "Fast",
     successRate: "98%",
-    description: "Zero-dollar authorization check"
+    description: "Zero-dollar authorization check",
+    icon: Sparkles,
+    iconColor: "text-purple-500"
   },
   { 
     id: "stripe_preauth",
@@ -105,7 +115,9 @@ const gateways: Gateway[] = [
     cardTypes: "Visa/MC/Amex",
     speed: "Fast",
     successRate: "97%",
-    description: "$1 hold then void"
+    description: "$1 hold then void",
+    icon: Zap,
+    iconColor: "text-indigo-500"
   },
   { 
     id: "braintree_auth",
@@ -115,7 +127,9 @@ const gateways: Gateway[] = [
     cardTypes: "Visa/MC/Discover",
     speed: "Fast",
     successRate: "96%",
-    description: "Zero-dollar authorization"
+    description: "Zero-dollar authorization",
+    icon: Wallet,
+    iconColor: "text-blue-500"
   },
   { 
     id: "clover_charge",
@@ -125,7 +139,9 @@ const gateways: Gateway[] = [
     cardTypes: "Visa/MC",
     speed: "Medium",
     successRate: "95%",
-    description: "$0.50 charge verification"
+    description: "$0.50 charge verification",
+    icon: Store,
+    iconColor: "text-green-500"
   },
   { 
     id: "square_charge",
@@ -135,7 +151,9 @@ const gateways: Gateway[] = [
     cardTypes: "Visa/MC/Amex",
     speed: "Fast",
     successRate: "94%",
-    description: "$0.50 charge verification"
+    description: "$0.50 charge verification",
+    icon: CircleDollarSign,
+    iconColor: "text-emerald-500"
   },
   { 
     id: "shopify_charge",
@@ -145,7 +163,9 @@ const gateways: Gateway[] = [
     cardTypes: "Visa/MC/Amex/Discover",
     speed: "Medium",
     successRate: "93%",
-    description: "$1.00 charge verification"
+    description: "$1.00 charge verification",
+    icon: ShoppingBag,
+    iconColor: "text-lime-500"
   },
 ];
 
@@ -651,7 +671,9 @@ const Gateways = () => {
               <CardHeader className="pb-2 p-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-bold flex items-center gap-2">
-                    <CreditCard className="h-4 w-4 text-primary" />
+                    <div className={`p-1.5 rounded-md bg-background/50 ${gateway.iconColor}`}>
+                      <gateway.icon className="h-4 w-4" />
+                    </div>
                     {gateway.name}
                   </CardTitle>
                   <div className="flex items-center gap-2">
@@ -729,9 +751,14 @@ const Gateways = () => {
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground">{selectedGateway.name}</h1>
-            <p className="text-muted-foreground mt-1 text-sm sm:text-base">{selectedGateway.description}</p>
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg bg-card border border-border ${selectedGateway.iconColor}`}>
+              <selectedGateway.icon className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground">{selectedGateway.name}</h1>
+              <p className="text-muted-foreground mt-1 text-sm sm:text-base">{selectedGateway.description}</p>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-3">
