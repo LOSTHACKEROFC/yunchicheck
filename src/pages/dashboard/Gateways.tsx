@@ -1263,11 +1263,11 @@ const Gateways = () => {
 
               {bulkChecking && (
                 <div className="space-y-3">
-                  {/* Live Counter */}
+                  {/* Live Counter with Success Rate */}
                   <div className="flex items-center justify-center gap-4 py-3 bg-gradient-to-r from-green-500/10 via-green-500/20 to-green-500/10 rounded-lg border border-green-500/30">
                     <div className="flex items-center gap-2">
                       <ShieldCheck className="h-5 w-5 text-green-500 animate-pulse" />
-                      <span className="text-sm text-muted-foreground">Live Cards:</span>
+                      <span className="text-sm text-muted-foreground">Live:</span>
                       <span 
                         key={bulkResults.filter(r => r.status === 'live').length}
                         className="text-2xl font-bold text-green-500 animate-scale-in tabular-nums"
@@ -1282,6 +1282,27 @@ const Gateways = () => {
                       <span className="text-lg font-semibold text-red-500 tabular-nums">
                         {bulkResults.filter(r => r.status === 'dead').length}
                       </span>
+                    </div>
+                    <div className="h-8 w-px bg-border" />
+                    {/* Live Success Rate */}
+                    <div className="flex items-center gap-2">
+                      <Activity className="h-5 w-5 text-primary" />
+                      <span className="text-sm text-muted-foreground">Rate:</span>
+                      {(() => {
+                        const liveCount = bulkResults.filter(r => r.status === 'live').length;
+                        const deadCount = bulkResults.filter(r => r.status === 'dead').length;
+                        const totalValid = liveCount + deadCount;
+                        const rate = totalValid > 0 ? Math.round((liveCount / totalValid) * 100) : 0;
+                        const rateColor = rate >= 70 ? 'text-green-500' : rate >= 40 ? 'text-yellow-500' : 'text-red-500';
+                        return (
+                          <span 
+                            key={rate}
+                            className={`text-lg font-bold ${rateColor} animate-scale-in tabular-nums`}
+                          >
+                            {totalValid > 0 ? `${rate}%` : '--'}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                   
