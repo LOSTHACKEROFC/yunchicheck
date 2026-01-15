@@ -109,7 +109,7 @@ const gateways: Gateway[] = [
     cardTypes: "Visa/MC/Amex",
     speed: "Fast",
     successRate: "98%",
-    description: "Zero-dollar authorization check",
+    description: "Format: card|MM|YY|CVC or card|MM|YY| (CVC optional)",
     icon: Sparkles,
     iconColor: "text-purple-500"
   },
@@ -121,7 +121,7 @@ const gateways: Gateway[] = [
     cardTypes: "Visa/MC/Amex",
     speed: "Fast",
     successRate: "97%",
-    description: "$1 hold then void",
+    description: "Format: card|MM|YY|CVC or card|MM|YY| (CVC optional)",
     icon: Zap,
     iconColor: "text-indigo-500"
   },
@@ -133,7 +133,7 @@ const gateways: Gateway[] = [
     cardTypes: "Visa/MC/Discover",
     speed: "Fast",
     successRate: "96%",
-    description: "Zero-dollar authorization",
+    description: "Format: card|MM|YY|CVC or card|MM|YY| (CVC optional)",
     icon: Wallet,
     iconColor: "text-blue-500"
   },
