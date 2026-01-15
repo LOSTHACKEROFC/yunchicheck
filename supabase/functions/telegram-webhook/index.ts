@@ -1965,7 +1965,229 @@ Examples:
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Ticket status
+      // ─────────────────────────────────────────────────────────
+      // USER START PAGE CALLBACKS
+      // ─────────────────────────────────────────────────────────
+      
+      if (callbackData === "user_mystatus") {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("username, name, credits, is_banned, ban_reason, banned_until, telegram_username, created_at")
+          .eq("telegram_chat_id", callbackChatId)
+          .maybeSingle();
+
+        if (!profile) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Account not connected");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        let status = "✅ Active";
+        if (profile.is_banned) {
+          status = profile.banned_until 
+            ? `🚫 Banned until ${new Date(profile.banned_until).toLocaleDateString()}`
+            : "🚫 Permanently Banned";
+        }
+
+        const joined = new Date(profile.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+
+        const statusMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+      📊 <b>MY STATUS</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>👤 Profile</b>
+┌─────────────────────
+│ Username: ${profile.username || "Not set"}
+│ Name: ${profile.name || "Not set"}
+│ Telegram: @${profile.telegram_username || "Not linked"}
+└─────────────────────
+
+<b>💳 Account</b>
+┌─────────────────────
+│ Credits: ${profile.credits || 0}
+│ Status: ${status}
+│ Member since: ${joined}
+${profile.is_banned && profile.ban_reason ? `│ Reason: ${profile.ban_reason}` : ""}
+└─────────────────────
+
+━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+        await sendTelegramMessage(callbackChatId!, statusMessage, {
+          inline_keyboard: [[{ text: "🔙 Back to Menu", callback_data: "user_back_start" }]]
+        });
+        await answerCallbackQuery(update.callback_query.id, "");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (callbackData === "user_balance") {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("username, credits")
+          .eq("telegram_chat_id", callbackChatId)
+          .maybeSingle();
+
+        if (!profile) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Account not connected");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const balanceMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+      💰 <b>MY BALANCE</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>💳 Credits Available</b>
+┌─────────────────────
+│
+│      <b>${profile.credits || 0}</b> CREDITS
+│
+└─────────────────────
+
+<b>📈 Quick Actions</b>
+• Top up credits via dashboard
+• Check usage history
+• Set spending alerts
+
+━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+        await sendTelegramMessage(callbackChatId!, balanceMessage, {
+          inline_keyboard: [
+            [{ text: "💳 Top Up Credits", url: "https://yunchicheck.lovable.app/dashboard/topup" }],
+            [{ text: "🔙 Back to Menu", callback_data: "user_back_start" }]
+          ]
+        });
+        await answerCallbackQuery(update.callback_query.id, "");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (callbackData === "user_help") {
+        const helpMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+      ❓ <b>HELP CENTER</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>🔗 How to Connect Account</b>
+┌─────────────────────
+│ 1️⃣ Copy your Chat ID
+│ 2️⃣ Go to yunchicheck.lovable.app
+│ 3️⃣ Sign up / Login
+│ 4️⃣ Paste in Profile settings
+│ 5️⃣ Click verify & confirm here
+└─────────────────────
+
+<b>📋 Available Commands</b>
+┌─────────────────────
+│ /start - Main menu
+│ /help - This help page
+│ /mystatus - Account status
+└─────────────────────
+
+<b>🎫 Need Support?</b>
+Open a ticket through the dashboard
+for personalized assistance.
+
+━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+        await sendTelegramMessage(callbackChatId!, helpMessage, {
+          inline_keyboard: [
+            [{ text: "🌐 Open Dashboard", url: "https://yunchicheck.lovable.app/dashboard" }],
+            [{ text: "🔙 Back to Menu", callback_data: "user_back_start" }]
+          ]
+        });
+        await answerCallbackQuery(update.callback_query.id, "");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (callbackData === "user_copy_id") {
+        await answerCallbackQuery(update.callback_query.id, `📋 Your Chat ID: ${callbackChatId}`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (callbackData === "user_back_start") {
+        // Check if user is connected
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("username, credits, is_banned")
+          .eq("telegram_chat_id", callbackChatId)
+          .maybeSingle();
+
+        const isAdminUser = await isAdminAsync(callbackChatId!, supabase);
+        const isModUser = await isModeratorAsync(callbackChatId!, supabase);
+
+        const welcomeMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+      🎴 <b>YUNCHI CHECK</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<i>Premium Card Validation Service</i>
+
+${profile ? `
+✅ <b>Account Connected</b>
+┌─────────────────────
+│ 👤 ${profile.username || "User"}
+│ 💰 ${profile.credits || 0} Credits
+│ ${profile.is_banned ? "🚫 Status: Banned" : "✨ Status: Active"}
+└─────────────────────
+` : `
+📋 <b>Your Chat ID</b>
+┌─────────────────────
+│ <code>${callbackChatId}</code>
+└─────────────────────
+
+<i>Copy this ID to link your account</i>
+`}
+
+<b>🚀 Features</b>
+├ ⚡ Fast card validation
+├ 🔔 Instant notifications  
+├ 📊 Real-time balance alerts
+├ 🎫 24/7 Support system
+└ 💳 Multiple payment methods
+
+${isAdminUser ? `
+🔐 <b>Admin Access Detected</b>
+Use /admincmd for control panel
+` : isModUser ? `
+🛡️ <b>Moderator Access Detected</b>
+Use /admincmd for staff panel
+` : ""}
+━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+        const keyboard = {
+          inline_keyboard: profile ? [
+            [
+              { text: "📊 My Status", callback_data: "user_mystatus" },
+              { text: "💰 Balance", callback_data: "user_balance" }
+            ],
+            [
+              { text: "❓ Help", callback_data: "user_help" },
+              { text: "🌐 Open Dashboard", url: "https://yunchicheck.lovable.app/dashboard" }
+            ]
+          ] : [
+            [
+              { text: "📋 Copy Chat ID", callback_data: "user_copy_id" },
+              { text: "❓ How to Connect", callback_data: "user_help" }
+            ],
+            [
+              { text: "🌐 Sign Up Now", url: "https://yunchicheck.lovable.app/auth" }
+            ]
+          ]
+        };
+
+        if (messageId) {
+          await editTelegramMessage(callbackChatId!, messageId, welcomeMessage, keyboard);
+        } else {
+          await sendTelegramMessage(callbackChatId!, welcomeMessage, keyboard);
+        }
+        await answerCallbackQuery(update.callback_query.id, "");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Ticket status (admin only)
       if (!callbackChatId || callbackChatId !== ADMIN_CHAT_ID) {
         await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -2089,21 +2311,80 @@ Examples:
     const text = update.message?.text || "";
     const chatId = update.message?.chat.id.toString() || "";
 
-    // /start
+    // /start - Professional Welcome Page
     if (text === "/start") {
-      const isAdminUser = isAdmin(chatId);
-      let msg = `
-👋 <b>Yunchi Bot</b>
+      const isAdminUser = await isAdminAsync(chatId, supabase);
+      const isModUser = await isModeratorAsync(chatId, supabase);
+      
+      // Check if user is connected
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("username, credits, is_banned")
+        .eq("telegram_chat_id", chatId)
+        .maybeSingle();
 
-Your Chat ID: <code>${chatId}</code>
+      const welcomeMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+      🎴 <b>YUNCHI CHECK</b>
+━━━━━━━━━━━━━━━━━━━━━━
 
-<b>Commands:</b>
-/help - View features
-/mystatus - Check account`;
+<i>Premium Card Validation Service</i>
 
-      if (isAdminUser) msg += `\n\n🔐 <b>Admin detected</b>\nUse /admincmd for panel`;
+${profile ? `
+✅ <b>Account Connected</b>
+┌─────────────────────
+│ 👤 ${profile.username || "User"}
+│ 💰 ${profile.credits || 0} Credits
+│ ${profile.is_banned ? "🚫 Status: Banned" : "✨ Status: Active"}
+└─────────────────────
+` : `
+📋 <b>Your Chat ID</b>
+┌─────────────────────
+│ <code>${chatId}</code>
+└─────────────────────
 
-      await sendTelegramMessage(chatId, msg);
+<i>Copy this ID to link your account</i>
+`}
+
+<b>🚀 Features</b>
+├ ⚡ Fast card validation
+├ 🔔 Instant notifications  
+├ 📊 Real-time balance alerts
+├ 🎫 24/7 Support system
+└ 💳 Multiple payment methods
+
+${isAdminUser ? `
+🔐 <b>Admin Access Detected</b>
+Use /admincmd for control panel
+` : isModUser ? `
+🛡️ <b>Moderator Access Detected</b>
+Use /admincmd for staff panel
+` : ""}
+━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+      const keyboard = {
+        inline_keyboard: profile ? [
+          [
+            { text: "📊 My Status", callback_data: "user_mystatus" },
+            { text: "💰 Balance", callback_data: "user_balance" }
+          ],
+          [
+            { text: "❓ Help", callback_data: "user_help" },
+            { text: "🌐 Open Dashboard", url: "https://yunchicheck.lovable.app/dashboard" }
+          ]
+        ] : [
+          [
+            { text: "📋 Copy Chat ID", callback_data: "user_copy_id" },
+            { text: "❓ How to Connect", callback_data: "user_help" }
+          ],
+          [
+            { text: "🌐 Sign Up Now", url: "https://yunchicheck.lovable.app/auth" }
+          ]
+        ]
+      };
+
+      await sendTelegramMessage(chatId, welcomeMessage, keyboard);
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -2389,6 +2670,98 @@ ${ticket.message}
 [${ticket.id}]
 <i>Reply to this message to respond</i>
 `, keyboard);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // DEFAULT USER MESSAGE HANDLER
+    // ─────────────────────────────────────────────────────────
+    
+    // If message is not a command and not a reply, respond with helpful message
+    if (text && !text.startsWith("/")) {
+      // Check if user is connected
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("username, credits")
+        .eq("telegram_chat_id", chatId)
+        .maybeSingle();
+
+      if (profile) {
+        // Connected user - offer quick actions
+        const responseMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+      🎴 <b>YUNCHI CHECK</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+Hey <b>${profile.username || "there"}</b>! 👋
+
+I received your message but I'm a bot
+that responds to specific commands.
+
+<b>💡 Quick Actions</b>
+┌─────────────────────
+│ /start - Main menu
+│ /mystatus - Account status
+│ /help - Help & guide
+└─────────────────────
+
+<b>💰 Your Balance:</b> ${profile.credits || 0} credits
+
+Need human support? Open a ticket
+through the dashboard! 🎫
+
+━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+        await sendTelegramMessage(chatId, responseMessage, {
+          inline_keyboard: [
+            [
+              { text: "📊 My Status", callback_data: "user_mystatus" },
+              { text: "💰 Balance", callback_data: "user_balance" }
+            ],
+            [
+              { text: "🎫 Open Support Ticket", url: "https://yunchicheck.lovable.app/dashboard/support" }
+            ]
+          ]
+        });
+      } else {
+        // Not connected user - guide them
+        const responseMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+      🎴 <b>YUNCHI CHECK</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+Hey there! 👋
+
+I'm the Yunchi support bot. Your 
+account isn't connected yet.
+
+<b>🔗 To Get Started</b>
+┌─────────────────────
+│ 1️⃣ Copy your Chat ID:
+│    <code>${chatId}</code>
+│ 
+│ 2️⃣ Sign up on our platform
+│ 3️⃣ Paste ID in profile settings
+│ 4️⃣ Verify when prompted
+└─────────────────────
+
+<b>💡 Commands</b>
+┌─────────────────────
+│ /start - Main menu & Chat ID
+│ /help - Full guide
+└─────────────────────
+
+━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+        await sendTelegramMessage(chatId, responseMessage, {
+          inline_keyboard: [
+            [{ text: "📋 Copy Chat ID", callback_data: "user_copy_id" }],
+            [{ text: "🌐 Sign Up Now", url: "https://yunchicheck.lovable.app/auth" }]
+          ]
+        });
+      }
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
