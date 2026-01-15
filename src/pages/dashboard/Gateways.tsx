@@ -35,8 +35,10 @@ import {
   Store,
   ShoppingBag,
   CircleDollarSign,
+  History,
   type LucideIcon
 } from "lucide-react";
+import { format } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -183,6 +185,13 @@ interface BulkResult extends CheckResult {
   fullCard: string;
 }
 
+interface GatewayCheck {
+  id: string;
+  created_at: string;
+  gateway: string;
+  status: string;
+}
+
 const Gateways = () => {
   const [selectedGateway, setSelectedGateway] = useState<Gateway | null>(null);
   const [cardNumber, setCardNumber] = useState("");
@@ -204,6 +213,10 @@ const Gateways = () => {
   const [bulkCurrentIndex, setBulkCurrentIndex] = useState(0);
   const bulkAbortRef = useRef(false);
   const bulkPauseRef = useRef(false);
+
+  // Gateway history state
+  const [gatewayHistory, setGatewayHistory] = useState<GatewayCheck[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const onlineCount = gateways.filter(g => g.status === "online").length;
 
@@ -270,6 +283,36 @@ const Gateways = () => {
   useEffect(() => {
     fetchUserCredits();
   }, []);
+
+  // Fetch gateway history when gateway is selected
+  useEffect(() => {
+    if (selectedGateway && userId) {
+      fetchGatewayHistory(selectedGateway.id);
+    }
+  }, [selectedGateway, userId]);
+
+  const fetchGatewayHistory = async (gatewayId: string) => {
+    if (!userId) return;
+    
+    setLoadingHistory(true);
+    try {
+      const { data, error } = await supabase
+        .from('card_checks')
+        .select('id, created_at, gateway, status')
+        .eq('user_id', userId)
+        .eq('gateway', gatewayId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      setGatewayHistory(data || []);
+    } catch (err) {
+      console.error('Failed to fetch gateway history:', err);
+      setGatewayHistory([]);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
 
   const fetchUserCredits = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -403,6 +446,9 @@ const Gateways = () => {
       } else {
         toast.warning("Check inconclusive", { description: checkResult.message });
       }
+
+      // Refresh history after check
+      fetchGatewayHistory(selectedGateway.id);
 
     } catch (error) {
       console.error('Check error:', error);
@@ -552,6 +598,9 @@ const Gateways = () => {
     setBulkChecking(false);
     setBulkPaused(false);
     toast.success(`Bulk check completed! Processed ${bulkAbortRef.current ? bulkCurrentIndex : cards.length} cards.`);
+    
+    // Refresh history after bulk check
+    fetchGatewayHistory(selectedGateway.id);
   };
 
   const pauseBulkCheck = () => {
@@ -797,6 +846,66 @@ const Gateways = () => {
               <span className="font-medium">{CREDIT_COST} Credit/Check</span>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Recent Check History */}
+      <Card className="bg-card border-border">
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <History className="h-4 w-4 text-primary" />
+            Recent Checks
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 pt-2">
+          {loadingHistory ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : gatewayHistory.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No checks performed on this gateway yet
+            </p>
+          ) : (
+            <ScrollArea className="h-32">
+              <div className="space-y-2">
+                {gatewayHistory.map((check) => (
+                  <div 
+                    key={check.id}
+                    className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 border border-border/50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`p-1.5 rounded-md ${
+                        check.status === 'completed' ? 'bg-green-500/20' : 'bg-yellow-500/20'
+                      }`}>
+                        {check.status === 'completed' ? (
+                          <CheckCircle className="h-3 w-3 text-green-500" />
+                        ) : (
+                          <Clock className="h-3 w-3 text-yellow-500" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium">Card Check</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {format(new Date(check.created_at), 'MMM d, yyyy HH:mm')}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge 
+                      variant="outline" 
+                      className={`text-[10px] ${
+                        check.status === 'completed' 
+                          ? 'border-green-500/30 text-green-500' 
+                          : 'border-yellow-500/30 text-yellow-500'
+                      }`}
+                    >
+                      {check.status === 'completed' ? 'Completed' : 'Pending'}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
         </CardContent>
       </Card>
 
