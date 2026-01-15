@@ -285,10 +285,40 @@ const Gateways = () => {
     fetchUserCredits();
   }, []);
 
-  // Fetch gateway history when gateway is selected
+  // Fetch gateway history when gateway is selected and subscribe to real-time updates
   useEffect(() => {
     if (selectedGateway && userId) {
       fetchGatewayHistory(selectedGateway.id);
+
+      // Subscribe to real-time card check updates
+      const channel = supabase
+        .channel(`card-checks-${selectedGateway.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'card_checks',
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            const newCheck = payload.new as { id: string; created_at: string; gateway: string; status: string; result: string };
+            // Only add if it's for the current gateway
+            if (newCheck.gateway === selectedGateway.id) {
+              setGatewayHistory(prev => {
+                // Avoid duplicates
+                if (prev.some(c => c.id === newCheck.id)) return prev;
+                // Add to front, keep max 20
+                return [newCheck, ...prev].slice(0, 20);
+              });
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [selectedGateway, userId]);
 
