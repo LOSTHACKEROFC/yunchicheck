@@ -109,7 +109,7 @@ const gateways: Gateway[] = [
     cardTypes: "Visa/MC/Amex",
     speed: "Fast",
     successRate: "98%",
-    description: "Auth-based • With or without CVC (auto-handled if missing/000)",
+    description: "$0 Auth Check • CVC optional (auto-handled if missing/000)",
     icon: Sparkles,
     iconColor: "text-purple-500"
   },
@@ -121,7 +121,7 @@ const gateways: Gateway[] = [
     cardTypes: "Visa/MC/Amex",
     speed: "Fast",
     successRate: "97%",
-    description: "Auth-based • With or without CVC (auto-handled if missing/000)",
+    description: "$1 Hold & Void • CVC optional (auto-handled if missing/000)",
     icon: Zap,
     iconColor: "text-indigo-500"
   },
@@ -133,7 +133,7 @@ const gateways: Gateway[] = [
     cardTypes: "Visa/MC/Discover",
     speed: "Fast",
     successRate: "96%",
-    description: "Auth-based • With or without CVC (auto-handled if missing/000)",
+    description: "$0 Auth Check • CVC optional (auto-handled if missing/000)",
     icon: Wallet,
     iconColor: "text-blue-500"
   },
@@ -145,7 +145,7 @@ const gateways: Gateway[] = [
     cardTypes: "Visa/MC",
     speed: "Medium",
     successRate: "95%",
-    description: "$0.50 charge verification",
+    description: "$0.50 Charge Verification • CVC required",
     icon: Store,
     iconColor: "text-green-500"
   },
@@ -157,7 +157,7 @@ const gateways: Gateway[] = [
     cardTypes: "Visa/MC/Amex",
     speed: "Fast",
     successRate: "94%",
-    description: "$0.50 charge verification",
+    description: "$0.50 Charge Verification • CVC required",
     icon: CircleDollarSign,
     iconColor: "text-emerald-500"
   },
@@ -169,7 +169,7 @@ const gateways: Gateway[] = [
     cardTypes: "Visa/MC/Amex/Discover",
     speed: "Medium",
     successRate: "93%",
-    description: "$1.00 charge verification",
+    description: "$1.00 Charge Verification • CVC required",
     icon: ShoppingBag,
     iconColor: "text-lime-500"
   },
