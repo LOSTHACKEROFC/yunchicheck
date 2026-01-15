@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Coins, CreditCard, Activity, ArrowUpCircle, History, HeadphonesIcon, ChevronRight, Users, Zap, TrendingUp, Server } from "lucide-react";
+import { Coins, CreditCard, Activity, ArrowUpCircle, History, HeadphonesIcon, ChevronRight, Users, Zap, TrendingUp } from "lucide-react";
 
 const quickLinks = [
   { title: "Buy Credits", description: "Purchase credit packages", icon: ArrowUpCircle, url: "/dashboard/topup", color: "text-green-500" },
@@ -18,19 +18,10 @@ interface TodayStats {
   unknown: number;
 }
 
-interface GatewayStats {
-  gateway: string;
-  total: number;
-  live: number;
-  dead: number;
-  successRate: number;
-}
-
 const DashboardHome = () => {
   const [profile, setProfile] = useState<{ username: string | null; credits: number } | null>(null);
   const [stats, setStats] = useState<{ total_users: number; total_checks: number }>({ total_users: 0, total_checks: 0 });
   const [todayStats, setTodayStats] = useState<TodayStats>({ total: 0, live: 0, dead: 0, unknown: 0 });
-  const [gatewayStats, setGatewayStats] = useState<GatewayStats[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -59,7 +50,7 @@ const DashboardHome = () => {
       
       const { data } = await supabase
         .from("card_checks")
-        .select("result, gateway")
+        .select("result")
         .eq("user_id", userId)
         .gte("created_at", today.toISOString());
       
@@ -68,30 +59,6 @@ const DashboardHome = () => {
         const dead = data.filter(c => c.result?.toLowerCase().includes('dead') || c.result?.toLowerCase().includes('declined')).length;
         const unknown = data.length - live - dead;
         setTodayStats({ total: data.length, live, dead, unknown });
-
-        // Calculate gateway-specific stats
-        const gatewayMap = new Map<string, { total: number; live: number; dead: number }>();
-        data.forEach(check => {
-          const gateway = check.gateway || 'Unknown';
-          const existing = gatewayMap.get(gateway) || { total: 0, live: 0, dead: 0 };
-          const isLive = check.result?.toLowerCase().includes('live') || check.result?.toLowerCase().includes('approved');
-          const isDead = check.result?.toLowerCase().includes('dead') || check.result?.toLowerCase().includes('declined');
-          gatewayMap.set(gateway, {
-            total: existing.total + 1,
-            live: existing.live + (isLive ? 1 : 0),
-            dead: existing.dead + (isDead ? 1 : 0)
-          });
-        });
-
-        const gatewayStatsArray: GatewayStats[] = Array.from(gatewayMap.entries()).map(([gateway, stats]) => ({
-          gateway,
-          total: stats.total,
-          live: stats.live,
-          dead: stats.dead,
-          successRate: stats.total > 0 ? (stats.live / stats.total) * 100 : 0
-        })).sort((a, b) => b.total - a.total);
-
-        setGatewayStats(gatewayStatsArray);
       }
     };
     
@@ -109,7 +76,6 @@ const DashboardHome = () => {
           filter: `user_id=eq.${userId}`
         },
         () => {
-          // Re-fetch to get accurate gateway stats
           fetchTodayStats();
         }
       )
@@ -122,7 +88,6 @@ const DashboardHome = () => {
           filter: `user_id=eq.${userId}`
         },
         () => {
-          // Re-fetch on updates to get accurate counts
           fetchTodayStats();
         }
       )
@@ -308,51 +273,6 @@ const DashboardHome = () => {
           </CardContent>
         </Card>
       </div>
-
-      {/* Gateway Performance */}
-      {gatewayStats.length > 0 && (
-        <Card className="bg-card border-border">
-          <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
-            <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-              <Server className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-              <span>Gateway Performance</span>
-              <span className="text-xs font-normal text-muted-foreground">(Today)</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 sm:p-6 pt-0 sm:pt-0">
-            <div className="space-y-3">
-              {gatewayStats.map((gw) => (
-                <div key={gw.gateway} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium text-foreground truncate max-w-[120px] sm:max-w-none">{gw.gateway}</span>
-                    <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm shrink-0">
-                      <span className="text-muted-foreground">{gw.total} checks</span>
-                      <span className="text-emerald-500 font-medium">{gw.live} live</span>
-                      <span className="text-red-500 font-medium">{gw.dead} dead</span>
-                      <span className={`font-bold ${gw.successRate >= 50 ? 'text-emerald-500' : gw.successRate >= 25 ? 'text-yellow-500' : 'text-red-500'}`}>
-                        {gw.successRate.toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-                  <div className="relative h-2 bg-muted rounded-full overflow-hidden">
-                    <div 
-                      className="absolute left-0 top-0 h-full bg-emerald-500 transition-all duration-300"
-                      style={{ width: `${gw.successRate}%` }}
-                    />
-                    <div 
-                      className="absolute top-0 h-full bg-red-500 transition-all duration-300"
-                      style={{ 
-                        left: `${gw.successRate}%`,
-                        width: `${gw.total > 0 ? (gw.dead / gw.total) * 100 : 0}%`
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Quick Links */}
       <Card className="bg-card border-border">
