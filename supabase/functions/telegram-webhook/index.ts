@@ -530,12 +530,16 @@ ${topupList}
 // ADMIN COMMAND HANDLERS
 // ═══════════════════════════════════════════════════════════
 
-async function handleAdminCmd(chatId: string, supabase: any): Promise<void> {
+async function handleAdminCmd(chatId: string, supabase: any, messageId?: number): Promise<void> {
   const isAdminUser = await isAdminAsync(chatId, supabase);
   const isModUser = await isModeratorAsync(chatId, supabase);
   
   if (!isAdminUser && !isModUser) {
-    await sendTelegramMessage(chatId, "❌ Access denied");
+    if (messageId) {
+      await editTelegramMessage(chatId, messageId, "❌ Access denied");
+    } else {
+      await sendTelegramMessage(chatId, "❌ Access denied");
+    }
     return;
   }
 
@@ -557,7 +561,12 @@ async function handleAdminCmd(chatId: string, supabase: any): Promise<void> {
 
 <i>⚠️ Limited permissions - Contact admin for elevated actions</i>
 `;
-    await sendTelegramMessage(chatId, modMenu);
+    const modKeyboard = { inline_keyboard: [[{ text: "🔙 Back to Menu", callback_data: "menu_back" }]] };
+    if (messageId) {
+      await editTelegramMessage(chatId, messageId, modMenu, modKeyboard);
+    } else {
+      await sendTelegramMessage(chatId, modMenu, modKeyboard);
+    }
     return;
   }
 
@@ -602,7 +611,12 @@ async function handleAdminCmd(chatId: string, supabase: any): Promise<void> {
 /admins - List admins & mods`;
   }
 
-  await sendTelegramMessage(chatId, menu);
+  const adminKeyboard = { inline_keyboard: [[{ text: "🔙 Back to Menu", callback_data: "menu_back" }]] };
+  if (messageId) {
+    await editTelegramMessage(chatId, messageId, menu, adminKeyboard);
+  } else {
+    await sendTelegramMessage(chatId, menu, adminKeyboard);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1419,10 +1433,14 @@ async function handleBroadcast(chatId: string, message: string, supabase: any): 
 `);
 }
 
-async function handleStats(chatId: string, supabase: any): Promise<void> {
+async function handleStats(chatId: string, supabase: any, messageId?: number): Promise<void> {
   const hasAccess = await isStaffAsync(chatId, supabase);
   if (!hasAccess) {
-    await sendTelegramMessage(chatId, "❌ Access denied");
+    if (messageId) {
+      await editTelegramMessage(chatId, messageId, "❌ Access denied");
+    } else {
+      await sendTelegramMessage(chatId, "❌ Access denied");
+    }
     return;
   }
 
@@ -1438,7 +1456,7 @@ async function handleStats(chatId: string, supabase: any): Promise<void> {
     closed: tickets?.filter((t: any) => t.status === "closed").length || 0,
   };
 
-  await sendTelegramMessage(chatId, `
+  const statsMessage = `
 📊 <b>Statistics</b>
 
 <b>Users</b>
@@ -1454,13 +1472,24 @@ async function handleStats(chatId: string, supabase: any): Promise<void> {
 • Processing: ${ticketStats.processing}
 • Solved: ${ticketStats.solved}
 • Closed: ${ticketStats.closed}
-`);
+`;
+
+  const statsKeyboard = { inline_keyboard: [[{ text: "🔙 Back to Menu", callback_data: "menu_back" }]] };
+  if (messageId) {
+    await editTelegramMessage(chatId, messageId, statsMessage, statsKeyboard);
+  } else {
+    await sendTelegramMessage(chatId, statsMessage, statsKeyboard);
+  }
 }
 
-async function handleViewBans(chatId: string, supabase: any): Promise<void> {
+async function handleViewBans(chatId: string, supabase: any, messageId?: number): Promise<void> {
   const hasAccess = await isStaffAsync(chatId, supabase);
   if (!hasAccess) {
-    await sendTelegramMessage(chatId, "❌ Access denied");
+    if (messageId) {
+      await editTelegramMessage(chatId, messageId, "❌ Access denied");
+    } else {
+      await sendTelegramMessage(chatId, "❌ Access denied");
+    }
     return;
   }
 
@@ -1470,8 +1499,14 @@ async function handleViewBans(chatId: string, supabase: any): Promise<void> {
     .eq("is_banned", true)
     .order("banned_at", { ascending: false });
 
+  const bansKeyboard = { inline_keyboard: [[{ text: "🔙 Back to Menu", callback_data: "menu_back" }]] };
+
   if (!banned?.length) {
-    await sendTelegramMessage(chatId, "✅ No banned users");
+    if (messageId) {
+      await editTelegramMessage(chatId, messageId, "✅ No banned users", bansKeyboard);
+    } else {
+      await sendTelegramMessage(chatId, "✅ No banned users", bansKeyboard);
+    }
     return;
   }
 
@@ -1481,12 +1516,18 @@ async function handleViewBans(chatId: string, supabase: any): Promise<void> {
     list += `\n• <b>${u.username || u.user_id}</b>\n  ${status} | ${u.ban_reason || "No reason"}`;
   }
 
-  await sendTelegramMessage(chatId, `
+  const bansMessage = `
 🚫 <b>Banned Users</b> (${banned.length})
 ${list}
 
 <i>Use /unbanuser [user] to unban</i>
-`);
+`;
+
+  if (messageId) {
+    await editTelegramMessage(chatId, messageId, bansMessage, bansKeyboard);
+  } else {
+    await sendTelegramMessage(chatId, bansMessage, bansKeyboard);
+  }
 }
 
 async function handleUserInfo(chatId: string, identifier: string, supabase: any): Promise<void> {
@@ -2094,9 +2135,15 @@ ${profile.is_banned && profile.ban_reason ? `│ Reason: ${profile.ban_reason}` 
 ━━━━━━━━━━━━━━━━━━━━━━
 `;
 
-        await sendTelegramMessage(callbackChatId!, statusMessage, {
-          inline_keyboard: [[{ text: "🔙 Back to Menu", callback_data: "user_back_start" }]]
-        });
+        if (messageId) {
+          await editTelegramMessage(callbackChatId!, messageId, statusMessage, {
+            inline_keyboard: [[{ text: "🔙 Back to Menu", callback_data: "user_back_start" }]]
+          });
+        } else {
+          await sendTelegramMessage(callbackChatId!, statusMessage, {
+            inline_keyboard: [[{ text: "🔙 Back to Menu", callback_data: "user_back_start" }]]
+          });
+        }
         await answerCallbackQuery(update.callback_query.id, "");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -2133,12 +2180,17 @@ ${profile.is_banned && profile.ban_reason ? `│ Reason: ${profile.ban_reason}` 
 ━━━━━━━━━━━━━━━━━━━━━━
 `;
 
-        await sendTelegramMessage(callbackChatId!, balanceMessage, {
+        const balanceKeyboard = {
           inline_keyboard: [
             [{ text: "💳 Top Up Credits", url: "https://yunchicheck.lovable.app/dashboard/topup" }],
             [{ text: "🔙 Back to Menu", callback_data: "user_back_start" }]
           ]
-        });
+        };
+        if (messageId) {
+          await editTelegramMessage(callbackChatId!, messageId, balanceMessage, balanceKeyboard);
+        } else {
+          await sendTelegramMessage(callbackChatId!, balanceMessage, balanceKeyboard);
+        }
         await answerCallbackQuery(update.callback_query.id, "");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -2172,12 +2224,17 @@ for personalized assistance.
 ━━━━━━━━━━━━━━━━━━━━━━
 `;
 
-        await sendTelegramMessage(callbackChatId!, helpMessage, {
+        const helpKeyboard = {
           inline_keyboard: [
             [{ text: "🌐 Open Dashboard", url: "https://yunchicheck.lovable.app/dashboard" }],
             [{ text: "🔙 Back to Menu", callback_data: "user_back_start" }]
           ]
-        });
+        };
+        if (messageId) {
+          await editTelegramMessage(callbackChatId!, messageId, helpMessage, helpKeyboard);
+        } else {
+          await sendTelegramMessage(callbackChatId!, helpMessage, helpKeyboard);
+        }
         await answerCallbackQuery(update.callback_query.id, "");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -2290,7 +2347,13 @@ Use /admincmd for staff panel
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
         const { message, keyboard } = await handleTopups(callbackChatId!, supabase, 0);
-        if (message) await sendTelegramMessage(callbackChatId!, message, keyboard || undefined);
+        if (message) {
+          if (messageId) {
+            await editTelegramMessage(callbackChatId!, messageId, message, keyboard || undefined);
+          } else {
+            await sendTelegramMessage(callbackChatId!, message, keyboard || undefined);
+          }
+        }
         await answerCallbackQuery(update.callback_query.id, "💰 Topups loaded");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -2321,7 +2384,11 @@ Use /admincmd for staff panel
           perPage
         );
 
-        await sendTelegramMessage(callbackChatId!, message, keyboard || undefined);
+        if (messageId) {
+          await editTelegramMessage(callbackChatId!, messageId, message, keyboard || undefined);
+        } else {
+          await sendTelegramMessage(callbackChatId!, message, keyboard || undefined);
+        }
         await answerCallbackQuery(update.callback_query.id, "👥 Users loaded");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -2364,9 +2431,14 @@ ${ticketsList}
 ━━━━━━━━━━━━━━━━━━━━━━
 `;
 
-        await sendTelegramMessage(callbackChatId!, ticketsMessage, {
+        const ticketsKeyboard = {
           inline_keyboard: [[{ text: "🔙 Back to Menu", callback_data: "menu_back" }]]
-        });
+        };
+        if (messageId) {
+          await editTelegramMessage(callbackChatId!, messageId, ticketsMessage, ticketsKeyboard);
+        } else {
+          await sendTelegramMessage(callbackChatId!, ticketsMessage, ticketsKeyboard);
+        }
         await answerCallbackQuery(update.callback_query.id, "🎫 Tickets loaded");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
