@@ -226,6 +226,115 @@ const Pricing = () => {
           ))}
         </div>
 
+        {/* Comparison Table */}
+        <div className="mt-12 sm:mt-16">
+          <div className="text-center mb-6 sm:mb-8">
+            <h2 className="text-xl sm:text-2xl font-display font-bold text-foreground mb-2">
+              Compare All Plans
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              See all features side-by-side
+            </p>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[600px] border-collapse">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Feature</th>
+                  {plans.map((plan) => (
+                    <th key={plan.name} className={`text-center py-3 px-4 text-sm font-semibold ${plan.popular ? "text-primary" : "text-foreground"}`}>
+                      <div className="flex flex-col items-center gap-1">
+                        <plan.icon className={`h-4 w-4 ${plan.popular ? "text-primary" : "text-muted-foreground"}`} />
+                        {plan.name}
+                        {plan.popular && (
+                          <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] px-1.5 py-0">Popular</Badge>
+                        )}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-border/50 bg-secondary/30">
+                  <td className="py-3 px-4 text-sm font-medium text-foreground">Price</td>
+                  {plans.map((plan) => (
+                    <td key={plan.name} className="text-center py-3 px-4 text-sm font-semibold text-primary">{plan.price}</td>
+                  ))}
+                </tr>
+                <tr className="border-b border-border/50">
+                  <td className="py-3 px-4 text-sm font-medium text-foreground">Credits</td>
+                  {plans.map((plan) => (
+                    <td key={plan.name} className="text-center py-3 px-4 text-sm text-foreground">{plan.credits}</td>
+                  ))}
+                </tr>
+                <tr className="border-b border-border/50 bg-secondary/30">
+                  <td className="py-3 px-4 text-sm font-medium text-foreground">Price per Credit</td>
+                  {plans.map((plan) => (
+                    <td key={plan.name} className="text-center py-3 px-4 text-sm text-muted-foreground">{plan.pricePerCredit}</td>
+                  ))}
+                </tr>
+                <tr className="border-b border-border/50">
+                  <td className="py-3 px-4 text-sm font-medium text-foreground">Savings</td>
+                  {plans.map((plan) => (
+                    <td key={plan.name} className="text-center py-3 px-4 text-sm">
+                      {plan.savings ? (
+                        <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-xs">{plan.savings}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+                <tr className="border-b border-border/50 bg-secondary/30">
+                  <td className="py-3 px-4 text-sm font-medium text-foreground">All Gateways</td>
+                  {plans.map((plan) => (
+                    <td key={plan.name} className="text-center py-3 px-4">
+                      <Check className="h-4 w-4 text-green-500 mx-auto" />
+                    </td>
+                  ))}
+                </tr>
+                <tr className="border-b border-border/50">
+                  <td className="py-3 px-4 text-sm font-medium text-foreground">Priority Queue</td>
+                  {plans.map((plan, idx) => (
+                    <td key={plan.name} className="text-center py-3 px-4">
+                      {idx > 0 ? (
+                        <Check className="h-4 w-4 text-green-500 mx-auto" />
+                      ) : (
+                        <X className="h-4 w-4 text-muted-foreground mx-auto" />
+                      )}
+                    </td>
+                  ))}
+                </tr>
+                <tr className="border-b border-border/50 bg-secondary/30">
+                  <td className="py-3 px-4 text-sm font-medium text-foreground">Support Level</td>
+                  {plans.map((plan, idx) => (
+                    <td key={plan.name} className="text-center py-3 px-4 text-sm text-foreground">
+                      {idx === 0 ? "Basic" : idx === 1 ? "Priority" : idx === 2 ? "VIP" : "Dedicated"}
+                    </td>
+                  ))}
+                </tr>
+                <tr>
+                  <td className="py-4 px-4"></td>
+                  {plans.map((plan) => (
+                    <td key={plan.name} className="text-center py-4 px-4">
+                      <Link to={getCtaLink(plan.name)}>
+                        <Button
+                          size="sm"
+                          variant={plan.popular ? "default" : "outline"}
+                          className={plan.popular ? "btn-primary" : ""}
+                        >
+                          {isLoggedIn ? "Buy" : "Select"}
+                        </Button>
+                      </Link>
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         {/* Volume Discount Calculator */}
         <div className="mt-12 sm:mt-16">
           <VolumeDiscountCalculator />
