@@ -5,10 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Check, 
   X, 
-  Zap, 
+  Medal, 
   Crown, 
-  Rocket, 
-  Layers,
+  Gem, 
+  Star,
   ArrowLeft,
   CreditCard
 } from "lucide-react";
@@ -43,7 +43,7 @@ const Pricing = () => {
       price: "$100",
       pricePerCredit: "$0.067",
       description: "Great starter pack",
-      icon: Zap,
+      icon: Medal,
       popular: false,
       checksCount: "1,500",
       features: [
@@ -78,7 +78,7 @@ const Pricing = () => {
       price: "$2,000",
       pricePerCredit: "$0.044",
       description: t.forPowerUsers || "For power users",
-      icon: Rocket,
+      icon: Gem,
       popular: false,
       checksCount: "45,000",
       savings: "38%",
@@ -96,7 +96,7 @@ const Pricing = () => {
       price: "$5,000",
       pricePerCredit: "$0.034",
       description: "Ultimate high-volume",
-      icon: Layers,
+      icon: Star,
       popular: false,
       checksCount: "145,000",
       savings: "52%",
