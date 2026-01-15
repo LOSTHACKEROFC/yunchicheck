@@ -58,6 +58,7 @@ export type Database = {
       }
       card_checks: {
         Row: {
+          card_details: string | null
           created_at: string
           gateway: string
           id: string
@@ -66,6 +67,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          card_details?: string | null
           created_at?: string
           gateway: string
           id?: string
@@ -74,6 +76,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          card_details?: string | null
           created_at?: string
           gateway?: string
           id?: string
