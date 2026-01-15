@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Coins, CreditCard, Activity, ArrowUpCircle, History, HeadphonesIcon, ChevronRight, Users, Zap, TrendingUp } from "lucide-react";
+import { Coins, CreditCard, Activity, ArrowUpCircle, History, HeadphonesIcon, ChevronRight, Users, Zap, TrendingUp, CheckCircle, XCircle } from "lucide-react";
 
 const quickLinks = [
   { title: "Buy Credits", description: "Purchase credit packages", icon: ArrowUpCircle, url: "/dashboard/topup", color: "text-green-500" },
@@ -18,10 +18,17 @@ interface TodayStats {
   unknown: number;
 }
 
+interface UserStats {
+  totalChecks: number;
+  liveCards: number;
+  deadCards: number;
+}
+
 const DashboardHome = () => {
   const [profile, setProfile] = useState<{ username: string | null; credits: number } | null>(null);
   const [stats, setStats] = useState<{ total_users: number; total_checks: number }>({ total_users: 0, total_checks: 0 });
   const [todayStats, setTodayStats] = useState<TodayStats>({ total: 0, live: 0, dead: 0, unknown: 0 });
+  const [userStats, setUserStats] = useState<UserStats>({ totalChecks: 0, liveCards: 0, deadCards: 0 });
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -40,7 +47,7 @@ const DashboardHome = () => {
     fetchProfile();
   }, []);
 
-  // Fetch today's checks with results and subscribe to real-time updates
+  // Fetch today's checks and all-time user stats with real-time updates
   useEffect(() => {
     if (!userId) return;
 
@@ -61,8 +68,22 @@ const DashboardHome = () => {
         setTodayStats({ total: data.length, live, dead, unknown });
       }
     };
+
+    const fetchUserStats = async () => {
+      const { data } = await supabase
+        .from("card_checks")
+        .select("result")
+        .eq("user_id", userId);
+      
+      if (data) {
+        const liveCards = data.filter(c => c.result?.toLowerCase().includes('live') || c.result?.toLowerCase().includes('approved')).length;
+        const deadCards = data.filter(c => c.result?.toLowerCase().includes('dead') || c.result?.toLowerCase().includes('declined')).length;
+        setUserStats({ totalChecks: data.length, liveCards, deadCards });
+      }
+    };
     
     fetchTodayStats();
+    fetchUserStats();
 
     // Subscribe to real-time updates for card_checks
     const channel = supabase
@@ -77,6 +98,7 @@ const DashboardHome = () => {
         },
         () => {
           fetchTodayStats();
+          fetchUserStats();
         }
       )
       .on(
@@ -89,6 +111,7 @@ const DashboardHome = () => {
         },
         () => {
           fetchTodayStats();
+          fetchUserStats();
         }
       )
       .subscribe();
@@ -190,7 +213,7 @@ const DashboardHome = () => {
       </div>
 
       {/* User Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         <Card className="bg-card border-border">
           <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
@@ -206,6 +229,64 @@ const DashboardHome = () => {
           </CardContent>
         </Card>
 
+        {/* Total Cards Checked by User */}
+        <Card className="bg-gradient-to-br from-purple-500/20 to-purple-500/5 border-purple-500/30">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
+              </span>
+              <span className="hidden xs:inline">Your Checks</span>
+              <span className="xs:hidden">Checks</span>
+            </CardTitle>
+            <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 text-purple-500" />
+          </CardHeader>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold text-purple-500">{userStats.totalChecks.toLocaleString()}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">All time</p>
+          </CardContent>
+        </Card>
+
+        {/* Live Cards by User */}
+        <Card className="bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 border-emerald-500/30">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="hidden xs:inline">Live Cards</span>
+              <span className="xs:hidden">Live</span>
+            </CardTitle>
+            <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold text-emerald-500">{userStats.liveCards.toLocaleString()}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Total live</p>
+          </CardContent>
+        </Card>
+
+        {/* Dead Cards by User */}
+        <Card className="bg-gradient-to-br from-red-500/20 to-red-500/5 border-red-500/30">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+              </span>
+              <span className="hidden xs:inline">Dead Cards</span>
+              <span className="xs:hidden">Dead</span>
+            </CardTitle>
+            <XCircle className="h-3 w-3 sm:h-4 sm:w-4 text-red-500" />
+          </CardHeader>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold text-red-500">{userStats.deadCards.toLocaleString()}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Total dead</p>
+          </CardContent>
+        </Card>
+
+        {/* Checks Today */}
         <Card className="bg-gradient-to-br from-blue-500/20 to-blue-500/5 border-blue-500/30">
           <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -213,29 +294,10 @@ const DashboardHome = () => {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
               </span>
-              <span className="hidden xs:inline">Checks Today</span>
+              <span className="hidden xs:inline">Today</span>
               <span className="xs:hidden">Today</span>
             </CardTitle>
-            <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
-            <div className="text-xl sm:text-2xl font-bold text-blue-500">{todayStats.total.toLocaleString()}</div>
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Cards checked</p>
-          </CardContent>
-        </Card>
-
-        {/* Live/Dead Ratio Card */}
-        <Card className="bg-gradient-to-br from-emerald-500/20 to-red-500/10 border-emerald-500/30">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span className="hidden xs:inline">Live/Dead</span>
-              <span className="xs:hidden">L/D</span>
-            </CardTitle>
-            <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-500" />
+            <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500" />
           </CardHeader>
           <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
             <div className="flex items-baseline gap-1">
@@ -243,20 +305,7 @@ const DashboardHome = () => {
               <span className="text-muted-foreground">/</span>
               <span className="text-xl sm:text-2xl font-bold text-red-500">{todayStats.dead}</span>
             </div>
-            {todayStats.total > 0 && (
-              <div className="mt-2 space-y-1">
-                <Progress 
-                  value={(todayStats.live / todayStats.total) * 100} 
-                  className="h-1.5 bg-red-500/30"
-                />
-                <p className="text-[10px] sm:text-xs text-muted-foreground">
-                  {((todayStats.live / todayStats.total) * 100).toFixed(1)}% success rate
-                </p>
-              </div>
-            )}
-            {todayStats.total === 0 && (
-              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">No checks yet</p>
-            )}
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">L/D today</p>
           </CardContent>
         </Card>
 
