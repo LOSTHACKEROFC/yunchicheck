@@ -38,47 +38,29 @@ const Pricing = () => {
 
   const plans = [
     {
-      name: "Starter",
-      credits: "350",
-      price: "$25",
-      pricePerCredit: "$0.071",
-      description: t.perfectForBeginners || "Perfect for beginners",
+      name: "Silver",
+      credits: "1,500",
+      price: "$100",
+      pricePerCredit: "$0.067",
+      description: "Great starter pack",
       icon: Zap,
       popular: false,
-      checksCount: "350",
+      checksCount: "1,500",
       features: [
-        { text: "350 Credits", included: true },
-        { text: "350 Card Checks", included: true },
+        { text: "1,500 Credits", included: true },
+        { text: "1,500 Card Checks", included: true },
         { text: t.allGateways || "All Gateways", included: true },
         { text: t.basicSupport || "Basic Support", included: true },
         { text: t.priorityQueue || "Priority Queue", included: false },
       ],
     },
     {
-      name: "Basic",
-      credits: "1,500",
-      price: "$100",
-      pricePerCredit: "$0.067",
-      description: "Great value pack",
-      icon: Crown,
-      popular: false,
-      checksCount: "1,500",
-      savings: "6%",
-      features: [
-        { text: "1,500 Credits", included: true },
-        { text: "1,500 Card Checks", included: true },
-        { text: t.allGateways || "All Gateways", included: true },
-        { text: t.prioritySupport || "Priority Support", included: true },
-        { text: t.priorityQueue || "Priority Queue", included: false },
-      ],
-    },
-    {
-      name: t.professional || "Professional",
+      name: "Gold",
       credits: "9,000",
       price: "$500",
       pricePerCredit: "$0.056",
       description: t.mostPopularChoice || "Most popular choice",
-      icon: Rocket,
+      icon: Crown,
       popular: true,
       checksCount: "9,000",
       savings: "22%",
@@ -86,17 +68,17 @@ const Pricing = () => {
         { text: "9,000 Credits", included: true },
         { text: "9,000 Card Checks", included: true },
         { text: t.allGateways || "All Gateways", included: true },
-        { text: t.vipSupport || "VIP Support", included: true },
+        { text: t.prioritySupport || "Priority Support", included: true },
         { text: t.priorityQueue || "Priority Queue", included: true },
       ],
     },
     {
-      name: "Business",
+      name: "Diamond",
       credits: "45,000",
       price: "$2,000",
       pricePerCredit: "$0.044",
       description: t.forPowerUsers || "For power users",
-      icon: Layers,
+      icon: Rocket,
       popular: false,
       checksCount: "45,000",
       savings: "38%",
@@ -109,11 +91,11 @@ const Pricing = () => {
       ],
     },
     {
-      name: t.enterprise || "Enterprise",
+      name: "Elite",
       credits: "145,000",
       price: "$5,000",
       pricePerCredit: "$0.034",
-      description: "High-volume solution",
+      description: "Ultimate high-volume",
       icon: Layers,
       popular: false,
       checksCount: "145,000",
@@ -121,24 +103,6 @@ const Pricing = () => {
       features: [
         { text: "145,000 Credits", included: true },
         { text: "145,000 Card Checks", included: true },
-        { text: t.allGateways || "All Gateways", included: true },
-        { text: "Dedicated Support", included: true },
-        { text: t.priorityQueue || "Priority Queue", included: true },
-      ],
-    },
-    {
-      name: "Ultimate",
-      credits: "710,000",
-      price: "$15,000",
-      pricePerCredit: "$0.021",
-      description: "Maximum value",
-      icon: Layers,
-      popular: false,
-      checksCount: "710,000",
-      savings: "70%",
-      features: [
-        { text: "710,000 Credits", included: true },
-        { text: "710,000 Card Checks", included: true },
         { text: t.allGateways || "All Gateways", included: true },
         { text: "Dedicated Support", included: true },
         { text: t.priorityQueue || "Priority Queue", included: true },
@@ -192,7 +156,7 @@ const Pricing = () => {
         </div>
 
         {/* Plans Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 max-w-7xl mx-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 max-w-7xl mx-auto">
           {plans.map((plan) => (
             <Card
               key={plan.name}
