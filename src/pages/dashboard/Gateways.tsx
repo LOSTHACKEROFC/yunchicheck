@@ -224,8 +224,16 @@ const Gateways = () => {
 
   const onlineCount = gateways.filter(g => g.status === "online").length;
   
-  // Live card sound hook
+  // Live card sound hook with settings check
   const { playLiveSound } = useLiveCardSound();
+  
+  const playLiveSoundIfEnabled = () => {
+    const savedPrefs = localStorage.getItem("notification-preferences");
+    const prefs = savedPrefs ? JSON.parse(savedPrefs) : { live_card_sound: true };
+    if (prefs.live_card_sound !== false) {
+      playLiveSound();
+    }
+  };
 
   // BIN lookup state
   const [binInfo, setBinInfo] = useState<BinInfo>(defaultBinInfo);
@@ -482,8 +490,8 @@ const Gateways = () => {
       setUserCredits(prev => prev - CREDIT_COST);
 
       if (checkResult.status === "live") {
-        // Play live card sound
-        playLiveSound();
+        // Play live card sound if enabled
+        playLiveSoundIfEnabled();
         // Trigger confetti celebration for live cards
         confetti({
           particleCount: 100,
@@ -631,9 +639,9 @@ const Gateways = () => {
           fullCard: `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`
         };
 
-        // Play sound for each live card in bulk check
+        // Play sound for each live card in bulk check if enabled
         if (checkStatus === "live") {
-          playLiveSound();
+          playLiveSoundIfEnabled();
         }
 
         setBulkResults(prev => [...prev, bulkResult]);
