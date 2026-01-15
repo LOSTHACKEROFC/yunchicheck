@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Shield, Zap, CreditCard } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import FloatingCardsBackground from "@/components/FloatingCardsBackground";
+import yunchiLogo from "@/assets/yunchi-logo.png";
 
 const Index = () => {
   const { t } = useLanguage();
@@ -14,12 +15,17 @@ const Index = () => {
       {/* Header */}
       <header className="border-b border-border relative z-10">
         <div className="container mx-auto px-4 py-3 sm:py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-primary rounded-md flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm sm:text-base">YC</span>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="relative">
+              <img 
+                src={yunchiLogo} 
+                alt="YunChi Checker" 
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl object-cover shadow-lg shadow-primary/30"
+              />
+              <div className="absolute inset-0 rounded-xl bg-primary/10 animate-pulse pointer-events-none" />
             </div>
-            <span className="font-display text-lg sm:text-xl font-bold text-primary">
-              Yunchi Checker
+            <span className="font-display text-lg sm:text-xl font-bold text-primary drop-shadow-[0_0_8px_hsl(var(--primary)/0.5)]">
+              YunChi Checker
             </span>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
