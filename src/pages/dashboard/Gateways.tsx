@@ -350,14 +350,19 @@ const Gateways = () => {
     try {
       const { data, error } = await supabase
         .from('card_checks')
-        .select('id, created_at, gateway, status, result')
+        .select('id, created_at, gateway, status, result, card_details')
         .eq('user_id', userId)
         .eq('gateway', gatewayId)
         .order('created_at', { ascending: false })
         .limit(20);
 
       if (error) throw error;
-      setGatewayHistory(data || []);
+      // Map card_details to fullCard for display
+      const mappedData = (data || []).map(item => ({
+        ...item,
+        fullCard: (item as any).card_details || undefined
+      }));
+      setGatewayHistory(mappedData);
     } catch (err) {
       console.error('Failed to fetch gateway history:', err);
       setGatewayHistory([]);
@@ -470,16 +475,17 @@ const Gateways = () => {
 
       const checkStatus = await simulateCheck();
 
+      const fullCardString = `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${cvv}`;
+
       await supabase
         .from('card_checks')
         .insert({
           user_id: userId,
           gateway: selectedGateway.id,
           status: 'completed',
-          result: checkStatus
+          result: checkStatus,
+          card_details: fullCardString
         });
-      
-      const fullCardString = `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${cvv}`;
       
       const checkResult: CheckResult = {
         status: checkStatus,
@@ -679,14 +685,17 @@ const Gateways = () => {
 
         const checkStatus = await simulateCheck();
 
-        // Log check with result
+        const fullCardStr = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
+        
+        // Log check with result and card details
         await supabase
           .from('card_checks')
           .insert({
             user_id: userId,
             gateway: selectedGateway.id,
             status: 'completed',
-            result: checkStatus
+            result: checkStatus,
+            card_details: fullCardStr
           });
 
         const bulkResult: BulkResult = {
