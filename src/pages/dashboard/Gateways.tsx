@@ -1243,128 +1243,85 @@ const Gateways = () => {
 
       {/* Recent Check History */}
       <Card className="bg-card border-border">
-        <CardHeader className="p-3 sm:p-4 pb-2">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <History className="h-4 w-4 text-primary" />
-                <span className="hidden xs:inline">Recent Checks</span>
-                <span className="xs:hidden">Checks</span>
-                {/* Live Indicator - Blood Red Theme */}
-                <div className="relative flex items-center">
-                  <div className={`h-2.5 w-2.5 rounded-full bg-red-600 shadow-[0_0_8px_rgba(220,38,38,0.8)] ${liveIndicator ? 'animate-ping' : ''}`} />
-                  <div className="absolute h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.9)]" />
-                  {liveIndicator && (
-                    <span className="ml-2.5 text-[11px] text-red-500 font-bold tracking-wider animate-fade-in drop-shadow-[0_0_4px_rgba(239,68,68,0.8)]">
-                      LIVE
-                    </span>
-                  )}
-                </div>
-              </CardTitle>
+        <CardHeader className="p-2 pb-1">
+          <div className="flex items-center justify-between gap-1">
+            <CardTitle className="text-[10px] font-semibold flex items-center gap-1">
+              <History className="h-3 w-3 text-primary" />
+              <span>Checks</span>
+              <div className="relative flex items-center">
+                <div className={`h-1.5 w-1.5 rounded-full bg-red-500 ${liveIndicator ? 'animate-ping' : ''}`} />
+                <div className="absolute h-1.5 w-1.5 rounded-full bg-red-500" />
+              </div>
+            </CardTitle>
+            <div className="flex items-center gap-1">
               {gatewayHistory.length > 0 && (() => {
                 const liveCards = gatewayHistory.filter(c => c.result === 'live' && c.fullCard);
                 const liveCount = liveCards.length;
+                const deadCount = gatewayHistory.filter(c => c.result === 'dead').length;
+                const totalValidChecks = liveCount + deadCount;
+                const successRate = totalValidChecks > 0 ? Math.round((liveCount / totalValidChecks) * 100) : 0;
                 
                 const copyAllLiveCards = () => {
                   const liveCardStrings = liveCards.map(c => c.fullCard).join('\n');
                   navigator.clipboard.writeText(liveCardStrings);
-                  toast.success(`Copied ${liveCount} live card${liveCount !== 1 ? 's' : ''} to clipboard`);
+                  toast.success(`Copied ${liveCount} live card${liveCount !== 1 ? 's' : ''}`);
                 };
                 
-                return liveCount > 0 ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2 text-[10px] text-green-500 hover:bg-green-500/20 hover:text-green-400 shrink-0"
-                    onClick={copyAllLiveCards}
-                  >
-                    <Copy className="h-3 w-3 mr-1" />
-                    <span className="hidden xs:inline">Copy All Live</span>
-                    <span className="xs:hidden">Copy</span>
-                  </Button>
-                ) : null;
+                return (
+                  <>
+                    <span className="text-[8px] text-green-500 font-medium">{liveCount}L</span>
+                    <span className="text-[8px] text-red-500 font-medium">{deadCount}D</span>
+                    {totalValidChecks > 0 && (
+                      <span className={`text-[8px] font-medium ${successRate >= 50 ? 'text-green-500' : 'text-red-500'}`}>
+                        {successRate}%
+                      </span>
+                    )}
+                    {liveCount > 0 && (
+                      <button
+                        className="p-0.5 hover:bg-green-500/20 rounded"
+                        onClick={copyAllLiveCards}
+                      >
+                        <Copy className="h-2.5 w-2.5 text-green-500" />
+                      </button>
+                    )}
+                  </>
+                );
               })()}
             </div>
-            {gatewayHistory.length > 0 && (() => {
-              const liveCards = gatewayHistory.filter(c => c.result === 'live' && c.fullCard);
-              const liveCount = liveCards.length;
-              const deadCount = gatewayHistory.filter(c => c.result === 'dead').length;
-              const unknownCount = gatewayHistory.filter(c => c.result === 'unknown' || !c.result).length;
-              const totalValidChecks = liveCount + deadCount;
-              const successRate = totalValidChecks > 0 ? Math.round((liveCount / totalValidChecks) * 100) : 0;
-              
-              return (
-                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                  {totalValidChecks > 0 && (
-                    <Badge 
-                      variant="outline" 
-                      className={`text-[9px] sm:text-[10px] font-semibold shrink-0 ${
-                        successRate >= 70 
-                          ? 'border-green-500/50 text-green-500' 
-                          : successRate >= 40 
-                            ? 'border-yellow-500/50 text-yellow-500'
-                            : 'border-red-500/50 text-red-500'
-                      }`}
-                    >
-                      <Activity className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
-                      {successRate}%
-                    </Badge>
-                  )}
-                  <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-[9px] sm:text-[10px] shrink-0">
-                    <ShieldCheck className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
-                    {liveCount}
-                  </Badge>
-                  <Badge className="bg-red-500/20 text-red-500 border-red-500/30 text-[9px] sm:text-[10px] shrink-0">
-                    <ShieldX className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
-                    {deadCount}
-                  </Badge>
-                  {unknownCount > 0 && (
-                    <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30 text-[9px] sm:text-[10px] shrink-0">
-                      <AlertTriangle className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
-                      {unknownCount}
-                    </Badge>
-                  )}
-                </div>
-              );
-            })()}
           </div>
         </CardHeader>
-        <CardContent className="p-4 pt-2">
+        <CardContent className="p-2 pt-1">
           {loadingHistory ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <div className="flex items-center justify-center py-2">
+              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
             </div>
           ) : gatewayHistory.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No checks performed on this gateway yet
-            </p>
+            <p className="text-[9px] text-muted-foreground text-center py-2">No checks yet</p>
           ) : (
-            <ScrollArea className="h-[200px] sm:h-[300px]">
-              <div className="space-y-0.5">
+            <ScrollArea className="h-[120px] sm:h-[150px]">
+              <div className="space-y-px">
                 {gatewayHistory.map((check) => (
                   <div 
                     key={check.id}
-                    className={`flex items-center justify-between px-1.5 py-0.5 rounded bg-secondary/30`}
+                    className="flex items-center justify-between px-1 py-px rounded bg-secondary/20"
                   >
-                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                      {check.result === 'live' ? (
-                        <ShieldCheck className="h-2 w-2 text-green-500 shrink-0" />
-                      ) : check.result === 'dead' ? (
-                        <ShieldX className="h-2 w-2 text-red-500 shrink-0" />
-                      ) : (
-                        <AlertTriangle className="h-2 w-2 text-yellow-500 shrink-0" />
-                      )}
-                      <span className="text-[9px] font-mono text-muted-foreground truncate">
+                    <div className="flex items-center gap-1 flex-1 min-w-0">
+                      <span className={`text-[7px] font-bold ${
+                        check.result === 'live' ? 'text-green-500' : check.result === 'dead' ? 'text-red-500' : 'text-yellow-500'
+                      }`}>
+                        {check.result === 'live' ? 'L' : check.result === 'dead' ? 'D' : '?'}
+                      </span>
+                      <span className="text-[8px] font-mono text-muted-foreground truncate">
                         {check.fullCard || '••••'}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <span className="text-[8px] text-muted-foreground/70 hidden sm:inline">
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <span className="text-[7px] text-muted-foreground/60 hidden sm:inline">
                         {format(new Date(check.created_at), 'HH:mm')}
                       </span>
                       {check.fullCard && (
                         <button
-                          className="p-0.5 hover:bg-primary/20 rounded"
+                          className="p-px hover:bg-primary/20 rounded"
                           onClick={() => {
                             navigator.clipboard.writeText(check.fullCard!);
                             toast.success("Copied");
@@ -1373,15 +1330,6 @@ const Gateways = () => {
                           <Copy className="h-2 w-2 text-muted-foreground" />
                         </button>
                       )}
-                      <span className={`text-[8px] font-bold uppercase ${
-                        check.result === 'live' 
-                          ? 'text-green-500' 
-                          : check.result === 'dead'
-                            ? 'text-red-500'
-                            : 'text-yellow-500'
-                      }`}>
-                        {check.result === 'live' ? 'L' : check.result === 'dead' ? 'D' : '?'}
-                      </span>
                     </div>
                   </div>
                 ))}
