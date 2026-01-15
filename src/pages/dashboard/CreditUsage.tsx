@@ -57,19 +57,28 @@ const getGatewayDisplayName = (gateway: string): string => {
   return GATEWAY_DISPLAY_NAMES[gateway] || gateway;
 };
 
+const ITEMS_PER_PAGE = 50;
+
 const CreditUsage = () => {
   const [checks, setChecks] = useState<CardCheck[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [timeFilter, setTimeFilter] = useState<string>("all");
   const [gatewayFilter, setGatewayFilter] = useState<string>("all");
   const [credits, setCredits] = useState<number>(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
 
-  const fetchData = async () => {
+  const fetchData = async (loadMore = false) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     
     setUserId(user.id);
+
+    if (!loadMore) {
+      setLoading(true);
+    }
 
     // Fetch credits
     const { data: profile } = await supabase
@@ -80,12 +89,35 @@ const CreditUsage = () => {
     
     setCredits(profile?.credits || 0);
 
-    // Build query for card checks
+    // Build base query for count
+    let countQuery = supabase
+      .from("card_checks")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id);
+
+    // Apply time filter to count
+    if (timeFilter !== "all") {
+      const days = parseInt(timeFilter);
+      const startDate = startOfDay(subDays(new Date(), days));
+      countQuery = countQuery.gte("created_at", startDate.toISOString());
+    }
+
+    // Apply gateway filter to count
+    if (gatewayFilter !== "all") {
+      countQuery = countQuery.eq("gateway", gatewayFilter);
+    }
+
+    const { count } = await countQuery;
+    setTotalCount(count || 0);
+
+    // Build query for card checks with pagination
+    const offset = loadMore ? checks.length : 0;
     let query = supabase
       .from("card_checks")
       .select("id, gateway, status, created_at")
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .range(offset, offset + ITEMS_PER_PAGE - 1);
 
     // Apply time filter
     if (timeFilter !== "all") {
@@ -94,17 +126,29 @@ const CreditUsage = () => {
       query = query.gte("created_at", startDate.toISOString());
     }
 
-    const { data: checksData } = await query;
-
-    let filteredChecks = checksData || [];
-
     // Apply gateway filter
     if (gatewayFilter !== "all") {
-      filteredChecks = filteredChecks.filter(c => c.gateway === gatewayFilter);
+      query = query.eq("gateway", gatewayFilter);
     }
 
-    setChecks(filteredChecks);
+    const { data: checksData } = await query;
+
+    const newChecks = checksData || [];
+    
+    if (loadMore) {
+      setChecks(prev => [...prev, ...newChecks]);
+    } else {
+      setChecks(newChecks);
+    }
+    
+    setHasMore(newChecks.length === ITEMS_PER_PAGE && (offset + newChecks.length) < (count || 0));
     setLoading(false);
+    setLoadingMore(false);
+  };
+
+  const loadMoreChecks = async () => {
+    setLoadingMore(true);
+    await fetchData(true);
   };
 
   useEffect(() => {
@@ -339,7 +383,7 @@ const CreditUsage = () => {
           </Select>
         </div>
 
-        <Button variant="outline" size="sm" onClick={fetchData} className="gap-2">
+        <Button variant="outline" size="sm" onClick={() => fetchData()} className="gap-2">
           <RefreshCw className="h-4 w-4" />
           Refresh
         </Button>
@@ -354,6 +398,11 @@ const CreditUsage = () => {
             <Badge variant="outline" className="ml-1 sm:ml-2 text-[10px] sm:text-xs">
               Live
             </Badge>
+            {totalCount > 0 && (
+              <span className="text-xs text-muted-foreground font-normal ml-auto">
+                {checks.length} of {totalCount}
+              </span>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
@@ -366,7 +415,7 @@ const CreditUsage = () => {
           ) : (
             <ScrollArea className="h-[400px] sm:h-[500px] pr-3">
               <div className="space-y-2 sm:space-y-3">
-                {checks.slice(0, 100).map((check) => (
+                {checks.map((check) => (
                   <div
                     key={check.id}
                     className="flex items-center justify-between p-2 sm:p-4 rounded-lg bg-secondary/50 border border-border transition-all hover:bg-secondary/70"
@@ -397,13 +446,27 @@ const CreditUsage = () => {
                     </div>
                   </div>
                 ))}
+                {hasMore && (
+                  <div className="pt-2">
+                    <Button 
+                      variant="outline" 
+                      className="w-full" 
+                      onClick={loadMoreChecks}
+                      disabled={loadingMore}
+                    >
+                      {loadingMore ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        <>Load More ({totalCount - checks.length} remaining)</>
+                      )}
+                    </Button>
+                  </div>
+                )}
               </div>
             </ScrollArea>
-          )}
-          {checks.length > 100 && (
-            <p className="text-center text-sm text-muted-foreground py-2">
-              Showing first 100 of {checks.length} checks
-            </p>
           )}
         </CardContent>
       </Card>
