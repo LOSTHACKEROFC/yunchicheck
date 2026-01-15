@@ -47,9 +47,8 @@ const adminItems = [
 const DashboardSidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { state, setOpen, isMobile } = useSidebar();
+  const { setOpen } = useSidebar();
   const { t } = useLanguage();
-  const collapsed = state === "collapsed";
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
@@ -93,17 +92,15 @@ const DashboardSidebar = () => {
   };
 
   return (
-    <Sidebar className={collapsed ? "w-14" : "w-60"} collapsible="icon">
+    <Sidebar className="w-60" collapsible="offcanvas">
       <SidebarHeader className="border-b border-border p-4">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
             <span className="text-primary-foreground font-bold text-sm">YC</span>
           </div>
-          {!collapsed && (
-            <span className="font-display font-bold text-primary">
-              Yunchi Checker
-            </span>
-          )}
+          <span className="font-display font-bold text-primary">
+            Yunchi Checker
+          </span>
         </div>
       </SidebarHeader>
 
@@ -125,7 +122,7 @@ const DashboardSidebar = () => {
                       activeClassName="bg-primary/20 text-primary border-l-2 border-primary"
                     >
                       <item.icon className="h-5 w-5" />
-                      {!collapsed && <span>{t[item.titleKey]}</span>}
+                      <span>{t[item.titleKey]}</span>
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -138,11 +135,9 @@ const DashboardSidebar = () => {
         {isAdmin && (
           <SidebarGroup>
             <SidebarGroupContent>
-              {!collapsed && (
-                <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Admin
-                </div>
-              )}
+              <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Admin
+              </div>
               <SidebarMenu>
                 {adminItems.map((item) => (
                   <SidebarMenuItem key={item.url}>
@@ -157,7 +152,7 @@ const DashboardSidebar = () => {
                         activeClassName="bg-primary/20 text-primary border-l-2 border-primary"
                       >
                         <item.icon className="h-5 w-5 text-yellow-500" />
-                        {!collapsed && <span className="text-yellow-500">{item.title}</span>}
+                        <span className="text-yellow-500">{item.title}</span>
                       </NavLink>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -174,7 +169,7 @@ const DashboardSidebar = () => {
           className="flex items-center gap-3 px-3 py-2 w-full rounded-md transition-colors hover:bg-destructive/20 text-destructive"
         >
           <LogOut className="h-5 w-5" />
-          {!collapsed && <span>{t.logout}</span>}
+          <span>{t.logout}</span>
         </button>
       </SidebarFooter>
     </Sidebar>
