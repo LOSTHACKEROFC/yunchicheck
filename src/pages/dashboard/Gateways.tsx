@@ -456,23 +456,26 @@ const Gateways = () => {
     return true;
   };
 
-  // Real API check for YunChi Auth gateway
+  // Real API check for YunChi Auth gateway via edge function
   const checkCardViaApi = async (cardNumber: string, month: string, year: string, cvv: string): Promise<"live" | "dead" | "unknown"> => {
     try {
       const cc = `${cardNumber}|${month}|${year}|${cvv}`;
-      const response = await fetch(`https://stripe-auth-api-production.up.railway.app/api?cc=${encodeURIComponent(cc)}`);
+      console.log('Sending card to API:', cc);
       
-      if (!response.ok) {
-        console.error('API response not ok:', response.status);
+      const { data, error } = await supabase.functions.invoke('stripe-auth-check', {
+        body: { cc }
+      });
+      
+      if (error) {
+        console.error('Edge function error:', error);
         return "unknown";
       }
       
-      const data = await response.json();
       console.log('API response:', data);
       
-      if (data.status === "SUCCESS") {
+      if (data?.status === "SUCCESS") {
         return "live";
-      } else if (data.status === "FAILED") {
+      } else if (data?.status === "FAILED") {
         return "dead";
       } else {
         return "unknown";
