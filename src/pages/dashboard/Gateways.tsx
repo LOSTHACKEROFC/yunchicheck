@@ -438,6 +438,27 @@ const Gateways = () => {
     setCardNumber(formatCardNumber(e.target.value));
   };
 
+  // Helper function to check if a card is expired
+  const isCardExpired = (month: string, year: string): boolean => {
+    const now = new Date();
+    const currentYear = now.getFullYear() % 100; // Get last 2 digits (e.g., 2026 -> 26)
+    const currentMonth = now.getMonth() + 1; // getMonth() is 0-indexed
+    
+    const cardYear = parseInt(year);
+    const cardMonth = parseInt(month);
+    
+    // Card is expired if:
+    // - Year is in the past, OR
+    // - Year is current but month is in the past
+    if (cardYear < currentYear) {
+      return true;
+    }
+    if (cardYear === currentYear && cardMonth < currentMonth) {
+      return true;
+    }
+    return false;
+  };
+
   const validateCard = () => {
     const digits = cardNumber.replace(/\s/g, '');
     if (digits.length < 13 || digits.length > 16) {
@@ -446,6 +467,11 @@ const Gateways = () => {
     }
     if (!expMonth || !expYear || parseInt(expMonth) < 1 || parseInt(expMonth) > 12) {
       toast.error("Invalid expiration date");
+      return false;
+    }
+    // Check if card is expired
+    if (isCardExpired(expMonth, expYear)) {
+      toast.error("Card is expired");
       return false;
     }
     // Allow empty CVV for auth gateways (will use 000 internally)
@@ -1001,13 +1027,22 @@ const Gateways = () => {
           ? (cardData.cvv.length >= 3 && cardData.cvv.length <= 4) // Internal CVV will be 000 if not provided
           : (cardData.cvv.length >= 3 && cardData.cvv.length <= 4);
         
+        // Check if card is expired
+        const now = new Date();
+        const currentYear = now.getFullYear() % 100;
+        const currentMonth = now.getMonth() + 1;
+        const cardYear = parseInt(cardData.year);
+        const cardMonth = parseInt(cardData.month);
+        const isExpired = cardYear < currentYear || (cardYear === currentYear && cardMonth < currentMonth);
+        
         if (
           cardData.card.length >= 13 && 
           cardData.card.length <= 16 && 
           monthNum >= 1 && 
           monthNum <= 12 && 
           cardData.year.length === 2 &&
-          cvvValid
+          cvvValid &&
+          !isExpired // Filter out expired cards
         ) {
           const cardKey = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv || 'nocvv'}`;
           if (!seenCards.has(cardKey)) {
