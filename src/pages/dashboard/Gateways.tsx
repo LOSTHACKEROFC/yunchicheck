@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import confetti from "canvas-confetti";
 import { useLiveCardSound } from "@/hooks/useLiveCardSound";
+import { useVictorySound } from "@/hooks/useVictorySound";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -229,12 +230,21 @@ const Gateways = () => {
   
   // Live card sound hook with settings check
   const { playLiveSound } = useLiveCardSound();
+  const { playVictorySound } = useVictorySound();
   
   const playLiveSoundIfEnabled = () => {
     const savedPrefs = localStorage.getItem("notification-preferences");
     const prefs = savedPrefs ? JSON.parse(savedPrefs) : { live_card_sound: true };
     if (prefs.live_card_sound !== false) {
       playLiveSound();
+    }
+  };
+
+  const playVictorySoundIfEnabled = (intensity: "small" | "medium" | "epic") => {
+    const savedPrefs = localStorage.getItem("notification-preferences");
+    const prefs = savedPrefs ? JSON.parse(savedPrefs) : { live_card_sound: true };
+    if (prefs.live_card_sound !== false) {
+      playVictorySound(intensity);
     }
   };
 
@@ -812,7 +822,7 @@ const Gateways = () => {
         
         if (finalLiveCount >= 5) {
           // MEGA celebration for 5+ live cards - Epic blood rain
-          playLiveSoundIfEnabled();
+          playVictorySoundIfEnabled("epic");
           
           const duration = 4000;
           const end = Date.now() + duration;
@@ -882,7 +892,7 @@ const Gateways = () => {
           
         } else if (finalLiveCount >= 3) {
           // Epic blood rain celebration for 3-4 live cards
-          playLiveSoundIfEnabled();
+          playVictorySoundIfEnabled("medium");
           
           const duration = 3000;
           const end = Date.now() + duration;
@@ -941,7 +951,7 @@ const Gateways = () => {
           
         } else if (finalLiveCount >= 1) {
           // Dramatic burst for 1-2 live cards
-          playLiveSoundIfEnabled();
+          playVictorySoundIfEnabled("small");
           
           confetti({
             particleCount: 120,
