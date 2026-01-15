@@ -1172,14 +1172,32 @@ const Gateways = () => {
               </div>
             </CardTitle>
             {gatewayHistory.length > 0 && (() => {
-              const liveCount = gatewayHistory.filter(c => c.result === 'live').length;
+              const liveCards = gatewayHistory.filter(c => c.result === 'live' && c.fullCard);
+              const liveCount = liveCards.length;
               const deadCount = gatewayHistory.filter(c => c.result === 'dead').length;
               const unknownCount = gatewayHistory.filter(c => c.result === 'unknown' || !c.result).length;
               const totalValidChecks = liveCount + deadCount;
               const successRate = totalValidChecks > 0 ? Math.round((liveCount / totalValidChecks) * 100) : 0;
               
+              const copyAllLiveCards = () => {
+                const liveCardStrings = liveCards.map(c => c.fullCard).join('\n');
+                navigator.clipboard.writeText(liveCardStrings);
+                toast.success(`Copied ${liveCount} live card${liveCount !== 1 ? 's' : ''} to clipboard`);
+              };
+              
               return (
                 <div className="flex items-center gap-2">
+                  {liveCount > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-[10px] text-green-500 hover:bg-green-500/20 hover:text-green-400"
+                      onClick={copyAllLiveCards}
+                    >
+                      <Copy className="h-3 w-3 mr-1" />
+                      Copy All Live
+                    </Button>
+                  )}
                   {totalValidChecks > 0 && (
                     <Badge 
                       variant="outline" 
