@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -100,6 +101,7 @@ interface TopupTransaction {
 }
 
 const BuyCredits = () => {
+  const [searchParams] = useSearchParams();
   const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(null);
   const [selectedMethod, setSelectedMethod] = useState("");
   const [step, setStep] = useState<"select" | "payment" | "proof">("select");
@@ -109,6 +111,19 @@ const BuyCredits = () => {
   const [proofPreview, setProofPreview] = useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Pre-select package from URL parameter
+  useEffect(() => {
+    const packageParam = searchParams.get('package');
+    if (packageParam && !selectedPackage) {
+      const foundPackage = creditPackages.find(
+        pkg => pkg.name.toLowerCase() === packageParam.toLowerCase()
+      );
+      if (foundPackage) {
+        setSelectedPackage(foundPackage);
+      }
+    }
+  }, [searchParams, selectedPackage]);
 
   // Real-time subscription for transaction updates
   useEffect(() => {

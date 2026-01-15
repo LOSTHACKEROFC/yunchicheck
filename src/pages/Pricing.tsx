@@ -34,7 +34,7 @@ const Pricing = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const getCtaLink = () => isLoggedIn ? "/dashboard/buy" : "/auth";
+  const getCtaLink = (packageName: string) => isLoggedIn ? `/dashboard/buy?package=${packageName.toLowerCase()}` : "/auth";
 
   const plans = [
     {
@@ -212,7 +212,7 @@ const Pricing = () => {
                   ))}
                 </ul>
 
-                <Link to={getCtaLink()}>
+                <Link to={getCtaLink(plan.name)}>
                   <Button
                     className={`w-full ${plan.popular ? "btn-primary" : ""}`}
                     variant={plan.popular ? "default" : "outline"}
