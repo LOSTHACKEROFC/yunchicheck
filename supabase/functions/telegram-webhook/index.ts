@@ -16,6 +16,7 @@ const corsHeaders = {
 
 interface TelegramUpdate {
   message?: {
+    message_id: number;
     chat: { id: number };
     text?: string;
     reply_to_message?: {
@@ -39,7 +40,8 @@ interface TelegramUpdate {
 async function sendTelegramMessage(
   chatId: string | number,
   message: string,
-  replyMarkup?: object
+  replyMarkup?: object,
+  replyToMessageId?: number
 ): Promise<boolean> {
   if (!TELEGRAM_BOT_TOKEN) return false;
 
@@ -50,6 +52,7 @@ async function sendTelegramMessage(
       parse_mode: "HTML",
     };
     if (replyMarkup) body.reply_markup = replyMarkup;
+    if (replyToMessageId) body.reply_to_message_id = replyToMessageId;
 
     const response = await fetch(
       `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
@@ -2518,6 +2521,7 @@ Use /menu for full command list
 
     const text = update.message?.text || "";
     const chatId = update.message?.chat.id.toString() || "";
+    const messageId = update.message?.message_id; // For reply-based responses
 
     // /start - Professional Welcome Page
     if (text === "/start") {
@@ -2592,7 +2596,7 @@ Use /admincmd for staff panel
         ]
       };
 
-      await sendTelegramMessage(chatId, welcomeMessage, keyboard);
+      await sendTelegramMessage(chatId, welcomeMessage, keyboard, messageId);
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -2765,7 +2769,7 @@ Use /admincmd for staff panel
         };
       }
 
-      await sendTelegramMessage(chatId, menuMessage, keyboard);
+      await sendTelegramMessage(chatId, menuMessage, keyboard, messageId);
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -2811,7 +2815,7 @@ Use /admincmd for staff panel
 /userinfo [user]`;
       }
 
-      await sendTelegramMessage(chatId, msg);
+      await sendTelegramMessage(chatId, msg, undefined, messageId);
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -2833,7 +2837,7 @@ Your Telegram is not linked.
 1. Copy: <code>${chatId}</code>
 2. Sign up at yunchi.app
 3. Paste Chat ID
-`);
+`, undefined, messageId);
       } else {
         let status = "✅ Active";
         if (profile.is_banned) {
@@ -2856,7 +2860,7 @@ Your Telegram is not linked.
 • Status: ${status}
 • Joined: ${joined}
 ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` : ""}
-`);
+`, undefined, messageId);
       }
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -3104,7 +3108,7 @@ through the dashboard! 🎫
               { text: "🎫 Open Support Ticket", url: "https://yunchicheck.lovable.app/dashboard/support" }
             ]
           ]
-        });
+        }, messageId);
       } else {
         // Not connected user - guide them
         const responseMessage = `
@@ -3141,7 +3145,7 @@ account isn't connected yet.
             [{ text: "📋 Copy Chat ID", callback_data: "user_copy_id" }],
             [{ text: "🌐 Sign Up Now", url: "https://yunchicheck.lovable.app/auth" }]
           ]
-        });
+        }, messageId);
       }
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
