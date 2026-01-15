@@ -228,6 +228,7 @@ const Gateways = () => {
   const [bulkStartTime, setBulkStartTime] = useState<number | null>(null);
   const [bulkEstimatedTime, setBulkEstimatedTime] = useState<string>("");
   const [workerCount, setWorkerCount] = useState(3); // Default 3 workers (2-5 range)
+  const [bulkResultFilter, setBulkResultFilter] = useState<"all" | "live" | "dead" | "unknown">("all"); // Filter for bulk results
   const bulkAbortRef = useRef(false);
   const bulkPauseRef = useRef(false);
 
@@ -2220,27 +2221,72 @@ const Gateways = () => {
           {bulkResults.length > 0 && (
             <Card className="bg-card border-border max-w-2xl">
               <CardHeader className="p-4 pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-semibold">Results</CardTitle>
-                  <div className="flex items-center gap-2">
-                    <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-xs">
-                      {liveCount} Live
-                    </Badge>
-                    <Badge className="bg-red-500/20 text-red-500 border-red-500/30 text-xs">
-                      {deadCount} Dead
-                    </Badge>
-                    {unknownCount > 0 && (
-                      <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30 text-xs">
-                        {unknownCount} Unknown
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-semibold">Results</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-xs">
+                        {liveCount} Live
                       </Badge>
-                    )}
+                      <Badge className="bg-red-500/20 text-red-500 border-red-500/30 text-xs">
+                        {deadCount} Dead
+                      </Badge>
+                      {unknownCount > 0 && (
+                        <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30 text-xs">
+                          {unknownCount} Unknown
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  {/* Filter Buttons */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Filter:</span>
+                    <div className="flex gap-1">
+                      <Button
+                        variant={bulkResultFilter === "all" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setBulkResultFilter("all")}
+                        className="h-6 px-2 text-[10px]"
+                      >
+                        All ({bulkResults.length})
+                      </Button>
+                      <Button
+                        variant={bulkResultFilter === "live" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setBulkResultFilter("live")}
+                        className={`h-6 px-2 text-[10px] ${bulkResultFilter === "live" ? "bg-green-600 hover:bg-green-700" : "text-green-500 border-green-500/50 hover:bg-green-500/10"}`}
+                        disabled={liveCount === 0}
+                      >
+                        Live ({liveCount})
+                      </Button>
+                      <Button
+                        variant={bulkResultFilter === "dead" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setBulkResultFilter("dead")}
+                        className={`h-6 px-2 text-[10px] ${bulkResultFilter === "dead" ? "bg-red-600 hover:bg-red-700" : "text-red-500 border-red-500/50 hover:bg-red-500/10"}`}
+                        disabled={deadCount === 0}
+                      >
+                        Dead ({deadCount})
+                      </Button>
+                      <Button
+                        variant={bulkResultFilter === "unknown" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setBulkResultFilter("unknown")}
+                        className={`h-6 px-2 text-[10px] ${bulkResultFilter === "unknown" ? "bg-yellow-600 hover:bg-yellow-700" : "text-yellow-500 border-yellow-500/50 hover:bg-yellow-500/10"}`}
+                        disabled={unknownCount === 0}
+                      >
+                        Unknown ({unknownCount})
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="p-4 pt-2 space-y-3">
                 <ScrollArea className="h-[200px] sm:h-[300px] rounded border border-border">
                   <div className="p-2 space-y-1 font-mono text-xs">
-                    {bulkResults.map((r, i) => (
+                    {bulkResults
+                      .filter(r => bulkResultFilter === "all" || r.status === bulkResultFilter)
+                      .map((r, i) => (
                       <div 
                         key={i} 
                         className={`flex items-center gap-2 px-2 py-1 rounded ${
