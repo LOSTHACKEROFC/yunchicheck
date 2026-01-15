@@ -156,8 +156,8 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Send email notification
-    const res = await fetch("https://api.resend.com/emails", {
+    // Send email notification to admin
+    const adminEmailRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -174,6 +174,7 @@ const handler = async (req: Request): Promise<Response> => {
               <p><strong>Ticket ID:</strong> ${ticketId}</p>
               <p><strong>From:</strong> ${userName || 'Unknown User'} (${userEmail})</p>
               <p><strong>Subject:</strong> ${subject}</p>
+              <p><strong>Priority:</strong> ${priority || 'medium'}</p>
             </div>
             <div style="background: #ffffff; padding: 20px; border: 1px solid #e9ecef; border-radius: 8px;">
               <h3 style="margin-top: 0;">Message:</h3>
@@ -187,13 +188,64 @@ const handler = async (req: Request): Promise<Response> => {
       }),
     });
 
-    if (!res.ok) {
-      const errorData = await res.json();
-      console.error("Resend API error:", errorData);
-      // Don't throw - ticket is saved, just email failed
-      console.log("Email failed but ticket was saved");
+    if (!adminEmailRes.ok) {
+      const errorData = await adminEmailRes.json();
+      console.error("Admin email error:", errorData);
     } else {
-      console.log("Email sent successfully");
+      console.log("Admin email sent successfully");
+    }
+
+    // Send confirmation email to user
+    const userEmailRes = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: "Yunchi Support <onboarding@resend.dev>",
+        to: [userEmail],
+        subject: `[${ticketId}] We've received your support request`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #7c3aed, #6d28d9); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+              <h1 style="color: white; margin: 0;">🎫 Ticket Received</h1>
+            </div>
+            <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
+              <p style="font-size: 16px;">Hello <strong>${userName || 'there'}</strong>,</p>
+              <p>Thank you for contacting us. We've received your support request and our team will review it shortly.</p>
+              
+              <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 5px 0;"><strong>Ticket ID:</strong> ${ticketId}</p>
+                <p style="margin: 5px 0;"><strong>Subject:</strong> ${subject}</p>
+                <p style="margin: 5px 0;"><strong>Priority:</strong> ${priority || 'medium'}</p>
+              </div>
+              
+              <div style="background: #262626; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 0 0 10px 0; color: #a3a3a3;"><strong>Your message:</strong></p>
+                <p style="margin: 0; white-space: pre-wrap;">${message}</p>
+              </div>
+              
+              <p style="color: #a3a3a3;">We'll notify you via email and Telegram (if connected) when we respond.</p>
+              
+              <div style="text-align: center; margin-top: 25px;">
+                <a href="https://yunchicheck.lovable.app/dashboard/support" style="display: inline-block; background: #7c3aed; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View Ticket</a>
+              </div>
+              
+              <p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 30px;">
+                This is an automated message from Yunchi Checker Support.
+              </p>
+            </div>
+          </div>
+        `,
+      }),
+    });
+
+    if (!userEmailRes.ok) {
+      const errorData = await userEmailRes.json();
+      console.error("User confirmation email error:", errorData);
+    } else {
+      console.log("User confirmation email sent successfully");
     }
 
     return new Response(JSON.stringify({ success: true, ticketId }), {
