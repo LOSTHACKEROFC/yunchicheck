@@ -534,6 +534,62 @@ const Topup = () => {
               ))}
             </div>
 
+            {/* Price Comparison Table */}
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table className="w-full text-xs sm:text-sm">
+                <thead>
+                  <tr className="bg-muted/50">
+                    <th className="text-left p-2 sm:p-3 font-medium text-muted-foreground">Package</th>
+                    <th className="text-right p-2 sm:p-3 font-medium text-muted-foreground">Credits</th>
+                    <th className="text-right p-2 sm:p-3 font-medium text-muted-foreground">Price</th>
+                    <th className="text-right p-2 sm:p-3 font-medium text-muted-foreground">Per Credit</th>
+                    <th className="text-right p-2 sm:p-3 font-medium text-muted-foreground">Savings</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {creditPackages.map((pkg, index) => {
+                    const pricePerCredit = pkg.price / pkg.credits;
+                    const baseRate = creditPackages[0].price / creditPackages[0].credits;
+                    const savings = index === 0 ? 0 : Math.round((1 - pricePerCredit / baseRate) * 100);
+                    return (
+                      <tr 
+                        key={pkg.credits} 
+                        className={`border-t border-border transition-colors cursor-pointer hover:bg-muted/30 ${
+                          selectedPackage?.credits === pkg.credits ? "bg-primary/10" : ""
+                        } ${pkg.popular ? "bg-primary/5" : ""}`}
+                        onClick={() => setSelectedPackage(pkg)}
+                      >
+                        <td className="p-2 sm:p-3 font-medium">
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            {pkg.popular && (
+                              <Badge className="bg-primary text-primary-foreground text-[8px] sm:text-[10px] px-1 py-0">Best</Badge>
+                            )}
+                            <span className={selectedPackage?.credits === pkg.credits ? "text-primary" : ""}>
+                              {index === 0 ? "Starter" : index === 1 ? "Basic" : index === 2 ? "Standard" : index === 3 ? "Pro" : index === 4 ? "Business" : "Enterprise"}
+                            </span>
+                          </div>
+                        </td>
+                        <td className={`p-2 sm:p-3 text-right font-semibold ${selectedPackage?.credits === pkg.credits ? "text-primary" : ""}`}>
+                          {pkg.credits.toLocaleString()}
+                        </td>
+                        <td className="p-2 sm:p-3 text-right text-muted-foreground">${pkg.price.toLocaleString()}</td>
+                        <td className="p-2 sm:p-3 text-right font-mono text-muted-foreground">
+                          ${pricePerCredit.toFixed(4)}
+                        </td>
+                        <td className="p-2 sm:p-3 text-right">
+                          {savings > 0 ? (
+                            <span className="text-green-500 font-medium">-{savings}%</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
             {/* Payment Methods */}
             <div className="space-y-3">
               <label className="text-sm font-medium">Payment Method</label>
