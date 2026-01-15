@@ -708,8 +708,8 @@ const Gateways = () => {
         };
       }
       
-      // Pattern 1b: Pipe-delimited without CVV (CardNumber|MM|YY or CardNumber|MM|YY|) - for auth gateways
-      if (!cardData && isAuthGateway) {
+      // Pattern 1b: Pipe-delimited without CVV (CardNumber|MM|YY or CardNumber|MM|YY|) - for all gateways
+      if (!cardData) {
         // Match cards with trailing pipe or no CVV: 5134148665605189|01|2026| or 5134148665605189|01|2026
         const pipeNoCvvMatch = trimmedLine.match(/^(\d{13,16})\|(\d{1,2})\|(\d{2,4})\|?\s*$/);
         if (pipeNoCvvMatch) {
@@ -739,8 +739,8 @@ const Gateways = () => {
         }
       }
       
-      // Pattern 2b: Space-delimited without CVV (CardNumber MM YY) - for auth gateways
-      if (!cardData && isAuthGateway) {
+      // Pattern 2b: Space-delimited without CVV (CardNumber MM YY) - for all gateways
+      if (!cardData) {
         const spaceNoCvvMatch = trimmedLine.match(/^(\d{13,16})\s+(\d{1,2})\s+(\d{2,4})(?:\s*$)/);
         if (spaceNoCvvMatch) {
           const [, card, month, year] = spaceNoCvvMatch;
@@ -769,8 +769,8 @@ const Gateways = () => {
         }
       }
       
-      // Pattern 3b: Forward slash delimited without CVV (CardNumber/MM/YY) - for auth gateways
-      if (!cardData && isAuthGateway) {
+      // Pattern 3b: Forward slash delimited without CVV (CardNumber/MM/YY) - for all gateways
+      if (!cardData) {
         const slashNoCvvMatch = trimmedLine.match(/^(\d{13,16})\/(\d{1,2})\/(\d{2,4})(?:\/|$|\s*$)/);
         if (slashNoCvvMatch) {
           const [, card, month, year] = slashNoCvvMatch;
@@ -799,8 +799,8 @@ const Gateways = () => {
         }
       }
       
-      // Pattern 4b: Dash-delimited without CVV (CardNumber-MM-YY) - for auth gateways
-      if (!cardData && isAuthGateway) {
+      // Pattern 4b: Dash-delimited without CVV (CardNumber-MM-YY) - for all gateways
+      if (!cardData) {
         const dashNoCvvMatch = trimmedLine.match(/^(\d{13,16})\-(\d{1,2})\-(\d{2,4})(?:\-|$|\s*$)/);
         if (dashNoCvvMatch) {
           const [, card, month, year] = dashNoCvvMatch;
@@ -829,8 +829,8 @@ const Gateways = () => {
         }
       }
       
-      // Pattern 5b: Dot-delimited without CVV (CardNumber.MM.YY) - for auth gateways
-      if (!cardData && isAuthGateway) {
+      // Pattern 5b: Dot-delimited without CVV (CardNumber.MM.YY) - for all gateways
+      if (!cardData) {
         const dotNoCvvMatch = trimmedLine.match(/^(\d{13,16})\.(\d{1,2})\.(\d{2,4})(?:\.|$|\s*$)/);
         if (dotNoCvvMatch) {
           const [, card, month, year] = dotNoCvvMatch;
