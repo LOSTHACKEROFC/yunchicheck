@@ -39,6 +39,7 @@ import {
   ShoppingBag,
   CircleDollarSign,
   History,
+  Paperclip,
   type LucideIcon
 } from "lucide-react";
 import { format } from "date-fns";
@@ -596,28 +597,188 @@ const Gateways = () => {
     setResult(null);
   };
 
-  // Bulk checking functions
+  // File input ref for bulk upload
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Bulk checking functions - Enhanced parser for multiple formats
   const parseCards = (input: string): { card: string; month: string; year: string; cvv: string }[] => {
     const lines = input.trim().split('\n').filter(line => line.trim());
     const cards: { card: string; month: string; year: string; cvv: string }[] = [];
+    const seenCards = new Set<string>();
 
     for (const line of lines) {
-      // Support formats: card|mm|yy|cvv or card|mm|yyyy|cvv
-      const parts = line.trim().split(/[|/]/);
-      if (parts.length >= 4) {
-        const card = parts[0].replace(/\D/g, '');
-        const month = parts[1].replace(/\D/g, '').slice(0, 2);
-        let year = parts[2].replace(/\D/g, '');
-        if (year.length === 4) year = year.slice(2);
-        const cvv = parts[3].replace(/\D/g, '').slice(0, 4);
+      const trimmedLine = line.trim();
+      
+      // Try to extract card data using multiple patterns
+      let cardData: { card: string; month: string; year: string; cvv: string } | null = null;
+      
+      // Pattern 1: Pipe-delimited (CardNumber|MM|YY|CVC or CardNumber|MM|YYYY|CVC or CardNumber|M|YY|CVC)
+      const pipeMatch = trimmedLine.match(/^(\d{13,16})\|(\d{1,2})\|(\d{2,4})\|(\d{3,4})/);
+      if (pipeMatch) {
+        const [, card, month, year, cvv] = pipeMatch;
+        cardData = {
+          card,
+          month: month.padStart(2, '0'),
+          year: year.length === 4 ? year.slice(2) : year,
+          cvv
+        };
+      }
+      
+      // Pattern 2: Space-delimited (CardNumber MM YY CVC or CardNumber MM YYYY CVC)
+      if (!cardData) {
+        const spaceMatch = trimmedLine.match(/^(\d{13,16})\s+(\d{1,2})\s+(\d{2,4})\s+(\d{3,4})/);
+        if (spaceMatch) {
+          const [, card, month, year, cvv] = spaceMatch;
+          cardData = {
+            card,
+            month: month.padStart(2, '0'),
+            year: year.length === 4 ? year.slice(2) : year,
+            cvv
+          };
+        }
+      }
+      
+      // Pattern 3: Forward slash delimited (CardNumber/MM/YY/CVC)
+      if (!cardData) {
+        const slashMatch = trimmedLine.match(/^(\d{13,16})\/(\d{1,2})\/(\d{2,4})\/(\d{3,4})/);
+        if (slashMatch) {
+          const [, card, month, year, cvv] = slashMatch;
+          cardData = {
+            card,
+            month: month.padStart(2, '0'),
+            year: year.length === 4 ? year.slice(2) : year,
+            cvv
+          };
+        }
+      }
 
-        if (card.length >= 13 && card.length <= 16 && month && year && cvv.length >= 3) {
-          cards.push({ card, month, year, cvv });
+      // Pattern 4: Fullz extraction - look for card number + exp + cvv anywhere in line
+      if (!cardData) {
+        // Extract 13-16 digit card number
+        const cardNumMatch = trimmedLine.match(/\b(\d{13,16})\b/);
+        if (cardNumMatch) {
+          const cardNum = cardNumMatch[1];
+          
+          // Look for expiration patterns: MM/YY, MM/YYYY, MM-YY, MM-YYYY, MMYY, MMYYYY
+          const expPatterns = [
+            /\b(0[1-9]|1[0-2])[\/\-]?(20)?(\d{2})\b/,  // MM/YY or MM/YYYY or MMYY
+            /\bexp[:\s]*(0[1-9]|1[0-2])[\/\-]?(20)?(\d{2})\b/i, // EXP: MM/YY
+          ];
+          
+          let expMonth = '', expYear = '';
+          for (const pattern of expPatterns) {
+            const expMatch = trimmedLine.match(pattern);
+            if (expMatch) {
+              expMonth = expMatch[1];
+              expYear = expMatch[3] || expMatch[2];
+              break;
+            }
+          }
+          
+          // Look for CVV (3-4 digit number that's not the card or exp)
+          const cvvPatterns = [
+            /\bcvv[:\s]*(\d{3,4})\b/i,  // CVV: 123
+            /\bcvc[:\s]*(\d{3,4})\b/i,  // CVC: 123
+            /\bsecurity[:\s]*(\d{3,4})\b/i, // Security: 123
+          ];
+          
+          let cvvNum = '';
+          for (const pattern of cvvPatterns) {
+            const cvvMatch = trimmedLine.match(pattern);
+            if (cvvMatch) {
+              cvvNum = cvvMatch[1];
+              break;
+            }
+          }
+          
+          // If no labeled CVV, try to find a standalone 3-4 digit number
+          if (!cvvNum) {
+            const allNumbers = trimmedLine.match(/\b\d{3,4}\b/g) || [];
+            for (const num of allNumbers) {
+              // Skip if it's part of the card number or exp date
+              if (!cardNum.includes(num) && num !== expMonth && num !== expYear && num !== expMonth + expYear) {
+                if (num.length >= 3 && num.length <= 4) {
+                  cvvNum = num;
+                  break;
+                }
+              }
+            }
+          }
+          
+          if (expMonth && expYear && cvvNum) {
+            cardData = {
+              card: cardNum,
+              month: expMonth.padStart(2, '0'),
+              year: expYear.length === 4 ? expYear.slice(2) : expYear,
+              cvv: cvvNum
+            };
+          }
+        }
+      }
+      
+      // Validate and add the card
+      if (cardData) {
+        const monthNum = parseInt(cardData.month);
+        if (
+          cardData.card.length >= 13 && 
+          cardData.card.length <= 16 && 
+          monthNum >= 1 && 
+          monthNum <= 12 && 
+          cardData.year.length === 2 &&
+          cardData.cvv.length >= 3 && 
+          cardData.cvv.length <= 4
+        ) {
+          const cardKey = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
+          if (!seenCards.has(cardKey)) {
+            seenCards.add(cardKey);
+            cards.push(cardData);
+          }
         }
       }
     }
 
     return cards;
+  };
+
+  // Handle file upload
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['text/plain', 'text/csv', 'application/vnd.ms-excel'];
+    const validExtensions = ['.txt', '.csv'];
+    const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+    
+    if (!validTypes.includes(file.type) && !validExtensions.includes(fileExtension)) {
+      toast.error("Please upload a .txt or .csv file");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      if (content) {
+        // Append to existing input or set as new
+        if (bulkInput.trim()) {
+          setBulkInput(prev => prev + '\n' + content);
+        } else {
+          setBulkInput(content);
+        }
+        
+        // Parse and show count
+        const newCards = parseCards(content);
+        toast.success(`Loaded ${newCards.length} valid cards from file`);
+      }
+    };
+    reader.onerror = () => {
+      toast.error("Failed to read file");
+    };
+    reader.readAsText(file);
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const maskCard = (card: string): string => {
@@ -1528,16 +1689,39 @@ const Gateways = () => {
           <Card className="bg-card border-border max-w-2xl">
             <CardContent className="p-4 sm:p-6 space-y-4">
               <div>
-                <Label className="text-xs">Cards (one per line)</Label>
+                <div className="flex items-center justify-between mb-1">
+                  <Label className="text-xs">Cards (one per line)</Label>
+                  <div>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept=".txt,.csv"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      disabled={bulkChecking}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-[10px] gap-1"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={bulkChecking}
+                    >
+                      <Paperclip className="h-3 w-3" />
+                      Attach File
+                    </Button>
+                  </div>
+                </div>
                 <Textarea
-                  placeholder="card|mm|yy|cvv&#10;4242424242424242|12|25|123&#10;5555555555554444|01|26|456"
+                  placeholder="Supports multiple formats:&#10;card|mm|yy|cvv&#10;card mm yyyy cvv&#10;Fullz data with card details"
                   value={bulkInput}
                   onChange={(e) => setBulkInput(e.target.value)}
                   className="mt-1 font-mono text-xs h-40 resize-none"
                   disabled={bulkChecking}
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  Format: card|mm|yy|cvv — {parseCards(bulkInput).length} valid cards detected
+                  Formats: card|mm|yy|cvv, card mm yyyy cvv, Fullz — {parseCards(bulkInput).length} valid cards detected
                 </p>
               </div>
 
