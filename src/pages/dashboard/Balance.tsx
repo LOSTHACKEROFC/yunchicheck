@@ -96,7 +96,7 @@ const Balance = () => {
         allTransactions.push({
           id: check.id,
           type: "check",
-          credits: -5, // Default check cost in credits
+          credits: -1, // Default check cost in credits
           gateway: check.gateway,
           date: check.created_at,
           status: check.status
