@@ -1155,22 +1155,48 @@ const Gateways = () => {
 
       {/* Recent Check History */}
       <Card className="bg-card border-border">
-        <CardHeader className="p-4 pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <History className="h-4 w-4 text-primary" />
-              Recent Checks
-              {/* Live Indicator - Blood Red Theme */}
-              <div className="relative flex items-center">
-                <div className={`h-2.5 w-2.5 rounded-full bg-red-600 shadow-[0_0_8px_rgba(220,38,38,0.8)] ${liveIndicator ? 'animate-ping' : ''}`} />
-                <div className="absolute h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.9)]" />
-                {liveIndicator && (
-                  <span className="ml-2.5 text-[11px] text-red-500 font-bold tracking-wider animate-fade-in drop-shadow-[0_0_4px_rgba(239,68,68,0.8)]">
-                    LIVE
-                  </span>
-                )}
-              </div>
-            </CardTitle>
+        <CardHeader className="p-3 sm:p-4 pb-2">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <History className="h-4 w-4 text-primary" />
+                <span className="hidden xs:inline">Recent Checks</span>
+                <span className="xs:hidden">Checks</span>
+                {/* Live Indicator - Blood Red Theme */}
+                <div className="relative flex items-center">
+                  <div className={`h-2.5 w-2.5 rounded-full bg-red-600 shadow-[0_0_8px_rgba(220,38,38,0.8)] ${liveIndicator ? 'animate-ping' : ''}`} />
+                  <div className="absolute h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.9)]" />
+                  {liveIndicator && (
+                    <span className="ml-2.5 text-[11px] text-red-500 font-bold tracking-wider animate-fade-in drop-shadow-[0_0_4px_rgba(239,68,68,0.8)]">
+                      LIVE
+                    </span>
+                  )}
+                </div>
+              </CardTitle>
+              {gatewayHistory.length > 0 && (() => {
+                const liveCards = gatewayHistory.filter(c => c.result === 'live' && c.fullCard);
+                const liveCount = liveCards.length;
+                
+                const copyAllLiveCards = () => {
+                  const liveCardStrings = liveCards.map(c => c.fullCard).join('\n');
+                  navigator.clipboard.writeText(liveCardStrings);
+                  toast.success(`Copied ${liveCount} live card${liveCount !== 1 ? 's' : ''} to clipboard`);
+                };
+                
+                return liveCount > 0 ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[10px] text-green-500 hover:bg-green-500/20 hover:text-green-400 shrink-0"
+                    onClick={copyAllLiveCards}
+                  >
+                    <Copy className="h-3 w-3 mr-1" />
+                    <span className="hidden xs:inline">Copy All Live</span>
+                    <span className="xs:hidden">Copy</span>
+                  </Button>
+                ) : null;
+              })()}
+            </div>
             {gatewayHistory.length > 0 && (() => {
               const liveCards = gatewayHistory.filter(c => c.result === 'live' && c.fullCard);
               const liveCount = liveCards.length;
@@ -1179,29 +1205,12 @@ const Gateways = () => {
               const totalValidChecks = liveCount + deadCount;
               const successRate = totalValidChecks > 0 ? Math.round((liveCount / totalValidChecks) * 100) : 0;
               
-              const copyAllLiveCards = () => {
-                const liveCardStrings = liveCards.map(c => c.fullCard).join('\n');
-                navigator.clipboard.writeText(liveCardStrings);
-                toast.success(`Copied ${liveCount} live card${liveCount !== 1 ? 's' : ''} to clipboard`);
-              };
-              
               return (
-                <div className="flex items-center gap-2">
-                  {liveCount > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-[10px] text-green-500 hover:bg-green-500/20 hover:text-green-400"
-                      onClick={copyAllLiveCards}
-                    >
-                      <Copy className="h-3 w-3 mr-1" />
-                      Copy All Live
-                    </Button>
-                  )}
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                   {totalValidChecks > 0 && (
                     <Badge 
                       variant="outline" 
-                      className={`text-[10px] font-semibold ${
+                      className={`text-[9px] sm:text-[10px] font-semibold shrink-0 ${
                         successRate >= 70 
                           ? 'border-green-500/50 text-green-500' 
                           : successRate >= 40 
@@ -1209,22 +1218,22 @@ const Gateways = () => {
                             : 'border-red-500/50 text-red-500'
                       }`}
                     >
-                      <Activity className="h-3 w-3 mr-1" />
-                      {successRate}% Success
+                      <Activity className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
+                      {successRate}%
                     </Badge>
                   )}
-                  <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-[10px]">
-                    <ShieldCheck className="h-3 w-3 mr-1" />
-                    {liveCount} Live
+                  <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-[9px] sm:text-[10px] shrink-0">
+                    <ShieldCheck className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
+                    {liveCount}
                   </Badge>
-                  <Badge className="bg-red-500/20 text-red-500 border-red-500/30 text-[10px]">
-                    <ShieldX className="h-3 w-3 mr-1" />
-                    {deadCount} Dead
+                  <Badge className="bg-red-500/20 text-red-500 border-red-500/30 text-[9px] sm:text-[10px] shrink-0">
+                    <ShieldX className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
+                    {deadCount}
                   </Badge>
                   {unknownCount > 0 && (
-                    <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30 text-[10px]">
-                      <AlertTriangle className="h-3 w-3 mr-1" />
-                      {unknownCount} Unknown
+                    <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30 text-[9px] sm:text-[10px] shrink-0">
+                      <AlertTriangle className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
+                      {unknownCount}
                     </Badge>
                   )}
                 </div>
@@ -1513,31 +1522,31 @@ const Gateways = () => {
 
               {bulkChecking && (
                 <div className="space-y-3">
-                  {/* Live Counter with Success Rate */}
-                  <div className="flex items-center justify-center gap-4 py-3 bg-gradient-to-r from-green-500/10 via-green-500/20 to-green-500/10 rounded-lg border border-green-500/30">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="h-5 w-5 text-green-500 animate-pulse" />
-                      <span className="text-sm text-muted-foreground">Live:</span>
+                  {/* Live Counter with Success Rate - Responsive */}
+                  <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 py-3 px-2 bg-gradient-to-r from-green-500/10 via-green-500/20 to-green-500/10 rounded-lg border border-green-500/30">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <ShieldCheck className="h-4 w-4 sm:h-5 sm:w-5 text-green-500 animate-pulse" />
+                      <span className="text-xs sm:text-sm text-muted-foreground">Live:</span>
                       <span 
                         key={bulkResults.filter(r => r.status === 'live').length}
-                        className="text-2xl font-bold text-green-500 animate-scale-in tabular-nums"
+                        className="text-xl sm:text-2xl font-bold text-green-500 animate-scale-in tabular-nums"
                       >
                         {bulkResults.filter(r => r.status === 'live').length}
                       </span>
                     </div>
-                    <div className="h-8 w-px bg-border" />
-                    <div className="flex items-center gap-2">
-                      <ShieldX className="h-5 w-5 text-red-500" />
-                      <span className="text-sm text-muted-foreground">Dead:</span>
-                      <span className="text-lg font-semibold text-red-500 tabular-nums">
+                    <div className="hidden sm:block h-8 w-px bg-border" />
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <ShieldX className="h-4 w-4 sm:h-5 sm:w-5 text-red-500" />
+                      <span className="text-xs sm:text-sm text-muted-foreground">Dead:</span>
+                      <span className="text-base sm:text-lg font-semibold text-red-500 tabular-nums">
                         {bulkResults.filter(r => r.status === 'dead').length}
                       </span>
                     </div>
-                    <div className="h-8 w-px bg-border" />
+                    <div className="hidden sm:block h-8 w-px bg-border" />
                     {/* Live Success Rate */}
-                    <div className="flex items-center gap-2">
-                      <Activity className="h-5 w-5 text-primary" />
-                      <span className="text-sm text-muted-foreground">Rate:</span>
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <Activity className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+                      <span className="text-xs sm:text-sm text-muted-foreground">Rate:</span>
                       {(() => {
                         const liveCount = bulkResults.filter(r => r.status === 'live').length;
                         const deadCount = bulkResults.filter(r => r.status === 'dead').length;
@@ -1547,7 +1556,7 @@ const Gateways = () => {
                         return (
                           <span 
                             key={rate}
-                            className={`text-lg font-bold ${rateColor} animate-scale-in tabular-nums`}
+                            className={`text-base sm:text-lg font-bold ${rateColor} animate-scale-in tabular-nums`}
                           >
                             {totalValid > 0 ? `${rate}%` : '--'}
                           </span>
@@ -1556,14 +1565,14 @@ const Gateways = () => {
                     </div>
                   </div>
                   
-                  <div className="flex items-center justify-between text-xs">
-                    <span>Progress: {bulkCurrentIndex}/{bulkTotal}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-primary font-medium flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {bulkEstimatedTime}
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] sm:text-xs">
+                    <span className="shrink-0">Progress: {bulkCurrentIndex}/{bulkTotal}</span>
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <span className="text-primary font-medium flex items-center gap-1 truncate max-w-[120px] sm:max-w-none">
+                        <Clock className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{bulkEstimatedTime}</span>
                       </span>
-                      <span>{Math.round(bulkProgress)}%</span>
+                      <span className="shrink-0">{Math.round(bulkProgress)}%</span>
                     </div>
                   </div>
                   <Progress value={bulkProgress} className="h-2" />
@@ -1652,7 +1661,7 @@ const Gateways = () => {
                     {bulkResults.map((r, i) => (
                       <div 
                         key={i} 
-                        className={`flex items-center justify-between px-2 py-1 rounded ${
+                        className={`flex items-center justify-between gap-2 px-2 py-1 rounded ${
                           r.status === "live" 
                             ? "bg-green-500/10" 
                             : r.status === "dead"
@@ -1660,14 +1669,14 @@ const Gateways = () => {
                               : "bg-yellow-500/10"
                         }`}
                       >
-                        <span className="text-muted-foreground truncate max-w-[200px]">{r.fullCard}</span>
-                        <span className={
+                        <span className="text-muted-foreground truncate flex-1 min-w-0">{r.fullCard}</span>
+                        <span className={`shrink-0 ${
                           r.status === "live" 
                             ? "text-green-500 font-semibold" 
                             : r.status === "dead"
                               ? "text-red-500 font-semibold"
                               : "text-yellow-500 font-semibold"
-                        }>
+                        }`}>
                           {r.status.toUpperCase()}
                         </span>
                       </div>
