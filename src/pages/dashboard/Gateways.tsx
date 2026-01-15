@@ -1340,61 +1340,48 @@ const Gateways = () => {
             </p>
           ) : (
             <ScrollArea className="h-[200px] sm:h-[300px]">
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {gatewayHistory.map((check) => (
                   <div 
                     key={check.id}
-                    className={`flex items-center justify-between px-2 py-1.5 rounded-md bg-secondary/30 border border-border/50`}
+                    className={`flex items-center justify-between px-1.5 py-0.5 rounded bg-secondary/30`}
                   >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <div className={`p-1 rounded ${
-                        check.result === 'live' 
-                          ? 'bg-green-500/20' 
-                          : check.result === 'dead' 
-                            ? 'bg-red-500/20' 
-                            : 'bg-yellow-500/20'
-                      }`}>
-                        {check.result === 'live' ? (
-                          <ShieldCheck className="h-2.5 w-2.5 text-green-500" />
-                        ) : check.result === 'dead' ? (
-                          <ShieldX className="h-2.5 w-2.5 text-red-500" />
-                        ) : (
-                          <AlertTriangle className="h-2.5 w-2.5 text-yellow-500" />
-                        )}
-                      </div>
-                      <p className="text-[10px] font-mono text-foreground truncate flex-1">
-                        {check.fullCard ? check.fullCard.split('|').join(' | ') : '•••• •••• •••• ••••'}
-                      </p>
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                      {check.result === 'live' ? (
+                        <ShieldCheck className="h-2 w-2 text-green-500 shrink-0" />
+                      ) : check.result === 'dead' ? (
+                        <ShieldX className="h-2 w-2 text-red-500 shrink-0" />
+                      ) : (
+                        <AlertTriangle className="h-2 w-2 text-yellow-500 shrink-0" />
+                      )}
+                      <span className="text-[9px] font-mono text-muted-foreground truncate">
+                        {check.fullCard || '••••'}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="text-[9px] text-muted-foreground hidden sm:inline">
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-[8px] text-muted-foreground/70 hidden sm:inline">
                         {format(new Date(check.created_at), 'HH:mm')}
                       </span>
                       {check.fullCard && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-5 w-5 hover:bg-primary/20"
+                        <button
+                          className="p-0.5 hover:bg-primary/20 rounded"
                           onClick={() => {
                             navigator.clipboard.writeText(check.fullCard!);
-                            toast.success("Card copied to clipboard");
+                            toast.success("Copied");
                           }}
                         >
-                          <Copy className="h-2.5 w-2.5 text-muted-foreground" />
-                        </Button>
+                          <Copy className="h-2 w-2 text-muted-foreground" />
+                        </button>
                       )}
-                      <Badge 
-                        variant="outline" 
-                        className={`text-[8px] px-1 py-0 uppercase font-semibold ${
-                          check.result === 'live' 
-                            ? 'border-green-500/30 text-green-500 bg-green-500/10' 
-                            : check.result === 'dead'
-                              ? 'border-red-500/30 text-red-500 bg-red-500/10'
-                              : 'border-yellow-500/30 text-yellow-500 bg-yellow-500/10'
-                        }`}
-                      >
-                        {check.result || '?'}
-                      </Badge>
+                      <span className={`text-[8px] font-bold uppercase ${
+                        check.result === 'live' 
+                          ? 'text-green-500' 
+                          : check.result === 'dead'
+                            ? 'text-red-500'
+                            : 'text-yellow-500'
+                      }`}>
+                        {check.result === 'live' ? 'L' : check.result === 'dead' ? 'D' : '?'}
+                      </span>
                     </div>
                   </div>
                 ))}
