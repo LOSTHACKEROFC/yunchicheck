@@ -478,6 +478,8 @@ const Gateways = () => {
           result: checkStatus
         });
       
+      const fullCardString = `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${cvv}`;
+      
       const checkResult: CheckResult = {
         status: checkStatus,
         message: checkStatus === "live" 
@@ -485,7 +487,8 @@ const Gateways = () => {
           : checkStatus === "dead" 
             ? "Card declined or invalid"
             : "Unable to verify - try another gateway",
-        gateway: selectedGateway.name
+        gateway: selectedGateway.name,
+        card: fullCardString
       };
 
       setResult(checkResult);
@@ -1371,7 +1374,7 @@ const Gateways = () => {
                   ) : (
                     <AlertTriangle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />
                   )}
-                  <div>
+                  <div className="flex-1">
                     <p className={`font-semibold text-sm ${
                       result.status === "live" 
                         ? "text-green-500" 
@@ -1382,6 +1385,11 @@ const Gateways = () => {
                       {result.status === "live" ? "LIVE" : result.status === "dead" ? "DEAD" : "UNKNOWN"}
                     </p>
                     <p className="text-xs text-muted-foreground">{result.message}</p>
+                    {result.card && (
+                      <p className="text-xs font-mono text-foreground/80 mt-1 bg-secondary/50 px-2 py-1 rounded inline-block">
+                        {result.card}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -1588,7 +1596,7 @@ const Gateways = () => {
                               : "bg-yellow-500/10"
                         }`}
                       >
-                        <span className="text-muted-foreground">{r.cardMasked}</span>
+                        <span className="text-muted-foreground truncate max-w-[200px]">{r.fullCard}</span>
                         <span className={
                           r.status === "live" 
                             ? "text-green-500 font-semibold" 
