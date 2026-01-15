@@ -190,6 +190,7 @@ interface GatewayCheck {
   created_at: string;
   gateway: string;
   status: string;
+  result: string | null;
 }
 
 const Gateways = () => {
@@ -298,7 +299,7 @@ const Gateways = () => {
     try {
       const { data, error } = await supabase
         .from('card_checks')
-        .select('id, created_at, gateway, status')
+        .select('id, created_at, gateway, status, result')
         .eq('user_id', userId)
         .eq('gateway', gatewayId)
         .order('created_at', { ascending: false })
@@ -416,15 +417,16 @@ const Gateways = () => {
         throw new Error("Failed to deduct credits");
       }
 
+      const checkStatus = await simulateCheck();
+
       await supabase
         .from('card_checks')
         .insert({
           user_id: userId,
           gateway: selectedGateway.id,
-          status: 'completed'
+          status: 'completed',
+          result: checkStatus
         });
-
-      const checkStatus = await simulateCheck();
       
       const checkResult: CheckResult = {
         status: checkStatus,
@@ -556,16 +558,17 @@ const Gateways = () => {
         currentCredits -= CREDIT_COST;
         setUserCredits(currentCredits);
 
-        // Log check
+        const checkStatus = await simulateCheck();
+
+        // Log check with result
         await supabase
           .from('card_checks')
           .insert({
             user_id: userId,
             gateway: selectedGateway.id,
-            status: 'completed'
+            status: 'completed',
+            result: checkStatus
           });
-
-        const checkStatus = await simulateCheck();
 
         const bulkResult: BulkResult = {
           status: checkStatus,
@@ -876,12 +879,18 @@ const Gateways = () => {
                   >
                     <div className="flex items-center gap-3">
                       <div className={`p-1.5 rounded-md ${
-                        check.status === 'completed' ? 'bg-green-500/20' : 'bg-yellow-500/20'
+                        check.result === 'live' 
+                          ? 'bg-green-500/20' 
+                          : check.result === 'dead' 
+                            ? 'bg-red-500/20' 
+                            : 'bg-yellow-500/20'
                       }`}>
-                        {check.status === 'completed' ? (
-                          <CheckCircle className="h-3 w-3 text-green-500" />
+                        {check.result === 'live' ? (
+                          <ShieldCheck className="h-3 w-3 text-green-500" />
+                        ) : check.result === 'dead' ? (
+                          <ShieldX className="h-3 w-3 text-red-500" />
                         ) : (
-                          <Clock className="h-3 w-3 text-yellow-500" />
+                          <AlertTriangle className="h-3 w-3 text-yellow-500" />
                         )}
                       </div>
                       <div>
@@ -893,13 +902,15 @@ const Gateways = () => {
                     </div>
                     <Badge 
                       variant="outline" 
-                      className={`text-[10px] ${
-                        check.status === 'completed' 
-                          ? 'border-green-500/30 text-green-500' 
-                          : 'border-yellow-500/30 text-yellow-500'
+                      className={`text-[10px] uppercase font-semibold ${
+                        check.result === 'live' 
+                          ? 'border-green-500/30 text-green-500 bg-green-500/10' 
+                          : check.result === 'dead'
+                            ? 'border-red-500/30 text-red-500 bg-red-500/10'
+                            : 'border-yellow-500/30 text-yellow-500 bg-yellow-500/10'
                       }`}
                     >
-                      {check.status === 'completed' ? 'Completed' : 'Pending'}
+                      {check.result || 'Unknown'}
                     </Badge>
                   </div>
                 ))}

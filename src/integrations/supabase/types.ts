@@ -61,6 +61,7 @@ export type Database = {
           created_at: string
           gateway: string
           id: string
+          result: string | null
           status: string
           user_id: string
         }
@@ -68,6 +69,7 @@ export type Database = {
           created_at?: string
           gateway: string
           id?: string
+          result?: string | null
           status?: string
           user_id: string
         }
@@ -75,6 +77,7 @@ export type Database = {
           created_at?: string
           gateway?: string
           id?: string
+          result?: string | null
           status?: string
           user_id?: string
         }
