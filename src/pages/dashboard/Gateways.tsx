@@ -1826,7 +1826,9 @@ const Gateways = () => {
           ) : (
             <ScrollArea className="h-[120px] sm:h-[150px]">
               <div className="space-y-px">
-                {gatewayHistory.map((check) => (
+                {gatewayHistory
+                  .filter((check) => check.result === 'live' || check.result === 'dead')
+                  .map((check) => (
                   <div 
                     key={check.id}
                     className="flex items-center justify-between px-1 py-px rounded bg-secondary/20"
