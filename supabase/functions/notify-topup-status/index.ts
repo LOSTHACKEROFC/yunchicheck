@@ -56,7 +56,7 @@ async function sendEmail(
   try {
     console.log("Sending email to:", to);
     const result = await resend.emails.send({
-      from: "Yunchi <noreply@resend.dev>",
+      from: "Yunchi <noreply@yunchicheck.com>",
       reply_to: "support@yunchicheck.lovable.app",
       to: [to],
       subject,

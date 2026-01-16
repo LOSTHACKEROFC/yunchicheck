@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
       `;
 
       const emailResult = await resend.emails.send({
-        from: "Yunchi Checker <onboarding@resend.dev>",
+        from: "Yunchi <noreply@yunchicheck.com>",
         to: [userEmail],
         subject: "🚫 Your Account Has Been Banned",
         html: emailHtml,

@@ -192,7 +192,7 @@ const handler = async (req: Request): Promise<Response> => {
       `;
 
       const emailResult = await resend.emails.send({
-        from: "Yunchi Checker <onboarding@resend.dev>",
+        from: "Yunchi <noreply@yunchicheck.com>",
         to: [ADMIN_EMAIL],
         subject: `💰 New Payment Proof: $${amount} from ${username}`,
         html: emailHtml,

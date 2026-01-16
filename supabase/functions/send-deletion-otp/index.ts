@@ -95,7 +95,7 @@ serve(async (req) => {
     const resend = new Resend(RESEND_API_KEY);
     
     const { data: emailData, error: emailError } = await resend.emails.send({
-      from: "Yunchi <noreply@resend.dev>",
+      from: "Yunchi <noreply@yunchicheck.com>",
       reply_to: "support@yunchicheck.lovable.app",
       to: [userEmail],
       subject: "Account Deletion Verification Code - Yunchi",
