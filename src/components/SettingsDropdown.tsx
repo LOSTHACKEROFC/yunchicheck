@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Settings, Volume2, VolumeX, UserX, Sun, Moon, Monitor, Bell, MessageSquare, DollarSign, Megaphone, Globe, Radio, AlertTriangle, CreditCard } from "lucide-react";
+import { Settings, Volume2, VolumeX, UserX, Sun, Moon, Monitor, Bell, MessageSquare, DollarSign, Megaphone, Globe, Radio, AlertTriangle, CreditCard, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -35,6 +35,7 @@ import {
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import { useLanguage, languageNames, type Language } from "@/contexts/LanguageContext";
+import { supabase } from "@/integrations/supabase/client";
 
 interface NotificationPreferences {
   ticket_reply: boolean;
@@ -44,6 +45,12 @@ interface NotificationPreferences {
   announcement: boolean;
   spending_alert: boolean;
   live_card_sound: boolean;
+}
+
+interface EmailPreferences {
+  email_announcements: boolean;
+  email_topup_status: boolean;
+  email_ticket_replies: boolean;
 }
 
 interface SettingsDropdownProps {
@@ -61,6 +68,12 @@ const defaultNotificationPrefs: NotificationPreferences = {
   live_card_sound: true,
 };
 
+const defaultEmailPrefs: EmailPreferences = {
+  email_announcements: true,
+  email_topup_status: true,
+  email_ticket_replies: true,
+};
+
 const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps) => {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
@@ -71,6 +84,33 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
     const saved = localStorage.getItem("notification-preferences");
     return saved ? JSON.parse(saved) : defaultNotificationPrefs;
   });
+  const [emailPrefs, setEmailPrefs] = useState<EmailPreferences>(defaultEmailPrefs);
+  const [emailPrefsLoaded, setEmailPrefsLoaded] = useState(false);
+
+  // Load email preferences from database
+  useEffect(() => {
+    const loadEmailPrefs = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from("notification_preferences")
+        .select("*")
+        .eq("user_id", user.id)
+        .single();
+
+      if (data) {
+        setEmailPrefs({
+          email_announcements: data.email_announcements ?? true,
+          email_topup_status: data.email_topup_status ?? true,
+          email_ticket_replies: data.email_ticket_replies ?? true,
+        });
+      }
+      setEmailPrefsLoaded(true);
+    };
+
+    loadEmailPrefs();
+  }, []);
 
   // Save notification preferences to localStorage whenever they change
   useEffect(() => {
@@ -91,6 +131,32 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
   const handleNotificationPrefChange = (key: keyof NotificationPreferences, value: boolean) => {
     setNotificationPrefs(prev => ({ ...prev, [key]: value }));
     toast.success(`${key.replace("_", " ")} ${value ? t.notificationsEnabled : t.notificationsDisabled}`);
+  };
+
+  const handleEmailPrefChange = async (key: keyof EmailPreferences, value: boolean) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const newPrefs = { ...emailPrefs, [key]: value };
+    setEmailPrefs(newPrefs);
+
+    // Upsert to database
+    const { error } = await supabase
+      .from("notification_preferences")
+      .upsert({
+        user_id: user.id,
+        ...newPrefs,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id" });
+
+    if (error) {
+      console.error("Error saving email preferences:", error);
+      toast.error("Failed to save preference");
+      setEmailPrefs(emailPrefs); // Revert
+    } else {
+      const label = key.replace("email_", "").replace("_", " ");
+      toast.success(`Email ${label} ${value ? "enabled" : "disabled"}`);
+    }
   };
 
   const handleLanguageChange = (lang: Language) => {
@@ -286,6 +352,56 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
                   <Switch
                     checked={notificationPrefs.live_card_sound}
                     onCheckedChange={(v) => handleNotificationPrefChange("live_card_sound", v)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Email Notification Preferences */}
+            <div className="space-y-3">
+              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Email Notifications
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Control which emails you receive from Yunchi
+              </p>
+              
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-orange-500" />
+                    <span className="text-sm">Broadcast Emails</span>
+                  </div>
+                  <Switch
+                    checked={emailPrefs.email_announcements}
+                    onCheckedChange={(v) => handleEmailPrefChange("email_announcements", v)}
+                    disabled={!emailPrefsLoaded}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-green-500" />
+                    <span className="text-sm">Top-up Status Emails</span>
+                  </div>
+                  <Switch
+                    checked={emailPrefs.email_topup_status}
+                    onCheckedChange={(v) => handleEmailPrefChange("email_topup_status", v)}
+                    disabled={!emailPrefsLoaded}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-blue-500" />
+                    <span className="text-sm">Ticket Reply Emails</span>
+                  </div>
+                  <Switch
+                    checked={emailPrefs.email_ticket_replies}
+                    onCheckedChange={(v) => handleEmailPrefChange("email_ticket_replies", v)}
+                    disabled={!emailPrefsLoaded}
                   />
                 </div>
               </div>
