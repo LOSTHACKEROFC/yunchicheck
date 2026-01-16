@@ -1718,6 +1718,88 @@ const handler = async (req: Request): Promise<Response> => {
       const isCallbackAdmin = callbackChatId ? await isAdminAsync(callbackChatId, supabase) : false;
       const isCallbackStaff = callbackChatId ? await isStaffAsync(callbackChatId, supabase) : false;
 
+      // ─────────────────────────────────────────────────────────
+      // REGISTRATION VERIFICATION CALLBACK
+      // ─────────────────────────────────────────────────────────
+      if (callbackData.startsWith("verify_")) {
+        const verificationCode = callbackData.replace("verify_", "");
+        console.log(`Processing verification for code: ${verificationCode}`);
+
+        // Validate verification code format (6 alphanumeric characters)
+        if (!/^[A-Z0-9]{6}$/.test(verificationCode)) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Invalid verification code");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Check if verification exists and is not expired
+        const { data: verification, error: fetchError } = await supabase
+          .from("pending_verifications")
+          .select("id, verified, expires_at, telegram_chat_id")
+          .eq("verification_code", verificationCode)
+          .single();
+
+        if (fetchError || !verification) {
+          console.error("Verification not found:", fetchError);
+          await answerCallbackQuery(update.callback_query.id, "❌ Verification code not found or expired");
+          if (messageId && callbackChatId) {
+            await editTelegramMessage(callbackChatId, messageId, `❌ <b>Verification Failed</b>\n\nThis verification code is invalid or has expired. Please request a new one from the website.`);
+          }
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Check if already verified
+        if (verification.verified) {
+          await answerCallbackQuery(update.callback_query.id, "✅ Already verified!");
+          if (messageId && callbackChatId) {
+            await editTelegramMessage(callbackChatId, messageId, `✅ <b>Already Verified</b>\n\nYour account has already been verified. Please return to the website to complete your registration.`);
+          }
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Check if expired
+        const isExpired = new Date(verification.expires_at) < new Date();
+        if (isExpired) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Verification expired");
+          if (messageId && callbackChatId) {
+            await editTelegramMessage(callbackChatId, messageId, `❌ <b>Verification Expired</b>\n\nThis verification code has expired. Please request a new one from the website.`);
+          }
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Verify that the callback is from the same chat that requested verification
+        if (verification.telegram_chat_id !== callbackChatId) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Verification mismatch");
+          if (messageId && callbackChatId) {
+            await editTelegramMessage(callbackChatId, messageId, `❌ <b>Verification Failed</b>\n\nThis verification was requested from a different Telegram account.`);
+          }
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Update verification status
+        const { error: updateError } = await supabase
+          .from("pending_verifications")
+          .update({ verified: true })
+          .eq("verification_code", verificationCode);
+
+        if (updateError) {
+          console.error("Error updating verification:", updateError);
+          await answerCallbackQuery(update.callback_query.id, "❌ Verification failed");
+          if (messageId && callbackChatId) {
+            await editTelegramMessage(callbackChatId, messageId, `❌ <b>Verification Failed</b>\n\nAn error occurred. Please try again.`);
+          }
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        console.log(`Verification successful for code: ${verificationCode}`);
+        await answerCallbackQuery(update.callback_query.id, "✅ Account verified successfully!");
+        
+        if (messageId && callbackChatId) {
+          await editTelegramMessage(callbackChatId, messageId, `✅ <b>Verification Successful</b>\n\nYour Telegram account has been verified!\n\n🔄 Please return to the website to complete your registration.\n\n<i>This verification will be detected automatically.</i>`);
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       // Pagination: /allusers (staff can view)
       if (callbackData.startsWith("allusers_page_")) {
         if (!callbackChatId || !isCallbackStaff) {
