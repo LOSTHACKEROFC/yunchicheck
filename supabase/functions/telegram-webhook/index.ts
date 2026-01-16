@@ -187,6 +187,25 @@ async function sendBroadcastEmail(email: string, username: string | null, broadc
 }
 
 // ═══════════════════════════════════════════════════════════
+// UTILITY HELPERS
+// ═══════════════════════════════════════════════════════════
+
+function formatTimeAgo(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+// ═══════════════════════════════════════════════════════════
 // TELEGRAM API HELPERS
 // ═══════════════════════════════════════════════════════════
 
@@ -2291,6 +2310,7 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
 
   let profile = null;
   let userEmail = null;
+  let authUserData = null;
 
   const { data: authData } = await supabase.auth.admin.listUsers();
   const authUsers = authData?.users || [];
@@ -2299,6 +2319,7 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
   const authUser = authUsers.find((u: any) => u.email?.toLowerCase() === identifier.toLowerCase());
   if (authUser) {
     userEmail = authUser.email;
+    authUserData = authUser;
     const { data: p } = await supabase.from("profiles").select("*").eq("user_id", authUser.id).maybeSingle();
     profile = p;
   }
@@ -2308,7 +2329,8 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
     const { data: p } = await supabase.from("profiles").select("*").ilike("username", identifier).maybeSingle();
     if (p) {
       profile = p;
-      userEmail = authUsers.find((u: any) => u.id === p.user_id)?.email || null;
+      authUserData = authUsers.find((u: any) => u.id === p.user_id);
+      userEmail = authUserData?.email || null;
     }
   }
 
@@ -2317,7 +2339,8 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
     const { data: p } = await supabase.from("profiles").select("*").eq("telegram_chat_id", identifier).maybeSingle();
     if (p) {
       profile = p;
-      userEmail = authUsers.find((u: any) => u.id === p.user_id)?.email || null;
+      authUserData = authUsers.find((u: any) => u.id === p.user_id);
+      userEmail = authUserData?.email || null;
     }
   }
 
@@ -2326,11 +2349,60 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
     return;
   }
 
-  const { count: checks } = await supabase.from("card_checks").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id);
-  const { count: liveCards } = await supabase.from("card_checks").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id).eq("result", "live");
-  const { count: deadCards } = await supabase.from("card_checks").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id).eq("result", "dead");
-  const { count: topups } = await supabase.from("topup_transactions").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id);
-  const { count: tickets } = await supabase.from("support_tickets").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id);
+  // Fetch all user data in parallel
+  const [
+    checksResult,
+    liveCardsResult,
+    deadCardsResult,
+    topupsResult,
+    ticketsResult,
+    devicesResult,
+    sessionsResult,
+    rolesResult,
+    blockedResult,
+    topupDetailsResult,
+    openTicketsResult,
+    recentChecksResult,
+    notificationPrefsResult,
+    spendingAlertsResult
+  ] = await Promise.all([
+    supabase.from("card_checks").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id),
+    supabase.from("card_checks").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id).eq("result", "live"),
+    supabase.from("card_checks").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id).eq("result", "dead"),
+    supabase.from("topup_transactions").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id),
+    supabase.from("support_tickets").select("*", { count: "exact", head: true }).eq("user_id", profile.user_id),
+    supabase.from("user_device_logs").select("*").eq("user_id", profile.user_id).order("last_seen", { ascending: false }).limit(10),
+    supabase.from("user_sessions").select("*").eq("user_id", profile.user_id).order("last_active", { ascending: false }).limit(5),
+    supabase.from("user_roles").select("role").eq("user_id", profile.user_id),
+    supabase.from("blocked_devices").select("*").eq("banned_user_id", profile.user_id).eq("is_active", true),
+    supabase.from("topup_transactions").select("*").eq("user_id", profile.user_id).order("created_at", { ascending: false }).limit(5),
+    supabase.from("support_tickets").select("*").eq("user_id", profile.user_id).eq("status", "open"),
+    supabase.from("card_checks").select("created_at, result, gateway").eq("user_id", profile.user_id).order("created_at", { ascending: false }).limit(5),
+    supabase.from("notification_preferences").select("*").eq("user_id", profile.user_id).maybeSingle(),
+    supabase.from("spending_alert_settings").select("*").eq("user_id", profile.user_id).maybeSingle()
+  ]);
+
+  const checks = checksResult.count || 0;
+  const liveCards = liveCardsResult.count || 0;
+  const deadCards = deadCardsResult.count || 0;
+  const topupsCount = topupsResult.count || 0;
+  const ticketsCount = ticketsResult.count || 0;
+  const devices = devicesResult.data || [];
+  const sessions = sessionsResult.data || [];
+  const roles = rolesResult.data || [];
+  const blockedDevices = blockedResult.data || [];
+  const topupDetails = topupDetailsResult.data || [];
+  const openTickets = openTicketsResult.data || [];
+  const recentChecks = recentChecksResult.data || [];
+  const notificationPrefs = notificationPrefsResult.data;
+  const spendingAlerts = spendingAlertsResult.data;
+
+  // Calculate totals
+  const totalCreditsAdded = topupDetails
+    .filter((t: any) => t.status === "completed")
+    .reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+  
+  const pendingTopups = topupDetails.filter((t: any) => t.status === "pending").length;
 
   let status = "✅ Active";
   if (profile.is_banned) {
@@ -2340,34 +2412,172 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
   }
 
   const joined = new Date(profile.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-  const successRate = (checks || 0) > 0 ? (((liveCards || 0) / (checks || 1)) * 100).toFixed(1) : "0.0";
+  const lastUpdated = new Date(profile.updated_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const successRate = checks > 0 ? ((liveCards / checks) * 100).toFixed(1) : "0.0";
+
+  // Get user roles
+  const userRoles = roles.map((r: any) => r.role).join(", ") || "user";
+
+  // Format devices summary
+  let devicesInfo = "";
+  if (devices.length > 0) {
+    const uniqueIPs = [...new Set(devices.map((d: any) => d.ip_address).filter(Boolean))];
+    const uniqueFingerprints = [...new Set(devices.map((d: any) => d.fingerprint).filter(Boolean))];
+    devicesInfo = `
+<b>📱 Devices (${devices.length})</b>
+• Unique IPs: ${uniqueIPs.length}
+• Unique Fingerprints: ${uniqueFingerprints.length}
+• Blocked: ${blockedDevices.length > 0 ? `⚠️ ${blockedDevices.length}` : "None"}`;
+    
+    // Show last 3 devices
+    const recentDevices = devices.slice(0, 3);
+    recentDevices.forEach((d: any, i: number) => {
+      const lastSeen = new Date(d.last_seen).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+      const isBlocked = blockedDevices.some((b: any) => b.fingerprint === d.fingerprint || b.ip_address === d.ip_address);
+      devicesInfo += `\n  ${i + 1}. ${d.ip_address || "Unknown IP"} ${isBlocked ? "🚫" : ""}\n      FP: <code>${d.fingerprint?.substring(0, 12) || "N/A"}...</code>\n      Last: ${lastSeen}`;
+    });
+  } else {
+    devicesInfo = "\n<b>📱 Devices:</b> No device logs";
+  }
+
+  // Format sessions summary
+  let sessionsInfo = "";
+  if (sessions.length > 0) {
+    const activeSessions = sessions.filter((s: any) => {
+      const lastActive = new Date(s.last_active);
+      const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      return lastActive > hourAgo;
+    }).length;
+    sessionsInfo = `
+<b>🔐 Sessions (${sessions.length})</b>
+• Active (last hour): ${activeSessions}`;
+    
+    // Show last 2 sessions
+    const recentSessions = sessions.slice(0, 2);
+    recentSessions.forEach((s: any, i: number) => {
+      const lastActive = new Date(s.last_active).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+      sessionsInfo += `\n  ${i + 1}. ${s.browser || "Unknown"} / ${s.os || "Unknown"}`;
+      sessionsInfo += `\n      IP: ${s.ip_address || "Unknown"}`;
+      sessionsInfo += `\n      Last: ${lastActive}`;
+    });
+  } else {
+    sessionsInfo = "\n<b>🔐 Sessions:</b> No active sessions";
+  }
+
+  // Format topup history
+  let topupInfo = "";
+  if (topupDetails.length > 0) {
+    topupInfo = `
+<b>💳 Topup History</b>
+• Total Added: ${totalCreditsAdded} credits
+• Pending: ${pendingTopups}
+• Total Requests: ${topupsCount}`;
+    
+    // Show last 3 topups
+    const recentTopups = topupDetails.slice(0, 3);
+    recentTopups.forEach((t: any, i: number) => {
+      const date = new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const statusEmoji = t.status === "completed" ? "✅" : t.status === "pending" ? "⏳" : "❌";
+      topupInfo += `\n  ${i + 1}. ${statusEmoji} ${t.amount} credits (${t.payment_method})`;
+      topupInfo += `\n      ${date}`;
+    });
+  } else {
+    topupInfo = "\n<b>💳 Topup History:</b> No topups";
+  }
+
+  // Format recent checks
+  let checksInfo = "";
+  if (recentChecks.length > 0) {
+    checksInfo = `
+<b>🔍 Recent Checks</b>`;
+    recentChecks.forEach((c: any, i: number) => {
+      const date = new Date(c.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+      const resultEmoji = c.result === "live" ? "✅" : c.result === "dead" ? "❌" : "⏳";
+      checksInfo += `\n  ${i + 1}. ${resultEmoji} ${c.gateway} - ${date}`;
+    });
+  }
+
+  // Format notification preferences
+  let prefsInfo = "";
+  if (notificationPrefs) {
+    prefsInfo = `
+<b>🔔 Notification Preferences</b>
+• Email Announcements: ${notificationPrefs.email_announcements ? "✅" : "❌"}
+• Email Ticket Replies: ${notificationPrefs.email_ticket_replies ? "✅" : "❌"}
+• Email Topup Status: ${notificationPrefs.email_topup_status ? "✅" : "❌"}`;
+  }
+
+  // Format spending alerts
+  let alertsInfo = "";
+  if (spendingAlerts) {
+    alertsInfo = `
+<b>⚠️ Spending Alerts</b>
+• Enabled: ${spendingAlerts.enabled ? "✅" : "❌"}
+• Daily Threshold: ${spendingAlerts.daily_threshold || 0} credits
+• Weekly Threshold: ${spendingAlerts.weekly_threshold || 0} credits`;
+  }
+
+  // Format ban info if banned
+  let banInfo = "";
+  if (profile.is_banned) {
+    banInfo = `
+<b>🚫 Ban Details</b>
+• Reason: ${profile.ban_reason || "Not specified"}
+• Banned At: ${profile.banned_at ? new Date(profile.banned_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "Unknown"}
+• Until: ${profile.banned_until ? new Date(profile.banned_until).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "Permanent"}`;
+  }
+
+  // Auth provider info
+  let authInfo = "";
+  if (authUserData) {
+    const provider = authUserData.app_metadata?.provider || "email";
+    const emailConfirmed = authUserData.email_confirmed_at ? "✅ Yes" : "❌ No";
+    const lastSignIn = authUserData.last_sign_in_at 
+      ? new Date(authUserData.last_sign_in_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+      : "Never";
+    authInfo = `
+<b>🔑 Auth Info</b>
+• Provider: ${provider}
+• Email Confirmed: ${emailConfirmed}
+• Last Sign In: ${lastSignIn}`;
+  }
 
   const userInfoMessage = `
-🔍 <b>User Info</b>
+📋 <b>Complete User Info</b>
 
-<b>Profile</b>
+<b>👤 Profile</b>
 • Username: ${profile.username || "Not set"}
 • Name: ${profile.name || "Not set"}
 • Email: ${userEmail || "Unknown"}
+• Role: ${userRoles}
 
-<b>Telegram</b>
-• Chat ID: ${profile.telegram_chat_id || "Not connected"}
+<b>📱 Telegram</b>
+• Chat ID: <code>${profile.telegram_chat_id || "Not connected"}</code>
 • Username: ${profile.telegram_username ? `@${profile.telegram_username}` : "Not set"}
 
-<b>Account</b>
+<b>💰 Account</b>
 • Credits: ${profile.credits || 0}
 • Status: ${status}
 • Joined: ${joined}
+• Last Updated: ${lastUpdated}
 
-<b>Activity</b>
-• Total Checks: ${checks || 0}
-• ✅ Live Cards: ${liveCards || 0}
-• ❌ Dead Cards: ${deadCards || 0}
+<b>📊 Activity Stats</b>
+• Total Checks: ${checks}
+• ✅ Live Cards: ${liveCards}
+• ❌ Dead Cards: ${deadCards}
 • 📈 Success Rate: ${successRate}%
-• 💰 Topups: ${topups || 0}
-• 🎫 Tickets: ${tickets || 0}
+• 💰 Topups: ${topupsCount}
+• 🎫 Tickets: ${ticketsCount} (${openTickets.length} open)
+${authInfo}
+${devicesInfo}
+${sessionsInfo}
+${topupInfo}
+${checksInfo}
+${prefsInfo}
+${alertsInfo}
+${banInfo}
 
-<b>User ID</b>
+<b>🆔 User ID</b>
 <code>${profile.user_id}</code>
 `;
 
@@ -2378,6 +2588,10 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
         [
           { text: profile.is_banned ? "✅ Unban" : "🚫 Ban", callback_data: `userinfo_${profile.is_banned ? "unban" : "ban"}_${profile.user_id}` },
           { text: "💰 Add Credits", callback_data: `userinfo_addcredits_${profile.user_id}` },
+        ],
+        [
+          { text: "📱 View Devices", callback_data: `userinfo_devices_${profile.user_id}` },
+          { text: "🔐 View Sessions", callback_data: `userinfo_sessions_${profile.user_id}` },
         ],
         [
           { text: "🗑️ Delete User", callback_data: `userinfo_delete_${profile.user_id}` },
@@ -3265,6 +3479,170 @@ Examples:
 • Transaction history
 `, keyboard);
         await answerCallbackQuery(update.callback_query.id, "Confirm deletion");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // View user devices from userinfo
+      if (callbackData.startsWith("userinfo_devices_")) {
+        if (!callbackChatId || !isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const userId = callbackData.replace("userinfo_devices_", "");
+        const { data: profile } = await supabase.from("profiles").select("username").eq("user_id", userId).maybeSingle();
+        const { data: authData } = await supabase.auth.admin.listUsers();
+        const userEmail = authData?.users?.find((u: any) => u.id === userId)?.email || "Unknown";
+
+        // Get all devices for this user
+        const { data: devices } = await supabase
+          .from("user_device_logs")
+          .select("*")
+          .eq("user_id", userId)
+          .order("last_seen", { ascending: false })
+          .limit(20);
+
+        // Get blocked devices for this user
+        const { data: blockedDevices } = await supabase
+          .from("blocked_devices")
+          .select("fingerprint, ip_address")
+          .eq("banned_user_id", userId)
+          .eq("is_active", true);
+
+        const blockedFingerprints = new Set(blockedDevices?.map((b: any) => b.fingerprint).filter(Boolean) || []);
+        const blockedIPs = new Set(blockedDevices?.map((b: any) => b.ip_address).filter(Boolean) || []);
+
+        let message = `📱 <b>Devices for ${profile?.username || userEmail}</b>\n\n`;
+
+        if (!devices || devices.length === 0) {
+          message += "No device logs found.";
+        } else {
+          const uniqueIPs = [...new Set(devices.map((d: any) => d.ip_address).filter(Boolean))];
+          const uniqueFPs = [...new Set(devices.map((d: any) => d.fingerprint).filter(Boolean))];
+          
+          message += `<b>Summary</b>\n`;
+          message += `• Total Logs: ${devices.length}\n`;
+          message += `• Unique IPs: ${uniqueIPs.length}\n`;
+          message += `• Unique Fingerprints: ${uniqueFPs.length}\n`;
+          message += `• Blocked: ${blockedDevices?.length || 0}\n\n`;
+          
+          message += `<b>Recent Devices</b>\n`;
+          devices.slice(0, 10).forEach((d: any, i: number) => {
+            const lastSeen = new Date(d.last_seen).toLocaleDateString("en-US", { 
+              month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" 
+            });
+            const isIPBlocked = blockedIPs.has(d.ip_address);
+            const isFPBlocked = blockedFingerprints.has(d.fingerprint);
+            const blockIndicator = (isIPBlocked || isFPBlocked) ? " 🚫" : "";
+            
+            // Parse user agent for browser/OS info
+            const ua = d.user_agent || "";
+            let browserOS = "Unknown";
+            if (ua.includes("Chrome")) browserOS = "Chrome";
+            else if (ua.includes("Firefox")) browserOS = "Firefox";
+            else if (ua.includes("Safari")) browserOS = "Safari";
+            else if (ua.includes("Edge")) browserOS = "Edge";
+            
+            if (ua.includes("Windows")) browserOS += "/Windows";
+            else if (ua.includes("Mac")) browserOS += "/Mac";
+            else if (ua.includes("Linux")) browserOS += "/Linux";
+            else if (ua.includes("Android")) browserOS += "/Android";
+            else if (ua.includes("iPhone") || ua.includes("iPad")) browserOS += "/iOS";
+            
+            message += `\n${i + 1}. ${d.ip_address || "Unknown IP"}${blockIndicator}`;
+            message += `\n   FP: <code>${d.fingerprint?.substring(0, 16) || "N/A"}...</code>`;
+            message += `\n   ${browserOS} | ${lastSeen}`;
+          });
+        }
+
+        await sendTelegramMessage(callbackChatId, message, {
+          inline_keyboard: [[
+            { text: "🔙 Back to User", callback_data: `userinfo_back_${userId}` }
+          ]]
+        });
+        await answerCallbackQuery(update.callback_query.id, "");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // View user sessions from userinfo
+      if (callbackData.startsWith("userinfo_sessions_")) {
+        if (!callbackChatId || !isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const userId = callbackData.replace("userinfo_sessions_", "");
+        const { data: profile } = await supabase.from("profiles").select("username").eq("user_id", userId).maybeSingle();
+        const { data: authData } = await supabase.auth.admin.listUsers();
+        const userEmail = authData?.users?.find((u: any) => u.id === userId)?.email || "Unknown";
+
+        // Get all sessions for this user
+        const { data: sessions } = await supabase
+          .from("user_sessions")
+          .select("*")
+          .eq("user_id", userId)
+          .order("last_active", { ascending: false })
+          .limit(15);
+
+        let message = `🔐 <b>Sessions for ${profile?.username || userEmail}</b>\n\n`;
+
+        if (!sessions || sessions.length === 0) {
+          message += "No active sessions found.";
+        } else {
+          const now = new Date();
+          const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+          const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          
+          const activeSessions = sessions.filter((s: any) => new Date(s.last_active) > hourAgo).length;
+          const todaySessions = sessions.filter((s: any) => new Date(s.last_active) > dayAgo).length;
+          
+          message += `<b>Summary</b>\n`;
+          message += `• Total Sessions: ${sessions.length}\n`;
+          message += `• Active (1h): ${activeSessions}\n`;
+          message += `• Active (24h): ${todaySessions}\n\n`;
+          
+          message += `<b>Session List</b>\n`;
+          sessions.slice(0, 10).forEach((s: any, i: number) => {
+            const lastActive = new Date(s.last_active);
+            const isActive = lastActive > hourAgo;
+            const timeAgo = formatTimeAgo(lastActive);
+            const statusIcon = isActive ? "🟢" : "⚪";
+            
+            message += `\n${statusIcon} ${i + 1}. ${s.browser || "Unknown"} / ${s.os || "Unknown"}`;
+            message += `\n   IP: ${s.ip_address || "Unknown"}`;
+            message += `\n   Location: ${s.location || "Unknown"}`;
+            message += `\n   Last: ${timeAgo}`;
+            if (s.is_current) message += " 📍";
+          });
+        }
+
+        await sendTelegramMessage(callbackChatId, message, {
+          inline_keyboard: [[
+            { text: "🔙 Back to User", callback_data: `userinfo_back_${userId}` }
+          ]]
+        });
+        await answerCallbackQuery(update.callback_query.id, "");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Back to userinfo
+      if (callbackData.startsWith("userinfo_back_")) {
+        if (!callbackChatId || !isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const userId = callbackData.replace("userinfo_back_", "");
+        // Get user email to call userinfo
+        const { data: authData } = await supabase.auth.admin.listUsers();
+        const userEmail = authData?.users?.find((u: any) => u.id === userId)?.email;
+        
+        if (userEmail) {
+          await handleUserInfo(callbackChatId, userEmail, supabase);
+        } else {
+          await sendTelegramMessage(callbackChatId, "❌ Could not load user info");
+        }
+        await answerCallbackQuery(update.callback_query.id, "");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
