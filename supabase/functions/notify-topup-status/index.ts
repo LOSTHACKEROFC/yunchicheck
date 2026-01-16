@@ -51,7 +51,8 @@ async function sendEmail(
   to: string,
   subject: string,
   html: string,
-  text: string
+  text: string,
+  isTransactional: boolean = true
 ): Promise<boolean> {
   try {
     console.log("Sending email to:", to);
@@ -64,7 +65,18 @@ async function sendEmail(
       text,
       headers: {
         "X-Entity-Ref-ID": crypto.randomUUID(),
+        // Transactional email headers to improve deliverability
+        "X-Priority": "1",
+        "X-MSMail-Priority": "High",
+        "Importance": "high",
+        // Gmail category hints - transactional/purchase emails
+        "X-PM-Message-Stream": "outbound",
+        "X-Auto-Response-Suppress": "OOF, AutoReply",
       },
+      tags: isTransactional ? [
+        { name: "category", value: "transactional" },
+        { name: "type", value: "purchase" }
+      ] : undefined,
     });
     console.log("Email result:", JSON.stringify(result));
     if (result.error) {
@@ -206,7 +218,7 @@ Thank you for using Yunchi Checker.`;
         console.log("Skipping email - user opted out of topup status emails");
         emailSkipped = true;
       } else {
-        emailSent = await sendEmail(userEmail, "Your Credits Have Been Added - Yunchi", emailHtml, emailText);
+        emailSent = await sendEmail(userEmail, `Purchase Confirmed: ${formattedCredits} Added - Yunchi`, emailHtml, emailText, true);
         console.log("Email sent for completed:", emailSent);
       }
     }
@@ -289,7 +301,7 @@ If you believe this was a mistake, please contact support with your transaction 
         console.log("Skipping email - user opted out of topup status emails");
         emailSkipped = true;
       } else {
-        emailSent = await sendEmail(userEmail, "Your Topup Request Was Not Approved - Yunchi", emailHtml, emailText);
+        emailSent = await sendEmail(userEmail, `Purchase Update: Request Not Approved - Yunchi`, emailHtml, emailText, true);
         console.log("Email sent for failed:", emailSent);
       }
     }
