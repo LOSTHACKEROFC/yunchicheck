@@ -69,7 +69,7 @@ async function sendEmailOTP(
     
     const { error } = await resend.emails.send({
       from: "Yunchi <noreply@yunchicheck.com>",
-      reply_to: "support@yunchicheck.lovable.app",
+      reply_to: "support@yunchicheck.com",
       to: [email],
       subject: "Password Reset Code - Yunchi",
       text: `You requested a password reset for your Yunchi Checker account.

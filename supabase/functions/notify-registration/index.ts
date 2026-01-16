@@ -102,7 +102,7 @@ const handler = async (req: Request): Promise<Response> => {
 
         const { error: emailError } = await resend.emails.send({
           from: "Yunchi <noreply@yunchicheck.com>",
-          reply_to: "support@yunchicheck.lovable.app",
+          reply_to: "support@yunchicheck.com",
           to: [email],
           subject: "Welcome to Yunchi - Your Account is Ready",
           text: `Hello ${displayName}!
@@ -121,7 +121,7 @@ Getting Started:
 3. Telegram Notifications Connected - You're already connected to @YunchiSupportbot
 4. Need Help? - Visit our Support page
 
-Go to your dashboard: https://yunchicheck.lovable.app/dashboard
+Go to your dashboard: https://yunchicheck.com/dashboard
 
 If you didn't create this account, please ignore this email.
 
@@ -201,7 +201,7 @@ If you didn't create this account, please ignore this email.
                 </div>
                 
                 <div style="text-align: center; margin-top: 30px;">
-                  <a href="https://yunchicheck.lovable.app/dashboard" 
+                  <a href="https://yunchicheck.com/dashboard" 
                      style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: #fff; text-decoration: none; padding: 14px 35px; border-radius: 8px; font-weight: bold; font-size: 16px;">
                     Go to Dashboard
                   </a>

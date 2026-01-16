@@ -105,7 +105,7 @@ async function sendBroadcastEmail(email: string, username: string | null, broadc
         },
         body: JSON.stringify({
           from: "Yunchi <noreply@yunchicheck.com>",
-          reply_to: "support@yunchicheck.lovable.app",
+          reply_to: "support@yunchicheck.com",
           to: [email],
           subject: "Announcement from Yunchi",
           text: `Hello${username ? ` ${username}` : ''},\n\n${broadcastMessage}\n\n— Yunchi Team\n\nIf you no longer wish to receive these announcements, you can update your notification preferences in your account settings.`,
@@ -127,7 +127,7 @@ async function sendBroadcastEmail(email: string, username: string | null, broadc
                 </div>
                 
                 <div style="text-align: center; margin-top: 30px;">
-                  <a href="https://yunchicheck.lovable.app/dashboard" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 600; font-size: 15px;">Visit Dashboard</a>
+                  <a href="https://yunchicheck.com/dashboard" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 600; font-size: 15px;">Visit Dashboard</a>
                 </div>
               </div>
               
@@ -136,7 +136,7 @@ async function sendBroadcastEmail(email: string, username: string | null, broadc
                   You're receiving this because you have an account at Yunchi.
                 </p>
                 <p style="color: #404040; font-size: 11px; margin: 0;">
-                  To manage your notification preferences, visit your <a href="https://yunchicheck.lovable.app/dashboard" style="color: #ef4444; text-decoration: none;">account settings</a>.
+                  To manage your notification preferences, visit your <a href="https://yunchicheck.com/dashboard" style="color: #ef4444; text-decoration: none;">account settings</a>.
                 </p>
               </div>
             </div>
@@ -3755,7 +3755,7 @@ ${profile.is_banned && profile.ban_reason ? `│ Reason: ${profile.ban_reason}` 
 
         const balanceKeyboard = {
           inline_keyboard: [
-            [{ text: "💳 Top Up Credits", url: "https://yunchicheck.lovable.app/dashboard/topup" }],
+            [{ text: "💳 Top Up Credits", url: "https://yunchicheck.com/dashboard/topup" }],
             [{ text: "🔙 Back to Menu", callback_data: "user_back_start" }]
           ]
         };
@@ -3777,7 +3777,7 @@ ${profile.is_banned && profile.ban_reason ? `│ Reason: ${profile.ban_reason}` 
 <b>🔗 How to Connect Account</b>
 ┌─────────────────────
 │ 1️⃣ Copy your Chat ID
-│ 2️⃣ Go to yunchicheck.lovable.app
+│ 2️⃣ Go to yunchicheck.com
 │ 3️⃣ Sign up / Login
 │ 4️⃣ Paste in Profile settings
 │ 5️⃣ Click verify & confirm here
@@ -3799,7 +3799,7 @@ for personalized assistance.
 
         const helpKeyboard = {
           inline_keyboard: [
-            [{ text: "🌐 Open Dashboard", url: "https://yunchicheck.lovable.app/dashboard" }],
+            [{ text: "🌐 Open Dashboard", url: "https://yunchicheck.com/dashboard" }],
             [{ text: "🔙 Back to Menu", callback_data: "user_back_start" }]
           ]
         };
@@ -3884,7 +3884,7 @@ Use /admincmd for staff panel
               { text: "❓ How to Connect", callback_data: "user_help" }
             ],
             [
-              { text: "🌐 Sign Up Now", url: "https://yunchicheck.lovable.app/auth" }
+              { text: "🌐 Sign Up Now", url: "https://yunchicheck.com/auth" }
             ]
           ]
         };
@@ -4469,10 +4469,10 @@ Use /admincmd for staff panel
             ],
             [
               { text: "❓ Help", callback_data: "user_help" },
-              { text: "🎫 Support", url: "https://yunchicheck.lovable.app/dashboard/support" }
+              { text: "🎫 Support", url: "https://yunchicheck.com/dashboard/support" }
             ],
             [
-              { text: "🌐 Dashboard", url: "https://yunchicheck.lovable.app/dashboard" }
+              { text: "🌐 Dashboard", url: "https://yunchicheck.com/dashboard" }
             ]
           ]
         };
@@ -4484,7 +4484,7 @@ Use /admincmd for staff panel
               { text: "❓ How to Connect", callback_data: "user_help" }
             ],
             [
-              { text: "🌐 Sign Up", url: "https://yunchicheck.lovable.app/auth" }
+              { text: "🌐 Sign Up", url: "https://yunchicheck.com/auth" }
             ]
           ]
         };
@@ -4502,7 +4502,7 @@ Use /admincmd for staff panel
 
 <b>Connect Account:</b>
 1. Copy Chat ID: <code>${chatId}</code>
-2. Sign up at yunchi.app
+2. Sign up at yunchicheck.com
 3. Paste Chat ID
 4. Verify when prompted
 
@@ -4556,7 +4556,7 @@ Your Telegram is not linked.
 
 <b>To connect:</b>
 1. Copy: <code>${chatId}</code>
-2. Sign up at yunchi.app
+2. Sign up at yunchicheck.com
 3. Paste Chat ID
 `, undefined, messageId);
       } else {
@@ -5039,7 +5039,7 @@ through the dashboard! 🎫
               { text: "💰 Balance", callback_data: "user_balance" }
             ],
             [
-              { text: "🎫 Open Support Ticket", url: "https://yunchicheck.lovable.app/dashboard/support" }
+              { text: "🎫 Open Support Ticket", url: "https://yunchicheck.com/dashboard/support" }
             ]
           ]
         }, messageId);
@@ -5077,7 +5077,7 @@ account isn't connected yet.
         await sendTelegramMessage(chatId, responseMessage, {
           inline_keyboard: [
             [{ text: "📋 Copy Chat ID", callback_data: "user_copy_id" }],
-            [{ text: "🌐 Sign Up Now", url: "https://yunchicheck.lovable.app/auth" }]
+            [{ text: "🌐 Sign Up Now", url: "https://yunchicheck.com/auth" }]
           ]
         }, messageId);
       }

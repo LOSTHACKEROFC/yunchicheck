@@ -96,7 +96,7 @@ serve(async (req) => {
     
     const { data: emailData, error: emailError } = await resend.emails.send({
       from: "Yunchi <noreply@yunchicheck.com>",
-      reply_to: "support@yunchicheck.lovable.app",
+      reply_to: "support@yunchicheck.com",
       to: [userEmail],
       subject: "Account Deletion Verification Code - Yunchi",
       text: `You have requested to permanently delete your Yunchi account. This action cannot be undone.

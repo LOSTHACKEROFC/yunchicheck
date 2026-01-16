@@ -313,7 +313,7 @@ async function generateReceiptPdf(data: ReceiptData): Promise<Uint8Array> {
   });
   
   // Bottom footer with website
-  page.drawText("yunchicheck.lovable.app", {
+  page.drawText("yunchicheck.com", {
     x: width / 2 - 60,
     y: 30,
     size: 10,
@@ -373,7 +373,7 @@ async function sendEmailWithAttachment(
       console.log("Sending email to:", to, "from:", fromAddress, "with", attachments?.length || 0, "attachments");
       const result = await resend.emails.send({
         from: fromAddress,
-        reply_to: "support@yunchicheck.lovable.app",
+        reply_to: "support@yunchicheck.com",
         to: [to],
         subject,
         html,

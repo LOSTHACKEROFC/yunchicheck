@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
             </div>
             
             <div style="text-align: center; margin-top: 25px;">
-              <a href="https://yunchicheck.lovable.app" style="display: inline-block; background: #7c3aed; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">Contact Support</a>
+              <a href="https://yunchicheck.com" style="display: inline-block; background: #7c3aed; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">Contact Support</a>
             </div>
             
             <p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 30px;">
