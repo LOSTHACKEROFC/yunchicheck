@@ -78,7 +78,7 @@ async function sendEmail(
   }
 }
 
-async function processNotification(data: TopupNotificationRequest): Promise<{ telegramSent: boolean; emailSent: boolean }> {
+async function processNotification(data: TopupNotificationRequest): Promise<{ telegramSent: boolean; emailSent: boolean; emailSkipped: boolean }> {
   const { transaction_id, user_id, amount, status, payment_method, rejection_reason } = data;
 
   console.log("Processing topup notification:", { transaction_id, user_id, amount, status, rejection_reason });
@@ -108,12 +108,22 @@ async function processNotification(data: TopupNotificationRequest): Promise<{ te
     console.error("Error fetching auth user:", authError);
   }
 
+  // Check email preferences
+  const { data: emailPrefs } = await supabaseAdmin
+    .from("notification_preferences")
+    .select("email_topup_status")
+    .eq("user_id", user_id)
+    .single();
+
+  const emailOptedOut = emailPrefs?.email_topup_status === false;
+  console.log("Email opt-out status:", emailOptedOut);
+
   const userEmail = authUser?.user?.email;
   const username = profile?.username || "User";
   const telegramChatId = profile?.telegram_chat_id;
   const currentCredits = profile?.credits || 0;
 
-  console.log("User info:", { userEmail, username, telegramChatId, currentCredits });
+  console.log("User info:", { userEmail, username, telegramChatId, currentCredits, emailOptedOut });
 
   const paymentMethodLabels: Record<string, string> = {
     btc: "Bitcoin",
@@ -128,6 +138,7 @@ async function processNotification(data: TopupNotificationRequest): Promise<{ te
 
   let telegramSent = false;
   let emailSent = false;
+  let emailSkipped = false;
 
   if (status === "completed") {
     // APPROVED notification with new balance
@@ -191,8 +202,13 @@ Thank you for using Yunchi Checker.`;
     }
 
     if (userEmail) {
-      emailSent = await sendEmail(userEmail, "Your Credits Have Been Added - Yunchi", emailHtml, emailText);
-      console.log("Email sent for completed:", emailSent);
+      if (emailOptedOut) {
+        console.log("Skipping email - user opted out of topup status emails");
+        emailSkipped = true;
+      } else {
+        emailSent = await sendEmail(userEmail, "Your Credits Have Been Added - Yunchi", emailHtml, emailText);
+        console.log("Email sent for completed:", emailSent);
+      }
     }
 
     // Create notification in database
@@ -269,8 +285,13 @@ If you believe this was a mistake, please contact support with your transaction 
     }
 
     if (userEmail) {
-      emailSent = await sendEmail(userEmail, "Your Topup Request Was Not Approved - Yunchi", emailHtml, emailText);
-      console.log("Email sent for failed:", emailSent);
+      if (emailOptedOut) {
+        console.log("Skipping email - user opted out of topup status emails");
+        emailSkipped = true;
+      } else {
+        emailSent = await sendEmail(userEmail, "Your Topup Request Was Not Approved - Yunchi", emailHtml, emailText);
+        console.log("Email sent for failed:", emailSent);
+      }
     }
 
     // Create notification in database
@@ -291,8 +312,8 @@ If you believe this was a mistake, please contact support with your transaction 
     }
   }
 
-  console.log("Notification processing complete:", { telegramSent, emailSent });
-  return { telegramSent, emailSent };
+  console.log("Notification processing complete:", { telegramSent, emailSent, emailSkipped });
+  return { telegramSent, emailSent, emailSkipped };
 }
 
 // Use Deno.serve for better background task support
