@@ -159,26 +159,26 @@ Thank you for using Yunchi Checker!
     `.trim();
 
     const emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background: linear-gradient(135deg, #10b981, #059669); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+        <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
           <h1 style="color: white; margin: 0;">✅ Credits Added!</h1>
         </div>
-        <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
-          <p style="font-size: 16px;">Hello <strong>${username}</strong>,</p>
-          <p>Your credit purchase has been approved and processed successfully.</p>
+        <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+          <p style="font-size: 16px;">Hello <strong style="color: #ef4444;">${username}</strong>,</p>
+          <p style="color: #a3a3a3;">Your credit purchase has been approved and processed successfully.</p>
           
-          <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p style="margin: 5px 0;"><strong>Credits Added:</strong> ${formattedCredits}</p>
-            <p style="margin: 5px 0;"><strong>Method:</strong> ${methodLabel}</p>
-            <p style="margin: 5px 0;"><strong>Transaction ID:</strong> ${transaction_id.slice(0, 8)}...</p>
+          <div style="background: #1a0a0a; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #2a1a1a;">
+            <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Credits Added:</strong> ${formattedCredits}</p>
+            <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Method:</strong> ${methodLabel}</p>
+            <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Transaction ID:</strong> ${transaction_id.slice(0, 8)}...</p>
           </div>
           
-          <div style="background: linear-gradient(135deg, #10b981, #059669); padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+          <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
             <p style="margin: 0; font-size: 14px; color: rgba(255,255,255,0.8);">Your New Balance</p>
             <p style="margin: 5px 0 0 0; font-size: 28px; font-weight: bold; color: white;">${formattedCurrentCredits}</p>
           </div>
           
-          <p style="color: #a3a3a3; font-size: 14px; text-align: center;">Thank you for using Yunchi Checker.</p>
+          <p style="color: #737373; font-size: 14px; text-align: center;">Thank you for using Yunchi Checker.</p>
         </div>
       </div>
     `;
@@ -242,27 +242,27 @@ If you believe this was a mistake, please contact support with your transaction 
     `.trim();
 
     const reasonHtml = rejection_reason 
-      ? `<p style="margin: 10px 0; padding: 15px; background: #3b1c1c; border-left: 4px solid #ef4444; border-radius: 4px;"><strong>Reason:</strong> ${rejection_reason}</p>` 
+      ? `<p style="margin: 10px 0; padding: 15px; background: #1a0a0a; border-left: 4px solid #ef4444; border-radius: 4px; color: #fca5a5;"><strong>Reason:</strong> ${rejection_reason}</p>` 
       : "";
     
     const emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background: linear-gradient(135deg, #ef4444, #dc2626); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+        <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
           <h1 style="color: white; margin: 0;">❌ Topup Rejected</h1>
         </div>
-        <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
-          <p style="font-size: 16px;">Hello <strong>${username}</strong>,</p>
-          <p>Unfortunately, your topup request has been rejected.</p>
+        <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+          <p style="font-size: 16px;">Hello <strong style="color: #ef4444;">${username}</strong>,</p>
+          <p style="color: #a3a3a3;">Unfortunately, your topup request has been rejected.</p>
           
-          <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p style="margin: 5px 0;"><strong>Credits:</strong> ${formattedCredits}</p>
-            <p style="margin: 5px 0;"><strong>Method:</strong> ${methodLabel}</p>
-            <p style="margin: 5px 0;"><strong>Transaction ID:</strong> ${transaction_id.slice(0, 8)}...</p>
+          <div style="background: #1a0a0a; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #2a1a1a;">
+            <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Credits:</strong> ${formattedCredits}</p>
+            <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Method:</strong> ${methodLabel}</p>
+            <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Transaction ID:</strong> ${transaction_id.slice(0, 8)}...</p>
           </div>
           
           ${reasonHtml}
           
-          <p style="color: #a3a3a3; font-size: 14px;">If you believe this was a mistake, please contact support with your transaction details.</p>
+          <p style="color: #737373; font-size: 14px;">If you believe this was a mistake, please contact support with your transaction details.</p>
         </div>
       </div>
     `;

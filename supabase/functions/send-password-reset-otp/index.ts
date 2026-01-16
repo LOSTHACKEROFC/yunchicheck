@@ -82,24 +82,24 @@ If you didn't request this, please ignore this email and secure your account.
 
 — Yunchi Security Team`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: linear-gradient(135deg, #7c3aed, #6d28d9); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0;">Password Reset</h1>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+          <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0;">🔑 Password Reset</h1>
           </div>
-          <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
-            <p style="font-size: 16px;">You requested a password reset for your Yunchi Checker account.</p>
-            <div style="background: #262626; padding: 25px; border-radius: 8px; text-align: center; margin: 25px 0;">
+          <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+            <p style="font-size: 16px; color: #a3a3a3;">You requested a password reset for your Yunchi Checker account.</p>
+            <div style="background: #1a0a0a; padding: 25px; border-radius: 8px; text-align: center; margin: 25px 0; border: 1px solid #2a1a1a;">
               <p style="color: #a3a3a3; margin-bottom: 12px;">Your OTP code is:</p>
-              <h2 style="color: #7c3aed; font-size: 36px; letter-spacing: 8px; margin: 0;">${otp}</h2>
+              <h2 style="color: #ef4444; font-size: 36px; letter-spacing: 8px; margin: 0;">${otp}</h2>
             </div>
-            <p style="color: #fca5a5; font-size: 14px; text-align: center; background: #3b1c1c; padding: 12px; border-radius: 6px;">
+            <p style="color: #fca5a5; font-size: 14px; text-align: center; background: #1a0a0a; padding: 12px; border-radius: 6px; border-left: 4px solid #dc2626;">
               This code will expire in <strong>2 minutes</strong>.
             </p>
-            <p style="color: #6b7280; font-size: 14px; text-align: center; margin-top: 20px;">
+            <p style="color: #525252; font-size: 14px; text-align: center; margin-top: 20px;">
               If you didn't request this, please ignore this email and secure your account.
             </p>
-            <hr style="border: none; border-top: 1px solid #333; margin: 24px 0;" />
-            <p style="color: #6b7280; font-size: 12px; text-align: center;">
+            <hr style="border: none; border-top: 1px solid #262626; margin: 24px 0;" />
+            <p style="color: #404040; font-size: 12px; text-align: center;">
               — Yunchi Security Team
             </p>
           </div>

@@ -52,28 +52,29 @@ async function sendUnbanEmail(email: string, username: string | null): Promise<v
         to: [email],
         subject: "✅ Your Account Has Been Unbanned",
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="text-align: center; margin-bottom: 30px;">
-              <h1 style="color: #22c55e; margin: 0;">✅ Account Restored</h1>
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+            <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+              <h1 style="color: white; margin: 0;">✅ Account Restored</h1>
             </div>
-            
-            <p style="color: #333; font-size: 16px;">Hello${username ? ` <strong>${username}</strong>` : ''},</p>
-            
-            <p style="color: #333; font-size: 16px;">Great news! Your account ban has been lifted and your access has been fully restored.</p>
-            
-            <div style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); border-radius: 12px; padding: 20px; margin: 25px 0; text-align: center;">
-              <p style="color: white; font-size: 18px; margin: 0; font-weight: bold;">You can now log in and use the platform again!</p>
+            <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+              <p style="color: #e5e5e5; font-size: 16px;">Hello${username ? ` <strong style="color: #ef4444;">${username}</strong>` : ''},</p>
+              
+              <p style="color: #a3a3a3; font-size: 16px;">Great news! Your account ban has been lifted and your access has been fully restored.</p>
+              
+              <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); border-radius: 12px; padding: 20px; margin: 25px 0; text-align: center;">
+                <p style="color: white; font-size: 18px; margin: 0; font-weight: bold;">You can now log in and use the platform again!</p>
+              </div>
+              
+              <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
+                Please ensure you follow our terms of service to maintain your account in good standing.
+              </p>
+              
+              <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;">
+              
+              <p style="color: #525252; font-size: 12px; text-align: center;">
+                — Yunchi Team
+              </p>
             </div>
-            
-            <p style="color: #666; font-size: 14px; margin-top: 30px;">
-              Please ensure you follow our terms of service to maintain your account in good standing.
-            </p>
-            
-            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-            
-            <p style="color: #999; font-size: 12px; text-align: center;">
-              — Yunchi Team
-            </p>
           </div>
         `,
       }),
@@ -108,33 +109,33 @@ async function sendBroadcastEmail(email: string, username: string | null, broadc
           subject: "Announcement from Yunchi",
           text: `Hello${username ? ` ${username}` : ''},\n\n${broadcastMessage}\n\n— Yunchi Team\n\nIf you no longer wish to receive these announcements, you can update your notification preferences in your account settings.`,
           html: `
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
-              <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 16px; padding: 40px 30px; text-align: center;">
-                <div style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); width: 60px; height: 60px; border-radius: 12px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+              <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); border-radius: 16px 16px 0 0; padding: 40px 30px; text-align: center;">
+                <div style="background: rgba(0,0,0,0.3); width: 60px; height: 60px; border-radius: 12px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
                   <span style="font-size: 28px;">📢</span>
                 </div>
                 <h1 style="color: #ffffff; margin: 0 0 10px; font-size: 24px; font-weight: 700;">Announcement</h1>
-                <p style="color: #94a3b8; margin: 0; font-size: 14px;">Important update from Yunchi</p>
+                <p style="color: rgba(255,255,255,0.7); margin: 0; font-size: 14px;">Important update from Yunchi</p>
               </div>
               
-              <div style="background: #ffffff; border-radius: 16px; padding: 30px; margin-top: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">Hello${username ? ` <strong>${username}</strong>` : ''},</p>
+              <div style="background: #0f0f0f; border-radius: 0 0 16px 16px; padding: 30px; border: 1px solid #1a1a1a; border-top: none;">
+                <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">Hello${username ? ` <strong style="color: #ef4444;">${username}</strong>` : ''},</p>
                 
-                <div style="background: #fef3c7; border-left: 4px solid #f97316; border-radius: 8px; padding: 20px; margin: 20px 0;">
-                  <p style="color: #1f2937; font-size: 16px; line-height: 1.7; margin: 0; white-space: pre-wrap;">${broadcastMessage}</p>
+                <div style="background: #1a0a0a; border-left: 4px solid #dc2626; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                  <p style="color: #e5e5e5; font-size: 16px; line-height: 1.7; margin: 0; white-space: pre-wrap;">${broadcastMessage}</p>
                 </div>
                 
                 <div style="text-align: center; margin-top: 30px;">
-                  <a href="https://yunchicheck.lovable.app/dashboard" style="display: inline-block; background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 600; font-size: 15px;">Visit Dashboard</a>
+                  <a href="https://yunchicheck.lovable.app/dashboard" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 600; font-size: 15px;">Visit Dashboard</a>
                 </div>
               </div>
               
               <div style="text-align: center; margin-top: 30px; padding: 20px;">
-                <p style="color: #6b7280; font-size: 12px; margin: 0 0 10px;">
+                <p style="color: #525252; font-size: 12px; margin: 0 0 10px;">
                   You're receiving this because you have an account at Yunchi.
                 </p>
-                <p style="color: #9ca3af; font-size: 11px; margin: 0;">
-                  To manage your notification preferences, visit your <a href="https://yunchicheck.lovable.app/dashboard" style="color: #f97316; text-decoration: none;">account settings</a>.
+                <p style="color: #404040; font-size: 11px; margin: 0;">
+                  To manage your notification preferences, visit your <a href="https://yunchicheck.lovable.app/dashboard" style="color: #ef4444; text-decoration: none;">account settings</a>.
                 </p>
               </div>
             </div>

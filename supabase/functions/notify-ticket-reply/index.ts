@@ -157,26 +157,26 @@ View Ticket: https://yunchicheck.lovable.app/dashboard/support
 
 — Yunchi Support Team`,
           html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-              <div style="background: linear-gradient(135deg, #7c3aed, #6d28d9); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                <h1 style="color: white; margin: 0;">New Reply to Your Ticket</h1>
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+              <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                <h1 style="color: white; margin: 0;">💬 New Reply to Your Ticket</h1>
               </div>
-              <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
-                <div style="background: #262626; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                  <p style="margin: 5px 0;"><strong>Ticket:</strong> ${ticket.ticket_id}</p>
-                  <p style="margin: 5px 0;"><strong>Subject:</strong> ${ticket.subject}</p>
+              <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+                <div style="background: #1a0a0a; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #2a1a1a;">
+                  <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Ticket:</strong> ${ticket.ticket_id}</p>
+                  <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Subject:</strong> ${ticket.subject}</p>
                 </div>
-                <div style="background: #262626; padding: 20px; border-radius: 8px; border-left: 4px solid #7c3aed;">
-                  <p style="color: #a3a3a3; margin-bottom: 10px;"><strong>${adminName || 'Support Team'}:</strong></p>
-                  <p style="white-space: pre-wrap; margin: 0; line-height: 1.6;">${message}</p>
+                <div style="background: #1a0a0a; padding: 20px; border-radius: 8px; border-left: 4px solid #dc2626;">
+                  <p style="color: #ef4444; margin-bottom: 10px;"><strong>${adminName || 'Support Team'}:</strong></p>
+                  <p style="white-space: pre-wrap; margin: 0; line-height: 1.6; color: #e5e5e5;">${message}</p>
                 </div>
-                <p style="color: #a3a3a3; font-size: 14px; margin-top: 20px;">
+                <p style="color: #737373; font-size: 14px; margin-top: 20px;">
                   You can view the full conversation by logging into your account.
                 </p>
                 <div style="text-align: center; margin-top: 25px;">
-                  <a href="https://yunchicheck.lovable.app/dashboard/support" style="display: inline-block; background: #7c3aed; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View Ticket</a>
+                  <a href="https://yunchicheck.lovable.app/dashboard/support" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View Ticket</a>
                 </div>
-                <p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 30px;">
+                <p style="color: #404040; font-size: 12px; text-align: center; margin-top: 30px;">
                   This is an automated notification from Yunchi Checker support.
                 </p>
               </div>

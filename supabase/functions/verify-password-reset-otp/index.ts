@@ -36,22 +36,22 @@ async function sendPasswordChangedEmail(email: string): Promise<boolean> {
       to: [email],
       subject: "🔒 Password Changed - Yunchi Checker",
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: linear-gradient(135deg, #10b981, #059669); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+          <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
             <h1 style="color: white; margin: 0;">🔒 Password Changed</h1>
           </div>
-          <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
+          <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
             <p style="font-size: 16px;">Hello,</p>
-            <p>Your password for <strong>Yunchi Checker</strong> has been successfully changed.</p>
+            <p style="color: #a3a3a3;">Your password for <strong style="color: #ef4444;">Yunchi Checker</strong> has been successfully changed.</p>
             
-            <div style="background: #262626; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <div style="background: #1a0a0a; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #2a1a1a;">
               <p style="color: #a3a3a3; margin: 0; font-size: 14px;">
                 <strong>Date & Time:</strong> ${formattedDate}
               </p>
             </div>
             
-            <div style="background: #3b2f1c; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 0 8px 8px 0;">
-              <p style="color: #fcd34d; margin: 0; font-size: 14px;">
+            <div style="background: #1a0a0a; border-left: 4px solid #dc2626; padding: 15px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+              <p style="color: #fca5a5; margin: 0; font-size: 14px;">
                 <strong>⚠️ Security Notice:</strong> If you did not make this change, please contact our support immediately and secure your account.
               </p>
             </div>
@@ -59,14 +59,14 @@ async function sendPasswordChangedEmail(email: string): Promise<boolean> {
             <p style="color: #a3a3a3; font-size: 14px; margin-top: 20px;">
               For your security, we recommend:
             </p>
-            <ul style="color: #a3a3a3; font-size: 14px; line-height: 1.8; padding-left: 20px;">
+            <ul style="color: #737373; font-size: 14px; line-height: 1.8; padding-left: 20px;">
               <li>Using a strong, unique password</li>
               <li>Never sharing your password with anyone</li>
               <li>Enabling notifications for account activities</li>
             </ul>
             
-            <hr style="border: none; border-top: 1px solid #333; margin: 30px 0;">
-            <p style="color: #6b7280; font-size: 12px; text-align: center;">
+            <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;">
+            <p style="color: #404040; font-size: 12px; text-align: center;">
               This is an automated security notification from Yunchi Checker.<br>
               If you have any questions, please contact our support team.
             </p>
