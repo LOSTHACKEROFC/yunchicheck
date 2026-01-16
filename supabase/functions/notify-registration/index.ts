@@ -101,9 +101,31 @@ const handler = async (req: Request): Promise<Response> => {
         const resend = new Resend(RESEND_API_KEY);
 
         const { error: emailError } = await resend.emails.send({
-          from: "Yunchi <onboarding@resend.dev>",
+          from: "Yunchi <noreply@resend.dev>",
+          reply_to: "support@yunchicheck.lovable.app",
           to: [email],
-          subject: "🎉 Welcome to Yunchi - Your Account is Ready!",
+          subject: "Welcome to Yunchi - Your Account is Ready",
+          text: `Hello ${displayName}!
+
+Thank you for joining Yunchi Checker. We're excited to have you on board!
+
+Your Account Details:
+- Username: ${displayName}
+- Email: ${email}
+- Registered: ${formattedDate}
+- Starting Credits: 0 credits
+
+Getting Started:
+1. Top Up Your Balance - Add credits via crypto payment
+2. Explore Available Gateways - Check our gateways page
+3. Telegram Notifications Connected - You're already connected to @YunchiSupportbot
+4. Need Help? - Visit our Support page
+
+Go to your dashboard: https://yunchicheck.lovable.app/dashboard
+
+If you didn't create this account, please ignore this email.
+
+— Yunchi Team`,
           html: `
             <!DOCTYPE html>
             <html>
@@ -113,13 +135,13 @@ const handler = async (req: Request): Promise<Response> => {
             </head>
             <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
               <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 16px; padding: 40px 30px; text-align: center;">
-                <h1 style="color: #fff; margin: 0 0 10px 0; font-size: 28px;">🎉 Welcome to Yunchi!</h1>
+                <h1 style="color: #fff; margin: 0 0 10px 0; font-size: 28px;">Welcome to Yunchi!</h1>
                 <p style="color: #a0a0a0; margin: 0; font-size: 16px;">Your account has been created successfully</p>
               </div>
               
               <div style="background: #ffffff; border-radius: 16px; padding: 30px; margin-top: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
                 <p style="color: #333; font-size: 18px; margin: 0 0 20px 0;">
-                  Hello <strong>${displayName}</strong>! 👋
+                  Hello <strong>${displayName}</strong>!
                 </p>
                 
                 <p style="color: #555; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">
@@ -127,7 +149,7 @@ const handler = async (req: Request): Promise<Response> => {
                 </p>
                 
                 <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 25px; margin: 25px 0;">
-                  <h2 style="color: #fff; margin: 0 0 15px 0; font-size: 18px;">📋 Your Account Details</h2>
+                  <h2 style="color: #fff; margin: 0 0 15px 0; font-size: 18px;">Your Account Details</h2>
                   <table style="width: 100%; color: #fff;">
                     <tr>
                       <td style="padding: 8px 0; opacity: 0.8;">Username:</td>
@@ -148,7 +170,7 @@ const handler = async (req: Request): Promise<Response> => {
                   </table>
                 </div>
                 
-                <h2 style="color: #333; font-size: 18px; margin: 30px 0 15px 0;">🚀 Getting Started</h2>
+                <h2 style="color: #333; font-size: 18px; margin: 30px 0 15px 0;">Getting Started</h2>
                 
                 <div style="background: #f8f9fa; border-radius: 10px; padding: 20px; margin-bottom: 15px;">
                   <h3 style="color: #333; margin: 0 0 10px 0; font-size: 16px;">1. Top Up Your Balance</h3>
@@ -165,7 +187,7 @@ const handler = async (req: Request): Promise<Response> => {
                 </div>
                 
                 <div style="background: #f8f9fa; border-radius: 10px; padding: 20px; margin-bottom: 15px;">
-                  <h3 style="color: #333; margin: 0 0 10px 0; font-size: 16px;">3. Telegram Notifications Connected ✅</h3>
+                  <h3 style="color: #333; margin: 0 0 10px 0; font-size: 16px;">3. Telegram Notifications Connected</h3>
                   <p style="color: #666; margin: 0; font-size: 14px; line-height: 1.5;">
                     You're already connected to @YunchiSupportbot for real-time alerts!
                   </p>
@@ -181,7 +203,7 @@ const handler = async (req: Request): Promise<Response> => {
                 <div style="text-align: center; margin-top: 30px;">
                   <a href="https://yunchicheck.lovable.app/dashboard" 
                      style="display: inline-block; background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); color: #fff; text-decoration: none; padding: 14px 35px; border-radius: 8px; font-weight: bold; font-size: 16px;">
-                    Go to Dashboard →
+                    Go to Dashboard
                   </a>
                 </div>
               </div>
@@ -197,6 +219,9 @@ const handler = async (req: Request): Promise<Response> => {
             </body>
             </html>
           `,
+          headers: {
+            "X-Entity-Ref-ID": crypto.randomUUID(),
+          },
         });
 
         if (emailError) {

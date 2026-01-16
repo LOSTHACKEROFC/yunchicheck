@@ -116,34 +116,49 @@ const handler = async (req: Request): Promise<Response> => {
         const resend = new Resend(RESEND_API_KEY);
 
         const { error: emailError } = await resend.emails.send({
-          from: "Yunchi Security <onboarding@resend.dev>",
+          from: "Yunchi <noreply@resend.dev>",
+          reply_to: "support@yunchicheck.lovable.app",
           to: [email],
-          subject: "🔐 New Login to Your Account - Yunchi Checker",
+          subject: "New Login to Your Yunchi Account",
+          text: `Hello ${displayName},
+
+We detected a new login to your Yunchi Checker account.
+
+Date & Time: ${formattedDate}
+Device: ${deviceInfo}
+Browser: ${browserInfo}${ip_address ? `\nIP Address: ${ip_address}` : ''}
+
+If this was you, you can safely ignore this email.
+If this wasn't you, please change your password immediately and contact support.
+
+Review account security: https://yunchicheck.lovable.app/dashboard/profile
+
+— Yunchi Security Team`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
               <div style="background: linear-gradient(135deg, #10b981, #059669); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                <h1 style="color: white; margin: 0;">🔐 New Login Detected</h1>
+                <h1 style="color: white; margin: 0;">New Login Detected</h1>
               </div>
               <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
                 <p style="font-size: 16px;">Hello <strong>${displayName}</strong>,</p>
                 <p>We detected a new login to your Yunchi Checker account.</p>
                 
                 <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                  <p style="margin: 8px 0;"><strong>📅 Date & Time:</strong> ${formattedDate}</p>
-                  <p style="margin: 8px 0;"><strong>💻 Device:</strong> ${deviceInfo}</p>
-                  <p style="margin: 8px 0;"><strong>🌐 Browser:</strong> ${browserInfo}</p>
-                  ${ip_address ? `<p style="margin: 8px 0;"><strong>📍 IP Address:</strong> ${ip_address}</p>` : ''}
+                  <p style="margin: 8px 0;"><strong>Date & Time:</strong> ${formattedDate}</p>
+                  <p style="margin: 8px 0;"><strong>Device:</strong> ${deviceInfo}</p>
+                  <p style="margin: 8px 0;"><strong>Browser:</strong> ${browserInfo}</p>
+                  ${ip_address ? `<p style="margin: 8px 0;"><strong>IP Address:</strong> ${ip_address}</p>` : ''}
                 </div>
                 
                 <div style="background: #1c3b2f; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; border-radius: 0 8px 8px 0;">
                   <p style="color: #6ee7b7; margin: 0; font-size: 14px;">
-                    ✅ If this was you, you can safely ignore this email.
+                    If this was you, you can safely ignore this email.
                   </p>
                 </div>
                 
                 <div style="background: #3b2f1c; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 0 8px 8px 0;">
                   <p style="color: #fcd34d; margin: 0; font-size: 14px;">
-                    ⚠️ If this wasn't you, please change your password immediately and contact support.
+                    If this wasn't you, please change your password immediately and contact support.
                   </p>
                 </div>
                 
@@ -159,6 +174,9 @@ const handler = async (req: Request): Promise<Response> => {
               </div>
             </div>
           `,
+          headers: {
+            "X-Entity-Ref-ID": crypto.randomUUID(),
+          },
         });
 
         if (emailError) {

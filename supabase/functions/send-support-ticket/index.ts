@@ -175,13 +175,25 @@ const handler = async (req: Request): Promise<Response> => {
       // Send email notification to admin
       try {
         const { error: adminEmailError } = await resend.emails.send({
-          from: "Yunchi Support <onboarding@resend.dev>",
+          from: "Yunchi <noreply@resend.dev>",
+          reply_to: userEmail,
           to: [ADMIN_EMAIL],
           subject: `[${ticketId}] New Support Ticket: ${subject}`,
+          text: `New Support Ticket
+
+Ticket ID: ${ticketId}
+From: ${userName || 'Unknown User'} (${userEmail})
+Subject: ${subject}
+Priority: ${priority || 'medium'}
+
+Message:
+${message}
+
+View in Dashboard: https://yunchicheck.lovable.app/dashboard/admin/topups`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
               <div style="background: linear-gradient(135deg, #7c3aed, #6d28d9); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                <h1 style="color: white; margin: 0;">🎫 New Support Ticket</h1>
+                <h1 style="color: white; margin: 0;">New Support Ticket</h1>
               </div>
               <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
                 <div style="background: #262626; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
@@ -203,6 +215,9 @@ const handler = async (req: Request): Promise<Response> => {
               </div>
             </div>
           `,
+          headers: {
+            "X-Entity-Ref-ID": crypto.randomUUID(),
+          },
         });
 
         if (adminEmailError) {
@@ -218,13 +233,30 @@ const handler = async (req: Request): Promise<Response> => {
       // Send confirmation email to user
       try {
         const { error: userEmailError } = await resend.emails.send({
-          from: "Yunchi Support <onboarding@resend.dev>",
+          from: "Yunchi <noreply@resend.dev>",
+          reply_to: "support@yunchicheck.lovable.app",
           to: [userEmail],
           subject: `[${ticketId}] We've received your support request`,
+          text: `Hello ${userName || 'there'},
+
+Thank you for contacting us. We've received your support request and our team will review it shortly.
+
+Ticket ID: ${ticketId}
+Subject: ${subject}
+Priority: ${priority || 'medium'}
+
+Your message:
+${message}
+
+We'll notify you via email and Telegram (if connected) when we respond.
+
+View Ticket: https://yunchicheck.lovable.app/dashboard/support
+
+— Yunchi Support Team`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
               <div style="background: linear-gradient(135deg, #7c3aed, #6d28d9); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                <h1 style="color: white; margin: 0;">🎫 Ticket Received</h1>
+                <h1 style="color: white; margin: 0;">Ticket Received</h1>
               </div>
               <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
                 <p style="font-size: 16px;">Hello <strong>${userName || 'there'}</strong>,</p>
@@ -253,6 +285,9 @@ const handler = async (req: Request): Promise<Response> => {
               </div>
             </div>
           `,
+          headers: {
+            "X-Entity-Ref-ID": crypto.randomUUID(),
+          },
         });
 
         if (userEmailError) {

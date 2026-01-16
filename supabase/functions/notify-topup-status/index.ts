@@ -50,15 +50,21 @@ async function sendTelegramMessage(chatId: string, message: string): Promise<boo
 async function sendEmail(
   to: string,
   subject: string,
-  html: string
+  html: string,
+  text: string
 ): Promise<boolean> {
   try {
     console.log("Sending email to:", to);
     const result = await resend.emails.send({
-      from: "Yunchi Checker <onboarding@resend.dev>",
+      from: "Yunchi <noreply@resend.dev>",
+      reply_to: "support@yunchicheck.lovable.app",
       to: [to],
       subject,
       html,
+      text,
+      headers: {
+        "X-Entity-Ref-ID": crypto.randomUUID(),
+      },
     });
     console.log("Email result:", JSON.stringify(result));
     if (result.error) {
@@ -166,6 +172,18 @@ Thank you for using Yunchi Checker!
       </div>
     `;
 
+    const emailText = `Hello ${username},
+
+Your credit purchase has been approved and processed.
+
+Credits Added: ${formattedCredits}
+Method: ${methodLabel}
+Transaction ID: ${transaction_id.slice(0, 8)}...
+
+New Balance: ${formattedCurrentCredits}
+
+Thank you for using Yunchi Checker.`;
+
     // Send notifications sequentially to ensure completion
     if (telegramChatId) {
       telegramSent = await sendTelegramMessage(telegramChatId, telegramMessage);
@@ -173,7 +191,7 @@ Thank you for using Yunchi Checker!
     }
 
     if (userEmail) {
-      emailSent = await sendEmail(userEmail, "✅ Your Credits Have Been Added!", emailHtml);
+      emailSent = await sendEmail(userEmail, "Your Credits Have Been Added - Yunchi", emailHtml, emailText);
       console.log("Email sent for completed:", emailSent);
     }
 
@@ -233,6 +251,17 @@ If you believe this was a mistake, please contact support with your transaction 
       </div>
     `;
 
+    const emailText = `Hello ${username},
+
+Unfortunately, your topup request has been rejected.
+
+Credits: ${formattedCredits}
+Method: ${methodLabel}
+Transaction ID: ${transaction_id.slice(0, 8)}...
+${rejection_reason ? `\nReason: ${rejection_reason}` : ""}
+
+If you believe this was a mistake, please contact support with your transaction details.`;
+
     // Send notifications sequentially to ensure completion
     if (telegramChatId) {
       telegramSent = await sendTelegramMessage(telegramChatId, telegramMessage);
@@ -240,7 +269,7 @@ If you believe this was a mistake, please contact support with your transaction 
     }
 
     if (userEmail) {
-      emailSent = await sendEmail(userEmail, "❌ Your Topup Request Was Rejected", emailHtml);
+      emailSent = await sendEmail(userEmail, "Your Topup Request Was Not Approved - Yunchi", emailHtml, emailText);
       console.log("Email sent for failed:", emailSent);
     }
 
