@@ -12,10 +12,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-async function sendPasswordChangedEmail(email: string): Promise<void> {
+async function sendPasswordChangedEmail(email: string): Promise<boolean> {
   if (!RESEND_API_KEY) {
     console.log("Resend API key not configured, skipping email notification");
-    return;
+    return false;
   }
 
   try {
@@ -31,40 +31,42 @@ async function sendPasswordChangedEmail(email: string): Promise<void> {
       timeZoneName: 'short'
     });
 
-    await resend.emails.send({
-      from: "Yunchi Checker <onboarding@resend.dev>",
+    const { error } = await resend.emails.send({
+      from: "Yunchi Security <onboarding@resend.dev>",
       to: [email],
       subject: "🔒 Password Changed - Yunchi Checker",
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">🔒 Password Changed</h1>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #10b981, #059669); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0;">🔒 Password Changed</h1>
           </div>
-          <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-            <p style="color: #333; font-size: 16px; line-height: 1.6;">Hello,</p>
-            <p style="color: #333; font-size: 16px; line-height: 1.6;">
-              Your password for <strong>Yunchi Checker</strong> has been successfully changed.
-            </p>
-            <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
-              <p style="color: #666; margin: 0; font-size: 14px;">
+          <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
+            <p style="font-size: 16px;">Hello,</p>
+            <p>Your password for <strong>Yunchi Checker</strong> has been successfully changed.</p>
+            
+            <div style="background: #262626; padding: 15px; border-radius: 8px; margin: 20px 0;">
+              <p style="color: #a3a3a3; margin: 0; font-size: 14px;">
                 <strong>Date & Time:</strong> ${formattedDate}
               </p>
             </div>
-            <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
-              <p style="color: #856404; margin: 0; font-size: 14px;">
+            
+            <div style="background: #3b2f1c; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+              <p style="color: #fcd34d; margin: 0; font-size: 14px;">
                 <strong>⚠️ Security Notice:</strong> If you did not make this change, please contact our support immediately and secure your account.
               </p>
             </div>
-            <p style="color: #666; font-size: 14px; margin-top: 20px;">
+            
+            <p style="color: #a3a3a3; font-size: 14px; margin-top: 20px;">
               For your security, we recommend:
             </p>
-            <ul style="color: #666; font-size: 14px; line-height: 1.8;">
+            <ul style="color: #a3a3a3; font-size: 14px; line-height: 1.8; padding-left: 20px;">
               <li>Using a strong, unique password</li>
               <li>Never sharing your password with anyone</li>
               <li>Enabling notifications for account activities</li>
             </ul>
-            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-            <p style="color: #999; font-size: 12px; text-align: center;">
+            
+            <hr style="border: none; border-top: 1px solid #333; margin: 30px 0;">
+            <p style="color: #6b7280; font-size: 12px; text-align: center;">
               This is an automated security notification from Yunchi Checker.<br>
               If you have any questions, please contact our support team.
             </p>
@@ -73,16 +75,23 @@ async function sendPasswordChangedEmail(email: string): Promise<void> {
       `,
     });
 
+    if (error) {
+      console.error("Error sending password changed email:", error);
+      return false;
+    }
+
     console.log("Password changed email sent successfully to:", email);
+    return true;
   } catch (error) {
     console.error("Error sending password changed email:", error);
+    return false;
   }
 }
 
-async function sendPasswordChangedTelegram(chatId: string): Promise<void> {
+async function sendPasswordChangedTelegram(chatId: string): Promise<boolean> {
   if (!TELEGRAM_BOT_TOKEN || !chatId) {
     console.log("Telegram not configured or no chat ID, skipping notification");
-    return;
+    return false;
   }
 
   try {
@@ -104,7 +113,7 @@ Your password for Yunchi Checker has been successfully changed.
 
 ⚠️ <b>Security Notice:</b> If you did not make this change, please contact support immediately!`;
 
-    await fetch(
+    const response = await fetch(
       `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
       {
         method: "POST",
@@ -117,9 +126,17 @@ Your password for Yunchi Checker has been successfully changed.
       }
     );
 
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("Telegram API error:", errorData);
+      return false;
+    }
+
     console.log("Password changed Telegram notification sent to:", chatId);
+    return true;
   } catch (error) {
     console.error("Error sending Telegram notification:", error);
+    return false;
   }
 }
 
@@ -140,6 +157,14 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
+    // Validate OTP format
+    if (!/^\d{6}$/.test(otp)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid OTP format" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Find the OTP record
@@ -152,7 +177,7 @@ const handler = async (req: Request): Promise<Response> => {
       .single();
 
     if (otpError || !otpRecord) {
-      console.log("OTP not found or already used");
+      console.log("OTP not found or already used for email:", email);
       return new Response(
         JSON.stringify({ error: "Invalid OTP code" }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
@@ -161,7 +186,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Check if OTP is expired
     if (new Date(otpRecord.expires_at) < new Date()) {
-      console.log("OTP expired");
+      console.log("OTP expired for email:", email);
       // Clean up expired OTP
       await supabase
         .from("password_reset_otps")
@@ -221,20 +246,32 @@ const handler = async (req: Request): Promise<Response> => {
       .update({ used: true, verified: true })
       .eq("id", otpRecord.id);
 
-    // Send security notifications (non-blocking)
-    sendPasswordChangedEmail(otpRecord.email);
+    console.log("Password updated successfully for:", otpRecord.email);
+
+    // Send security notifications
+    const emailSent = await sendPasswordChangedEmail(otpRecord.email);
+    let telegramSent = false;
     if (otpRecord.telegram_chat_id) {
-      sendPasswordChangedTelegram(otpRecord.telegram_chat_id);
+      telegramSent = await sendPasswordChangedTelegram(otpRecord.telegram_chat_id);
     }
 
-    console.log("Password updated successfully for:", otpRecord.email);
+    // Create in-app notification
+    await supabase.from("notifications").insert({
+      user_id: otpRecord.user_id,
+      type: "security",
+      title: "Password Changed",
+      message: "Your account password was successfully changed. If you didn't make this change, please contact support immediately.",
+      metadata: { action: "password_reset" }
+    });
     
     return new Response(
       JSON.stringify({ 
         success: true, 
         message: "Password updated successfully",
         userId: otpRecord.user_id,
-        email: otpRecord.email
+        email: otpRecord.email,
+        emailSent,
+        telegramSent
       }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );

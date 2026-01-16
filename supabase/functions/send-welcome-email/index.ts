@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Resend } from "https://esm.sh/resend@2.0.0";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -34,6 +35,15 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (!email) {
+      console.error("Email address is required");
+      return new Response(
+        JSON.stringify({ error: "Email address is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const resend = new Resend(RESEND_API_KEY);
     const displayName = username || email.split("@")[0];
 
     const emailHtml = `
@@ -126,34 +136,25 @@ Deno.serve(async (req) => {
       </html>
     `;
 
-    const emailResponse = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-      },
-      body: JSON.stringify({
-        from: "Yunchi <onboarding@resend.dev>",
-        to: [email],
-        subject: "🎉 Welcome to Yunchi - Your Account is Ready!",
-        html: emailHtml,
-      }),
+    const { data, error } = await resend.emails.send({
+      from: "Yunchi <onboarding@resend.dev>",
+      to: [email],
+      subject: "🎉 Welcome to Yunchi - Your Account is Ready!",
+      html: emailHtml,
     });
 
-    if (!emailResponse.ok) {
-      const errorText = await emailResponse.text();
-      console.error("Resend API error:", errorText);
+    if (error) {
+      console.error("Resend API error:", error);
       return new Response(
-        JSON.stringify({ error: "Failed to send email", details: errorText }),
+        JSON.stringify({ error: "Failed to send email", details: error.message }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const result = await emailResponse.json();
-    console.log(`Welcome email sent successfully to ${email}:`, result);
+    console.log(`Welcome email sent successfully to ${email}:`, data);
 
     return new Response(
-      JSON.stringify({ success: true, message: "Welcome email sent" }),
+      JSON.stringify({ success: true, message: "Welcome email sent", id: data?.id }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Resend } from "https://esm.sh/resend@2.0.0";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
@@ -64,6 +65,13 @@ const handler = async (req: Request): Promise<Response> => {
     
     console.log(`Processing admin reply for ticket: ${ticketId}`);
 
+    if (!ticketId || !message) {
+      return new Response(
+        JSON.stringify({ error: "Ticket ID and message are required" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Get ticket details
@@ -75,7 +83,10 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (ticketError || !ticket) {
       console.error("Ticket not found:", ticketError);
-      throw new Error("Ticket not found");
+      return new Response(
+        JSON.stringify({ error: "Ticket not found" }),
+        { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
     }
 
     console.log(`Found ticket: ${ticket.ticket_id} for user: ${ticket.user_email}`);
@@ -99,57 +110,70 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (messageError) {
       console.error("Failed to save message:", messageError);
-      throw new Error("Failed to save admin message");
+      return new Response(
+        JSON.stringify({ error: "Failed to save admin message" }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
     }
 
     console.log("Admin message saved successfully");
 
     // Send email notification to user
-    const emailRes = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-      },
-      body: JSON.stringify({
-        from: "Support Team <onboarding@resend.dev>",
-        to: [ticket.user_email],
-        subject: `[${ticket.ticket_id}] New Reply to Your Support Ticket`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #7c3aed;">New Reply to Your Ticket</h2>
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p><strong>Ticket:</strong> ${ticket.ticket_id}</p>
-              <p><strong>Subject:</strong> ${ticket.subject}</p>
+    let emailSent = false;
+    if (RESEND_API_KEY && ticket.user_email) {
+      try {
+        const resend = new Resend(RESEND_API_KEY);
+        
+        const { error: emailError } = await resend.emails.send({
+          from: "Yunchi Support <onboarding@resend.dev>",
+          to: [ticket.user_email],
+          subject: `[${ticket.ticket_id}] New Reply to Your Support Ticket`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <div style="background: linear-gradient(135deg, #7c3aed, #6d28d9); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                <h1 style="color: white; margin: 0;">🎫 New Reply to Your Ticket</h1>
+              </div>
+              <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
+                <div style="background: #262626; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                  <p style="margin: 5px 0;"><strong>Ticket:</strong> ${ticket.ticket_id}</p>
+                  <p style="margin: 5px 0;"><strong>Subject:</strong> ${ticket.subject}</p>
+                </div>
+                <div style="background: #262626; padding: 20px; border-radius: 8px; border-left: 4px solid #7c3aed;">
+                  <p style="color: #a3a3a3; margin-bottom: 10px;"><strong>${adminName || 'Support Team'}:</strong></p>
+                  <p style="white-space: pre-wrap; margin: 0; line-height: 1.6;">${message}</p>
+                </div>
+                <p style="color: #a3a3a3; font-size: 14px; margin-top: 20px;">
+                  You can view the full conversation by logging into your account.
+                </p>
+                <div style="text-align: center; margin-top: 25px;">
+                  <a href="https://yunchicheck.lovable.app/dashboard/support" style="display: inline-block; background: #7c3aed; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View Ticket</a>
+                </div>
+                <p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 30px;">
+                  This is an automated notification from Yunchi Checker support.
+                </p>
+              </div>
             </div>
-            <div style="background: #ffffff; padding: 20px; border: 1px solid #e9ecef; border-radius: 8px;">
-              <p style="color: #6c757d; margin-bottom: 10px;"><strong>${adminName || 'Support Team'}:</strong></p>
-              <p style="white-space: pre-wrap;">${message}</p>
-            </div>
-            <p style="color: #6c757d; font-size: 14px; margin-top: 20px;">
-              You can view the full conversation by logging into your account.
-            </p>
-            <p style="color: #6c757d; font-size: 12px; margin-top: 20px;">
-              This is an automated notification from Yunchi Checker support.
-            </p>
-          </div>
-        `,
-      }),
-    });
+          `,
+        });
 
-    if (!emailRes.ok) {
-      const errorData = await emailRes.json();
-      console.error("Resend API error:", errorData);
-      console.log("Email notification failed but message was saved");
+        if (emailError) {
+          console.error("Email error:", emailError);
+        } else {
+          emailSent = true;
+          console.log("Email notification sent successfully");
+        }
+      } catch (emailErr) {
+        console.error("Error sending email:", emailErr);
+      }
     } else {
-      console.log("Email notification sent successfully");
+      console.log("Email not sent: RESEND_API_KEY not configured or no user email");
     }
 
     // Send Telegram notification if user has chat ID configured
+    let telegramSent = false;
     if (profile?.telegram_chat_id) {
-      const userName = profile.name || profile.username || "User";
       const telegramMessage = `
-<b>🎫 New Reply to Your Ticket</b>
+🎫 <b>New Reply to Your Ticket</b>
 
 <b>Ticket:</b> ${ticket.ticket_id}
 <b>Subject:</b> ${ticket.subject}
@@ -159,12 +183,21 @@ ${message}
 
 <i>View the full conversation in your dashboard.</i>
 `;
-      await sendTelegramMessage(profile.telegram_chat_id, telegramMessage);
+      telegramSent = await sendTelegramMessage(profile.telegram_chat_id, telegramMessage);
     } else {
       console.log("No Telegram chat ID configured for user");
     }
 
-    return new Response(JSON.stringify({ success: true }), {
+    // Create in-app notification
+    await supabase.from("notifications").insert({
+      user_id: ticket.user_id,
+      type: "ticket_reply",
+      title: "New Reply to Your Ticket",
+      message: `${adminName || 'Support Team'} replied to ticket ${ticket.ticket_id}: ${message.substring(0, 100)}${message.length > 100 ? '...' : ''}`,
+      metadata: { ticket_id: ticketId, ticket_number: ticket.ticket_id }
+    });
+
+    return new Response(JSON.stringify({ success: true, emailSent, telegramSent }), {
       status: 200,
       headers: {
         "Content-Type": "application/json",

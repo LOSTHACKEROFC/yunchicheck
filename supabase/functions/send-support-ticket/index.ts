@@ -1,11 +1,13 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Resend } from "https://esm.sh/resend@2.0.0";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const ADMIN_EMAIL = "losthackerofc@gmail.com";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,10 +32,10 @@ async function sendAdminTelegramNotification(
   subject: string,
   message: string,
   priority: string
-): Promise<void> {
+): Promise<boolean> {
   if (!TELEGRAM_BOT_TOKEN || !ADMIN_TELEGRAM_CHAT_ID) {
     console.log("Telegram not configured for admin notifications");
-    return;
+    return false;
   }
 
   try {
@@ -90,11 +92,14 @@ ${message}
     if (!response.ok) {
       const errorData = await response.json();
       console.error("Telegram API error:", errorData);
-    } else {
-      console.log("Admin Telegram notification sent successfully");
+      return false;
     }
+    
+    console.log("Admin Telegram notification sent successfully");
+    return true;
   } catch (error) {
     console.error("Error sending admin Telegram notification:", error);
+    return false;
   }
 }
 
@@ -109,6 +114,14 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     const { subject, message, userEmail, userName, userId, priority }: SupportTicketRequest = await req.json();
     
+    // Validate required fields
+    if (!subject || !message || !userEmail || !userId) {
+      return new Response(
+        JSON.stringify({ error: "Missing required fields" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
     console.log(`Processing ticket from ${userEmail}: ${subject} (Priority: ${priority})`);
 
     // Generate a simple ticket ID
@@ -117,7 +130,7 @@ const handler = async (req: Request): Promise<Response> => {
     // Save ticket to database using service role
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
-    const { error: dbError } = await supabase
+    const { data: ticketData, error: dbError } = await supabase
       .from("support_tickets")
       .insert({
         ticket_id: ticketId,
@@ -127,128 +140,140 @@ const handler = async (req: Request): Promise<Response> => {
         message,
         status: "open",
         priority: priority || "medium"
-      });
+      })
+      .select("id")
+      .single();
 
     if (dbError) {
       console.error("Database error:", dbError);
-      throw new Error("Failed to save ticket to database");
-    }
-
-    // Get the ticket UUID for Telegram notification
-    const { data: ticketData } = await supabase
-      .from("support_tickets")
-      .select("id")
-      .eq("ticket_id", ticketId)
-      .single();
-
-    console.log("Ticket saved to database:", ticketId);
-
-    // Send Telegram notification to admin
-    if (ticketData?.id) {
-      await sendAdminTelegramNotification(
-        ticketData.id,
-        ticketId,
-        userName,
-        userEmail,
-        subject,
-        message,
-        priority || "medium"
+      return new Response(
+        JSON.stringify({ error: "Failed to save ticket to database" }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
-    // Send email notification to admin
-    const adminEmailRes = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-      },
-      body: JSON.stringify({
-        from: "Support Ticket <onboarding@resend.dev>",
-        to: ["losthackerofc@gmail.com"],
-        subject: `[${ticketId}] New Support Ticket: ${subject}`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #7c3aed;">New Support Ticket</h2>
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p><strong>Ticket ID:</strong> ${ticketId}</p>
-              <p><strong>From:</strong> ${userName || 'Unknown User'} (${userEmail})</p>
-              <p><strong>Subject:</strong> ${subject}</p>
-              <p><strong>Priority:</strong> ${priority || 'medium'}</p>
-            </div>
-            <div style="background: #ffffff; padding: 20px; border: 1px solid #e9ecef; border-radius: 8px;">
-              <h3 style="margin-top: 0;">Message:</h3>
-              <p style="white-space: pre-wrap;">${message}</p>
-            </div>
-            <p style="color: #6c757d; font-size: 12px; margin-top: 20px;">
-              This ticket was submitted via the Yunchi Checker support system.
-            </p>
-          </div>
-        `,
-      }),
-    });
+    console.log("Ticket saved to database:", ticketId, "UUID:", ticketData.id);
 
-    if (!adminEmailRes.ok) {
-      const errorData = await adminEmailRes.json();
-      console.error("Admin email error:", errorData);
+    // Send Telegram notification to admin
+    await sendAdminTelegramNotification(
+      ticketData.id,
+      ticketId,
+      userName,
+      userEmail,
+      subject,
+      message,
+      priority || "medium"
+    );
+
+    // Send email notifications using Resend SDK
+    let adminEmailSent = false;
+    let userEmailSent = false;
+
+    if (RESEND_API_KEY) {
+      const resend = new Resend(RESEND_API_KEY);
+
+      // Send email notification to admin
+      try {
+        const { error: adminEmailError } = await resend.emails.send({
+          from: "Yunchi Support <onboarding@resend.dev>",
+          to: [ADMIN_EMAIL],
+          subject: `[${ticketId}] New Support Ticket: ${subject}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <div style="background: linear-gradient(135deg, #7c3aed, #6d28d9); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                <h1 style="color: white; margin: 0;">🎫 New Support Ticket</h1>
+              </div>
+              <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
+                <div style="background: #262626; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                  <p style="margin: 5px 0;"><strong>Ticket ID:</strong> ${ticketId}</p>
+                  <p style="margin: 5px 0;"><strong>From:</strong> ${userName || 'Unknown User'} (${userEmail})</p>
+                  <p style="margin: 5px 0;"><strong>Subject:</strong> ${subject}</p>
+                  <p style="margin: 5px 0;"><strong>Priority:</strong> ${priority || 'medium'}</p>
+                </div>
+                <div style="background: #262626; padding: 20px; border-radius: 8px;">
+                  <h3 style="margin-top: 0; color: #a3a3a3;">Message:</h3>
+                  <p style="white-space: pre-wrap; margin: 0; line-height: 1.6;">${message}</p>
+                </div>
+                <div style="text-align: center; margin-top: 25px;">
+                  <a href="https://yunchicheck.lovable.app/dashboard/admin/topups" style="display: inline-block; background: #7c3aed; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View in Dashboard</a>
+                </div>
+                <p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 30px;">
+                  This ticket was submitted via the Yunchi Checker support system.
+                </p>
+              </div>
+            </div>
+          `,
+        });
+
+        if (adminEmailError) {
+          console.error("Admin email error:", adminEmailError);
+        } else {
+          adminEmailSent = true;
+          console.log("Admin email sent successfully");
+        }
+      } catch (err) {
+        console.error("Error sending admin email:", err);
+      }
+
+      // Send confirmation email to user
+      try {
+        const { error: userEmailError } = await resend.emails.send({
+          from: "Yunchi Support <onboarding@resend.dev>",
+          to: [userEmail],
+          subject: `[${ticketId}] We've received your support request`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <div style="background: linear-gradient(135deg, #7c3aed, #6d28d9); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                <h1 style="color: white; margin: 0;">🎫 Ticket Received</h1>
+              </div>
+              <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
+                <p style="font-size: 16px;">Hello <strong>${userName || 'there'}</strong>,</p>
+                <p>Thank you for contacting us. We've received your support request and our team will review it shortly.</p>
+                
+                <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                  <p style="margin: 5px 0;"><strong>Ticket ID:</strong> ${ticketId}</p>
+                  <p style="margin: 5px 0;"><strong>Subject:</strong> ${subject}</p>
+                  <p style="margin: 5px 0;"><strong>Priority:</strong> ${priority || 'medium'}</p>
+                </div>
+                
+                <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                  <p style="margin: 0 0 10px 0; color: #a3a3a3;"><strong>Your message:</strong></p>
+                  <p style="margin: 0; white-space: pre-wrap; line-height: 1.6;">${message}</p>
+                </div>
+                
+                <p style="color: #a3a3a3;">We'll notify you via email and Telegram (if connected) when we respond.</p>
+                
+                <div style="text-align: center; margin-top: 25px;">
+                  <a href="https://yunchicheck.lovable.app/dashboard/support" style="display: inline-block; background: #7c3aed; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View Ticket</a>
+                </div>
+                
+                <p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 30px;">
+                  This is an automated message from Yunchi Checker Support.
+                </p>
+              </div>
+            </div>
+          `,
+        });
+
+        if (userEmailError) {
+          console.error("User confirmation email error:", userEmailError);
+        } else {
+          userEmailSent = true;
+          console.log("User confirmation email sent successfully");
+        }
+      } catch (err) {
+        console.error("Error sending user email:", err);
+      }
     } else {
-      console.log("Admin email sent successfully");
+      console.log("RESEND_API_KEY not configured, skipping email notifications");
     }
 
-    // Send confirmation email to user
-    const userEmailRes = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-      },
-      body: JSON.stringify({
-        from: "Yunchi Support <onboarding@resend.dev>",
-        to: [userEmail],
-        subject: `[${ticketId}] We've received your support request`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background: linear-gradient(135deg, #7c3aed, #6d28d9); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-              <h1 style="color: white; margin: 0;">🎫 Ticket Received</h1>
-            </div>
-            <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
-              <p style="font-size: 16px;">Hello <strong>${userName || 'there'}</strong>,</p>
-              <p>Thank you for contacting us. We've received your support request and our team will review it shortly.</p>
-              
-              <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <p style="margin: 5px 0;"><strong>Ticket ID:</strong> ${ticketId}</p>
-                <p style="margin: 5px 0;"><strong>Subject:</strong> ${subject}</p>
-                <p style="margin: 5px 0;"><strong>Priority:</strong> ${priority || 'medium'}</p>
-              </div>
-              
-              <div style="background: #262626; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                <p style="margin: 0 0 10px 0; color: #a3a3a3;"><strong>Your message:</strong></p>
-                <p style="margin: 0; white-space: pre-wrap;">${message}</p>
-              </div>
-              
-              <p style="color: #a3a3a3;">We'll notify you via email and Telegram (if connected) when we respond.</p>
-              
-              <div style="text-align: center; margin-top: 25px;">
-                <a href="https://yunchicheck.lovable.app/dashboard/support" style="display: inline-block; background: #7c3aed; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View Ticket</a>
-              </div>
-              
-              <p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 30px;">
-                This is an automated message from Yunchi Checker Support.
-              </p>
-            </div>
-          </div>
-        `,
-      }),
-    });
-
-    if (!userEmailRes.ok) {
-      const errorData = await userEmailRes.json();
-      console.error("User confirmation email error:", errorData);
-    } else {
-      console.log("User confirmation email sent successfully");
-    }
-
-    return new Response(JSON.stringify({ success: true, ticketId }), {
+    return new Response(JSON.stringify({ 
+      success: true, 
+      ticketId,
+      adminEmailSent,
+      userEmailSent
+    }), {
       status: 200,
       headers: {
         "Content-Type": "application/json",

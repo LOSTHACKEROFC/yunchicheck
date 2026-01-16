@@ -68,19 +68,31 @@ async function sendEmailOTP(
     const resend = new Resend(RESEND_API_KEY);
     
     const { error } = await resend.emails.send({
-      from: "Yunchi Checker <onboarding@resend.dev>",
+      from: "Yunchi Security <onboarding@resend.dev>",
       to: [email],
-      subject: "Password Reset OTP - Yunchi Checker",
+      subject: "🔐 Password Reset OTP - Yunchi Checker",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h1 style="color: #333; text-align: center;">Password Reset</h1>
-          <p style="color: #666; font-size: 16px;">You requested a password reset for your Yunchi Checker account.</p>
-          <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
-            <p style="color: #666; margin-bottom: 10px;">Your OTP code is:</p>
-            <h2 style="color: #333; font-size: 32px; letter-spacing: 5px; margin: 0;">${otp}</h2>
+          <div style="background: linear-gradient(135deg, #7c3aed, #6d28d9); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0;">🔐 Password Reset</h1>
           </div>
-          <p style="color: #999; font-size: 14px; text-align: center;">This code will expire in <strong>2 minutes</strong>.</p>
-          <p style="color: #999; font-size: 14px; text-align: center;">If you didn't request this, please ignore this email.</p>
+          <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
+            <p style="font-size: 16px;">You requested a password reset for your Yunchi Checker account.</p>
+            <div style="background: #262626; padding: 25px; border-radius: 8px; text-align: center; margin: 25px 0;">
+              <p style="color: #a3a3a3; margin-bottom: 12px;">Your OTP code is:</p>
+              <h2 style="color: #7c3aed; font-size: 36px; letter-spacing: 8px; margin: 0;">${otp}</h2>
+            </div>
+            <p style="color: #fca5a5; font-size: 14px; text-align: center; background: #3b1c1c; padding: 12px; border-radius: 6px;">
+              ⏱️ This code will expire in <strong>2 minutes</strong>.
+            </p>
+            <p style="color: #6b7280; font-size: 14px; text-align: center; margin-top: 20px;">
+              If you didn't request this, please ignore this email and secure your account.
+            </p>
+            <hr style="border: none; border-top: 1px solid #333; margin: 24px 0;" />
+            <p style="color: #6b7280; font-size: 12px; text-align: center;">
+              — Yunchi Security Team
+            </p>
+          </div>
         </div>
       `,
     });
@@ -90,7 +102,7 @@ async function sendEmailOTP(
       return { success: false, error: "Failed to send email" };
     }
 
-    console.log("Email OTP sent successfully");
+    console.log("Email OTP sent successfully to:", email);
     return { success: true };
   } catch (error) {
     console.error("Error sending email OTP:", error);
@@ -115,6 +127,15 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid email format" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Find the user by email in auth.users
@@ -132,6 +153,7 @@ const handler = async (req: Request): Promise<Response> => {
     
     if (!user) {
       // Don't reveal that the email doesn't exist for security
+      console.log("User not found for email:", email);
       return new Response(
         JSON.stringify({ success: true, message: "If the email exists, an OTP has been sent" }),
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
@@ -145,7 +167,7 @@ const handler = async (req: Request): Promise<Response> => {
       .eq("user_id", user.id)
       .single();
 
-    if (profileError) {
+    if (profileError && profileError.code !== 'PGRST116') {
       console.error("Error fetching profile:", profileError);
     }
 
@@ -187,6 +209,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Send OTP via Telegram if chat ID exists
+    let telegramSent = false;
     if (profile?.telegram_chat_id) {
       const telegramMessage = `🔐 <b>Password Reset OTP</b>
 
@@ -199,6 +222,7 @@ Your OTP code for Yunchi Checker password reset:
 If you didn't request this, please ignore this message and secure your account.`;
 
       const telegramResult = await sendTelegramMessage(profile.telegram_chat_id, telegramMessage);
+      telegramSent = telegramResult.success;
       if (!telegramResult.success) {
         console.error("Failed to send Telegram OTP:", telegramResult.error);
       }
@@ -209,6 +233,8 @@ If you didn't request this, please ignore this message and secure your account.`
         success: true, 
         message: "OTP sent successfully",
         hasTelegram: !!profile?.telegram_chat_id,
+        telegramSent,
+        emailSent: emailResult.success,
         expiresAt: expiresAt.toISOString()
       }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
