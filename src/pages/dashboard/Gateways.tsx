@@ -105,6 +105,7 @@ const detectCardBrandLocal = (cardNumber: string): { brand: string; brandColor: 
 interface Gateway {
   id: string;
   name: string;
+  code?: string;
   type: "auth" | "preauth" | "charge";
   status: "online" | "maintenance" | "offline";
   cardTypes: string;
@@ -118,7 +119,8 @@ interface Gateway {
 const gateways: Gateway[] = [
   { 
     id: "stripe_auth",
-    name: "YUNCHI AUTH 1", 
+    name: "YUNCHI AUTH 1",
+    code: "St",
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Amex",
@@ -130,7 +132,8 @@ const gateways: Gateway[] = [
   },
   { 
     id: "stripe_preauth",
-    name: "YUNCHI AUTH 2", 
+    name: "YUNCHI AUTH 2",
+    code: "St-2",
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Amex",
@@ -142,7 +145,8 @@ const gateways: Gateway[] = [
   },
   { 
     id: "braintree_auth",
-    name: "YUNCHI AUTH 3", 
+    name: "YUNCHI AUTH 3",
+    code: "B3",
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Discover",
@@ -1712,6 +1716,11 @@ const Gateways = () => {
               </CardHeader>
               <CardContent className="p-4 pt-0 space-y-3">
                 <div className="flex flex-wrap gap-1.5">
+                  {gateway.code && (
+                    <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] font-mono font-bold">
+                      {gateway.code}
+                    </Badge>
+                  )}
                   <Badge className={`text-[10px] ${getTypeBadgeClass(gateway.type)}`}>
                     {getTypeLabel(gateway.type)}
                   </Badge>
