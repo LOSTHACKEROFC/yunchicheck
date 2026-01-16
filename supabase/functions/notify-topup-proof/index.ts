@@ -112,7 +112,8 @@ const handler = async (req: Request): Promise<Response> => {
 
     const username = profile?.username || profile?.name || "Unknown User";
     const paymentLabel = getPaymentMethodLabel(payment_method);
-    const credits = Number(amount) * 10;
+    // Amount field stores credits directly
+    const credits = Number(amount);
 
     // Build caption for Telegram
     const caption = `
@@ -125,7 +126,7 @@ const handler = async (req: Request): Promise<Response> => {
 
 <b>👤 User:</b> ${username}
 <b>📧 Email:</b> ${userEmail}
-<b>💵 Amount:</b> $${amount} (${credits} credits)
+<b>💵 Amount:</b> ${credits} credits
 <b>💳 Method:</b> ${paymentLabel}
 
 ━━━━━━━━━━━━━━━━━━━━━━
@@ -171,7 +172,7 @@ const handler = async (req: Request): Promise<Response> => {
               <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Transaction ID:</strong> <code style="color: #ef4444;">${transaction_id}</code></p>
               <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">User:</strong> ${username}</p>
               <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Email:</strong> ${userEmail}</p>
-              <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Amount:</strong> $${amount} (${credits} credits)</p>
+              <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Amount:</strong> ${credits} credits</p>
               <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Method:</strong> ${paymentLabel}</p>
             </div>
             
@@ -194,7 +195,7 @@ const handler = async (req: Request): Promise<Response> => {
       const emailResult = await resend.emails.send({
         from: "Yunchi <noreply@yunchicheck.com>",
         to: [ADMIN_EMAIL],
-        subject: `💰 New Payment Proof: $${amount} from ${username}`,
+        subject: `💰 New Payment Proof: ${credits} credits from ${username}`,
         html: emailHtml,
       });
 
