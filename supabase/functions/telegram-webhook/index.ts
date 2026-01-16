@@ -1531,8 +1531,21 @@ async function handleBroadcast(chatId: string, message: string, supabase: any): 
     }
   }
 
-  let telegramSent = 0, webSent = 0, emailSent = 0;
-  const totalWithEmail = profiles.filter((p: any) => userEmailMap[p.user_id]).length;
+  // Get email preferences for all users
+  const { data: emailPreferences } = await supabase
+    .from("notification_preferences")
+    .select("user_id, email_announcements");
+  
+  const emailOptOutMap: Record<string, boolean> = {};
+  if (emailPreferences) {
+    for (const pref of emailPreferences) {
+      emailOptOutMap[pref.user_id] = pref.email_announcements === false;
+    }
+  }
+
+  let telegramSent = 0, webSent = 0, emailSent = 0, emailSkipped = 0;
+  const usersWithEmail = profiles.filter((p: any) => userEmailMap[p.user_id]);
+  const totalWithEmail = usersWithEmail.length;
 
   await sendTelegramMessage(chatId, `📡 Broadcasting to ${profiles.length} users...`);
 
@@ -1552,11 +1565,17 @@ async function handleBroadcast(chatId: string, message: string, supabase: any): 
     });
     webSent++;
 
-    // Send email notification
+    // Send email notification (only if user hasn't opted out)
     const userEmail = userEmailMap[p.user_id];
     if (userEmail) {
-      const emailSuccess = await sendBroadcastEmail(userEmail, p.username, message);
-      if (emailSuccess) emailSent++;
+      // Check if user has opted out of email announcements
+      if (emailOptOutMap[p.user_id]) {
+        emailSkipped++;
+        console.log(`Skipping email for ${p.user_id} - opted out`);
+      } else {
+        const emailSuccess = await sendBroadcastEmail(userEmail, p.username, message);
+        if (emailSuccess) emailSent++;
+      }
     }
   }
 
@@ -1565,7 +1584,7 @@ async function handleBroadcast(chatId: string, message: string, supabase: any): 
 
 📱 Telegram: ${telegramSent}/${profiles.filter((p: any) => p.telegram_chat_id).length}
 🌐 Web: ${webSent}/${profiles.length}
-📧 Email: ${emailSent}/${totalWithEmail}
+📧 Email: ${emailSent}/${totalWithEmail}${emailSkipped > 0 ? ` (${emailSkipped} opted out)` : ""}
 `);
 }
 
