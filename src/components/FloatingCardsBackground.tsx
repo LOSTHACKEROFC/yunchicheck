@@ -1,4 +1,4 @@
-import { forwardRef } from "react";
+import React from "react";
 import { CreditCard } from "lucide-react";
 
 type CardBrand = "default" | "visa" | "mastercard" | "amex" | "discover";
@@ -133,7 +133,7 @@ const MiniCreditCard = ({
 };
 
 // Background floating credit cards
-const FloatingCardsBackground = forwardRef<HTMLDivElement>((_, ref) => {
+const FloatingCardsBackground = () => {
   const cards: Array<{
     delay: number;
     duration: number;
@@ -161,7 +161,7 @@ const FloatingCardsBackground = forwardRef<HTMLDivElement>((_, ref) => {
   ];
 
   return (
-    <div ref={ref} className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+    <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
       <style>{`
         @keyframes float-card {
           0%, 100% {
@@ -207,8 +207,6 @@ const FloatingCardsBackground = forwardRef<HTMLDivElement>((_, ref) => {
       ))}
     </div>
   );
-});
-
-FloatingCardsBackground.displayName = "FloatingCardsBackground";
+};
 
 export default FloatingCardsBackground;
