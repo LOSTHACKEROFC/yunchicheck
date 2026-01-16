@@ -785,6 +785,11 @@ async function handleAdminCmd(chatId: string, supabase: any, messageId?: number)
 /cancelban - Cancel pending ban
 /viewbans - View banned users
 
+<b>🚫 Device Blocking</b>
+/viewblocked - View blocked devices/IPs
+/blockdevice <code>[type] [value]</code> - Block device/IP
+/unblockdevice <code>[id]</code> - Unblock device/IP
+
 <b>📊 Data</b>
 /stats - View statistics
 /allusers - List all users
