@@ -1018,30 +1018,53 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
     }
 
     if (registrationStep === "verification") {
+      const isExpired = timeRemaining <= 0;
+      
       return (
         <div className="space-y-4">
           <div className="text-center space-y-2">
-            <Clock className="h-12 w-12 mx-auto text-yellow-500" />
-            <h3 className="font-semibold text-lg">Step 2: Verify in Telegram</h3>
-            <p className="text-sm text-muted-foreground">
-              Click the verification button in the Telegram message
-            </p>
+            {isExpired ? (
+              <>
+                <XCircle className="h-12 w-12 mx-auto text-red-500" />
+                <h3 className="font-semibold text-lg text-red-500">Verification Expired</h3>
+                <p className="text-sm text-muted-foreground">
+                  Your verification code has expired. Please request a new one.
+                </p>
+              </>
+            ) : (
+              <>
+                <Clock className="h-12 w-12 mx-auto text-yellow-500" />
+                <h3 className="font-semibold text-lg">Step 2: Verify in Telegram</h3>
+                <p className="text-sm text-muted-foreground">
+                  Click the verification button in the Telegram message
+                </p>
+              </>
+            )}
           </div>
 
-          <div className="bg-secondary/50 rounded-lg p-4 space-y-3 text-center">
+          <div className={`rounded-lg p-4 space-y-3 text-center ${isExpired ? 'bg-red-500/10 border border-red-500/20' : 'bg-secondary/50'}`}>
             <p className="text-sm">Verification sent to Chat ID:</p>
             <p className="font-mono text-lg font-bold">{telegramChatId}</p>
             
-            <div className="space-y-2">
-              <div className="flex items-center justify-center gap-2 text-yellow-500">
-                <Clock className="h-4 w-4" />
-                <span className="font-mono text-lg">{formatTime(timeRemaining)}</span>
+            {!isExpired && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-center gap-2 text-yellow-500">
+                  <Clock className="h-4 w-4" />
+                  <span className="font-mono text-lg">{formatTime(timeRemaining)}</span>
+                </div>
+                <Progress value={progressPercentage} className="h-2" />
+                <p className="text-xs text-muted-foreground">Time remaining</p>
               </div>
-              <Progress value={progressPercentage} className="h-2" />
-              <p className="text-xs text-muted-foreground">Time remaining</p>
-            </div>
+            )}
 
-            {checkingVerification && (
+            {isExpired && (
+              <div className="flex items-center justify-center gap-2 text-red-500">
+                <AlertCircle className="h-4 w-4" />
+                <span className="text-sm font-medium">Code expired - request a new one below</span>
+              </div>
+            )}
+
+            {!isExpired && checkingVerification && (
               <div className="flex items-center justify-center gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span className="text-sm">Waiting for verification...</span>
@@ -1049,25 +1072,65 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
             )}
           </div>
 
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1"
-              onClick={resetRegistration}
-            >
-              Back
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1"
-              onClick={handleSendVerification}
-              disabled={loading}
-            >
-              Resend
-            </Button>
-          </div>
+          {isExpired ? (
+            <div className="space-y-2">
+              <Button
+                type="button"
+                className="w-full btn-primary"
+                onClick={handleSendVerification}
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <MessageCircle className="h-4 w-4 mr-2" />
+                    Resend Verification Code
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={resetRegistration}
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Change Telegram ID
+              </Button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={resetRegistration}
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={handleSendVerification}
+                disabled={loading}
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <MessageCircle className="h-4 w-4 mr-2" />
+                    Resend
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </div>
       );
     }
