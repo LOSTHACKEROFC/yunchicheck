@@ -98,6 +98,16 @@ const handler = async (req: Request): Promise<Response> => {
       .eq("user_id", ticket.user_id)
       .maybeSingle();
 
+    // Check email preferences
+    const { data: emailPrefs } = await supabase
+      .from("notification_preferences")
+      .select("email_ticket_replies")
+      .eq("user_id", ticket.user_id)
+      .single();
+
+    const emailOptedOut = emailPrefs?.email_ticket_replies === false;
+    console.log("Email opt-out status:", emailOptedOut);
+
     // Insert admin message
     const { error: messageError } = await supabase
       .from("ticket_messages")
@@ -118,9 +128,13 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Admin message saved successfully");
 
-    // Send email notification to user
+    // Send email notification to user (if not opted out)
     let emailSent = false;
-    if (RESEND_API_KEY && ticket.user_email) {
+    let emailSkipped = false;
+    if (emailOptedOut) {
+      console.log("Skipping email - user opted out of ticket reply emails");
+      emailSkipped = true;
+    } else if (RESEND_API_KEY && ticket.user_email) {
       try {
         const resend = new Resend(RESEND_API_KEY);
         
@@ -214,7 +228,7 @@ ${message}
       metadata: { ticket_id: ticketId, ticket_number: ticket.ticket_id }
     });
 
-    return new Response(JSON.stringify({ success: true, emailSent, telegramSent }), {
+    return new Response(JSON.stringify({ success: true, emailSent, emailSkipped, telegramSent }), {
       status: 200,
       headers: {
         "Content-Type": "application/json",
