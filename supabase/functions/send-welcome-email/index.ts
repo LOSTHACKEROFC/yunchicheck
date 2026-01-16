@@ -158,7 +158,7 @@ If you didn't create this account, please ignore this email.
 — Yunchi Team`;
 
     const { data, error } = await resend.emails.send({
-      from: "Yunchi <noreply@resend.dev>",
+      from: "Yunchi <noreply@yunchicheck.com>",
       reply_to: "support@yunchicheck.lovable.app",
       to: [email],
       subject: "Welcome to Yunchi - Your Account is Ready",

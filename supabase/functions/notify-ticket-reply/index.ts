@@ -139,7 +139,7 @@ const handler = async (req: Request): Promise<Response> => {
         const resend = new Resend(RESEND_API_KEY);
         
         const { error: emailError } = await resend.emails.send({
-          from: "Yunchi <noreply@resend.dev>",
+          from: "Yunchi <noreply@yunchicheck.com>",
           reply_to: "support@yunchicheck.lovable.app",
           to: [ticket.user_email],
           subject: `[${ticket.ticket_id}] New Reply to Your Support Ticket`,

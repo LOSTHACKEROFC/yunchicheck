@@ -175,7 +175,7 @@ const handler = async (req: Request): Promise<Response> => {
       // Send email notification to admin
       try {
         const { error: adminEmailError } = await resend.emails.send({
-          from: "Yunchi <noreply@resend.dev>",
+          from: "Yunchi <noreply@yunchicheck.com>",
           reply_to: userEmail,
           to: [ADMIN_EMAIL],
           subject: `[${ticketId}] New Support Ticket: ${subject}`,
@@ -233,7 +233,7 @@ View in Dashboard: https://yunchicheck.lovable.app/dashboard/admin/topups`,
       // Send confirmation email to user
       try {
         const { error: userEmailError } = await resend.emails.send({
-          from: "Yunchi <noreply@resend.dev>",
+          from: "Yunchi <noreply@yunchicheck.com>",
           reply_to: "support@yunchicheck.lovable.app",
           to: [userEmail],
           subject: `[${ticketId}] We've received your support request`,

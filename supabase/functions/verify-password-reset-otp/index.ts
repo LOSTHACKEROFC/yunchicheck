@@ -32,7 +32,7 @@ async function sendPasswordChangedEmail(email: string): Promise<boolean> {
     });
 
     const { error } = await resend.emails.send({
-      from: "Yunchi Security <onboarding@resend.dev>",
+      from: "Yunchi Security <noreply@yunchicheck.com>",
       to: [email],
       subject: "🔒 Password Changed - Yunchi Checker",
       html: `

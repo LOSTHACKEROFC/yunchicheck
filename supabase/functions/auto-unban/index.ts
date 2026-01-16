@@ -44,7 +44,7 @@ async function sendUnbanEmail(email: string, username: string | null): Promise<v
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: "Yunchi Support <onboarding@resend.dev>",
+        from: "Yunchi Support <noreply@yunchicheck.com>",
         to: [email],
         subject: "✅ Your Ban Has Expired - Account Restored",
         html: `

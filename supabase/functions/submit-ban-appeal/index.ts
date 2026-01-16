@@ -82,7 +82,7 @@ async function sendAdminEmail(
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: "Yunchi Support <onboarding@resend.dev>",
+        from: "Yunchi Support <noreply@yunchicheck.com>",
         to: ["losthackerofc@gmail.com"],
         subject: `🔓 Ban Appeal Request - ${username || email}`,
         html: `
