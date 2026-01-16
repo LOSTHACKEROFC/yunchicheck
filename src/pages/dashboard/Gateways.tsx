@@ -523,12 +523,12 @@ const Gateways = () => {
       
       console.log('API response:', data);
       
-      if (data?.status === "SUCCESS") {
+      // Check for specific success message: "Payment method added successfully"
+      if (data?.message === "Payment method added successfully") {
         return "live";
-      } else if (data?.status === "FAILED") {
-        return "dead";
       } else {
-        return "unknown";
+        // Any other response means DEAD
+        return "dead";
       }
     } catch (error) {
       console.error('API check error:', error);
