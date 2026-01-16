@@ -136,7 +136,7 @@ const gateways: Gateway[] = [
     cardTypes: "Visa/MC/Amex",
     speed: "Fast",
     successRate: "97%",
-    description: "$1 Hold & Void • CVC optional (auto-handled if missing/000)",
+    description: "$0 Auth Check • CVC optional (auto-handled if missing/000)",
     icon: Zap,
     iconColor: "text-indigo-500"
   },
