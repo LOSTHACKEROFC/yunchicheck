@@ -23,6 +23,7 @@ import {
   HeadphonesIcon,
   LogOut,
   Shield,
+  ShieldOff,
   History,
   ShoppingCart
 } from "lucide-react";
@@ -43,6 +44,7 @@ const menuItems = [
 
 const adminItems = [
   { title: "Manage Topups", url: "/dashboard/admin/topups", icon: Shield },
+  { title: "Blocked Devices", url: "/dashboard/admin/blocked", icon: ShieldOff },
 ];
 
 const DashboardSidebar = () => {
