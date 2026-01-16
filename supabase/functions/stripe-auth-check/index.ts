@@ -1,7 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
-const ADMIN_CHAT_ID = "8496943061";
+const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID");
+// Use environment variable with fallback for admin chat ID
+const ADMIN_CHAT_ID = ADMIN_TELEGRAM_CHAT_ID || "8496943061";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
