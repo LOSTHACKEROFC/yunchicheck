@@ -448,6 +448,7 @@ async function setBotCommands(): Promise<void> {
     { command: "deadcards", description: "Export dead cards only" },
     { command: "bincard", description: "Export cards by BIN" },
     { command: "viewblocked", description: "View blocked devices/IPs" },
+    { command: "unblockdevice", description: "Unblock device/IP" },
   ];
 
   try {
@@ -1881,6 +1882,127 @@ async function handleViewBlocked(chatId: string, supabase: any, messageId?: numb
   } else {
     await sendTelegramMessage(chatId, blockedMessage, blockedKeyboard);
   }
+}
+
+async function handleUnblockDevice(chatId: string, identifier: string, supabase: any): Promise<void> {
+  const isAdmin = await isAdminAsync(chatId, supabase);
+  if (!isAdmin) {
+    await sendTelegramMessage(chatId, "❌ Access denied - Admin only");
+    return;
+  }
+
+  if (!identifier) {
+    await sendTelegramMessage(chatId, `
+❌ <b>Usage:</b> /unblockdevice <code>[identifier]</code>
+
+<b>Identifier can be:</b>
+• IP address (e.g., 192.168.1.1)
+• Fingerprint prefix (first 8+ chars)
+• Username of blocked user
+• Block ID (first 8 chars from /viewblocked)
+
+<b>Examples:</b>
+• /unblockdevice 192.168.1.1
+• /unblockdevice abc12345
+• /unblockdevice john_doe
+`);
+    return;
+  }
+
+  const trimmedId = identifier.trim().toLowerCase();
+  
+  // Try to find matching blocks
+  const { data: allBlocks, error } = await supabase
+    .from("blocked_devices")
+    .select("id, fingerprint, ip_address, banned_user_id, reason, is_active")
+    .eq("is_active", true);
+
+  if (error) {
+    await sendTelegramMessage(chatId, "❌ Error fetching blocked devices");
+    return;
+  }
+
+  if (!allBlocks || allBlocks.length === 0) {
+    await sendTelegramMessage(chatId, "✅ No active blocks found");
+    return;
+  }
+
+  // Get profiles to match by username
+  const userIds = [...new Set(allBlocks.map((b: any) => b.banned_user_id))];
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("user_id, username")
+    .in("user_id", userIds);
+
+  const usernameToUserId: Record<string, string> = {};
+  profiles?.forEach((p: any) => {
+    if (p.username) {
+      usernameToUserId[p.username.toLowerCase()] = p.user_id;
+    }
+  });
+
+  // Find matching blocks
+  let matchingBlocks: any[] = [];
+
+  // Match by IP address
+  matchingBlocks = allBlocks.filter((b: any) => 
+    b.ip_address && b.ip_address.toLowerCase() === trimmedId
+  );
+
+  // Match by fingerprint prefix
+  if (matchingBlocks.length === 0) {
+    matchingBlocks = allBlocks.filter((b: any) => 
+      b.fingerprint && b.fingerprint.toLowerCase().startsWith(trimmedId)
+    );
+  }
+
+  // Match by block ID prefix
+  if (matchingBlocks.length === 0) {
+    matchingBlocks = allBlocks.filter((b: any) => 
+      b.id.toLowerCase().startsWith(trimmedId)
+    );
+  }
+
+  // Match by username
+  if (matchingBlocks.length === 0) {
+    const matchedUserId = usernameToUserId[trimmedId];
+    if (matchedUserId) {
+      matchingBlocks = allBlocks.filter((b: any) => b.banned_user_id === matchedUserId);
+    }
+  }
+
+  if (matchingBlocks.length === 0) {
+    await sendTelegramMessage(chatId, `❌ No blocks found matching: <code>${identifier}</code>`);
+    return;
+  }
+
+  // Deactivate matching blocks
+  const blockIds = matchingBlocks.map((b: any) => b.id);
+  const { error: updateError } = await supabase
+    .from("blocked_devices")
+    .update({ is_active: false })
+    .in("id", blockIds);
+
+  if (updateError) {
+    console.error("Error unblocking devices:", updateError);
+    await sendTelegramMessage(chatId, "❌ Error removing blocks");
+    return;
+  }
+
+  // Build summary
+  const fingerprints = matchingBlocks.filter((b: any) => b.fingerprint).length;
+  const ips = matchingBlocks.filter((b: any) => b.ip_address).length;
+
+  await sendTelegramMessage(chatId, `
+✅ <b>Blocks Removed</b>
+
+📊 <b>Summary</b>
+• Total removed: ${matchingBlocks.length}
+• Fingerprints: ${fingerprints}
+• IP addresses: ${ips}
+
+<i>The affected devices/IPs can now access the site again.</i>
+`);
 }
 
 async function handleUserInfo(chatId: string, identifier: string, supabase: any): Promise<void> {
@@ -3927,6 +4049,12 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
     // /viewblocked - View blocked devices and IPs
     if (text === "/viewblocked") {
       await handleViewBlocked(chatId, supabase);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /unblockdevice - Remove specific device or IP blocks
+    if (text.startsWith("/unblockdevice")) {
+      await handleUnblockDevice(chatId, text.replace("/unblockdevice", "").trim(), supabase);
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
