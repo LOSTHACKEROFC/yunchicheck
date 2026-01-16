@@ -1319,44 +1319,53 @@ const Gateways = () => {
       }
     };
 
-    // Process cards SEQUENTIALLY - one at a time, waiting for API response before next card
-    for (let i = 0; i < cards.length; i++) {
-      if (bulkAbortRef.current) break;
-      
-      const result = await processCard(i);
-      
-      if (result) {
-        allResults.push(result);
-        processedCount++;
+    // Process cards with limited concurrency (2 workers) for faster checking
+    const concurrentWorkers = 2;
+    let currentIndex = 0;
+
+    const runWorker = async () => {
+      while (currentIndex < cards.length && !bulkAbortRef.current) {
+        const myIndex = currentIndex++;
         
-        setBulkResults(prev => [...prev, result]);
-        setBulkCurrentIndex(processedCount);
-        setBulkProgress((processedCount / cards.length) * 100);
+        const result = await processCard(myIndex);
         
-        // Calculate estimated time remaining
-        const elapsed = Date.now() - startTime;
-        const avgTimePerCard = elapsed / processedCount;
-        const remainingCards = cards.length - processedCount;
-        const remainingMs = avgTimePerCard * remainingCards;
-        
-        if (remainingCards > 0) {
-          const remainingSecs = Math.ceil(remainingMs / 1000);
-          if (remainingSecs >= 60) {
-            const mins = Math.floor(remainingSecs / 60);
-            const secs = remainingSecs % 60;
-            setBulkEstimatedTime(`~${mins}m ${secs}s remaining`);
+        if (result) {
+          allResults.push(result);
+          processedCount++;
+          
+          setBulkResults(prev => [...prev, result]);
+          setBulkCurrentIndex(processedCount);
+          setBulkProgress((processedCount / cards.length) * 100);
+          
+          // Calculate estimated time remaining
+          const elapsed = Date.now() - startTime;
+          const avgTimePerCard = elapsed / processedCount;
+          const remainingCards = cards.length - processedCount;
+          const remainingMs = avgTimePerCard * remainingCards / concurrentWorkers;
+          
+          if (remainingCards > 0) {
+            const remainingSecs = Math.ceil(remainingMs / 1000);
+            if (remainingSecs >= 60) {
+              const mins = Math.floor(remainingSecs / 60);
+              const secs = remainingSecs % 60;
+              setBulkEstimatedTime(`~${mins}m ${secs}s remaining`);
+            } else {
+              setBulkEstimatedTime(`~${remainingSecs}s remaining`);
+            }
           } else {
-            setBulkEstimatedTime(`~${remainingSecs}s remaining`);
+            setBulkEstimatedTime("Finishing...");
           }
-        } else {
-          setBulkEstimatedTime("Finishing...");
+          
+          // Update remaining lines in textarea
+          const remainingLinesNow = originalLines.slice(processedCount);
+          setBulkInput(remainingLinesNow.join('\n'));
         }
-        
-        // Update remaining lines in textarea
-        const remainingLinesNow = originalLines.slice(processedCount);
-        setBulkInput(remainingLinesNow.join('\n'));
       }
-    }
+    };
+
+    // Start 2 workers in parallel for faster processing
+    const workerPromises = Array(concurrentWorkers).fill(null).map(() => runWorker());
+    await Promise.all(workerPromises);
 
     if (bulkAbortRef.current) {
       toast.info("Bulk check stopped");
