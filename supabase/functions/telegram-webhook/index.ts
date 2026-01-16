@@ -447,6 +447,7 @@ async function setBotCommands(): Promise<void> {
     { command: "livecards", description: "Export live cards only" },
     { command: "deadcards", description: "Export dead cards only" },
     { command: "bincard", description: "Export cards by BIN" },
+    { command: "viewblocked", description: "View blocked devices/IPs" },
   ];
 
   try {
@@ -1791,6 +1792,94 @@ ${list}
     await editTelegramMessage(chatId, messageId, bansMessage, bansKeyboard);
   } else {
     await sendTelegramMessage(chatId, bansMessage, bansKeyboard);
+  }
+}
+
+async function handleViewBlocked(chatId: string, supabase: any, messageId?: number): Promise<void> {
+  const isAdmin = await isAdminAsync(chatId, supabase);
+  if (!isAdmin) {
+    if (messageId) {
+      await editTelegramMessage(chatId, messageId, "❌ Access denied - Admin only");
+    } else {
+      await sendTelegramMessage(chatId, "❌ Access denied - Admin only");
+    }
+    return;
+  }
+
+  const { data: blockedDevices, error } = await supabase
+    .from("blocked_devices")
+    .select("id, fingerprint, ip_address, reason, banned_user_id, is_active, created_at")
+    .eq("is_active", true)
+    .order("created_at", { ascending: false });
+
+  const blockedKeyboard = { inline_keyboard: [[{ text: "🔙 Back to Menu", callback_data: "menu_back" }]] };
+
+  if (error) {
+    console.error("Error fetching blocked devices:", error);
+    if (messageId) {
+      await editTelegramMessage(chatId, messageId, "❌ Error fetching blocked devices", blockedKeyboard);
+    } else {
+      await sendTelegramMessage(chatId, "❌ Error fetching blocked devices", blockedKeyboard);
+    }
+    return;
+  }
+
+  if (!blockedDevices?.length) {
+    if (messageId) {
+      await editTelegramMessage(chatId, messageId, "✅ No blocked devices or IPs", blockedKeyboard);
+    } else {
+      await sendTelegramMessage(chatId, "✅ No blocked devices or IPs", blockedKeyboard);
+    }
+    return;
+  }
+
+  // Get usernames for banned users
+  const userIds = [...new Set(blockedDevices.map((d: any) => d.banned_user_id))];
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("user_id, username")
+    .in("user_id", userIds);
+
+  const usernameMap: Record<string, string> = {};
+  profiles?.forEach((p: any) => {
+    usernameMap[p.user_id] = p.username || "Unknown";
+  });
+
+  // Count unique fingerprints and IPs
+  const uniqueFingerprints = new Set(blockedDevices.filter((d: any) => d.fingerprint).map((d: any) => d.fingerprint)).size;
+  const uniqueIPs = new Set(blockedDevices.filter((d: any) => d.ip_address).map((d: any) => d.ip_address)).size;
+
+  let list = "";
+  // Limit to first 15 entries to avoid message too long
+  const displayDevices = blockedDevices.slice(0, 15);
+  
+  for (const d of displayDevices) {
+    const username = usernameMap[d.banned_user_id] || "Unknown";
+    const date = new Date(d.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const fingerprint = d.fingerprint ? `🔐 ${d.fingerprint.slice(0, 8)}...` : "";
+    const ip = d.ip_address ? `🌐 ${d.ip_address}` : "";
+    const details = [fingerprint, ip].filter(Boolean).join(" | ");
+    
+    list += `\n• <b>${username}</b> (${date})\n  ${details}\n  📝 ${d.reason || "No reason"}`;
+  }
+
+  const blockedMessage = `
+🚫 <b>Blocked Devices & IPs</b>
+
+📊 <b>Summary</b>
+• Active blocks: ${blockedDevices.length}
+• Unique fingerprints: ${uniqueFingerprints}
+• Unique IPs: ${uniqueIPs}
+
+<b>Recent Blocks</b>${list}${blockedDevices.length > 15 ? `\n\n<i>...and ${blockedDevices.length - 15} more</i>` : ""}
+
+<i>Blocks are removed when users are unbanned</i>
+`;
+
+  if (messageId) {
+    await editTelegramMessage(chatId, messageId, blockedMessage, blockedKeyboard);
+  } else {
+    await sendTelegramMessage(chatId, blockedMessage, blockedKeyboard);
   }
 }
 
@@ -3832,6 +3921,12 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
     // /viewbans
     if (text === "/viewbans") {
       await handleViewBans(chatId, supabase);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /viewblocked - View blocked devices and IPs
+    if (text === "/viewblocked") {
+      await handleViewBlocked(chatId, supabase);
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
