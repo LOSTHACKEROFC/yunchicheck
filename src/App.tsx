@@ -18,6 +18,7 @@ import Gateways from "./pages/dashboard/Gateways";
 import Topup from "./pages/dashboard/Topup";
 import Support from "./pages/dashboard/Support";
 import AdminTopups from "./pages/dashboard/AdminTopups";
+import AdminBlockedDevices from "./pages/dashboard/AdminBlockedDevices";
 import CreditUsage from "./pages/dashboard/CreditUsage";
 import BuyCredits from "./pages/dashboard/BuyCredits";
 import BannedAccount from "./pages/BannedAccount";
@@ -68,6 +69,7 @@ function AppContent() {
         <Route path="usage" element={<CreditUsage />} />
         <Route path="support" element={<Support />} />
         <Route path="admin/topups" element={<AdminTopups />} />
+        <Route path="admin/blocked" element={<AdminBlockedDevices />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
