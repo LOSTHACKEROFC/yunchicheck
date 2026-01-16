@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useAuthDeviceLogger } from "@/hooks/useDeviceLogger";
 import { MessageCircle, CheckCircle, Clock, ExternalLink, Loader2, XCircle, AlertCircle, ArrowLeft, Mail } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import FloatingCardsBackground from "@/components/FloatingCardsBackground";
@@ -29,6 +30,7 @@ const VERIFICATION_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 const Auth = forwardRef<HTMLDivElement>((_, ref) => {
   const { t } = useLanguage();
+  const { logDeviceForUser } = useAuthDeviceLogger();
   const [isLogin, setIsLogin] = useState(true);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetOtpSent, setResetOtpSent] = useState(false);
@@ -767,8 +769,13 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
         });
         if (error) throw error;
         
-        // Check if user is banned
+        // Check if user is banned and log device
         if (signInData.user) {
+          // Log device for this user (for ban tracking)
+          logDeviceForUser(signInData.user.id).catch((err) => 
+            console.error("Device logging error:", err)
+          );
+
           const { data: profile } = await supabase
             .from("profiles")
             .select("is_banned, ban_reason, banned_until")
@@ -832,8 +839,13 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
         });
         if (error) throw error;
         
-        // Update the profile with telegram info after signup
+        // Update the profile with telegram info after signup and log device
         if (data.user) {
+          // Log device for this new user (for ban tracking)
+          logDeviceForUser(data.user.id).catch((err) => 
+            console.error("Device logging error:", err)
+          );
+
           const profileUpdate: {
             telegram_chat_id: string;
             telegram_username?: string;
