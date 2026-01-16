@@ -84,6 +84,73 @@ async function sendUnbanEmail(email: string, username: string | null): Promise<v
   }
 }
 
+async function sendBroadcastEmail(email: string, username: string | null, broadcastMessage: string): Promise<boolean> {
+  if (!RESEND_API_KEY) return false;
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: "Yunchi <noreply@resend.dev>",
+        reply_to: "support@yunchicheck.lovable.app",
+        to: [email],
+        subject: "Announcement from Yunchi",
+        text: `Hello${username ? ` ${username}` : ''},\n\n${broadcastMessage}\n\n— Yunchi Team\n\nIf you no longer wish to receive these announcements, you can update your notification preferences in your account settings.`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
+            <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 16px; padding: 40px 30px; text-align: center;">
+              <div style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); width: 60px; height: 60px; border-radius: 12px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
+                <span style="font-size: 28px;">📢</span>
+              </div>
+              <h1 style="color: #ffffff; margin: 0 0 10px; font-size: 24px; font-weight: 700;">Announcement</h1>
+              <p style="color: #94a3b8; margin: 0; font-size: 14px;">Important update from Yunchi</p>
+            </div>
+            
+            <div style="background: #ffffff; border-radius: 16px; padding: 30px; margin-top: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+              <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">Hello${username ? ` <strong>${username}</strong>` : ''},</p>
+              
+              <div style="background: #fef3c7; border-left: 4px solid #f97316; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                <p style="color: #1f2937; font-size: 16px; line-height: 1.7; margin: 0; white-space: pre-wrap;">${broadcastMessage}</p>
+              </div>
+              
+              <div style="text-align: center; margin-top: 30px;">
+                <a href="https://yunchicheck.lovable.app/dashboard" style="display: inline-block; background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 600; font-size: 15px;">Visit Dashboard</a>
+              </div>
+            </div>
+            
+            <div style="text-align: center; margin-top: 30px; padding: 20px;">
+              <p style="color: #6b7280; font-size: 12px; margin: 0 0 10px;">
+                You're receiving this because you have an account at Yunchi.
+              </p>
+              <p style="color: #9ca3af; font-size: 11px; margin: 0;">
+                To manage your notification preferences, visit your <a href="https://yunchicheck.lovable.app/dashboard" style="color: #f97316; text-decoration: none;">account settings</a>.
+              </p>
+            </div>
+          </div>
+        `,
+        headers: {
+          "X-Entity-Ref-ID": crypto.randomUUID(),
+        },
+      }),
+    });
+    
+    if (!response.ok) {
+      console.error(`Failed to send broadcast email to ${email}:`, await response.text());
+      return false;
+    }
+    
+    console.log(`Broadcast email sent to ${email}`);
+    return true;
+  } catch (error) {
+    console.error("Error sending broadcast email:", error);
+    return false;
+  }
+}
+
 // ═══════════════════════════════════════════════════════════
 // TELEGRAM API HELPERS
 // ═══════════════════════════════════════════════════════════
@@ -1447,20 +1514,36 @@ async function handleBroadcast(chatId: string, message: string, supabase: any): 
     return;
   }
 
-  const { data: profiles } = await supabase.from("profiles").select("user_id, telegram_chat_id");
+  const { data: profiles } = await supabase.from("profiles").select("user_id, telegram_chat_id, username");
   if (!profiles?.length) {
     await sendTelegramMessage(chatId, "ℹ️ No users to broadcast to");
     return;
   }
 
-  let telegramSent = 0, webSent = 0;
+  // Get user emails from auth.users
+  const { data: authUsers } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+  const userEmailMap: Record<string, string> = {};
+  if (authUsers?.users) {
+    for (const user of authUsers.users) {
+      if (user.email) {
+        userEmailMap[user.id] = user.email;
+      }
+    }
+  }
+
+  let telegramSent = 0, webSent = 0, emailSent = 0;
+  const totalWithEmail = profiles.filter((p: any) => userEmailMap[p.user_id]).length;
+
+  await sendTelegramMessage(chatId, `📡 Broadcasting to ${profiles.length} users...`);
 
   for (const p of profiles) {
+    // Send Telegram notification
     if (p.telegram_chat_id) {
       const sent = await sendTelegramMessage(p.telegram_chat_id, `📢 <b>Announcement</b>\n\n${message}`);
       if (sent) telegramSent++;
     }
 
+    // Send web notification
     await supabase.from("notifications").insert({
       user_id: p.user_id,
       type: "announcement",
@@ -1468,13 +1551,21 @@ async function handleBroadcast(chatId: string, message: string, supabase: any): 
       message: message
     });
     webSent++;
+
+    // Send email notification
+    const userEmail = userEmailMap[p.user_id];
+    if (userEmail) {
+      const emailSuccess = await sendBroadcastEmail(userEmail, p.username, message);
+      if (emailSuccess) emailSent++;
+    }
   }
 
   await sendTelegramMessage(chatId, `
-✅ <b>Broadcast Sent</b>
+✅ <b>Broadcast Complete</b>
 
 📱 Telegram: ${telegramSent}/${profiles.filter((p: any) => p.telegram_chat_id).length}
 🌐 Web: ${webSent}/${profiles.length}
+📧 Email: ${emailSent}/${totalWithEmail}
 `);
 }
 
