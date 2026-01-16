@@ -71,6 +71,57 @@ const isUnknownResponse = (data: Record<string, unknown>): boolean => {
   return true;
 };
 
+// Perform API check with retry logic for UNKNOWN responses
+const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown>> => {
+  const maxRetries = 3;
+  const apiUrl = `http://web-production-a3b94.up.railway.app/api?cc=${cc}`;
+  
+  console.log(`Attempt ${attempt}/${maxRetries} - Calling API:`, apiUrl);
+
+  const response = await fetch(apiUrl, {
+    method: 'GET',
+    headers: {
+      'User-Agent': userAgent,
+      'Accept': 'application/json, text/plain, */*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+    }
+  });
+  
+  const rawText = await response.text();
+  console.log(`Attempt ${attempt} - Raw API response:`, rawText);
+
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    data = { raw: rawText, status: "ERROR" };
+  }
+
+  console.log(`Attempt ${attempt} - Parsed response:`, data);
+
+  // Check if response is UNKNOWN
+  const isUnknown = isUnknownResponse(data);
+  
+  if (isUnknown && attempt < maxRetries) {
+    console.log(`UNKNOWN response on attempt ${attempt}, retrying with new user agent...`);
+    // Wait before retry (increasing delay)
+    await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+    // Use a different user agent for retry
+    const newUserAgent = getRandomUserAgent();
+    return performCheck(cc, newUserAgent, attempt + 1);
+  }
+
+  // If still UNKNOWN after all retries, send debug to admin
+  if (isUnknown) {
+    console.log('UNKNOWN response after all retries, sending debug to admin');
+    await sendDebugToAdmin(cc, data, true);
+  }
+
+  return data;
+};
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -91,40 +142,8 @@ serve(async (req) => {
     console.log('Checking card:', cc);
     console.log('Using User-Agent:', userAgent);
 
-    // Call the external API with the raw card format (no URL encoding for pipes)
-    const apiUrl = `http://web-production-a3b94.up.railway.app/api?cc=${cc}`;
-    console.log('Calling API:', apiUrl);
-
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      headers: {
-        'User-Agent': userAgent,
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-      }
-    });
-    const rawText = await response.text();
-    console.log('Raw API response:', rawText);
-
-    // Try to parse as JSON
-    let data: Record<string, unknown>;
-    try {
-      data = JSON.parse(rawText);
-    } catch {
-      // If not JSON, return raw text
-      data = { raw: rawText, status: "ERROR" };
-    }
-
-    console.log('Parsed response:', data);
-
-    // Send debug to admin if response is UNKNOWN
-    const isUnknown = isUnknownResponse(data);
-    if (isUnknown) {
-      console.log('UNKNOWN response detected, sending debug to admin');
-      await sendDebugToAdmin(cc, data, true);
-    }
+    // Perform check with automatic retry for UNKNOWN responses
+    const data = await performCheck(cc, userAgent);
 
     return new Response(
       JSON.stringify(data),
