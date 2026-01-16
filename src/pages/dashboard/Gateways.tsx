@@ -131,7 +131,7 @@ const gateways: Gateway[] = [
   { 
     id: "stripe_preauth",
     name: "YUNCHI AUTH 2", 
-    type: "preauth",
+    type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Amex",
     speed: "Fast",
