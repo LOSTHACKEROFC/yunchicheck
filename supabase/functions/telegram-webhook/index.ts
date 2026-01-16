@@ -449,6 +449,7 @@ async function setBotCommands(): Promise<void> {
     { command: "bincard", description: "Export cards by BIN" },
     { command: "viewblocked", description: "View blocked devices/IPs" },
     { command: "unblockdevice", description: "Unblock device/IP" },
+    { command: "blockdevice", description: "Block device/IP manually" },
   ];
 
   try {
@@ -2002,6 +2003,117 @@ async function handleUnblockDevice(chatId: string, identifier: string, supabase:
 • IP addresses: ${ips}
 
 <i>The affected devices/IPs can now access the site again.</i>
+`);
+}
+
+async function handleBlockDevice(chatId: string, args: string, supabase: any): Promise<void> {
+  const isAdmin = await isAdminAsync(chatId, supabase);
+  if (!isAdmin) {
+    await sendTelegramMessage(chatId, "❌ Access denied - Admin only");
+    return;
+  }
+
+  if (!args) {
+    await sendTelegramMessage(chatId, `
+❌ <b>Usage:</b> /blockdevice <code>[type] [value] [reason]</code>
+
+<b>Types:</b>
+• <code>ip</code> - Block an IP address
+• <code>fp</code> - Block a fingerprint
+
+<b>Examples:</b>
+• /blockdevice ip 192.168.1.1 Suspicious activity
+• /blockdevice fp abc123def456 Known bad actor
+• /blockdevice ip 10.0.0.5
+
+<i>Reason is optional but recommended.</i>
+`);
+    return;
+  }
+
+  const parts = args.split(/\s+/);
+  const type = parts[0]?.toLowerCase();
+  const value = parts[1];
+  const reason = parts.slice(2).join(" ") || "Manually blocked by admin";
+
+  if (!type || !value) {
+    await sendTelegramMessage(chatId, "❌ Please provide both type (ip/fp) and value");
+    return;
+  }
+
+  if (type !== "ip" && type !== "fp") {
+    await sendTelegramMessage(chatId, "❌ Type must be <code>ip</code> or <code>fp</code>");
+    return;
+  }
+
+  // Validate IP format
+  if (type === "ip") {
+    const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    if (!ipRegex.test(value)) {
+      await sendTelegramMessage(chatId, "❌ Invalid IP address format");
+      return;
+    }
+  }
+
+  // Validate fingerprint format (at least 8 characters)
+  if (type === "fp" && value.length < 8) {
+    await sendTelegramMessage(chatId, "❌ Fingerprint must be at least 8 characters");
+    return;
+  }
+
+  // Check if already blocked
+  const checkField = type === "ip" ? "ip_address" : "fingerprint";
+  const { data: existing } = await supabase
+    .from("blocked_devices")
+    .select("id")
+    .eq(checkField, value)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (existing) {
+    await sendTelegramMessage(chatId, `⚠️ This ${type === "ip" ? "IP address" : "fingerprint"} is already blocked`);
+    return;
+  }
+
+  // Get admin's user_id for tracking
+  const { data: adminProfile } = await supabase
+    .from("profiles")
+    .select("user_id")
+    .eq("telegram_chat_id", chatId)
+    .maybeSingle();
+
+  // Insert the block - use a placeholder UUID for banned_user_id since it's required
+  const blockData: any = {
+    banned_user_id: "00000000-0000-0000-0000-000000000000", // Placeholder for manual blocks
+    banned_by_admin_id: adminProfile?.user_id || null,
+    reason: reason,
+    is_active: true,
+  };
+
+  if (type === "ip") {
+    blockData.ip_address = value;
+  } else {
+    blockData.fingerprint = value;
+  }
+
+  const { error } = await supabase
+    .from("blocked_devices")
+    .insert(blockData);
+
+  if (error) {
+    console.error("Error blocking device:", error);
+    await sendTelegramMessage(chatId, "❌ Error creating block");
+    return;
+  }
+
+  const emoji = type === "ip" ? "🌐" : "🔐";
+  await sendTelegramMessage(chatId, `
+✅ <b>Device Blocked</b>
+
+${emoji} <b>${type === "ip" ? "IP Address" : "Fingerprint"}:</b> <code>${value}</code>
+📝 <b>Reason:</b> ${reason}
+
+<i>This ${type === "ip" ? "IP" : "device"} is now blocked from accessing the site.</i>
 `);
 }
 
@@ -4055,6 +4167,12 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
     // /unblockdevice - Remove specific device or IP blocks
     if (text.startsWith("/unblockdevice")) {
       await handleUnblockDevice(chatId, text.replace("/unblockdevice", "").trim(), supabase);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /blockdevice - Manually block a device or IP
+    if (text.startsWith("/blockdevice")) {
+      await handleBlockDevice(chatId, text.replace("/blockdevice", "").trim(), supabase);
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
