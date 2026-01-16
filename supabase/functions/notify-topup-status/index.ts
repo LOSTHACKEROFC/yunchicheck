@@ -362,42 +362,62 @@ async function sendEmailWithAttachment(
   attachments?: EmailAttachment[],
   isTransactional: boolean = true
 ): Promise<boolean> {
-  try {
-    console.log("Sending email to:", to, "with", attachments?.length || 0, "attachments");
-    const result = await resend.emails.send({
-      from: "Yunchi <noreply@yunchicheck.com>",
-      reply_to: "support@yunchicheck.lovable.app",
-      to: [to],
-      subject,
-      html,
-      text,
-      attachments: attachments?.map(att => ({
-        filename: att.filename,
-        content: att.content,
-      })),
-      headers: {
-        "X-Entity-Ref-ID": crypto.randomUUID(),
-        "X-Priority": "1",
-        "X-MSMail-Priority": "High",
-        "Importance": "high",
-        "X-PM-Message-Stream": "outbound",
-        "X-Auto-Response-Suppress": "OOF, AutoReply",
-      },
-      tags: isTransactional ? [
-        { name: "category", value: "transactional" },
-        { name: "type", value: "purchase" }
-      ] : undefined,
-    });
-    console.log("Email result:", JSON.stringify(result));
-    if (result.error) {
-      console.error("Resend error:", result.error);
-      return false;
+  // Try primary domain first, fallback to resend.dev if it fails
+  const emailDomains = [
+    "Yunchi <noreply@yunchicheck.com>",
+    "Yunchi <onboarding@resend.dev>"
+  ];
+
+  for (const fromAddress of emailDomains) {
+    try {
+      console.log("Sending email to:", to, "from:", fromAddress, "with", attachments?.length || 0, "attachments");
+      const result = await resend.emails.send({
+        from: fromAddress,
+        reply_to: "support@yunchicheck.lovable.app",
+        to: [to],
+        subject,
+        html,
+        text,
+        attachments: attachments?.map(att => ({
+          filename: att.filename,
+          content: att.content,
+        })),
+        headers: {
+          "X-Entity-Ref-ID": crypto.randomUUID(),
+          "X-Priority": "1",
+          "X-MSMail-Priority": "High",
+          "Importance": "high",
+          "X-PM-Message-Stream": "outbound",
+          "X-Auto-Response-Suppress": "OOF, AutoReply",
+        },
+        tags: isTransactional ? [
+          { name: "category", value: "transactional" },
+          { name: "type", value: "purchase" }
+        ] : undefined,
+      });
+      console.log("Email result:", JSON.stringify(result));
+      
+      if (result.error) {
+        // Check if it's a domain verification error
+        const errorMessage = (result.error as any)?.message || '';
+        if (errorMessage.includes('domain is not verified') || (result.error as any)?.statusCode === 403) {
+          console.warn("Domain not verified, trying fallback:", errorMessage);
+          continue; // Try next domain
+        }
+        console.error("Resend error:", result.error);
+        return false;
+      }
+      console.log("Email sent successfully via:", fromAddress);
+      return true;
+    } catch (error) {
+      console.error("Error sending email via", fromAddress, ":", error);
+      // Continue to try fallback domain
+      continue;
     }
-    return true;
-  } catch (error) {
-    console.error("Error sending email:", error);
-    return false;
   }
+  
+  console.error("All email domains failed");
+  return false;
 }
 
 async function sendEmail(
