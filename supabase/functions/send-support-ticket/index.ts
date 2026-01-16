@@ -191,25 +191,25 @@ ${message}
 
 View in Dashboard: https://yunchicheck.lovable.app/dashboard/admin/topups`,
           html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-              <div style="background: linear-gradient(135deg, #7c3aed, #6d28d9); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                <h1 style="color: white; margin: 0;">New Support Ticket</h1>
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+              <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                <h1 style="color: white; margin: 0;">🎫 New Support Ticket</h1>
               </div>
-              <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
-                <div style="background: #262626; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                  <p style="margin: 5px 0;"><strong>Ticket ID:</strong> ${ticketId}</p>
-                  <p style="margin: 5px 0;"><strong>From:</strong> ${userName || 'Unknown User'} (${userEmail})</p>
-                  <p style="margin: 5px 0;"><strong>Subject:</strong> ${subject}</p>
-                  <p style="margin: 5px 0;"><strong>Priority:</strong> ${priority || 'medium'}</p>
+              <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+                <div style="background: #1a0a0a; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #2a1a1a;">
+                  <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Ticket ID:</strong> ${ticketId}</p>
+                  <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">From:</strong> ${userName || 'Unknown User'} (${userEmail})</p>
+                  <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Subject:</strong> ${subject}</p>
+                  <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Priority:</strong> ${priority || 'medium'}</p>
                 </div>
-                <div style="background: #262626; padding: 20px; border-radius: 8px;">
-                  <h3 style="margin-top: 0; color: #a3a3a3;">Message:</h3>
-                  <p style="white-space: pre-wrap; margin: 0; line-height: 1.6;">${message}</p>
+                <div style="background: #1a0a0a; padding: 20px; border-radius: 8px; border: 1px solid #2a1a1a;">
+                  <h3 style="margin-top: 0; color: #ef4444;">Message:</h3>
+                  <p style="white-space: pre-wrap; margin: 0; line-height: 1.6; color: #e5e5e5;">${message}</p>
                 </div>
                 <div style="text-align: center; margin-top: 25px;">
-                  <a href="https://yunchicheck.lovable.app/dashboard/admin/topups" style="display: inline-block; background: #7c3aed; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View in Dashboard</a>
+                  <a href="https://yunchicheck.lovable.app/dashboard/admin/topups" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View in Dashboard</a>
                 </div>
-                <p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 30px;">
+                <p style="color: #404040; font-size: 12px; text-align: center; margin-top: 30px;">
                   This ticket was submitted via the Yunchi Checker support system.
                 </p>
               </div>
@@ -254,32 +254,32 @@ View Ticket: https://yunchicheck.lovable.app/dashboard/support
 
 — Yunchi Support Team`,
           html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-              <div style="background: linear-gradient(135deg, #7c3aed, #6d28d9); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                <h1 style="color: white; margin: 0;">Ticket Received</h1>
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+              <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                <h1 style="color: white; margin: 0;">🎫 Ticket Received</h1>
               </div>
-              <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
-                <p style="font-size: 16px;">Hello <strong>${userName || 'there'}</strong>,</p>
-                <p>Thank you for contacting us. We've received your support request and our team will review it shortly.</p>
+              <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+                <p style="font-size: 16px;">Hello <strong style="color: #ef4444;">${userName || 'there'}</strong>,</p>
+                <p style="color: #a3a3a3;">Thank you for contacting us. We've received your support request and our team will review it shortly.</p>
                 
-                <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                  <p style="margin: 5px 0;"><strong>Ticket ID:</strong> ${ticketId}</p>
-                  <p style="margin: 5px 0;"><strong>Subject:</strong> ${subject}</p>
-                  <p style="margin: 5px 0;"><strong>Priority:</strong> ${priority || 'medium'}</p>
+                <div style="background: #1a0a0a; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #2a1a1a;">
+                  <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Ticket ID:</strong> ${ticketId}</p>
+                  <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Subject:</strong> ${subject}</p>
+                  <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Priority:</strong> ${priority || 'medium'}</p>
                 </div>
                 
-                <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                  <p style="margin: 0 0 10px 0; color: #a3a3a3;"><strong>Your message:</strong></p>
-                  <p style="margin: 0; white-space: pre-wrap; line-height: 1.6;">${message}</p>
+                <div style="background: #1a0a0a; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #2a1a1a;">
+                  <p style="margin: 0 0 10px 0; color: #ef4444;"><strong>Your message:</strong></p>
+                  <p style="margin: 0; white-space: pre-wrap; line-height: 1.6; color: #e5e5e5;">${message}</p>
                 </div>
                 
-                <p style="color: #a3a3a3;">We'll notify you via email and Telegram (if connected) when we respond.</p>
+                <p style="color: #737373;">We'll notify you via email and Telegram (if connected) when we respond.</p>
                 
                 <div style="text-align: center; margin-top: 25px;">
-                  <a href="https://yunchicheck.lovable.app/dashboard/support" style="display: inline-block; background: #7c3aed; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View Ticket</a>
+                  <a href="https://yunchicheck.lovable.app/dashboard/support" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View Ticket</a>
                 </div>
                 
-                <p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 30px;">
+                <p style="color: #404040; font-size: 12px; text-align: center; margin-top: 30px;">
                   This is an automated message from Yunchi Checker Support.
                 </p>
               </div>

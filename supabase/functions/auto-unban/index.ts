@@ -48,15 +48,19 @@ async function sendUnbanEmail(email: string, username: string | null): Promise<v
         to: [email],
         subject: "✅ Your Ban Has Expired - Account Restored",
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #22c55e;">✅ Ban Expired - Account Restored</h2>
-            <p>Hello${username ? ` ${username}` : ''},</p>
-            <p>Your temporary ban has expired and your account has been automatically restored.</p>
-            <p>You can now log in and use the platform again.</p>
-            <p style="color: #6c757d; font-size: 14px; margin-top: 20px;">
-              Please ensure you follow our terms of service to avoid future bans.
-            </p>
-            <p style="color: #6c757d; font-size: 14px;">— Yunchi Team</p>
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+            <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+              <h1 style="color: white; margin: 0;">✅ Ban Expired - Account Restored</h1>
+            </div>
+            <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+              <p style="font-size: 16px;">Hello${username ? ` <strong style="color: #ef4444;">${username}</strong>` : ''},</p>
+              <p style="color: #a3a3a3;">Your temporary ban has expired and your account has been automatically restored.</p>
+              <p style="color: #a3a3a3;">You can now log in and use the platform again.</p>
+              <p style="color: #525252; font-size: 14px; margin-top: 20px;">
+                Please ensure you follow our terms of service to avoid future bans.
+              </p>
+              <p style="color: #404040; font-size: 14px;">— Yunchi Team</p>
+            </div>
           </div>
         `,
       }),
