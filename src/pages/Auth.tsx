@@ -786,6 +786,15 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
             setLoading(false);
             return;
           }
+
+          // Send login notification (non-blocking)
+          supabase.functions.invoke("notify-login", {
+            body: {
+              user_id: signInData.user.id,
+              email: email,
+              user_agent: navigator.userAgent,
+            },
+          }).catch((err) => console.error("Login notification error:", err));
         }
         
         toast.success(t.loginSuccessful);
@@ -850,6 +859,15 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
           if (profileError) {
             console.error("Error updating profile with Telegram info:", profileError);
           }
+
+          // Send registration notification (non-blocking)
+          supabase.functions.invoke("notify-registration", {
+            body: {
+              user_id: data.user.id,
+              email: email,
+              username: username.toLowerCase(),
+            },
+          }).catch((err) => console.error("Registration notification error:", err));
 
           // Clean up the pending verification
           await supabase

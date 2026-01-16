@@ -1,0 +1,211 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Resend } from "https://esm.sh/resend@2.0.0";
+
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+interface LoginNotificationRequest {
+  user_id: string;
+  email: string;
+  ip_address?: string;
+  user_agent?: string;
+}
+
+async function sendTelegramMessage(chatId: string, message: string): Promise<boolean> {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.log("Telegram bot token not configured");
+    return false;
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: message,
+          parse_mode: "HTML",
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("Telegram API error:", errorData);
+      return false;
+    }
+
+    console.log("Telegram login notification sent");
+    return true;
+  } catch (error) {
+    console.error("Error sending Telegram message:", error);
+    return false;
+  }
+}
+
+const handler = async (req: Request): Promise<Response> => {
+  console.log("Received login notification request");
+
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { user_id, email, ip_address, user_agent }: LoginNotificationRequest = await req.json();
+
+    if (!user_id || !email) {
+      return new Response(
+        JSON.stringify({ error: "User ID and email are required" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    console.log(`Processing login notification for: ${email}`);
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Get user profile for telegram chat ID and username
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("telegram_chat_id, username, name")
+      .eq("user_id", user_id)
+      .single();
+
+    const displayName = profile?.name || profile?.username || email.split("@")[0];
+    const now = new Date();
+    const formattedDate = now.toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZoneName: 'short'
+    });
+
+    // Parse user agent for device info
+    let deviceInfo = "Unknown Device";
+    let browserInfo = "Unknown Browser";
+    if (user_agent) {
+      if (user_agent.includes("Mobile")) deviceInfo = "Mobile Device";
+      else if (user_agent.includes("Tablet")) deviceInfo = "Tablet";
+      else deviceInfo = "Desktop";
+
+      if (user_agent.includes("Chrome")) browserInfo = "Chrome";
+      else if (user_agent.includes("Firefox")) browserInfo = "Firefox";
+      else if (user_agent.includes("Safari")) browserInfo = "Safari";
+      else if (user_agent.includes("Edge")) browserInfo = "Edge";
+    }
+
+    let emailSent = false;
+    let telegramSent = false;
+
+    // Send email notification
+    if (RESEND_API_KEY) {
+      try {
+        const resend = new Resend(RESEND_API_KEY);
+
+        const { error: emailError } = await resend.emails.send({
+          from: "Yunchi Security <onboarding@resend.dev>",
+          to: [email],
+          subject: "🔐 New Login to Your Account - Yunchi Checker",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <div style="background: linear-gradient(135deg, #10b981, #059669); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                <h1 style="color: white; margin: 0;">🔐 New Login Detected</h1>
+              </div>
+              <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
+                <p style="font-size: 16px;">Hello <strong>${displayName}</strong>,</p>
+                <p>We detected a new login to your Yunchi Checker account.</p>
+                
+                <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                  <p style="margin: 8px 0;"><strong>📅 Date & Time:</strong> ${formattedDate}</p>
+                  <p style="margin: 8px 0;"><strong>💻 Device:</strong> ${deviceInfo}</p>
+                  <p style="margin: 8px 0;"><strong>🌐 Browser:</strong> ${browserInfo}</p>
+                  ${ip_address ? `<p style="margin: 8px 0;"><strong>📍 IP Address:</strong> ${ip_address}</p>` : ''}
+                </div>
+                
+                <div style="background: #1c3b2f; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+                  <p style="color: #6ee7b7; margin: 0; font-size: 14px;">
+                    ✅ If this was you, you can safely ignore this email.
+                  </p>
+                </div>
+                
+                <div style="background: #3b2f1c; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+                  <p style="color: #fcd34d; margin: 0; font-size: 14px;">
+                    ⚠️ If this wasn't you, please change your password immediately and contact support.
+                  </p>
+                </div>
+                
+                <div style="text-align: center; margin-top: 25px;">
+                  <a href="https://yunchicheck.lovable.app/dashboard/profile" style="display: inline-block; background: #7c3aed; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">Review Account Security</a>
+                </div>
+                
+                <hr style="border: none; border-top: 1px solid #333; margin: 30px 0;">
+                <p style="color: #6b7280; font-size: 12px; text-align: center;">
+                  This is an automated security notification from Yunchi Checker.<br>
+                  You're receiving this because login notifications are enabled for your account.
+                </p>
+              </div>
+            </div>
+          `,
+        });
+
+        if (emailError) {
+          console.error("Email error:", emailError);
+        } else {
+          emailSent = true;
+          console.log("Login email notification sent to:", email);
+        }
+      } catch (err) {
+        console.error("Error sending email:", err);
+      }
+    } else {
+      console.log("RESEND_API_KEY not configured");
+    }
+
+    // Send Telegram notification
+    if (profile?.telegram_chat_id) {
+      const telegramMessage = `🔐 <b>New Login Detected</b>
+
+Hello <b>${displayName}</b>,
+
+A new login to your Yunchi Checker account was detected.
+
+📅 <b>Date:</b> ${formattedDate}
+💻 <b>Device:</b> ${deviceInfo}
+🌐 <b>Browser:</b> ${browserInfo}
+${ip_address ? `📍 <b>IP:</b> ${ip_address}` : ''}
+
+✅ If this was you, you can ignore this message.
+⚠️ If this wasn't you, change your password immediately!`;
+
+      telegramSent = await sendTelegramMessage(profile.telegram_chat_id, telegramMessage);
+    } else {
+      console.log("No Telegram chat ID for user");
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, emailSent, telegramSent }),
+      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+    );
+  } catch (error: any) {
+    console.error("Error in notify-login:", error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+    );
+  }
+};
+
+serve(handler);
