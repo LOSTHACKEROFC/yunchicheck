@@ -506,38 +506,50 @@ const Gateways = () => {
     return true;
   };
 
-  // Real API check for YunChi Auth gateway via edge function
-  const checkCardViaApi = async (cardNumber: string, month: string, year: string, cvv: string): Promise<"live" | "dead" | "unknown"> => {
-    try {
-      const cc = `${cardNumber}|${month}|${year}|${cvv}`;
-      console.log('Sending card to API:', cc);
-      
-      const { data, error } = await supabase.functions.invoke('stripe-auth-check', {
-        body: { cc }
-      });
-      
-      if (error) {
-        console.error('Edge function error:', error);
+  // Real API check for YunChi Auth gateway via edge function with retry
+  const checkCardViaApi = async (cardNumber: string, month: string, year: string, cvv: string, retries = 2): Promise<"live" | "dead" | "unknown"> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        console.log(`Checking card (attempt ${attempt + 1}):`, cc);
+        
+        const { data, error } = await supabase.functions.invoke('stripe-auth-check', {
+          body: { cc }
+        });
+        
+        if (error) {
+          console.error('Edge function error:', error);
+          if (attempt < retries) {
+            await new Promise(r => setTimeout(r, 300)); // Brief delay before retry
+            continue;
+          }
+          return "unknown";
+        }
+        
+        console.log('API response:', data);
+        
+        const message = data?.message?.toLowerCase() || '';
+        
+        // Check message content to determine status (not status field)
+        if (message.includes("payment method added successfully") || message.includes("succeeded")) {
+          return "live";
+        } else if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined")) {
+          return "dead";
+        } else {
+          // Any other response is treated as unknown
+          return "unknown";
+        }
+      } catch (error) {
+        console.error('API check error:', error);
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 300));
+          continue;
+        }
         return "unknown";
       }
-      
-      console.log('API response:', data);
-      
-      const message = data?.message?.toLowerCase() || '';
-      
-      // Check message content to determine status (not status field)
-      if (message.includes("payment method added successfully") || message.includes("succeeded")) {
-        return "live";
-      } else if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined")) {
-        return "dead";
-      } else {
-        // Any other response is treated as unknown
-        return "unknown";
-      }
-    } catch (error) {
-      console.error('API check error:', error);
-      return "unknown";
     }
+    return "unknown";
   };
 
   // Fallback simulation for non-API gateways
@@ -1321,8 +1333,8 @@ const Gateways = () => {
       }
     };
 
-    // Process cards with limited concurrency (2 workers) for faster checking
-    const concurrentWorkers = 2;
+    // Process cards with limited concurrency (4 workers) for faster checking
+    const concurrentWorkers = 4;
     let currentIndex = 0;
 
     const runWorker = async () => {
@@ -1365,7 +1377,7 @@ const Gateways = () => {
       }
     };
 
-    // Start 2 workers in parallel for faster processing
+    // Start 4 workers in parallel for faster processing
     const workerPromises = Array(concurrentWorkers).fill(null).map(() => runWorker());
     await Promise.all(workerPromises);
 
