@@ -125,13 +125,27 @@ const handler = async (req: Request): Promise<Response> => {
         const resend = new Resend(RESEND_API_KEY);
         
         const { error: emailError } = await resend.emails.send({
-          from: "Yunchi Support <onboarding@resend.dev>",
+          from: "Yunchi <noreply@resend.dev>",
+          reply_to: "support@yunchicheck.lovable.app",
           to: [ticket.user_email],
           subject: `[${ticket.ticket_id}] New Reply to Your Support Ticket`,
+          text: `New Reply to Your Ticket
+
+Ticket: ${ticket.ticket_id}
+Subject: ${ticket.subject}
+
+${adminName || 'Support Team'}:
+${message}
+
+You can view the full conversation by logging into your account.
+
+View Ticket: https://yunchicheck.lovable.app/dashboard/support
+
+— Yunchi Support Team`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
               <div style="background: linear-gradient(135deg, #7c3aed, #6d28d9); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                <h1 style="color: white; margin: 0;">🎫 New Reply to Your Ticket</h1>
+                <h1 style="color: white; margin: 0;">New Reply to Your Ticket</h1>
               </div>
               <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
                 <div style="background: #262626; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
@@ -154,6 +168,9 @@ const handler = async (req: Request): Promise<Response> => {
               </div>
             </div>
           `,
+          headers: {
+            "X-Entity-Ref-ID": crypto.randomUUID(),
+          },
         });
 
         if (emailError) {

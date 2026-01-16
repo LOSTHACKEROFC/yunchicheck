@@ -95,13 +95,23 @@ serve(async (req) => {
     const resend = new Resend(RESEND_API_KEY);
     
     const { data: emailData, error: emailError } = await resend.emails.send({
-      from: "Yunchi Security <onboarding@resend.dev>",
+      from: "Yunchi <noreply@resend.dev>",
+      reply_to: "support@yunchicheck.lovable.app",
       to: [userEmail],
-      subject: "⚠️ Account Deletion Verification Code",
+      subject: "Account Deletion Verification Code - Yunchi",
+      text: `You have requested to permanently delete your Yunchi account. This action cannot be undone.
+
+Your verification code: ${otp}
+
+This code will expire in 5 minutes.
+
+If you did not request this, please ignore this email and secure your account immediately.
+
+— Yunchi Security Team`,
       html: `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">⚠️ Account Deletion Request</h1>
+            <h1 style="color: white; margin: 0; font-size: 24px;">Account Deletion Request</h1>
           </div>
           <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
             <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6;">
@@ -124,6 +134,9 @@ serve(async (req) => {
           </div>
         </div>
       `,
+      headers: {
+        "X-Entity-Ref-ID": crypto.randomUUID(),
+      },
     });
 
     if (emailError) {

@@ -136,11 +136,37 @@ Deno.serve(async (req) => {
       </html>
     `;
 
+    const emailText = `Hello ${displayName}!
+
+Thank you for joining Yunchi Checker. We're excited to have you on board!
+
+Your Account Details:
+- Username: ${username || "Not set"}
+- Email: ${email}
+- Starting Credits: 0 credits
+
+Getting Started:
+1. Top Up Your Balance - Add credits via crypto payment
+2. Explore Available Gateways - Check our gateways page
+3. Connect Telegram - Get real-time alerts via @YunchiSupportbot
+4. Need Help? - Visit our Support page
+
+Go to your dashboard: https://yunchicheck.lovable.app/dashboard
+
+If you didn't create this account, please ignore this email.
+
+— Yunchi Team`;
+
     const { data, error } = await resend.emails.send({
-      from: "Yunchi <onboarding@resend.dev>",
+      from: "Yunchi <noreply@resend.dev>",
+      reply_to: "support@yunchicheck.lovable.app",
       to: [email],
-      subject: "🎉 Welcome to Yunchi - Your Account is Ready!",
+      subject: "Welcome to Yunchi - Your Account is Ready",
       html: emailHtml,
+      text: emailText,
+      headers: {
+        "X-Entity-Ref-ID": crypto.randomUUID(),
+      },
     });
 
     if (error) {

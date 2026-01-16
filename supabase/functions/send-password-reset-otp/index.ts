@@ -68,13 +68,23 @@ async function sendEmailOTP(
     const resend = new Resend(RESEND_API_KEY);
     
     const { error } = await resend.emails.send({
-      from: "Yunchi Security <onboarding@resend.dev>",
+      from: "Yunchi <noreply@resend.dev>",
+      reply_to: "support@yunchicheck.lovable.app",
       to: [email],
-      subject: "🔐 Password Reset OTP - Yunchi Checker",
+      subject: "Password Reset Code - Yunchi",
+      text: `You requested a password reset for your Yunchi Checker account.
+
+Your OTP code is: ${otp}
+
+This code will expire in 2 minutes.
+
+If you didn't request this, please ignore this email and secure your account.
+
+— Yunchi Security Team`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="background: linear-gradient(135deg, #7c3aed, #6d28d9); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0;">🔐 Password Reset</h1>
+            <h1 style="color: white; margin: 0;">Password Reset</h1>
           </div>
           <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
             <p style="font-size: 16px;">You requested a password reset for your Yunchi Checker account.</p>
@@ -83,7 +93,7 @@ async function sendEmailOTP(
               <h2 style="color: #7c3aed; font-size: 36px; letter-spacing: 8px; margin: 0;">${otp}</h2>
             </div>
             <p style="color: #fca5a5; font-size: 14px; text-align: center; background: #3b1c1c; padding: 12px; border-radius: 6px;">
-              ⏱️ This code will expire in <strong>2 minutes</strong>.
+              This code will expire in <strong>2 minutes</strong>.
             </p>
             <p style="color: #6b7280; font-size: 14px; text-align: center; margin-top: 20px;">
               If you didn't request this, please ignore this email and secure your account.
@@ -95,6 +105,9 @@ async function sendEmailOTP(
           </div>
         </div>
       `,
+      headers: {
+        "X-Entity-Ref-ID": crypto.randomUUID(),
+      },
     });
 
     if (error) {
