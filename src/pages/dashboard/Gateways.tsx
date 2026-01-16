@@ -507,12 +507,12 @@ const Gateways = () => {
   };
 
   // Real API check for YunChi Auth gateway via edge function with retry
-  const checkCardViaApi = async (cardNumber: string, month: string, year: string, cvv: string, retries = 3): Promise<"live" | "dead" | "unknown"> => {
+  const checkCardViaApi = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<"live" | "dead" | "unknown"> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
-    for (let attempt = 0; attempt <= retries; attempt++) {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`Checking card (attempt ${attempt + 1}/${retries + 1}):`, cc);
+        console.log(`Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
         
         const { data, error } = await supabase.functions.invoke('stripe-auth-check', {
           body: { cc }
@@ -520,8 +520,8 @@ const Gateways = () => {
         
         if (error) {
           console.error('Edge function error:', error);
-          if (attempt < retries) {
-            await new Promise(r => setTimeout(r, 500 + attempt * 200)); // Increasing delay
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 500 + attempt * 200));
             continue;
           }
           return "unknown";
@@ -536,11 +536,19 @@ const Gateways = () => {
           return "live";
         } else if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined")) {
           return "dead";
-        } else if (message.includes("no such paymentmethod") || message.includes("rate limit") || message.includes("timeout")) {
-          // Retry for temporary API errors
+        } else if (message.includes("no such paymentmethod")) {
+          // "No such PaymentMethod" error - ALWAYS retry with longer delay
+          console.log(`PaymentMethod error - retrying (attempt ${attempt + 1}/${maxRetries + 1})`);
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 1000 + attempt * 500)); // 1s, 1.5s, 2s, 2.5s, 3s delays
+            continue;
+          }
+          return "unknown";
+        } else if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
+          // Other retryable errors
           console.log(`Retryable error detected: ${message}`);
-          if (attempt < retries) {
-            await new Promise(r => setTimeout(r, 800 + attempt * 300)); // Longer delay for these errors
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 800 + attempt * 300));
             continue;
           }
           return "unknown";
@@ -550,7 +558,7 @@ const Gateways = () => {
         }
       } catch (error) {
         console.error('API check error:', error);
-        if (attempt < retries) {
+        if (attempt < maxRetries) {
           await new Promise(r => setTimeout(r, 500 + attempt * 200));
           continue;
         }
