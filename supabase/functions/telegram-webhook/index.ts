@@ -632,8 +632,9 @@ function buildTopupsListMessage(
   let topupList = "";
   displayTopups.forEach((topup, index) => {
     const date = new Date(topup.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    const username = topup.profiles?.username || "Unknown";
-    const credits = Number(topup.amount) * 10;
+    const username = topup.username || "Unknown";
+    // Amount field stores credits directly
+    const credits = Number(topup.amount);
     
     topupList += `
 ${startIndex + index + 1}. <b>${credits} credits</b>
@@ -653,7 +654,8 @@ ${topupList}
 
   const buttons: any[][] = [];
   displayTopups.forEach((topup) => {
-    const credits = Number(topup.amount) * 10;
+    // Amount field stores credits directly
+    const credits = Number(topup.amount);
     buttons.push([
       { text: `✅ Approve ${credits}`, callback_data: `topup_accept_${topup.id}` },
       { text: `❌ Reject`, callback_data: `topup_reject_${topup.id}` }
@@ -1245,13 +1247,32 @@ async function handleTopups(chatId: string, supabase: any, page: number = 0): Pr
   }
 
   const perPage = 5;
+  
+  // Fetch transactions without join (no FK relationship exists)
   const { data: topups, count } = await supabase
     .from("topup_transactions")
-    .select(`id, user_id, amount, payment_method, created_at, profiles!inner(username, name)`, { count: "exact" })
+    .select("id, user_id, amount, payment_method, created_at", { count: "exact" })
     .eq("status", "pending")
     .order("created_at", { ascending: false });
 
-  return buildTopupsListMessage(topups || [], page, count || 0, perPage);
+  // Fetch profiles separately for usernames
+  const enrichedTopups = [];
+  if (topups && topups.length > 0) {
+    for (const topup of topups) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("user_id", topup.user_id)
+        .maybeSingle();
+      
+      enrichedTopups.push({
+        ...topup,
+        username: profile?.username || "Unknown"
+      });
+    }
+  }
+
+  return buildTopupsListMessage(enrichedTopups, page, count || 0, perPage);
 }
 
 async function handleDeleteUser(chatId: string, identifier: string, supabase: any): Promise<void> {
@@ -2027,30 +2048,47 @@ const handler = async (req: Request): Promise<Response> => {
         const isAccept = callbackData.startsWith("topup_accept_");
         const transactionId = callbackData.replace(isAccept ? "topup_accept_" : "topup_reject_", "");
 
-        const { data: transaction } = await supabase
+        // Fetch transaction first (without join since no FK exists)
+        const { data: transaction, error: txError } = await supabase
           .from("topup_transactions")
-          .select("*, profiles!inner(username, telegram_chat_id)")
+          .select("*")
           .eq("id", transactionId)
-          .single();
+          .maybeSingle();
 
-        if (!transaction) {
+        if (!transaction || txError) {
+          console.error("Transaction lookup error:", txError);
           await answerCallbackQuery(update.callback_query.id, "❌ Transaction not found");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        if (isAccept) {
-          const credits = Number(transaction.amount) * 10;
-          await supabase.rpc("handle_topup_completion", { p_transaction_id: transactionId });
+        // Fetch user profile separately
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("username, telegram_chat_id")
+          .eq("user_id", transaction.user_id)
+          .maybeSingle();
 
-          if (transaction.profiles?.telegram_chat_id) {
-            await sendTelegramMessage(transaction.profiles.telegram_chat_id, `✅ <b>Topup Approved</b>\n\n+${credits} credits added!`);
+        // The amount field stores credits directly
+        const credits = Number(transaction.amount);
+
+        if (isAccept) {
+          const { data: rpcResult, error: rpcError } = await supabase.rpc("handle_topup_completion", { p_transaction_id: transactionId });
+          
+          if (rpcError) {
+            console.error("RPC error:", rpcError);
+            await answerCallbackQuery(update.callback_query.id, "❌ Failed to process approval");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          if (profile?.telegram_chat_id) {
+            await sendTelegramMessage(profile.telegram_chat_id, `✅ <b>Topup Approved</b>\n\n+${credits} credits added!`);
           }
           await answerCallbackQuery(update.callback_query.id, `✅ Approved ${credits} credits`);
         } else {
           await supabase.from("topup_transactions").update({ status: "failed", rejection_reason: "Rejected by admin" }).eq("id", transactionId);
 
-          if (transaction.profiles?.telegram_chat_id) {
-            await sendTelegramMessage(transaction.profiles.telegram_chat_id, "❌ <b>Topup Rejected</b>\n\nYour topup request was rejected.");
+          if (profile?.telegram_chat_id) {
+            await sendTelegramMessage(profile.telegram_chat_id, "❌ <b>Topup Rejected</b>\n\nYour topup request was rejected.");
           }
           await answerCallbackQuery(update.callback_query.id, "❌ Rejected");
         }
