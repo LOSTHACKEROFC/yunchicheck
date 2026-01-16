@@ -450,6 +450,7 @@ async function setBotCommands(): Promise<void> {
     { command: "viewblocked", description: "View blocked devices/IPs" },
     { command: "unblockdevice", description: "Unblock device/IP" },
     { command: "blockdevice", description: "Block device/IP manually" },
+    { command: "userdevices", description: "View user's devices" },
   ];
 
   try {
@@ -789,6 +790,7 @@ async function handleAdminCmd(chatId: string, supabase: any, messageId?: number)
 /viewblocked - View blocked devices/IPs
 /blockdevice <code>[type] [value]</code> - Block device/IP
 /unblockdevice <code>[id]</code> - Unblock device/IP
+/userdevices <code>[user]</code> - View user's devices
 
 <b>📊 Data</b>
 /stats - View statistics
@@ -2120,6 +2122,158 @@ ${emoji} <b>${type === "ip" ? "IP Address" : "Fingerprint"}:</b> <code>${value}<
 
 <i>This ${type === "ip" ? "IP" : "device"} is now blocked from accessing the site.</i>
 `);
+}
+
+async function handleUserDevices(chatId: string, identifier: string, supabase: any): Promise<void> {
+  const isAdmin = await isAdminAsync(chatId, supabase);
+  if (!isAdmin) {
+    await sendTelegramMessage(chatId, "❌ Access denied - Admin only");
+    return;
+  }
+
+  if (!identifier) {
+    await sendTelegramMessage(chatId, `
+❌ <b>Usage:</b> /userdevices <code>[email/username]</code>
+
+<b>Examples:</b>
+• /userdevices john@example.com
+• /userdevices john_doe
+`);
+    return;
+  }
+
+  // Find user by email or username
+  let profile = null;
+  let userEmail = null;
+
+  const { data: authData } = await supabase.auth.admin.listUsers();
+  const authUsers = authData?.users || [];
+
+  // Try by email
+  const authUser = authUsers.find((u: any) => u.email?.toLowerCase() === identifier.toLowerCase());
+  if (authUser) {
+    userEmail = authUser.email;
+    const { data: p } = await supabase.from("profiles").select("*").eq("user_id", authUser.id).maybeSingle();
+    profile = p;
+  }
+
+  // Try by username
+  if (!profile) {
+    const { data: p } = await supabase.from("profiles").select("*").ilike("username", identifier).maybeSingle();
+    if (p) {
+      profile = p;
+      userEmail = authUsers.find((u: any) => u.id === p.user_id)?.email || null;
+    }
+  }
+
+  // Try by telegram chat ID
+  if (!profile) {
+    const { data: p } = await supabase.from("profiles").select("*").eq("telegram_chat_id", identifier).maybeSingle();
+    if (p) {
+      profile = p;
+      userEmail = authUsers.find((u: any) => u.id === p.user_id)?.email || null;
+    }
+  }
+
+  if (!profile) {
+    await sendTelegramMessage(chatId, `❌ User not found: <code>${identifier}</code>`);
+    return;
+  }
+
+  // Fetch device logs for this user
+  const { data: deviceLogs, error } = await supabase
+    .from("user_device_logs")
+    .select("id, fingerprint, ip_address, user_agent, last_seen, created_at")
+    .eq("user_id", profile.user_id)
+    .order("last_seen", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching device logs:", error);
+    await sendTelegramMessage(chatId, "❌ Error fetching device data");
+    return;
+  }
+
+  if (!deviceLogs || deviceLogs.length === 0) {
+    await sendTelegramMessage(chatId, `
+📱 <b>User Devices</b>
+
+👤 <b>User:</b> ${profile.username || "Unknown"}
+📧 <b>Email:</b> ${userEmail || "Unknown"}
+
+<i>No device data recorded for this user.</i>
+`);
+    return;
+  }
+
+  // Check which devices are blocked
+  const fingerprints = deviceLogs.map((d: any) => d.fingerprint);
+  const ips = deviceLogs.map((d: any) => d.ip_address).filter(Boolean);
+
+  const { data: blockedFingerprints } = await supabase
+    .from("blocked_devices")
+    .select("fingerprint")
+    .in("fingerprint", fingerprints)
+    .eq("is_active", true);
+
+  const { data: blockedIPs } = await supabase
+    .from("blocked_devices")
+    .select("ip_address")
+    .in("ip_address", ips)
+    .eq("is_active", true);
+
+  const blockedFpSet = new Set(blockedFingerprints?.map((b: any) => b.fingerprint) || []);
+  const blockedIpSet = new Set(blockedIPs?.map((b: any) => b.ip_address) || []);
+
+  // Build device list (limit to 10)
+  const displayDevices = deviceLogs.slice(0, 10);
+  let deviceList = "";
+
+  for (const device of displayDevices) {
+    const lastSeen = new Date(device.last_seen).toLocaleDateString("en-US", { 
+      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" 
+    });
+    const fpBlocked = blockedFpSet.has(device.fingerprint) ? " 🚫" : "";
+    const ipBlocked = blockedIpSet.has(device.ip_address) ? " 🚫" : "";
+    
+    // Parse user agent for browser/OS
+    const ua = device.user_agent || "";
+    let browser = "Unknown";
+    let os = "Unknown";
+    
+    if (ua.includes("Chrome")) browser = "Chrome";
+    else if (ua.includes("Firefox")) browser = "Firefox";
+    else if (ua.includes("Safari")) browser = "Safari";
+    else if (ua.includes("Edge")) browser = "Edge";
+    
+    if (ua.includes("Windows")) os = "Windows";
+    else if (ua.includes("Mac")) os = "macOS";
+    else if (ua.includes("Linux")) os = "Linux";
+    else if (ua.includes("Android")) os = "Android";
+    else if (ua.includes("iPhone") || ua.includes("iPad")) os = "iOS";
+
+    deviceList += `
+━━━━━━━━━━━━━━━━━━
+🔐 <code>${device.fingerprint.slice(0, 12)}...</code>${fpBlocked}
+🌐 ${device.ip_address || "Unknown"}${ipBlocked}
+💻 ${browser} on ${os}
+🕐 Last: ${lastSeen}`;
+  }
+
+  const message = `
+📱 <b>User Devices</b>
+
+👤 <b>User:</b> ${profile.username || "Unknown"}
+📧 <b>Email:</b> ${userEmail || "Unknown"}
+🆔 <b>User ID:</b> <code>${profile.user_id.slice(0, 8)}...</code>
+
+📊 <b>Total Devices:</b> ${deviceLogs.length}
+🚫 <b>Blocked:</b> ${blockedFpSet.size} fingerprints, ${blockedIpSet.size} IPs
+${deviceList}${deviceLogs.length > 10 ? `\n\n<i>...and ${deviceLogs.length - 10} more devices</i>` : ""}
+
+<i>Use /blockdevice to block specific devices</i>
+`;
+
+  await sendTelegramMessage(chatId, message);
 }
 
 async function handleUserInfo(chatId: string, identifier: string, supabase: any): Promise<void> {
@@ -4178,6 +4332,12 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
     // /blockdevice - Manually block a device or IP
     if (text.startsWith("/blockdevice")) {
       await handleBlockDevice(chatId, text.replace("/blockdevice", "").trim(), supabase);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /userdevices - View user's device logs
+    if (text.startsWith("/userdevices")) {
+      await handleUserDevices(chatId, text.replace("/userdevices", "").trim(), supabase);
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
