@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 
-const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,6 +15,15 @@ serve(async (req) => {
   }
 
   try {
+    // Check API key first
+    if (!RESEND_API_KEY) {
+      console.error("RESEND_API_KEY not configured");
+      return new Response(
+        JSON.stringify({ error: "Email service not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(
@@ -36,6 +45,7 @@ serve(async (req) => {
     const { data: userData, error: userError } = await userClient.auth.getUser(token);
 
     if (userError || !userData?.user) {
+      console.error("User verification failed:", userError);
       return new Response(
         JSON.stringify({ error: "Invalid token" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -75,39 +85,57 @@ serve(async (req) => {
 
     if (insertError) {
       console.error("Error storing OTP:", insertError);
-      throw new Error("Failed to generate verification code");
+      return new Response(
+        JSON.stringify({ error: "Failed to generate verification code" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    // Send email with OTP
-    const emailResponse = await resend.emails.send({
+    // Send email with OTP using Resend SDK
+    const resend = new Resend(RESEND_API_KEY);
+    
+    const { data: emailData, error: emailError } = await resend.emails.send({
       from: "Yunchi Security <onboarding@resend.dev>",
       to: [userEmail],
       subject: "⚠️ Account Deletion Verification Code",
       html: `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h1 style="color: #dc2626; margin-bottom: 24px;">Account Deletion Request</h1>
-          <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-            You have requested to permanently delete your Yunchi account. This action cannot be undone.
-          </p>
-          <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 24px; margin: 24px 0; text-align: center;">
-            <p style="color: #991b1b; font-size: 14px; margin-bottom: 12px;">Your verification code:</p>
-            <p style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #dc2626; margin: 0;">${otp}</p>
+          <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">⚠️ Account Deletion Request</h1>
           </div>
-          <p style="color: #6b7280; font-size: 14px;">
-            This code will expire in <strong>5 minutes</strong>.
-          </p>
-          <p style="color: #6b7280; font-size: 14px;">
-            If you did not request this, please ignore this email and secure your account immediately.
-          </p>
-          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
-          <p style="color: #9ca3af; font-size: 12px;">
-            — Yunchi Security Team
-          </p>
+          <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
+            <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6;">
+              You have requested to permanently delete your Yunchi account. This action cannot be undone.
+            </p>
+            <div style="background: #3b1c1c; border: 1px solid #fecaca; border-radius: 8px; padding: 24px; margin: 24px 0; text-align: center;">
+              <p style="color: #fca5a5; font-size: 14px; margin-bottom: 12px;">Your verification code:</p>
+              <p style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #ef4444; margin: 0;">${otp}</p>
+            </div>
+            <p style="color: #a3a3a3; font-size: 14px;">
+              This code will expire in <strong>5 minutes</strong>.
+            </p>
+            <p style="color: #a3a3a3; font-size: 14px;">
+              If you did not request this, please ignore this email and secure your account immediately.
+            </p>
+            <hr style="border: none; border-top: 1px solid #333; margin: 24px 0;" />
+            <p style="color: #6b7280; font-size: 12px; text-align: center;">
+              — Yunchi Security Team
+            </p>
+          </div>
         </div>
       `,
     });
 
-    console.log("Deletion OTP sent to:", userEmail);
+    if (emailError) {
+      console.error("Error sending email:", emailError);
+      // Still return success since OTP is stored, user can request resend
+      return new Response(
+        JSON.stringify({ success: true, message: "Verification code generated", emailWarning: "Email delivery may be delayed" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("Deletion OTP sent to:", userEmail, "Email ID:", emailData?.id);
 
     return new Response(
       JSON.stringify({ success: true, message: "Verification code sent to your email" }),
