@@ -285,6 +285,50 @@ async function answerCallbackQuery(callbackQueryId: string, text: string): Promi
   }
 }
 
+// Edit message caption (for photos) - removes or updates buttons
+async function editMessageCaption(
+  chatId: string | number,
+  messageId: number,
+  caption: string,
+  replyMarkup?: object | null
+): Promise<boolean> {
+  if (!TELEGRAM_BOT_TOKEN) return false;
+
+  try {
+    const body: Record<string, unknown> = {
+      chat_id: chatId,
+      message_id: messageId,
+      caption: caption,
+      parse_mode: "HTML",
+    };
+    
+    // If replyMarkup is explicitly null, remove keyboard; if undefined, don't include it
+    if (replyMarkup === null) {
+      body.reply_markup = { inline_keyboard: [] };
+    } else if (replyMarkup) {
+      body.reply_markup = replyMarkup;
+    }
+
+    const response = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageCaption`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }
+    );
+
+    if (!response.ok) {
+      console.error("Telegram editMessageCaption error:", await response.json());
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("Error editing caption:", error);
+    return false;
+  }
+}
+
 async function editMessageReplyMarkup(
   chatId: number,
   messageId: number,
@@ -2068,8 +2112,19 @@ const handler = async (req: Request): Promise<Response> => {
           .eq("user_id", transaction.user_id)
           .maybeSingle();
 
+        // Get user email for the updated caption
+        const { data: authData } = await supabase.auth.admin.listUsers();
+        const userAuth = authData?.users?.find((u: any) => u.id === transaction.user_id);
+        const userEmail = userAuth?.email || "Unknown";
+
         // The amount field stores credits directly
         const credits = Number(transaction.amount);
+        const username = profile?.username || "Unknown";
+        const paymentMethod = transaction.payment_method?.toUpperCase() || "Unknown";
+        const timestamp = new Date().toLocaleString("en-US", { 
+          month: "short", day: "numeric", year: "numeric", 
+          hour: "2-digit", minute: "2-digit" 
+        });
 
         if (isAccept) {
           const { data: rpcResult, error: rpcError } = await supabase.rpc("handle_topup_completion", { p_transaction_id: transactionId });
@@ -2080,6 +2135,29 @@ const handler = async (req: Request): Promise<Response> => {
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
 
+          // Update the payment proof message - remove buttons and show approved status
+          if (messageId && callbackChatId) {
+            const approvedCaption = `
+✅ <b>APPROVED</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>Transaction ID:</b>
+<code>${transactionId}</code>
+
+<b>👤 User:</b> ${username}
+<b>📧 Email:</b> ${userEmail}
+<b>💵 Amount:</b> ${credits} credits
+<b>💳 Method:</b> ${paymentMethod}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>✅ Status:</b> Approved
+<b>📅 Processed:</b> ${timestamp}
+`;
+            await editMessageCaption(callbackChatId, messageId, approvedCaption, null);
+          }
+
           if (profile?.telegram_chat_id) {
             await sendTelegramMessage(profile.telegram_chat_id, `✅ <b>Topup Approved</b>\n\n+${credits} credits added!`);
           }
@@ -2087,14 +2165,35 @@ const handler = async (req: Request): Promise<Response> => {
         } else {
           await supabase.from("topup_transactions").update({ status: "failed", rejection_reason: "Rejected by admin" }).eq("id", transactionId);
 
+          // Update the payment proof message - remove buttons and show rejected status
+          if (messageId && callbackChatId) {
+            const rejectedCaption = `
+❌ <b>REJECTED</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>Transaction ID:</b>
+<code>${transactionId}</code>
+
+<b>👤 User:</b> ${username}
+<b>📧 Email:</b> ${userEmail}
+<b>💵 Amount:</b> ${credits} credits
+<b>💳 Method:</b> ${paymentMethod}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>❌ Status:</b> Rejected
+<b>📅 Processed:</b> ${timestamp}
+`;
+            await editMessageCaption(callbackChatId, messageId, rejectedCaption, null);
+          }
+
           if (profile?.telegram_chat_id) {
             await sendTelegramMessage(profile.telegram_chat_id, "❌ <b>Topup Rejected</b>\n\nYour topup request was rejected.");
           }
           await answerCallbackQuery(update.callback_query.id, "❌ Rejected");
         }
 
-        const { message, keyboard } = await handleTopups(callbackChatId, supabase, 0);
-        if (messageId && message) await editTelegramMessage(callbackChatId, messageId, message, keyboard || undefined);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
