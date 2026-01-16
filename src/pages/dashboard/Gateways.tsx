@@ -523,13 +523,15 @@ const Gateways = () => {
       
       console.log('API response:', data);
       
-      // Check for specific messages to determine status
-      if (data?.message === "Payment method added successfully") {
+      const message = data?.message?.toLowerCase() || '';
+      
+      // Check message content to determine status (not status field)
+      if (message.includes("payment method added successfully") || message.includes("succeeded")) {
         return "live";
-      } else if (data?.message === "Your card was declined.") {
+      } else if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined")) {
         return "dead";
       } else {
-        // Any other response is treated as ERROR
+        // Any other response is treated as unknown
         return "unknown";
       }
     } catch (error) {
