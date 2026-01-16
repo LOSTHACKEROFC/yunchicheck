@@ -1566,6 +1566,7 @@ async function handleBroadcast(chatId: string, message: string, supabase: any): 
     webSent++;
 
     // Send email notification (only if user hasn't opted out)
+    // Add delay to avoid Resend rate limiting (2 requests/second max)
     const userEmail = userEmailMap[p.user_id];
     if (userEmail) {
       // Check if user has opted out of email announcements
@@ -1573,6 +1574,8 @@ async function handleBroadcast(chatId: string, message: string, supabase: any): 
         emailSkipped++;
         console.log(`Skipping email for ${p.user_id} - opted out`);
       } else {
+        // Wait 600ms between emails to stay under rate limit
+        await new Promise(resolve => setTimeout(resolve, 600));
         const emailSuccess = await sendBroadcastEmail(userEmail, p.username, message);
         if (emailSuccess) emailSent++;
       }
