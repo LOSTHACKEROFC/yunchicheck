@@ -1,5 +1,6 @@
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { PDFDocument, rgb, StandardFonts } from "https://esm.sh/pdf-lib@1.17.1";
 
 // Declare EdgeRuntime for Supabase edge functions
 declare const EdgeRuntime: {
@@ -21,6 +22,307 @@ interface TopupNotificationRequest {
   status: string;
   payment_method: string;
   rejection_reason?: string;
+}
+
+interface ReceiptData {
+  transactionId: string;
+  username: string;
+  email: string;
+  credits: number;
+  paymentMethod: string;
+  currentBalance: number;
+  date: Date;
+}
+
+async function generateReceiptPdf(data: ReceiptData): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([595.28, 841.89]); // A4 size
+  const { width, height } = page.getSize();
+  
+  const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  
+  const primaryColor = rgb(0.86, 0.15, 0.15); // #dc2626
+  const darkGray = rgb(0.2, 0.2, 0.2);
+  const lightGray = rgb(0.6, 0.6, 0.6);
+  const black = rgb(0, 0, 0);
+  
+  // Header background
+  page.drawRectangle({
+    x: 0,
+    y: height - 120,
+    width: width,
+    height: 120,
+    color: primaryColor,
+  });
+  
+  // Logo/Brand name
+  page.drawText("YUNCHI", {
+    x: 50,
+    y: height - 60,
+    size: 32,
+    font: helveticaBold,
+    color: rgb(1, 1, 1),
+  });
+  
+  page.drawText("CHECKER", {
+    x: 50,
+    y: height - 90,
+    size: 18,
+    font: helvetica,
+    color: rgb(1, 1, 1),
+  });
+  
+  // Receipt title
+  page.drawText("PURCHASE RECEIPT", {
+    x: width - 200,
+    y: height - 75,
+    size: 16,
+    font: helveticaBold,
+    color: rgb(1, 1, 1),
+  });
+  
+  // Receipt number and date
+  const formattedDate = data.date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  const formattedTime = data.date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  
+  let yPosition = height - 160;
+  
+  // Receipt details header
+  page.drawText("Receipt Details", {
+    x: 50,
+    y: yPosition,
+    size: 14,
+    font: helveticaBold,
+    color: darkGray,
+  });
+  
+  yPosition -= 30;
+  
+  // Transaction ID
+  page.drawText("Transaction ID:", {
+    x: 50,
+    y: yPosition,
+    size: 11,
+    font: helvetica,
+    color: lightGray,
+  });
+  page.drawText(data.transactionId, {
+    x: 180,
+    y: yPosition,
+    size: 11,
+    font: helveticaBold,
+    color: black,
+  });
+  
+  yPosition -= 25;
+  
+  // Date
+  page.drawText("Date:", {
+    x: 50,
+    y: yPosition,
+    size: 11,
+    font: helvetica,
+    color: lightGray,
+  });
+  page.drawText(`${formattedDate} at ${formattedTime}`, {
+    x: 180,
+    y: yPosition,
+    size: 11,
+    font: helvetica,
+    color: black,
+  });
+  
+  yPosition -= 40;
+  
+  // Customer details header
+  page.drawText("Customer Information", {
+    x: 50,
+    y: yPosition,
+    size: 14,
+    font: helveticaBold,
+    color: darkGray,
+  });
+  
+  yPosition -= 30;
+  
+  // Username
+  page.drawText("Username:", {
+    x: 50,
+    y: yPosition,
+    size: 11,
+    font: helvetica,
+    color: lightGray,
+  });
+  page.drawText(data.username, {
+    x: 180,
+    y: yPosition,
+    size: 11,
+    font: helvetica,
+    color: black,
+  });
+  
+  yPosition -= 25;
+  
+  // Email
+  page.drawText("Email:", {
+    x: 50,
+    y: yPosition,
+    size: 11,
+    font: helvetica,
+    color: lightGray,
+  });
+  page.drawText(data.email, {
+    x: 180,
+    y: yPosition,
+    size: 11,
+    font: helvetica,
+    color: black,
+  });
+  
+  yPosition -= 50;
+  
+  // Purchase details box
+  page.drawRectangle({
+    x: 40,
+    y: yPosition - 100,
+    width: width - 80,
+    height: 120,
+    color: rgb(0.97, 0.97, 0.97),
+    borderColor: rgb(0.9, 0.9, 0.9),
+    borderWidth: 1,
+  });
+  
+  yPosition -= 20;
+  
+  page.drawText("Purchase Summary", {
+    x: 50,
+    y: yPosition,
+    size: 14,
+    font: helveticaBold,
+    color: darkGray,
+  });
+  
+  yPosition -= 30;
+  
+  // Item line
+  page.drawText("Credit Package", {
+    x: 60,
+    y: yPosition,
+    size: 11,
+    font: helvetica,
+    color: black,
+  });
+  page.drawText(`${data.credits.toLocaleString()} Credits`, {
+    x: width - 180,
+    y: yPosition,
+    size: 11,
+    font: helveticaBold,
+    color: black,
+  });
+  
+  yPosition -= 25;
+  
+  // Payment method
+  const paymentMethodLabels: Record<string, string> = {
+    btc: "Bitcoin",
+    eth: "Ethereum",
+    ltc: "Litecoin",
+    usdt: "USDT TRC20"
+  };
+  const methodLabel = paymentMethodLabels[data.paymentMethod] || data.paymentMethod;
+  
+  page.drawText("Payment Method", {
+    x: 60,
+    y: yPosition,
+    size: 11,
+    font: helvetica,
+    color: black,
+  });
+  page.drawText(methodLabel, {
+    x: width - 180,
+    y: yPosition,
+    size: 11,
+    font: helvetica,
+    color: black,
+  });
+  
+  yPosition -= 60;
+  
+  // Balance after purchase
+  page.drawRectangle({
+    x: 40,
+    y: yPosition - 50,
+    width: width - 80,
+    height: 60,
+    color: primaryColor,
+  });
+  
+  page.drawText("New Account Balance", {
+    x: 60,
+    y: yPosition - 20,
+    size: 12,
+    font: helvetica,
+    color: rgb(1, 1, 1),
+  });
+  
+  page.drawText(`${data.currentBalance.toLocaleString()} Credits`, {
+    x: width - 200,
+    y: yPosition - 20,
+    size: 16,
+    font: helveticaBold,
+    color: rgb(1, 1, 1),
+  });
+  
+  yPosition -= 100;
+  
+  // Footer
+  page.drawText("Thank you for your purchase!", {
+    x: 50,
+    y: yPosition,
+    size: 12,
+    font: helveticaBold,
+    color: darkGray,
+  });
+  
+  yPosition -= 25;
+  
+  page.drawText("This is an official receipt from Yunchi Checker. If you have any questions,", {
+    x: 50,
+    y: yPosition,
+    size: 10,
+    font: helvetica,
+    color: lightGray,
+  });
+  
+  yPosition -= 15;
+  
+  page.drawText("please contact our support team.", {
+    x: 50,
+    y: yPosition,
+    size: 10,
+    font: helvetica,
+    color: lightGray,
+  });
+  
+  // Bottom footer with website
+  page.drawText("yunchicheck.lovable.app", {
+    x: width / 2 - 60,
+    y: 30,
+    size: 10,
+    font: helvetica,
+    color: lightGray,
+  });
+  
+  const pdfBytes = await pdfDoc.save();
+  return pdfBytes;
 }
 
 async function sendTelegramMessage(chatId: string, message: string): Promise<boolean> {
@@ -47,15 +349,21 @@ async function sendTelegramMessage(chatId: string, message: string): Promise<boo
   }
 }
 
-async function sendEmail(
+interface EmailAttachment {
+  filename: string;
+  content: string; // base64 encoded
+}
+
+async function sendEmailWithAttachment(
   to: string,
   subject: string,
   html: string,
   text: string,
+  attachments?: EmailAttachment[],
   isTransactional: boolean = true
 ): Promise<boolean> {
   try {
-    console.log("Sending email to:", to);
+    console.log("Sending email to:", to, "with", attachments?.length || 0, "attachments");
     const result = await resend.emails.send({
       from: "Yunchi <noreply@yunchicheck.com>",
       reply_to: "support@yunchicheck.lovable.app",
@@ -63,13 +371,15 @@ async function sendEmail(
       subject,
       html,
       text,
+      attachments: attachments?.map(att => ({
+        filename: att.filename,
+        content: att.content,
+      })),
       headers: {
         "X-Entity-Ref-ID": crypto.randomUUID(),
-        // Transactional email headers to improve deliverability
         "X-Priority": "1",
         "X-MSMail-Priority": "High",
         "Importance": "high",
-        // Gmail category hints - transactional/purchase emails
         "X-PM-Message-Stream": "outbound",
         "X-Auto-Response-Suppress": "OOF, AutoReply",
       },
@@ -88,6 +398,16 @@ async function sendEmail(
     console.error("Error sending email:", error);
     return false;
   }
+}
+
+async function sendEmail(
+  to: string,
+  subject: string,
+  html: string,
+  text: string,
+  isTransactional: boolean = true
+): Promise<boolean> {
+  return sendEmailWithAttachment(to, subject, html, text, undefined, isTransactional);
 }
 
 async function processNotification(data: TopupNotificationRequest): Promise<{ telegramSent: boolean; emailSent: boolean; emailSkipped: boolean }> {
@@ -218,7 +538,40 @@ Thank you for using Yunchi Checker.`;
         console.log("Skipping email - user opted out of topup status emails");
         emailSkipped = true;
       } else {
-        emailSent = await sendEmail(userEmail, `Purchase Confirmed: ${formattedCredits} Added - Yunchi`, emailHtml, emailText, true);
+        // Generate PDF receipt
+        try {
+          console.log("Generating PDF receipt...");
+          const receiptData: ReceiptData = {
+            transactionId: transaction_id,
+            username,
+            email: userEmail,
+            credits: amount,
+            paymentMethod: payment_method,
+            currentBalance: currentCredits,
+            date: new Date(),
+          };
+          
+          const pdfBytes = await generateReceiptPdf(receiptData);
+          const pdfBase64 = btoa(String.fromCharCode(...pdfBytes));
+          
+          const attachments: EmailAttachment[] = [{
+            filename: `yunchi-receipt-${transaction_id.slice(0, 8)}.pdf`,
+            content: pdfBase64,
+          }];
+          
+          console.log("PDF receipt generated, sending email with attachment...");
+          emailSent = await sendEmailWithAttachment(
+            userEmail, 
+            `Purchase Confirmed: ${formattedCredits} Added - Yunchi`, 
+            emailHtml, 
+            emailText, 
+            attachments,
+            true
+          );
+        } catch (pdfError) {
+          console.error("Error generating PDF, sending email without attachment:", pdfError);
+          emailSent = await sendEmail(userEmail, `Purchase Confirmed: ${formattedCredits} Added - Yunchi`, emailHtml, emailText, true);
+        }
         console.log("Email sent for completed:", emailSent);
       }
     }
