@@ -56,6 +56,39 @@ export type Database = {
         }
         Relationships: []
       }
+      blocked_devices: {
+        Row: {
+          banned_by_admin_id: string | null
+          banned_user_id: string
+          created_at: string
+          fingerprint: string | null
+          id: string
+          ip_address: string | null
+          is_active: boolean
+          reason: string | null
+        }
+        Insert: {
+          banned_by_admin_id?: string | null
+          banned_user_id: string
+          created_at?: string
+          fingerprint?: string | null
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean
+          reason?: string | null
+        }
+        Update: {
+          banned_by_admin_id?: string | null
+          banned_user_id?: string
+          created_at?: string
+          fingerprint?: string | null
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean
+          reason?: string | null
+        }
+        Relationships: []
+      }
       card_checks: {
         Row: {
           card_details: string | null
@@ -544,6 +577,36 @@ export type Database = {
           updated_at?: string
           user_id?: string
           wallet_address?: string | null
+        }
+        Relationships: []
+      }
+      user_device_logs: {
+        Row: {
+          created_at: string
+          fingerprint: string
+          id: string
+          ip_address: string | null
+          last_seen: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          fingerprint: string
+          id?: string
+          ip_address?: string | null
+          last_seen?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          fingerprint?: string
+          id?: string
+          ip_address?: string | null
+          last_seen?: string
+          user_agent?: string | null
+          user_id?: string
         }
         Relationships: []
       }

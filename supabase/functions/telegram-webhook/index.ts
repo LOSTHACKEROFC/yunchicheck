@@ -1585,6 +1585,12 @@ async function handleUnbanUser(chatId: string, identifier: string, supabase: any
     .update({ is_banned: false, ban_reason: null, banned_at: null, banned_until: null })
     .eq("user_id", profile.user_id);
 
+  // Remove device/IP blocks for this user
+  await supabase
+    .from("blocked_devices")
+    .update({ is_active: false })
+    .eq("banned_user_id", profile.user_id);
+
   // Get user email for notification
   const { data: authUsers } = await supabase.auth.admin.listUsers();
   const userEmail = authUsers?.users?.find((u: any) => u.id === profile.user_id)?.email;
@@ -2482,8 +2488,9 @@ const handler = async (req: Request): Promise<Response> => {
 
         let bannedUntil: string | null = null;
         let durationText = "Permanent";
+        const isPermanentBan = duration === "permanent";
 
-        if (duration !== "permanent") {
+        if (!isPermanentBan) {
           const hours = parseInt(duration);
           bannedUntil = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
           durationText = hours >= 24 ? `${hours / 24} days` : `${hours} hours`;
@@ -2496,6 +2503,63 @@ const handler = async (req: Request): Promise<Response> => {
           banned_until: bannedUntil
         }).eq("user_id", pendingBan.user_id);
 
+        // For permanent bans, block all known devices and IPs
+        if (isPermanentBan) {
+          console.log("Permanent ban applied, blocking devices for user:", pendingBan.user_id);
+          
+          // Get all known devices for this user
+          const { data: deviceLogs } = await supabase
+            .from("user_device_logs")
+            .select("fingerprint, ip_address")
+            .eq("user_id", pendingBan.user_id);
+
+          if (deviceLogs && deviceLogs.length > 0) {
+            // Create blocked device entries for each unique fingerprint and IP
+            const blockedEntries: Array<{
+              fingerprint?: string;
+              ip_address?: string;
+              banned_user_id: string;
+              reason: string;
+            }> = [];
+
+            const seenFingerprints = new Set<string>();
+            const seenIps = new Set<string>();
+
+            for (const log of deviceLogs) {
+              if (log.fingerprint && !seenFingerprints.has(log.fingerprint)) {
+                seenFingerprints.add(log.fingerprint);
+                blockedEntries.push({
+                  fingerprint: log.fingerprint,
+                  banned_user_id: pendingBan.user_id,
+                  reason: pendingBan.ban_reason || "Permanent ban",
+                });
+              }
+              if (log.ip_address && !seenIps.has(log.ip_address)) {
+                seenIps.add(log.ip_address);
+                blockedEntries.push({
+                  ip_address: log.ip_address,
+                  banned_user_id: pendingBan.user_id,
+                  reason: pendingBan.ban_reason || "Permanent ban",
+                });
+              }
+            }
+
+            if (blockedEntries.length > 0) {
+              const { error: blockError } = await supabase
+                .from("blocked_devices")
+                .insert(blockedEntries);
+
+              if (blockError) {
+                console.error("Error blocking devices:", blockError);
+              } else {
+                console.log(`Blocked ${blockedEntries.length} device/IP entries for user ${pendingBan.user_id}`);
+              }
+            }
+          } else {
+            console.log("No device logs found for user:", pendingBan.user_id);
+          }
+        }
+
         await supabase.from("pending_bans").delete().eq("admin_chat_id", callbackChatId);
 
         if (pendingBan.user_telegram_chat_id) {
@@ -2507,12 +2571,13 @@ Duration: ${durationText}
 `);
         }
 
+        const deviceBlockNote = isPermanentBan ? "\n🔒 Device & IP blocked" : "";
         if (messageId) await editTelegramMessage(callbackChatId, messageId, `
 ✅ <b>User Banned</b>
 
 👤 ${pendingBan.username || pendingBan.user_email}
 ⏱️ ${durationText}
-📝 ${pendingBan.ban_reason || "No reason"}
+📝 ${pendingBan.ban_reason || "No reason"}${deviceBlockNote}
 `);
         await answerCallbackQuery(update.callback_query.id, "✅ Banned");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -2538,6 +2603,12 @@ Duration: ${durationText}
           await supabase.from("profiles").update({
             is_banned: false, ban_reason: null, banned_at: null, banned_until: null
           }).eq("user_id", appeal.user_id);
+
+          // Remove device/IP blocks for this user
+          await supabase
+            .from("blocked_devices")
+            .update({ is_active: false })
+            .eq("banned_user_id", appeal.user_id);
 
           await supabase.from("ban_appeals").update({
             status: "approved", resolved_at: new Date().toISOString()
@@ -2633,6 +2704,12 @@ Reply with the ban reason:
           banned_at: null,
           banned_until: null
         }).eq("user_id", userId);
+
+        // Remove device/IP blocks for this user
+        await supabase
+          .from("blocked_devices")
+          .update({ is_active: false })
+          .eq("banned_user_id", userId);
 
         // Get user email for notification
         const { data: authData } = await supabase.auth.admin.listUsers();
