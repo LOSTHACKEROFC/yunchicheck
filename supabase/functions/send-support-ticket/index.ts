@@ -189,7 +189,7 @@ Priority: ${priority || 'medium'}
 Message:
 ${message}
 
-View in Dashboard: https://yunchicheck.lovable.app/dashboard/admin/topups`,
+View in Dashboard: https://yunchicheck.com/dashboard/admin/topups`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
               <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
@@ -207,7 +207,7 @@ View in Dashboard: https://yunchicheck.lovable.app/dashboard/admin/topups`,
                   <p style="white-space: pre-wrap; margin: 0; line-height: 1.6; color: #e5e5e5;">${message}</p>
                 </div>
                 <div style="text-align: center; margin-top: 25px;">
-                  <a href="https://yunchicheck.lovable.app/dashboard/admin/topups" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View in Dashboard</a>
+                  <a href="https://yunchicheck.com/dashboard/admin/topups" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View in Dashboard</a>
                 </div>
                 <p style="color: #404040; font-size: 12px; text-align: center; margin-top: 30px;">
                   This ticket was submitted via the Yunchi Checker support system.
@@ -234,7 +234,7 @@ View in Dashboard: https://yunchicheck.lovable.app/dashboard/admin/topups`,
       try {
         const { error: userEmailError } = await resend.emails.send({
           from: "Yunchi <noreply@yunchicheck.com>",
-          reply_to: "support@yunchicheck.lovable.app",
+          reply_to: "support@yunchicheck.com",
           to: [userEmail],
           subject: `[${ticketId}] We've received your support request`,
           text: `Hello ${userName || 'there'},
@@ -250,7 +250,7 @@ ${message}
 
 We'll notify you via email and Telegram (if connected) when we respond.
 
-View Ticket: https://yunchicheck.lovable.app/dashboard/support
+View Ticket: https://yunchicheck.com/dashboard/support
 
 — Yunchi Support Team`,
           html: `
@@ -276,7 +276,7 @@ View Ticket: https://yunchicheck.lovable.app/dashboard/support
                 <p style="color: #737373;">We'll notify you via email and Telegram (if connected) when we respond.</p>
                 
                 <div style="text-align: center; margin-top: 25px;">
-                  <a href="https://yunchicheck.lovable.app/dashboard/support" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View Ticket</a>
+                  <a href="https://yunchicheck.com/dashboard/support" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View Ticket</a>
                 </div>
                 
                 <p style="color: #404040; font-size: 12px; text-align: center; margin-top: 30px;">

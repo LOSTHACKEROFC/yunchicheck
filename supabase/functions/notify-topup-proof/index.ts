@@ -182,7 +182,7 @@ const handler = async (req: Request): Promise<Response> => {
             </div>
             
             <div style="text-align: center; margin-top: 25px;">
-              <a href="https://yunchicheck.lovable.app/dashboard/admin/topups" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold; margin-right: 10px;">✅ Review in Dashboard</a>
+              <a href="https://yunchicheck.com/dashboard/admin/topups" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold; margin-right: 10px;">✅ Review in Dashboard</a>
             </div>
             
             <p style="color: #404040; font-size: 12px; text-align: center; margin-top: 30px;">

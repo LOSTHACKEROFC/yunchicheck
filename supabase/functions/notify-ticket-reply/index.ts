@@ -140,7 +140,7 @@ const handler = async (req: Request): Promise<Response> => {
         
         const { error: emailError } = await resend.emails.send({
           from: "Yunchi <noreply@yunchicheck.com>",
-          reply_to: "support@yunchicheck.lovable.app",
+          reply_to: "support@yunchicheck.com",
           to: [ticket.user_email],
           subject: `[${ticket.ticket_id}] New Reply to Your Support Ticket`,
           text: `New Reply to Your Ticket
@@ -153,7 +153,7 @@ ${message}
 
 You can view the full conversation by logging into your account.
 
-View Ticket: https://yunchicheck.lovable.app/dashboard/support
+View Ticket: https://yunchicheck.com/dashboard/support
 
 — Yunchi Support Team`,
           html: `
@@ -174,7 +174,7 @@ View Ticket: https://yunchicheck.lovable.app/dashboard/support
                   You can view the full conversation by logging into your account.
                 </p>
                 <div style="text-align: center; margin-top: 25px;">
-                  <a href="https://yunchicheck.lovable.app/dashboard/support" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View Ticket</a>
+                  <a href="https://yunchicheck.com/dashboard/support" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View Ticket</a>
                 </div>
                 <p style="color: #404040; font-size: 12px; text-align: center; margin-top: 30px;">
                   This is an automated notification from Yunchi Checker support.

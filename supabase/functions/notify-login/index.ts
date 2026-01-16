@@ -117,7 +117,7 @@ const handler = async (req: Request): Promise<Response> => {
 
         const { error: emailError } = await resend.emails.send({
           from: "Yunchi <noreply@yunchicheck.com>",
-          reply_to: "support@yunchicheck.lovable.app",
+          reply_to: "support@yunchicheck.com",
           to: [email],
           subject: "New Login to Your Yunchi Account",
           text: `Hello ${displayName},
@@ -131,7 +131,7 @@ Browser: ${browserInfo}${ip_address ? `\nIP Address: ${ip_address}` : ''}
 If this was you, you can safely ignore this email.
 If this wasn't you, please change your password immediately and contact support.
 
-Review account security: https://yunchicheck.lovable.app/dashboard/profile
+Review account security: https://yunchicheck.com/dashboard/profile
 
 — Yunchi Security Team`,
           html: `
@@ -163,7 +163,7 @@ Review account security: https://yunchicheck.lovable.app/dashboard/profile
                 </div>
                 
                 <div style="text-align: center; margin-top: 25px;">
-                  <a href="https://yunchicheck.lovable.app/dashboard/profile" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">Review Account Security</a>
+                  <a href="https://yunchicheck.com/dashboard/profile" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">Review Account Security</a>
                 </div>
                 
                 <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;">
