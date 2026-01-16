@@ -531,8 +531,8 @@ const Gateways = () => {
         
         const message = data?.message?.toLowerCase() || '';
         
-        // Check message content to determine status (not status field)
-        if (message.includes("payment method added successfully") || message.includes("succeeded")) {
+        // LIVE: Only when message is "Payment method added successfully"
+        if (message.includes("payment method added successfully")) {
           return "live";
         } else if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined")) {
           return "dead";
