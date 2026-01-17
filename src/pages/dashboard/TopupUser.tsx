@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +64,55 @@ const TopupUser = () => {
   const [rejectionReason, setRejectionReason] = useState("");
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [stats, setStats] = useState({ pending: 0, totalCredits: 0 });
+  
+  // Track previous pending count for sound notification
+  const prevPendingCountRef = useRef<number>(0);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const hasInitialLoad = useRef(false);
+
+  // Sound notification for new pending topups
+  const playNewTopupSound = useCallback(() => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+
+      const ctx = audioContextRef.current;
+      
+      if (ctx.state === "suspended") {
+        ctx.resume();
+      }
+
+      const now = ctx.currentTime;
+
+      // Play a cash register / coin drop sound effect
+      const playTone = (frequency: number, startTime: number, duration: number, volume: number = 0.3) => {
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+
+        oscillator.frequency.value = frequency;
+        oscillator.type = "sine";
+
+        gainNode.gain.setValueAtTime(0, startTime);
+        gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.01);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+
+        oscillator.start(startTime);
+        oscillator.stop(startTime + duration);
+      };
+
+      // Ascending "cha-ching" sound
+      playTone(880, now, 0.08, 0.25);        // A5
+      playTone(1108.73, now + 0.06, 0.08, 0.25); // C#6
+      playTone(1318.51, now + 0.12, 0.15, 0.3);  // E6
+      playTone(1760, now + 0.18, 0.25, 0.35);    // A6
+    } catch (error) {
+      console.warn("Could not play topup notification sound:", error);
+    }
+  }, []);
 
   // Check admin status
   useEffect(() => {
@@ -137,12 +186,32 @@ const TopupUser = () => {
     }
   }, [isAdmin]);
 
-  // Real-time subscription for pending topups
+  // Real-time subscription for pending topups with sound notification
   useEffect(() => {
     if (!isAdmin) return;
 
     const channel = supabase
       .channel('topupuser-pending-transactions')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'topup_transactions',
+          filter: 'status=eq.pending'
+        },
+        (payload) => {
+          // New pending topup arrived - play sound and show toast
+          if (hasInitialLoad.current) {
+            playNewTopupSound();
+            const amount = (payload.new as TopupTransaction).amount;
+            toast.info(`💰 New topup request: ${Number(amount).toLocaleString()} credits`, {
+              duration: 5000,
+            });
+          }
+          fetchTransactions();
+        }
+      )
       .on(
         'postgres_changes',
         {
@@ -159,7 +228,15 @@ const TopupUser = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isAdmin]);
+  }, [isAdmin, playNewTopupSound]);
+
+  // Mark initial load complete after first fetch
+  useEffect(() => {
+    if (!loading && isAdmin && !hasInitialLoad.current) {
+      hasInitialLoad.current = true;
+      prevPendingCountRef.current = stats.pending;
+    }
+  }, [loading, isAdmin, stats.pending]);
 
   const handleApprove = async () => {
     if (!selectedTx) return;
