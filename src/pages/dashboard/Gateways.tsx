@@ -192,6 +192,18 @@ const gateways: Gateway[] = [
     icon: ShoppingBag,
     iconColor: "text-lime-500"
   },
+  { 
+    id: "paygate_charge",
+    name: "PAYGATE", 
+    type: "charge",
+    status: "online", 
+    cardTypes: "Visa/MC/Amex",
+    speed: "Medium",
+    successRate: "92%",
+    description: "$14.00 Charged • CVC required",
+    icon: CreditCard,
+    iconColor: "text-cyan-500"
+  },
 ];
 
 // Credit costs: LIVE = 2 credits, DEAD = 1 credit, ERROR/UNKNOWN = 0 credits
