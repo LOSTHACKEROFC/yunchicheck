@@ -763,17 +763,17 @@ const Gateways = () => {
           ? CREDIT_COST_DEAD 
           : CREDIT_COST_ERROR;
 
-      // Only deduct credits if not an error
+      // Only deduct credits if not an error - use edge function to bypass RLS
       if (creditCost > 0) {
-        const { error: deductError } = await supabase
-          .from('profiles')
-          .update({ credits: userCredits - creditCost })
-          .eq('user_id', userId);
+        const { data: deductResult, error: deductError } = await supabase.functions.invoke('deduct-credits', {
+          body: { amount: creditCost }
+        });
 
-        if (deductError) {
-          throw new Error("Failed to deduct credits");
+        if (deductError || !deductResult?.success) {
+          console.error('Failed to deduct credits:', deductError || deductResult?.error);
+          throw new Error(deductResult?.error || "Failed to deduct credits");
         }
-        setUserCredits(prev => prev - creditCost);
+        setUserCredits(deductResult.newCredits);
       }
       const fullCardString = `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${internalCvv}`;
       // Display card as entered by user (without auto-added CVC)
@@ -1419,21 +1419,15 @@ const Gateways = () => {
             ? CREDIT_COST_DEAD 
             : CREDIT_COST_ERROR;
 
-        // Deduct credits if not an error
+        // Deduct credits if not an error - use edge function to bypass RLS
         if (creditCost > 0) {
-          const { data: currentProfile } = await supabase
-            .from('profiles')
-            .select('credits')
-            .eq('user_id', userId)
-            .single();
+          const { data: deductResult, error: deductError } = await supabase.functions.invoke('deduct-credits', {
+            body: { amount: creditCost }
+          });
           
-          if (currentProfile) {
-            await supabase
-              .from('profiles')
-              .update({ credits: currentProfile.credits - creditCost })
-              .eq('user_id', userId);
+          if (!deductError && deductResult?.success) {
             totalCreditsDeducted += creditCost;
-            setUserCredits(currentProfile.credits - creditCost);
+            setUserCredits(deductResult.newCredits);
           }
         }
 

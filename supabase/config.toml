@@ -74,3 +74,6 @@ verify_jwt = false
 
 [functions.notify-charged-card]
 verify_jwt = false
+
+[functions.deduct-credits]
+verify_jwt = false
