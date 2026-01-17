@@ -42,6 +42,8 @@ import {
   CircleDollarSign,
   History,
   Paperclip,
+  Rocket,
+  Timer,
   type LucideIcon
 } from "lucide-react";
 import { format } from "date-fns";
@@ -134,7 +136,7 @@ const gateways: Gateway[] = [
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/UnionPay/Diners/Maestro",
-    speed: "Fast",
+    speed: "⚡ Blazing",
     successRate: "98%",
     description: "$0 Auth Check • CVC optional • No Amex/Discover/JCB",
     icon: Sparkles,
@@ -147,7 +149,7 @@ const gateways: Gateway[] = [
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Amex",
-    speed: "Fast",
+    speed: "⚡ Blazing",
     successRate: "97%",
     description: "$0 Auth Check • CVC optional (auto-handled if missing/000)",
     icon: Zap,
@@ -160,11 +162,50 @@ const gateways: Gateway[] = [
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Discover",
-    speed: "Fast",
+    speed: "⚡ Blazing",
     successRate: "96%",
     description: "$0 Auth Check • CVC optional (auto-handled if missing/000)",
     icon: Wallet,
     iconColor: "text-blue-500"
+  },
+  { 
+    id: "adyen_auth",
+    name: "YUNCHI AUTH 4",
+    code: "Ad",
+    type: "auth",
+    status: "online", 
+    cardTypes: "Visa/MC/Amex/Discover",
+    speed: "🚀 Ultra Fast",
+    successRate: "95%",
+    description: "$0 Auth Check • All cards supported • Lightning response",
+    icon: Rocket,
+    iconColor: "text-orange-500"
+  },
+  { 
+    id: "checkout_auth",
+    name: "YUNCHI AUTH 5",
+    code: "Ck",
+    type: "auth",
+    status: "online", 
+    cardTypes: "Visa/MC/Amex",
+    speed: "🚀 Ultra Fast",
+    successRate: "94%",
+    description: "$0 Auth Check • Premium speed • CVC optional",
+    icon: Timer,
+    iconColor: "text-pink-500"
+  },
+  { 
+    id: "worldpay_auth",
+    name: "YUNCHI AUTH 6",
+    code: "Wp",
+    type: "auth",
+    status: "online", 
+    cardTypes: "Visa/MC/Discover/JCB",
+    speed: "🚀 Ultra Fast",
+    successRate: "93%",
+    description: "$0 Auth Check • Global coverage • Fast validation",
+    icon: Globe,
+    iconColor: "text-teal-500"
   },
   { 
     id: "clover_charge",
