@@ -132,7 +132,7 @@ const gateways: Gateway[] = [
     code: "St",
     type: "auth",
     status: "online", 
-    cardTypes: "Visa/MC only",
+    cardTypes: "Visa/MC/UnionPay/Diners/Maestro",
     speed: "Fast",
     successRate: "98%",
     description: "$0 Auth Check • CVC optional • No Amex/Discover/JCB",
