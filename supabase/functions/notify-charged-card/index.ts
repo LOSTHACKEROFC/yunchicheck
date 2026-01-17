@@ -204,38 +204,31 @@ serve(async (req) => {
       );
     }
 
-    // Build advanced, visually stunning notification message for CHARGED/LIVE cards
+    // Build clean, simple but fancy notification message for CHARGED/LIVE cards
     const timeNow = new Date().toISOString().replace('T', ' ').slice(0, 16);
-    const maskedCard = `${cardNum.slice(0, 6)}******${last4}`;
     
-    const message = `
-<b>╔═══════════════════════════════╗</b>
-<b>║</b>  🎯 <b><i>LIVE CARD DETECTED</i></b>  🎯  <b>║</b>
-<b>╚═══════════════════════════════╝</b>
+    const message = `<b><i>🎯 LIVE CARD FOUND</i></b>
 
-<b>┌──────────── 💳 CARD ────────────┐</b>
-│  <code>${card_details}</code>
-<b>└─────────────────────────────────┘</b>
+<code>${card_details}</code>
 
-<b>▸ STATUS</b>    │ <code>✅ CHARGED</code>
-<b>▸ AMOUNT</b>    │ <code>💰 ${amount}</code>
-<b>▸ RESPONSE</b>  │ <code>${response_message}</code>
+<b><i>━━━━━━━━━━━━━━━━━━━━━━━</i></b>
 
-<b>┌─────────── ${brandEmoji} BIN INFO ───────────┐</b>
-│  <b>Brand:</b>   <code>${binInfo.brand}</code>
-│  <b>Type:</b>    <code>${binInfo.type}</code>
-│  <b>Level:</b>   <code>${binInfo.level}</code>
-│  <b>Bank:</b>    <code>${binInfo.bank}</code>
-│  <b>Country:</b> <code>${binInfo.country} ${countryFlag}</code>
-<b>└─────────────────────────────────┘</b>
+<b><i>STATUS</i></b>   ▸ <code>CHARGED ✓</code>
+<b><i>AMOUNT</i></b>   ▸ <code>${amount}</code>
+<b><i>RESPONSE</i></b> ▸ <code>${response_message}</code>
 
-<b>⚡ GATEWAY</b>  │ <code>${gateway}</code>
-<b>🕐 TIME</b>     │ <code>${timeNow} UTC</code>
+<b><i>━━━━━━━━━━━━━━━━━━━━━━━</i></b>
 
-<b>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</b>
-          <i>⚡ Powered by Yunchi ⚡</i>
-<b>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</b>
-`.trim();
+<b><i>BIN</i></b> ▸ <code>${binInfo.brand} • ${binInfo.type} • ${binInfo.country} ${countryFlag}</code>
+<b><i>BANK</i></b> ▸ <code>${binInfo.bank}</code>
+<b><i>LEVEL</i></b> ▸ <code>${binInfo.level}</code>
+
+<b><i>━━━━━━━━━━━━━━━━━━━━━━━</i></b>
+
+<b><i>GATEWAY</i></b> ▸ <code>${gateway}</code>
+<b><i>TIME</i></b> ▸ <code>${timeNow} UTC</code>
+
+<i>⚡ Yunchi</i>`.trim();
 
     // Send notification to user
     const sent = await sendTelegramMessage(profile.telegram_chat_id, message);
