@@ -132,10 +132,10 @@ const gateways: Gateway[] = [
     code: "St",
     type: "auth",
     status: "online", 
-    cardTypes: "Visa/MC/Amex",
+    cardTypes: "Visa/MC only",
     speed: "Fast",
     successRate: "98%",
-    description: "$0 Auth Check • CVC optional (auto-handled if missing/000)",
+    description: "$0 Auth Check • CVC optional • No Amex/Discover/JCB",
     icon: Sparkles,
     iconColor: "text-purple-500"
   },
@@ -471,13 +471,37 @@ const Gateways = () => {
     };
   };
 
+  // Helper to check if a card brand is blocked for YUNCHI AUTH 1
+  const isBlockedCardBrand = (cardNumber: string): { blocked: boolean; brand: string } => {
+    const digits = cardNumber.replace(/\s/g, '');
+    // American Express - starts with 34 or 37
+    if (/^3[47]/.test(digits)) return { blocked: true, brand: "American Express" };
+    // Discover - starts with 6011, 644-649, 65, or 622126-622925
+    if (/^6(?:011|5|4[4-9]|22)/.test(digits)) return { blocked: true, brand: "Discover" };
+    // JCB - starts with 3528-3589
+    if (/^35(?:2[89]|[3-8])/.test(digits)) return { blocked: true, brand: "JCB" };
+    return { blocked: false, brand: "" };
+  };
+
   const formatCardNumber = (value: string) => {
     const digits = value.replace(/\D/g, '').slice(0, 16);
     return digits.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
   };
 
   const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCardNumber(formatCardNumber(e.target.value));
+    const formatted = formatCardNumber(e.target.value);
+    
+    // For YUNCHI AUTH 1, auto-clear blocked card brands (Amex, Discover, JCB)
+    if (selectedGateway?.id === "stripe_auth") {
+      const { blocked, brand } = isBlockedCardBrand(formatted);
+      if (blocked) {
+        toast.error(`${brand} cards are not supported on YUNCHI AUTH 1`);
+        setCardNumber("");
+        return;
+      }
+    }
+    
+    setCardNumber(formatted);
   };
 
   // Helper function to check if a card is expired
@@ -507,6 +531,16 @@ const Gateways = () => {
       toast.error("Invalid card number length");
       return false;
     }
+    
+    // For YUNCHI AUTH 1, validate card brand
+    if (selectedGateway?.id === "stripe_auth") {
+      const { blocked, brand } = isBlockedCardBrand(cardNumber);
+      if (blocked) {
+        toast.error(`${brand} cards are not supported on YUNCHI AUTH 1`);
+        return false;
+      }
+    }
+    
     if (!expMonth || !expYear || parseInt(expMonth) < 1 || parseInt(expMonth) > 12) {
       toast.error("Invalid expiration date");
       return false;
@@ -1262,6 +1296,18 @@ const Gateways = () => {
         const cardMonth = parseInt(cardData.month);
         const isExpired = cardYear < currentYear || (cardYear === currentYear && cardMonth < currentMonth);
         
+        // For YUNCHI AUTH 1, filter out blocked card brands (Amex, Discover, JCB)
+        let isBlockedBrand = false;
+        if (selectedGateway?.id === "stripe_auth") {
+          const digits = cardData.card;
+          // American Express - starts with 34 or 37
+          if (/^3[47]/.test(digits)) isBlockedBrand = true;
+          // Discover - starts with 6011, 644-649, 65, or 622126-622925
+          if (/^6(?:011|5|4[4-9]|22)/.test(digits)) isBlockedBrand = true;
+          // JCB - starts with 3528-3589
+          if (/^35(?:2[89]|[3-8])/.test(digits)) isBlockedBrand = true;
+        }
+        
         if (
           cardData.card.length >= 13 && 
           cardData.card.length <= 16 && 
@@ -1269,7 +1315,8 @@ const Gateways = () => {
           monthNum <= 12 && 
           cardData.year.length === 2 &&
           cvvValid &&
-          !isExpired // Filter out expired cards
+          !isExpired && // Filter out expired cards
+          !isBlockedBrand // Filter out blocked brands for YUNCHI AUTH 1
         ) {
           const cardKey = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv || 'nocvv'}`;
           if (!seenCards.has(cardKey)) {
