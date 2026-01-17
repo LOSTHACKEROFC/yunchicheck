@@ -52,33 +52,41 @@ serve(async (req) => {
 
     const lowerResponse = responseText.toLowerCase();
     
-    // 3D Secure or verification responses = declined
-    if (lowerResponse.includes("3d") || 
+    // Check for failure indicators FIRST (they can appear alongside "success" in the wrapper)
+    const hasFailureIndicators = 
+        lowerResponse.includes("3d") || 
         lowerResponse.includes("3ds") ||
         lowerResponse.includes("verification") ||
         lowerResponse.includes("verify") ||
         lowerResponse.includes("authenticate") ||
         lowerResponse.includes("otp") ||
         lowerResponse.includes("secure") ||
-        lowerResponse.includes("redirect")) {
+        lowerResponse.includes("redirect") ||
+        lowerResponse.includes("declined") || 
+        lowerResponse.includes("could not") ||
+        lowerResponse.includes("transaction failed") ||
+        lowerResponse.includes("invalid") ||
+        lowerResponse.includes("insufficient") ||
+        lowerResponse.includes("expired") ||
+        lowerResponse.includes("rejected") ||
+        lowerResponse.includes("failed\":true") ||
+        lowerResponse.includes("error_code") ||
+        lowerResponse.includes("try again");
+
+    if (hasFailureIndicators) {
       status = "dead";
-      apiMessage = "3D Secure/Verification Required - DECLINED";
+      // Extract error message if available
+      if (data && typeof data === 'object' && data.transaction?.retryOptions?.details?.error_message) {
+        apiMessage = data.transaction.retryOptions.details.error_message;
+      } else if (data && typeof data === 'object' && data.transaction?.retryOptions?.details?.error_title) {
+        apiMessage = data.transaction.retryOptions.details.error_title;
+      }
     } else if (lowerResponse.includes("success") || 
         lowerResponse.includes("approved") || 
         lowerResponse.includes("charged") ||
         lowerResponse.includes("payment successful") ||
         lowerResponse.includes("transaction successful")) {
       status = "live";
-    } else if (lowerResponse.includes("declined") || 
-               lowerResponse.includes("failed") || 
-               lowerResponse.includes("invalid") ||
-               lowerResponse.includes("insufficient") ||
-               lowerResponse.includes("expired") ||
-               lowerResponse.includes("error") ||
-               lowerResponse.includes("rejected") ||
-               lowerResponse.includes("could not") ||
-               lowerResponse.includes("transaction failed")) {
-      status = "dead";
     }
 
     // Try to extract message from JSON response
