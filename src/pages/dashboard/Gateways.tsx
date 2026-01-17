@@ -580,6 +580,77 @@ const Gateways = () => {
     return "unknown";
   };
 
+  // PAYGATE API check via edge function with retry
+  const checkCardViaPaygate = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<"live" | "dead" | "unknown"> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[PAYGATE] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
+        
+        const { data, error } = await supabase.functions.invoke('paygate-check', {
+          body: { cc }
+        });
+        
+        if (error) {
+          console.error('[PAYGATE] Edge function error:', error);
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 500 + attempt * 200));
+            continue;
+          }
+          return "unknown";
+        }
+        
+        console.log('[PAYGATE] API response:', data);
+        
+        // Use computedStatus from edge function
+        const computedStatus = data?.computedStatus;
+        if (computedStatus === "live" || computedStatus === "dead") {
+          return computedStatus;
+        }
+        
+        // Fallback: Check status field directly
+        const status = (data?.status as string)?.toUpperCase() || '';
+        if (status === 'APPROVED' || status === 'SUCCESS' || status === 'CHARGED' || status === 'LIVE') {
+          return "live";
+        }
+        if (status === 'DECLINED' || status === 'DEAD' || status === 'FAILED') {
+          return "dead";
+        }
+        
+        // Check message for decline indicators
+        const message = (data?.message as string)?.toLowerCase() || '';
+        if (message.includes('decline') || message.includes('declined') || 
+            message.includes('insufficient') || message.includes('invalid') || 
+            message.includes('expired')) {
+          return "dead";
+        }
+        if (message.includes('approved') || message.includes('success') || message.includes('charged')) {
+          return "live";
+        }
+        
+        // Rate limit or timeout - retry
+        if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
+          console.log(`[PAYGATE] Retryable error detected: ${message}`);
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 800 + attempt * 300));
+            continue;
+          }
+        }
+        
+        return "unknown";
+      } catch (error) {
+        console.error('[PAYGATE] API check error:', error);
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 500 + attempt * 200));
+          continue;
+        }
+        return "unknown";
+      }
+    }
+    return "unknown";
+  };
+
   // Fallback simulation for non-API gateways
   const simulateCheck = async (): Promise<"live" | "dead" | "unknown"> => {
     await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 700));
@@ -615,10 +686,15 @@ const Gateways = () => {
       // For auth gateways, use 000 as CVV internally if not provided
       const internalCvv = cvv || "000";
 
-      // Use real API for YUNCHI AUTH gateway, simulation for others
-      const checkStatus = selectedGateway.id === "stripe_auth"
-        ? await checkCardViaApi(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv)
-        : await simulateCheck();
+      // Use real API for YUNCHI AUTH gateway and PAYGATE, simulation for others
+      let checkStatus: "live" | "dead" | "unknown";
+      if (selectedGateway.id === "stripe_auth") {
+        checkStatus = await checkCardViaApi(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+      } else if (selectedGateway.id === "paygate_charge") {
+        checkStatus = await checkCardViaPaygate(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+      } else {
+        checkStatus = await simulateCheck();
+      }
 
       // Determine credit cost based on result: LIVE = 2, DEAD = 1, ERROR = 0
       const creditCost = checkStatus === "live" 
@@ -1232,10 +1308,15 @@ const Gateways = () => {
       const cardData = cards[cardIndex];
 
       try {
-        // Use real API for YUNCHI AUTH gateway, simulation for others
-        const checkStatus = selectedGateway.id === "stripe_auth"
-          ? await checkCardViaApi(cardData.card, cardData.month, cardData.year, cardData.cvv)
-          : await simulateCheck();
+        // Use real API for YUNCHI AUTH gateway and PAYGATE, simulation for others
+        let checkStatus: "live" | "dead" | "unknown";
+        if (selectedGateway.id === "stripe_auth") {
+          checkStatus = await checkCardViaApi(cardData.card, cardData.month, cardData.year, cardData.cvv);
+        } else if (selectedGateway.id === "paygate_charge") {
+          checkStatus = await checkCardViaPaygate(cardData.card, cardData.month, cardData.year, cardData.cvv);
+        } else {
+          checkStatus = await simulateCheck();
+        }
 
         const fullCardStr = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
         const displayCardStr = cardData.originalCvv 

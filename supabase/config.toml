@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.log-device]
 verify_jwt = false
+
+[functions.paygate-check]
+verify_jwt = false
