@@ -63,6 +63,9 @@ const TopupUser = () => {
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
+  const [showRejectAllConfirm, setShowRejectAllConfirm] = useState(false);
+  const [rejectAllReason, setRejectAllReason] = useState("");
+  const [rejectAllLoading, setRejectAllLoading] = useState(false);
   const [stats, setStats] = useState({ pending: 0, totalCredits: 0 });
   
   // Track previous pending count for sound notification
@@ -306,6 +309,41 @@ const TopupUser = () => {
     }
   };
 
+  const handleRejectAll = async () => {
+    if (transactions.length === 0) return;
+
+    setRejectAllLoading(true);
+    
+    try {
+      const pendingIds = transactions.map(tx => tx.id);
+      
+      const { error } = await supabase
+        .from('topup_transactions')
+        .update({ 
+          status: 'failed',
+          rejection_reason: rejectAllReason || 'Bulk rejected by admin',
+          updated_at: new Date().toISOString()
+        })
+        .in('id', pendingIds);
+
+      if (error) {
+        console.error('Error rejecting all transactions:', error);
+        toast.error("Failed to reject transactions");
+        setRejectAllLoading(false);
+        return;
+      }
+
+      toast.success(`❌ Rejected ${pendingIds.length} pending topups`);
+      setShowRejectAllConfirm(false);
+      setRejectAllReason("");
+    } catch (err) {
+      console.error('Error rejecting all transactions:', err);
+      toast.error("Failed to reject transactions");
+    } finally {
+      setRejectAllLoading(false);
+    }
+  };
+
   const getPaymentMethodLabel = (method: string) => {
     const labels: Record<string, string> = {
       btc: 'Bitcoin',
@@ -375,10 +413,23 @@ const TopupUser = () => {
               <DollarSign className="h-5 w-5 text-primary" />
               Pending Requests
             </span>
-            <Button variant="outline" size="sm" onClick={fetchTransactions}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
+            <div className="flex items-center gap-2">
+              {transactions.length > 0 && (
+                <Button 
+                  variant="destructive" 
+                  size="sm" 
+                  onClick={() => setShowRejectAllConfirm(true)}
+                  className="gap-1"
+                >
+                  <XCircle className="h-4 w-4" />
+                  Reject All ({transactions.length})
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={fetchTransactions}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
+              </Button>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -636,6 +687,61 @@ const TopupUser = () => {
                 <XCircle className="h-4 w-4" />
               )}
               Confirm Reject
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject All Confirmation Dialog */}
+      <Dialog open={showRejectAllConfirm} onOpenChange={setShowRejectAllConfirm}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <XCircle className="h-5 w-5" />
+              Reject All Pending Topups
+            </DialogTitle>
+            <DialogDescription>
+              This will reject all {transactions.length} pending topup requests. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg">
+            <p className="text-sm text-destructive font-medium">
+              ⚠️ Warning: You are about to reject {transactions.length} pending requests totaling {stats.totalCredits.toLocaleString()} credits.
+            </p>
+          </div>
+
+          <Textarea
+            placeholder="Enter rejection reason for all (optional)..."
+            value={rejectAllReason}
+            onChange={(e) => setRejectAllReason(e.target.value)}
+            className="bg-secondary border-border"
+            rows={2}
+          />
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowRejectAllConfirm(false);
+                setRejectAllReason("");
+              }}
+              disabled={rejectAllLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleRejectAll}
+              disabled={rejectAllLoading}
+              className="gap-2"
+            >
+              {rejectAllLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <XCircle className="h-4 w-4" />
+              )}
+              Reject All ({transactions.length})
             </Button>
           </DialogFooter>
         </DialogContent>
