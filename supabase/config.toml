@@ -83,3 +83,6 @@ verify_jwt = false
 
 [functions.stripe-auth-check]
 verify_jwt = false
+
+[functions.payu-check]
+verify_jwt = false
