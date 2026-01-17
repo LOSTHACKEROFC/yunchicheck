@@ -141,15 +141,15 @@ const gateways: Gateway[] = [
     iconColor: "text-purple-500"
   },
   { 
-    id: "stripe_preauth",
+    id: "combined_auth",
     name: "YUNCHI AUTH 2",
-    code: "St-2",
+    code: "St+B3",
     type: "auth",
     status: "online", 
-    cardTypes: "Visa/MC/Amex",
+    cardTypes: "Visa/MC/Amex/Discover",
     speed: "⚡ Blazing",
-    successRate: "97%",
-    description: "$0 Auth Check • CVC optional (auto-handled if missing/000)",
+    successRate: "99%",
+    description: "$0 Auth Check • Dual API (Stripe + B3) • CVC optional",
     icon: Zap,
     iconColor: "text-indigo-500"
   },
@@ -824,6 +824,85 @@ const Gateways = () => {
     };
   };
 
+  // Combined Auth API check (YUNCHI AUTH 2) - uses both Stripe + B3 APIs in parallel
+  const checkCardViaCombined = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 3): Promise<GatewayApiResponse> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[COMBINED-AUTH] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
+        
+        const { data, error } = await supabase.functions.invoke('combined-auth-check', {
+          body: { cc }
+        });
+        
+        if (error) {
+          console.error('[COMBINED-AUTH] Edge function error:', error);
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 500 + attempt * 200));
+            continue;
+          }
+          return {
+            status: "unknown",
+            apiStatus: "ERROR",
+            apiMessage: error.message || "Edge function error",
+            rawResponse: JSON.stringify(error)
+          };
+        }
+        
+        console.log('[COMBINED-AUTH] API response:', data);
+        
+        // Extract real API response data
+        const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
+        const apiMessage = data?.apiMessage || data?.message || 'No message';
+        const rawResponse = JSON.stringify(data);
+        
+        // Use computedStatus from edge function if available
+        const computedStatus = data?.computedStatus;
+        if (computedStatus === "live" || computedStatus === "dead") {
+          return { status: computedStatus, apiStatus, apiMessage, rawResponse };
+        }
+        
+        // Fallback: Check message for status indicators
+        const message = (data?.message as string)?.toLowerCase() || '';
+        
+        if (message.includes("approved") || message.includes("success") || message.includes("authorized") ||
+            message.includes("payment method added successfully") || message.includes("card added successfully")) {
+          return { status: "live", apiStatus, apiMessage, rawResponse };
+        } else if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined")) {
+          return { status: "dead", apiStatus, apiMessage, rawResponse };
+        } else if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
+          console.log(`[COMBINED-AUTH] Retryable error detected: ${message}`);
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 800 + attempt * 300));
+            continue;
+          }
+          return { status: "unknown", apiStatus, apiMessage, rawResponse };
+        } else {
+          return { status: "unknown", apiStatus, apiMessage, rawResponse };
+        }
+      } catch (error) {
+        console.error('[COMBINED-AUTH] API check error:', error);
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 500 + attempt * 200));
+          continue;
+        }
+        return {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: error instanceof Error ? error.message : "Unknown error",
+          rawResponse: String(error)
+        };
+      }
+    }
+    return {
+      status: "unknown",
+      apiStatus: "ERROR",
+      apiMessage: "Max retries exceeded",
+      rawResponse: "Max retries exceeded"
+    };
+  };
+
   // Fallback simulation for non-API gateways
   const simulateCheck = async (): Promise<"live" | "dead" | "unknown"> => {
     await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 700));
@@ -864,6 +943,8 @@ const Gateways = () => {
       
       if (selectedGateway.id === "stripe_auth") {
         gatewayResponse = await checkCardViaApi(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+      } else if (selectedGateway.id === "combined_auth") {
+        gatewayResponse = await checkCardViaCombined(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "braintree_auth") {
         gatewayResponse = await checkCardViaB3(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "paygate_charge") {
@@ -1575,6 +1656,8 @@ const Gateways = () => {
         
         if (selectedGateway.id === "stripe_auth") {
           gatewayResponse = await checkCardViaApi(cardData.card, cardData.month, cardData.year, cardData.cvv);
+        } else if (selectedGateway.id === "combined_auth") {
+          gatewayResponse = await checkCardViaCombined(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "braintree_auth") {
           gatewayResponse = await checkCardViaB3(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "paygate_charge") {
