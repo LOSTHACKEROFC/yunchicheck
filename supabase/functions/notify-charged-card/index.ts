@@ -227,7 +227,7 @@ serve(async (req) => {
       );
     }
 
-    // Build notification message based on status
+    // Build notification message based on status with real API response
     let message: string;
     const statusEmoji = status === "CHARGED" ? "✅" : "❌";
     const statusText = status === "CHARGED" ? "CHARGED" : "DECLINED";
@@ -243,7 +243,7 @@ ${statusEmoji} <b>CARD CHARGED!</b> ${statusEmoji}
 
 <b>📊 Status:</b> <code>${statusText}</code>
 <b>💰 Amount:</b> <code>${amount}</code>
-<b>📝 Response:</b> <code>${response_message}</code>
+<b>📝 API Response:</b> <code>${response_message}</code>
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
@@ -267,7 +267,7 @@ ${statusEmoji} <b>CARD DECLINED</b>
 
 <b>💳 Card:</b> <code>${maskedCard}</code>
 <b>📊 Status:</b> <code>${statusText}</code>
-<b>📝 Response:</b> <code>${response_message}</code>
+<b>📝 API Response:</b> <code>${response_message}</code>
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
