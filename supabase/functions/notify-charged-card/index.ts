@@ -204,40 +204,24 @@ serve(async (req) => {
       );
     }
 
-    // Build beautiful notification message for CHARGED/LIVE cards
-    const message = `
-╔══════════════════════════════╗
-     🎉 <b>LIVE CARD FOUND!</b> 🎉
-╚══════════════════════════════╝
+    // Build clean, fancy notification message for CHARGED/LIVE cards
+    const timeNow = new Date().toISOString().replace('T', ' ').slice(0, 16);
+    
+    const message = `<b><i>🎯 [LIVE] </i></b><code>${card_details}</code>
 
-💳 <b>CARD DETAILS</b>
-┌─────────────────────────────
-│ <code>${card_details}</code>
-└─────────────────────────────
+<b><i>────────────────────────</i></b>
 
-📊 <b>RESULT</b>
-┌─────────────────────────────
-│ ✅ Status: <b>CHARGED</b>
-│ 💰 Amount: <code>${amount}</code>
-│ 📝 Response: <code>${response_message}</code>
-└─────────────────────────────
+<b><i>STATUS   :</i></b> <code>CHARGED</code>
 
-${brandEmoji} <b>BIN INFORMATION</b>
-┌─────────────────────────────
-│ 🏷️ Brand: <b>${binInfo.brand}</b>
-│ 📋 Type: ${binInfo.type}
-│ ⭐ Level: ${binInfo.level}
-│ 🏦 Bank: ${binInfo.bank}
-│ ${countryFlag} Country: ${binInfo.country}
-└─────────────────────────────
+<b><i>AMOUNT   :</i></b> <code>${amount}</code>
 
-⚡ <b>Gateway:</b> ${gateway}
-🕐 <b>Time:</b> ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC
+<b><i>RESPONSE :</i></b> <code>${response_message}</code>
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-     🔥 <i>Powered by Yunchi</i> 🔥
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    `.trim();
+<b><i>BIN      :</i></b> <code>${binInfo.brand} / ${binInfo.type} / ${binInfo.country} ${countryFlag}</code>
+
+<b><i>GATEWAY  :</i></b> <code>${gateway}</code>
+
+<b><i>TIME     :</i></b> <code>${timeNow} UTC</code>`;
 
     // Send notification to user
     const sent = await sendTelegramMessage(profile.telegram_chat_id, message);
