@@ -226,6 +226,7 @@ interface CheckResult {
   gateway: string;
   card?: string;
   displayCard?: string; // Card as entered by user (without auto-added CVC)
+  apiResponse?: string; // Real API response message for PAYGATE
 }
 
 interface BulkResult extends CheckResult {
@@ -234,6 +235,7 @@ interface BulkResult extends CheckResult {
   displayCard: string; // Card as entered by user (without auto-added CVC)
   brand: string;
   brandColor: string;
+  apiResponse?: string; // Real API response message for PAYGATE
 }
 
 interface GatewayCheck {
@@ -764,6 +766,11 @@ const Gateways = () => {
           card_details: fullCardString
         });
       
+      // Build API response string for display
+      const apiResponseDisplay = paygateResponse 
+        ? `${paygateResponse.apiStatus}: ${paygateResponse.apiMessage}${paygateResponse.apiTotal ? ` (${paygateResponse.apiTotal})` : ''}`
+        : undefined;
+      
       const checkResult: CheckResult = {
         status: checkStatus,
         message: checkStatus === "live" 
@@ -773,7 +780,8 @@ const Gateways = () => {
             : "Unable to verify - try another gateway",
         gateway: selectedGateway.name,
         card: fullCardString,
-        displayCard: displayCardString
+        displayCard: displayCardString,
+        apiResponse: apiResponseDisplay
       };
 
       setResult(checkResult);
@@ -1418,6 +1426,12 @@ const Gateways = () => {
           });
 
         const { brand, brandColor } = detectCardBrandLocal(cardData.card);
+        
+        // Build API response string for display
+        const apiResponseDisplay = paygateResponse 
+          ? `${paygateResponse.apiStatus}: ${paygateResponse.apiMessage}${paygateResponse.apiTotal ? ` (${paygateResponse.apiTotal})` : ''}`
+          : undefined;
+        
         const bulkResult: BulkResult = {
           status: checkStatus,
           message: checkStatus === "live" 
@@ -1430,7 +1444,8 @@ const Gateways = () => {
           fullCard: fullCardStr,
           displayCard: displayCardStr,
           brand,
-          brandColor
+          brandColor,
+          apiResponse: apiResponseDisplay
         };
 
         // Send Telegram notification for PAYGATE checks (bulk - all statuses) with real API response
@@ -2277,6 +2292,11 @@ const Gateways = () => {
                       {result.status === "live" ? "LIVE" : result.status === "dead" ? "DEAD" : "UNKNOWN"}
                     </p>
                     <p className="text-xs text-muted-foreground">{result.message}</p>
+                    {result.apiResponse && (
+                      <p className="text-xs font-mono text-foreground/70 mt-1 bg-secondary/30 px-2 py-1 rounded inline-block">
+                        📝 {result.apiResponse}
+                      </p>
+                    )}
                     {result.card && (
                       <p className="text-xs font-mono text-foreground/80 mt-1 bg-secondary/50 px-2 py-1 rounded inline-block">
                         {result.card}
@@ -2561,7 +2581,7 @@ const Gateways = () => {
                       .map((r, i) => (
                       <div 
                         key={i} 
-                        className={`flex items-center gap-2 px-2 py-1 rounded ${
+                        className={`flex flex-col gap-1 px-2 py-1.5 rounded ${
                           r.status === "live" 
                             ? "bg-green-500/10" 
                             : r.status === "dead"
@@ -2569,17 +2589,24 @@ const Gateways = () => {
                               : "bg-yellow-500/10"
                         }`}
                       >
-                        <CardBrandLogo brand={r.brand} size="sm" />
-                        <span className="text-muted-foreground truncate flex-1 min-w-0">{r.fullCard}</span>
-                        <span className={`shrink-0 ${
-                          r.status === "live" 
-                            ? "text-green-500 font-semibold" 
-                            : r.status === "dead"
-                              ? "text-red-500 font-semibold"
-                              : "text-yellow-500 font-semibold"
-                        }`}>
-                          {r.status.toUpperCase()}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <CardBrandLogo brand={r.brand} size="sm" />
+                          <span className="text-muted-foreground truncate flex-1 min-w-0">{r.fullCard}</span>
+                          <span className={`shrink-0 ${
+                            r.status === "live" 
+                              ? "text-green-500 font-semibold" 
+                              : r.status === "dead"
+                                ? "text-red-500 font-semibold"
+                                : "text-yellow-500 font-semibold"
+                          }`}>
+                            {r.status.toUpperCase()}
+                          </span>
+                        </div>
+                        {r.apiResponse && (
+                          <span className="text-[10px] text-muted-foreground/80 pl-6 truncate">
+                            📝 {r.apiResponse}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
