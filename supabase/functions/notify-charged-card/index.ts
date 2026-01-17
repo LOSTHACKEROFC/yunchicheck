@@ -340,11 +340,21 @@ serve(async (req) => {
       return text.split('').map(c => chars[c] || c).join('');
     };
     
+    // Determine if this is an Auth gateway (shows LIVE) vs Charge gateway (shows CHARGED)
+    const isAuthGateway = gateway.toLowerCase().includes('auth') || 
+                          gateway.toLowerCase().includes('yunchi auth') ||
+                          gateway.toLowerCase().includes('braintree');
+    
+    const statusLabel = isAuthGateway ? 'LIVE' : 'CHARGED';
+    const statusLine = isAuthGateway 
+      ? `✅ ${toFancyBold('LIVE')}`
+      : `✅ ${toFancyBold('CHARGED')} • 💰 ${amount}`;
+    
     const message = `🔥 ${toFancyBold('LIVE CARD FOUND')} 🔥
 
 ${toFancyScript('Card')} ▸ <code>${card_details}</code>
 
-✅ ${toFancyBold('CHARGED')} • 💰 ${amount}
+${statusLine}
 ${toFancyScript('Response')} ▸ <code>${response_message}</code>
 
 ${brandEmoji} ${toFancyItalic(binInfo.brand)} • ${toFancyItalic(binInfo.type)}
