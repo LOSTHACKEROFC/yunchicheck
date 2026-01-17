@@ -52,7 +52,18 @@ serve(async (req) => {
 
     const lowerResponse = responseText.toLowerCase();
     
-    if (lowerResponse.includes("success") || 
+    // 3D Secure or verification responses = declined
+    if (lowerResponse.includes("3d") || 
+        lowerResponse.includes("3ds") ||
+        lowerResponse.includes("verification") ||
+        lowerResponse.includes("verify") ||
+        lowerResponse.includes("authenticate") ||
+        lowerResponse.includes("otp") ||
+        lowerResponse.includes("secure") ||
+        lowerResponse.includes("redirect")) {
+      status = "dead";
+      apiMessage = "3D Secure/Verification Required - DECLINED";
+    } else if (lowerResponse.includes("success") || 
         lowerResponse.includes("approved") || 
         lowerResponse.includes("charged") ||
         lowerResponse.includes("payment successful") ||
