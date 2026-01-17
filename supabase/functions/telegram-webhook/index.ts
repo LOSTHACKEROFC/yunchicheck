@@ -446,6 +446,7 @@ async function setBotCommands(): Promise<void> {
     { command: "admincmd", description: "Admin panel" },
     { command: "ticket", description: "Manage ticket" },
     { command: "topups", description: "Pending topups" },
+    { command: "rejectall", description: "Reject all pending topups" },
     { command: "addfund", description: "Add/deduct credits" },
     { command: "banuser", description: "Ban user" },
     { command: "unbanuser", description: "Unban user" },
@@ -696,48 +697,74 @@ function buildTopupsListMessage(
   const startIndex = page * perPage;
   const displayTopups = topups.slice(startIndex, startIndex + perPage);
 
+  // Calculate total pending credits
+  const totalPendingCredits = topups.reduce((sum, t) => sum + Number(t.amount), 0);
+
   let topupList = "";
   displayTopups.forEach((topup, index) => {
     const date = new Date(topup.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const time = new Date(topup.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
     const username = topup.username || "Unknown";
     // Amount field stores credits directly
     const credits = Number(topup.amount);
+    const paymentMethod = (topup.payment_method || "unknown").toUpperCase();
     
     topupList += `
-${startIndex + index + 1}. <b>${credits} credits</b>
-   👤 ${username} | 💳 ${topup.payment_method}
-   📅 ${date} | 🆔 <code>${topup.id.slice(0, 8)}</code>
+<b>${startIndex + index + 1}.</b> 💰 <b>${credits.toLocaleString()} credits</b>
+   👤 ${username}
+   💳 ${paymentMethod} | 📅 ${date} ${time}
+   🆔 <code>${topup.id.slice(0, 8)}</code>
 `;
   });
 
   const message = totalCount === 0 
-    ? `💰 <b>Pending Topups</b>\n\n✅ No pending requests!`
+    ? `
+💰 <b>Pending Topups</b>
+
+✅ <b>All clear!</b> No pending requests.
+
+<i>New topup requests will appear here.</i>
+`
     : `
 💰 <b>Pending Topups</b> (${page + 1}/${totalPages || 1})
 
-📊 Pending: ${totalCount}
+📊 <b>Summary:</b>
+├ Pending: <b>${totalCount}</b> requests
+└ Total: <b>${totalPendingCredits.toLocaleString()}</b> credits
 ${topupList}
+<i>Tap a button to approve or reject</i>
 `;
 
   const buttons: any[][] = [];
+  
+  // Add approve/reject buttons for each topup
   displayTopups.forEach((topup) => {
-    // Amount field stores credits directly
     const credits = Number(topup.amount);
+    const username = topup.username?.slice(0, 8) || "User";
     buttons.push([
-      { text: `✅ Approve ${credits}`, callback_data: `topup_accept_${topup.id}` },
+      { text: `✅ ${credits} (${username})`, callback_data: `topup_accept_${topup.id}` },
       { text: `❌ Reject`, callback_data: `topup_reject_${topup.id}` }
     ]);
   });
 
+  // Pagination buttons
   if (totalPages > 1) {
     const navButtons = [];
-    if (page > 0) navButtons.push({ text: "◀️", callback_data: `topups_page_${page - 1}` });
-    navButtons.push({ text: `${page + 1}/${totalPages}`, callback_data: "topups_noop" });
-    if (page < totalPages - 1) navButtons.push({ text: "▶️", callback_data: `topups_page_${page + 1}` });
+    if (page > 0) navButtons.push({ text: "◀️ Prev", callback_data: `topups_page_${page - 1}` });
+    navButtons.push({ text: `📄 ${page + 1}/${totalPages}`, callback_data: "topups_noop" });
+    if (page < totalPages - 1) navButtons.push({ text: "Next ▶️", callback_data: `topups_page_${page + 1}` });
     buttons.push(navButtons);
   }
   
-  buttons.push([{ text: "🔄 Refresh", callback_data: "topups_refresh" }]);
+  // Action buttons row
+  const actionButtons = [{ text: "🔄 Refresh", callback_data: "topups_refresh" }];
+  if (totalCount > 0) {
+    actionButtons.push({ text: `🗑️ Reject All (${totalCount})`, callback_data: "topups_reject_all" });
+  }
+  buttons.push(actionButtons);
+  
+  // Back to menu
+  buttons.push([{ text: "🔙 Back to Menu", callback_data: "menu_back" }]);
 
   return { message, keyboard: { inline_keyboard: buttons } };
 }
@@ -795,6 +822,7 @@ async function handleAdminCmd(chatId: string, supabase: any, messageId?: number)
 
 <b>💰 Finance</b>
 /topups - Pending requests
+/rejectall - Reject all pending
 /addfund <code>[email] [amount]</code> - Add/deduct credits
 
 <b>👥 Users</b>
@@ -1346,6 +1374,109 @@ async function handleTopups(chatId: string, supabase: any, page: number = 0): Pr
   }
 
   return buildTopupsListMessage(enrichedTopups, page, count || 0, perPage);
+}
+
+// Handle reject all pending topups
+async function handleRejectAllTopups(chatId: string, supabase: any, messageId?: number, reason?: string): Promise<void> {
+  const hasAccess = await isAdminAsync(chatId, supabase);
+  if (!hasAccess) {
+    if (messageId) {
+      await editTelegramMessage(chatId, messageId, "❌ Access denied");
+    } else {
+      await sendTelegramMessage(chatId, "❌ Access denied");
+    }
+    return;
+  }
+
+  // Get all pending topups
+  const { data: pendingTopups, error: fetchError } = await supabase
+    .from("topup_transactions")
+    .select("id, user_id, amount")
+    .eq("status", "pending");
+
+  if (fetchError) {
+    console.error("Error fetching pending topups:", fetchError);
+    const errorMsg = "❌ Failed to fetch pending topups";
+    if (messageId) {
+      await editTelegramMessage(chatId, messageId, errorMsg);
+    } else {
+      await sendTelegramMessage(chatId, errorMsg);
+    }
+    return;
+  }
+
+  if (!pendingTopups || pendingTopups.length === 0) {
+    const noTopupsMsg = "✅ No pending topups to reject";
+    if (messageId) {
+      await editTelegramMessage(chatId, messageId, noTopupsMsg);
+    } else {
+      await sendTelegramMessage(chatId, noTopupsMsg);
+    }
+    return;
+  }
+
+  const totalCount = pendingTopups.length;
+  const totalCredits = pendingTopups.reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+  const rejectionReason = reason || "Bulk rejected by admin";
+
+  // Update all pending transactions to failed
+  const pendingIds = pendingTopups.map((t: any) => t.id);
+  const { error: updateError } = await supabase
+    .from("topup_transactions")
+    .update({
+      status: "failed",
+      rejection_reason: rejectionReason,
+      updated_at: new Date().toISOString()
+    })
+    .in("id", pendingIds);
+
+  if (updateError) {
+    console.error("Error rejecting topups:", updateError);
+    const errorMsg = "❌ Failed to reject topups";
+    if (messageId) {
+      await editTelegramMessage(chatId, messageId, errorMsg);
+    } else {
+      await sendTelegramMessage(chatId, errorMsg);
+    }
+    return;
+  }
+
+  // Notify each affected user
+  const userIds = [...new Set(pendingTopups.map((t: any) => t.user_id))];
+  for (const userId of userIds) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("telegram_chat_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (profile?.telegram_chat_id) {
+      const userTopups = pendingTopups.filter((t: any) => t.user_id === userId);
+      const userCredits = userTopups.reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+      await sendTelegramMessage(
+        profile.telegram_chat_id,
+        `❌ <b>Topup Rejected</b>\n\nYour pending topup request(s) for ${userCredits.toLocaleString()} credits have been rejected.\n\n<b>Reason:</b> ${rejectionReason}`
+      );
+    }
+  }
+
+  const successMsg = `
+🗑️ <b>All Pending Topups Rejected</b>
+
+✅ <b>Rejected:</b> ${totalCount} requests
+💰 <b>Total Credits:</b> ${totalCredits.toLocaleString()}
+📋 <b>Reason:</b> ${rejectionReason}
+
+<i>All affected users have been notified.</i>
+`;
+
+  const backKeyboard = { inline_keyboard: [[{ text: "🔙 Back to Topups", callback_data: "topups_refresh" }]] };
+
+  if (messageId) {
+    await editTelegramMessage(chatId, messageId, successMsg, backKeyboard);
+  } else {
+    await sendTelegramMessage(chatId, successMsg, backKeyboard);
+  }
 }
 
 async function handleDeleteUser(chatId: string, identifier: string, supabase: any): Promise<void> {
@@ -2781,6 +2912,59 @@ const handler = async (req: Request): Promise<Response> => {
         const { message, keyboard } = await handleTopups(callbackChatId, supabase, 0);
         if (messageId && message) await editTelegramMessage(callbackChatId, messageId, message, keyboard || undefined);
         await answerCallbackQuery(update.callback_query.id, "🔄 Refreshed");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Reject all pending topups - confirmation step
+      if (callbackData === "topups_reject_all") {
+        if (!callbackChatId || !isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Get pending count for confirmation message
+        const { count } = await supabase
+          .from("topup_transactions")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pending");
+
+        if (!count || count === 0) {
+          await answerCallbackQuery(update.callback_query.id, "✅ No pending topups");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const confirmKeyboard = {
+          inline_keyboard: [
+            [
+              { text: `⚠️ Yes, Reject All (${count})`, callback_data: "topups_reject_all_confirm" },
+            ],
+            [
+              { text: "❌ Cancel", callback_data: "topups_refresh" },
+            ],
+          ],
+        };
+
+        if (messageId) {
+          await editTelegramMessage(
+            callbackChatId, 
+            messageId, 
+            `⚠️ <b>Reject All Pending Topups?</b>\n\nThis will reject <b>${count}</b> pending topup requests.\n\n<b>All users will be notified.</b>\n\n<i>This action cannot be undone.</i>`,
+            confirmKeyboard
+          );
+        }
+        await answerCallbackQuery(update.callback_query.id, "⚠️ Confirmation required");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Reject all - confirmed
+      if (callbackData === "topups_reject_all_confirm") {
+        if (!callbackChatId || !isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        await handleRejectAllTopups(callbackChatId, supabase, messageId);
+        await answerCallbackQuery(update.callback_query.id, "🗑️ All rejected");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -4680,6 +4864,13 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
     if (text === "/topups") {
       const { message, keyboard } = await handleTopups(chatId, supabase, 0);
       if (message) await sendTelegramMessage(chatId, message, keyboard || undefined);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /rejectall - Reject all pending topups
+    if (text === "/rejectall" || text.startsWith("/rejectall ")) {
+      const reason = text.replace("/rejectall", "").trim() || undefined;
+      await handleRejectAllTopups(chatId, supabase, undefined, reason);
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
