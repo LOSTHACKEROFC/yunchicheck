@@ -3876,7 +3876,7 @@ Use /admincmd for staff panel
             ],
             [
               { text: "❓ Help", callback_data: "user_help" },
-              { text: "🌐 Open Dashboard", url: "https://yunchicheck.lovable.app/dashboard" }
+              { text: "🌐 Open Dashboard", url: "https://yunchicheck.com/dashboard" }
             ]
           ] : [
             [
@@ -4304,7 +4304,7 @@ Use /admincmd for staff panel
           ],
           [
             { text: "❓ Help", callback_data: "user_help" },
-            { text: "🌐 Open Dashboard", url: "https://yunchicheck.lovable.app/dashboard" }
+            { text: "🌐 Open Dashboard", url: "https://yunchicheck.com/dashboard" }
           ]
         ] : [
           [
@@ -4312,7 +4312,7 @@ Use /admincmd for staff panel
             { text: "❓ How to Connect", callback_data: "user_help" }
           ],
           [
-            { text: "🌐 Sign Up Now", url: "https://yunchicheck.lovable.app/auth" }
+            { text: "🌐 Sign Up Now", url: "https://yunchicheck.com/auth" }
           ]
         ]
       };
