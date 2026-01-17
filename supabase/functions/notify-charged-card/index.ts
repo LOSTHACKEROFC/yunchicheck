@@ -103,16 +103,18 @@ async function lookupBin(bin: string): Promise<BinInfo> {
   return defaultInfo;
 }
 
-// Japanese Anime celebration GIFs
+// Japanese Anime character celebration GIFs
 const CELEBRATION_GIFS = [
-  "https://media.giphy.com/media/tsX3YMWYzDPjAARfeg/giphy.gif", // anime excited girl
-  "https://media.giphy.com/media/5LU6ZcEGBbhVS/giphy.gif", // anime thumbs up
-  "https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif", // anime wow sparkle
-  "https://media.giphy.com/media/xT0Cyhi8GCSU91PvtC/giphy.gif", // anime happy dance
-  "https://media.giphy.com/media/yidUzriaAGJbsxt58k/giphy.gif", // anime celebration
-  "https://media.giphy.com/media/oGO1MPNUVbbk4/giphy.gif", // anime sparkle eyes
-  "https://media.giphy.com/media/bAlGLD0BQwZqg/giphy.gif", // anime victory pose
-  "https://media.giphy.com/media/3o85xGocUH8RYoDKKs/giphy.gif", // anime kawaii
+  "https://media.giphy.com/media/Ju8RiMNjR7TJS/giphy.gif", // Goku power up
+  "https://media.giphy.com/media/vxvNnSOyPIbKM/giphy.gif", // Goku Super Saiyan
+  "https://media.giphy.com/media/dxld1UBIiGuoh31Fus/giphy.gif", // Itachi Uchiha
+  "https://media.giphy.com/media/ohT1vVoz1lWXEMoGzM/giphy.gif", // Naruto victory
+  "https://media.giphy.com/media/koWOxAfLY3wU8/giphy.gif", // Goku Kamehameha
+  "https://media.giphy.com/media/4Cpgf1zzMMy4w/giphy.gif", // Vegeta power
+  "https://media.giphy.com/media/W0by16DFaKmlyL89gu/giphy.gif", // Hinata Haikyuu
+  "https://media.giphy.com/media/3o7TKU8RvQuomFfUUU/giphy.gif", // One Punch Man
+  "https://media.giphy.com/media/ToMjGpjwk1MxyYRcQnK/giphy.gif", // Luffy One Piece
+  "https://media.giphy.com/media/yJ1KSiTxaAw5G/giphy.gif", // Sasuke
 ];
 
 // Get random celebration GIF
