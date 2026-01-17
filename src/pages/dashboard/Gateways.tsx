@@ -208,7 +208,7 @@ const gateways: Gateway[] = [
     status: "online", 
     cardTypes: "Visa/MC/Amex",
     speed: "Medium",
-    successRate: "92%",
+    successRate: "40%",
     description: "$14.00 Charged • CVC required",
     icon: CreditCard,
     iconColor: "text-cyan-500"
