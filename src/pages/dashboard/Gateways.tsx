@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import confetti from "canvas-confetti";
 import { useLiveCardSound } from "@/hooks/useLiveCardSound";
 import { useVictorySound } from "@/hooks/useVictorySound";
+import { useBackgroundProcessing } from "@/hooks/useBackgroundProcessing";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -284,6 +285,7 @@ const Gateways = () => {
   // Live card sound hook with settings check
   const { playLiveSound } = useLiveCardSound();
   const { playVictorySound } = useVictorySound();
+  const { startBackgroundMode, stopBackgroundMode } = useBackgroundProcessing();
   
   const playLiveSoundIfEnabled = () => {
     const savedPrefs = localStorage.getItem("notification-preferences");
@@ -1422,6 +1424,9 @@ const Gateways = () => {
     setBulkEstimatedTime("Calculating...");
     bulkAbortRef.current = false;
     bulkPauseRef.current = false;
+    
+    // Enable background mode to prevent browser throttling when minimized
+    startBackgroundMode();
 
     // Track credits to deduct after each check (no upfront deduction)
     let totalCreditsDeducted = 0;
@@ -1654,6 +1659,9 @@ const Gateways = () => {
       // No refund needed since we charge per result
     }
 
+    // Disable background mode when bulk check completes
+    stopBackgroundMode();
+    
     setBulkChecking(false);
     setBulkPaused(false);
     
@@ -1852,6 +1860,8 @@ const Gateways = () => {
     bulkAbortRef.current = true;
     bulkPauseRef.current = false;
     setBulkPaused(false);
+    // Disable background mode when user stops the check
+    stopBackgroundMode();
   };
 
   const copyResults = (type: "live" | "dead" | "all") => {
