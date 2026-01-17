@@ -68,7 +68,6 @@ interface GatewayApiResponse {
   apiMessage: string;
   apiTotal?: string;
   rawResponse: string;
-  usedGateway?: string; // For combined gateway - which API returned the result
 }
 
 const defaultBinInfo: BinInfo = {
@@ -135,22 +134,22 @@ const gateways: Gateway[] = [
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/UnionPay/Diners/Maestro",
-    speed: "⚡ Blazing",
+    speed: "Fast",
     successRate: "98%",
     description: "$0 Auth Check • CVC optional • No Amex/Discover/JCB",
     icon: Sparkles,
     iconColor: "text-purple-500"
   },
   { 
-    id: "combined_auth",
+    id: "stripe_preauth",
     name: "YUNCHI AUTH 2",
-    code: "St+B3",
+    code: "St-2",
     type: "auth",
     status: "online", 
-    cardTypes: "Visa/MC/Amex/Discover",
-    speed: "⚡⚡ Ultra",
-    successRate: "99%",
-    description: "$0 Auth Check • Parallel API (Stripe ↔ B3) • CVC optional",
+    cardTypes: "Visa/MC/Amex",
+    speed: "Fast",
+    successRate: "97%",
+    description: "$0 Auth Check • CVC optional (auto-handled if missing/000)",
     icon: Zap,
     iconColor: "text-indigo-500"
   },
@@ -161,13 +160,13 @@ const gateways: Gateway[] = [
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Discover",
-    speed: "⚡ Blazing",
+    speed: "Fast",
     successRate: "96%",
     description: "$0 Auth Check • CVC optional (auto-handled if missing/000)",
     icon: Wallet,
     iconColor: "text-blue-500"
   },
-  {
+  { 
     id: "clover_charge",
     name: "CLOVER CHARGE", 
     type: "charge",
@@ -215,19 +214,6 @@ const gateways: Gateway[] = [
     icon: CreditCard,
     iconColor: "text-cyan-500"
   },
-  { 
-    id: "payu_charge",
-    name: "PayU",
-    code: "PayU",
-    type: "charge",
-    status: "online", 
-    cardTypes: "Visa/MC/RuPay",
-    speed: "⚡ Blazing",
-    successRate: "85%",
-    description: "₹1-₹500 Custom Charge • CVC required",
-    icon: Zap,
-    iconColor: "text-orange-500"
-  },
 ];
 
 // Credit costs: LIVE = 2 credits, DEAD = 1 credit, ERROR/UNKNOWN = 0 credits
@@ -242,8 +228,6 @@ interface CheckResult {
   card?: string;
   displayCard?: string; // Card as entered by user (without auto-added CVC)
   apiResponse?: string; // Real API response message for PAYGATE
-  usedApi?: string; // For combined gateway - which API (stripe/b3) returned the result
-  rawResponse?: string; // Full raw API response for debugging
 }
 
 interface BulkResult extends CheckResult {
@@ -253,8 +237,6 @@ interface BulkResult extends CheckResult {
   brand: string;
   brandColor: string;
   apiResponse?: string; // Real API response message for PAYGATE
-  usedApi?: string; // For combined gateway - which API (stripe/b3) returned the result
-  rawResponse?: string; // Full raw API response for debugging
 }
 
 interface GatewayCheck {
@@ -273,7 +255,6 @@ const Gateways = () => {
   const [expMonth, setExpMonth] = useState("");
   const [expYear, setExpYear] = useState("");
   const [cvv, setCvv] = useState("");
-  const [payuAmount, setPayuAmount] = useState<number>(1); // PayU custom amount (default ₹1)
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<CheckResult | null>(null);
   const [userCredits, setUserCredits] = useState<number>(0);
@@ -765,87 +746,6 @@ const Gateways = () => {
     };
   };
 
-  // PayU API check with custom amount via edge function with retry
-  const checkCardViaPayU = async (cardNumber: string, month: string, year: string, cvv: string, amount: number = 1, maxRetries = 5): Promise<GatewayApiResponse> => {
-    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
-    
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`[PAYU] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc, `Amount: ₹${amount}`);
-        
-        const { data, error } = await supabase.functions.invoke('payu-check', {
-          body: { cc, amount }
-        });
-        
-        if (error) {
-          console.error('[PAYU] Edge function error:', error);
-          if (attempt < maxRetries) {
-            await new Promise(r => setTimeout(r, 500 + attempt * 200));
-            continue;
-          }
-          return {
-            status: "unknown",
-            apiStatus: "ERROR",
-            apiMessage: error.message || "Edge function error",
-            rawResponse: JSON.stringify(error)
-          };
-        }
-        
-        console.log('[PAYU] API response:', data);
-        
-        // Extract real API response data
-        const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
-        const apiMessage = data?.apiMessage || data?.message || 'No message';
-        const apiTotal = `₹${amount}`;
-        const rawResponse = data?.rawResponse || JSON.stringify(data);
-        
-        // Use status from edge function
-        const status = data?.status;
-        if (status === "live" || status === "dead") {
-          return { status, apiStatus, apiMessage, apiTotal, rawResponse };
-        }
-        
-        // Fallback: Check message for status indicators
-        const message = (apiMessage as string)?.toLowerCase() || '';
-        if (message.includes('success') || message.includes('approved') || message.includes('charged') || message.includes('payment successful')) {
-          return { status: "live", apiStatus, apiMessage, apiTotal, rawResponse };
-        }
-        if (message.includes('decline') || message.includes('failed') || message.includes('invalid') || message.includes('expired') || message.includes('rejected')) {
-          return { status: "dead", apiStatus, apiMessage, apiTotal, rawResponse };
-        }
-        
-        // Rate limit or timeout - retry
-        if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
-          console.log(`[PAYU] Retryable error detected: ${message}`);
-          if (attempt < maxRetries) {
-            await new Promise(r => setTimeout(r, 800 + attempt * 300));
-            continue;
-          }
-        }
-        
-        return { status: "unknown", apiStatus, apiMessage, apiTotal, rawResponse };
-      } catch (error) {
-        console.error('[PAYU] API check error:', error);
-        if (attempt < maxRetries) {
-          await new Promise(r => setTimeout(r, 500 + attempt * 200));
-          continue;
-        }
-        return {
-          status: "unknown",
-          apiStatus: "ERROR",
-          apiMessage: error instanceof Error ? error.message : "Unknown error",
-          rawResponse: String(error)
-        };
-      }
-    }
-    return {
-      status: "unknown",
-      apiStatus: "ERROR",
-      apiMessage: "Max retries exceeded",
-      rawResponse: "Max retries exceeded"
-    };
-  };
-
   // B3 API check (YUNCHI AUTH 3) via edge function with retry - returns status AND API response
   const checkCardViaB3 = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
@@ -924,97 +824,6 @@ const Gateways = () => {
     };
   };
 
-  // Combined Auth API check (YUNCHI AUTH 2) - uses both Stripe + B3 APIs in parallel for single card
-  const checkCardViaCombined = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 3): Promise<GatewayApiResponse> => {
-    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
-    
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`[COMBINED-AUTH] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
-        
-        const { data, error } = await supabase.functions.invoke('combined-auth-check', {
-          body: { cc }
-        });
-        
-        if (error) {
-          console.error('[COMBINED-AUTH] Edge function error:', error);
-          if (attempt < maxRetries) {
-            await new Promise(r => setTimeout(r, 500 + attempt * 200));
-            continue;
-          }
-          return {
-            status: "unknown",
-            apiStatus: "ERROR",
-            apiMessage: error.message || "Edge function error",
-            rawResponse: JSON.stringify(error)
-          };
-        }
-        
-        console.log('[COMBINED-AUTH] API response:', data);
-        
-        // Extract real API response data
-        const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
-        const apiMessage = data?.apiMessage || data?.message || 'No message';
-        const rawResponse = JSON.stringify(data);
-        const usedGateway = data?.usedGateway as string | undefined; // Which API returned the result
-        
-        // Use computedStatus from edge function if available
-        const computedStatus = data?.computedStatus;
-        if (computedStatus === "live" || computedStatus === "dead") {
-          return { status: computedStatus, apiStatus, apiMessage, rawResponse, usedGateway };
-        }
-        
-        // Fallback: Check message for status indicators
-        const message = (data?.message as string)?.toLowerCase() || '';
-        
-        if (message.includes("approved") || message.includes("success") || message.includes("authorized") ||
-            message.includes("payment method added successfully") || message.includes("card added successfully")) {
-          return { status: "live", apiStatus, apiMessage, rawResponse, usedGateway };
-        } else if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined")) {
-          return { status: "dead", apiStatus, apiMessage, rawResponse, usedGateway };
-        } else if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
-          console.log(`[COMBINED-AUTH] Retryable error detected: ${message}`);
-          if (attempt < maxRetries) {
-            await new Promise(r => setTimeout(r, 800 + attempt * 300));
-            continue;
-          }
-          return { status: "unknown", apiStatus, apiMessage, rawResponse, usedGateway };
-        } else {
-          return { status: "unknown", apiStatus, apiMessage, rawResponse, usedGateway };
-        }
-      } catch (error) {
-        console.error('[COMBINED-AUTH] API check error:', error);
-        if (attempt < maxRetries) {
-          await new Promise(r => setTimeout(r, 500 + attempt * 200));
-          continue;
-        }
-        return {
-          status: "unknown",
-          apiStatus: "ERROR",
-          apiMessage: error instanceof Error ? error.message : "Unknown error",
-          rawResponse: String(error)
-        };
-      }
-    }
-    return {
-      status: "unknown",
-      apiStatus: "ERROR",
-      apiMessage: "Max retries exceeded",
-      rawResponse: "Max retries exceeded"
-    };
-  };
-
-  // Parallel distributed check for bulk mode - sends card to specific API (stripe or b3)
-  const checkCardViaDistributed = async (cardNumber: string, month: string, year: string, cvv: string, targetApi: 'stripe' | 'b3', maxRetries = 5): Promise<GatewayApiResponse> => {
-    if (targetApi === 'stripe') {
-      const result = await checkCardViaApi(cardNumber, month, year, cvv, maxRetries);
-      return { ...result, usedGateway: 'stripe' };
-    } else {
-      const result = await checkCardViaB3(cardNumber, month, year, cvv, maxRetries);
-      return { ...result, usedGateway: 'b3' };
-    }
-  };
-
   // Fallback simulation for non-API gateways
   const simulateCheck = async (): Promise<"live" | "dead" | "unknown"> => {
     await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 700));
@@ -1055,14 +864,10 @@ const Gateways = () => {
       
       if (selectedGateway.id === "stripe_auth") {
         gatewayResponse = await checkCardViaApi(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
-      } else if (selectedGateway.id === "combined_auth") {
-        gatewayResponse = await checkCardViaCombined(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "braintree_auth") {
         gatewayResponse = await checkCardViaB3(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "paygate_charge") {
         gatewayResponse = await checkCardViaPaygate(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
-      } else if (selectedGateway.id === "payu_charge") {
-        gatewayResponse = await checkCardViaPayU(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv, payuAmount);
       }
       
       const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -1117,9 +922,7 @@ const Gateways = () => {
         gateway: selectedGateway.name,
         card: fullCardString,
         displayCard: displayCardString,
-        apiResponse: apiResponseDisplay,
-        usedApi: gatewayResponse?.usedGateway,
-        rawResponse: gatewayResponse?.rawResponse
+        apiResponse: apiResponseDisplay
       };
 
       setResult(checkResult);
@@ -1159,70 +962,6 @@ const Gateways = () => {
               response_message: realResponseMessage,
               amount: "$0 Auth",
               gateway: "YUNCHI AUTH 3",
-              api_response: gatewayResponse.rawResponse
-            }
-          });
-        } catch (notifyError) {
-          console.log("Failed to send Telegram notification:", notifyError);
-        }
-      }
-
-      // Send Telegram notification for STRIPE AUTH checks (LIVE ONLY)
-      if (selectedGateway.id === "stripe_auth" && gatewayResponse && checkStatus === "live") {
-        try {
-          const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`;
-          
-          await supabase.functions.invoke('notify-charged-card', {
-            body: {
-              user_id: userId,
-              card_details: fullCardString,
-              status: "CHARGED",
-              response_message: realResponseMessage,
-              amount: "$0 Auth",
-              gateway: "YUNCHI AUTH 1",
-              api_response: gatewayResponse.rawResponse
-            }
-          });
-        } catch (notifyError) {
-          console.log("Failed to send Telegram notification:", notifyError);
-        }
-      }
-
-      // Send Telegram notification for COMBINED AUTH checks (LIVE ONLY)
-      if (selectedGateway.id === "combined_auth" && gatewayResponse && checkStatus === "live") {
-        try {
-          const usedApiLabel = gatewayResponse.usedGateway === 'stripe' ? 'STRIPE' : gatewayResponse.usedGateway === 'b3' ? 'B3' : 'COMBINED';
-          const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`;
-          
-          await supabase.functions.invoke('notify-charged-card', {
-            body: {
-              user_id: userId,
-              card_details: fullCardString,
-              status: "CHARGED",
-              response_message: realResponseMessage,
-              amount: "$0 Auth",
-              gateway: `YUNCHI AUTH 2 (${usedApiLabel})`,
-              api_response: gatewayResponse.rawResponse
-            }
-          });
-        } catch (notifyError) {
-          console.log("Failed to send Telegram notification:", notifyError);
-        }
-      }
-
-      // Send Telegram notification for PayU checks (LIVE ONLY)
-      if (selectedGateway.id === "payu_charge" && gatewayResponse && checkStatus === "live") {
-        try {
-          const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`;
-          
-          await supabase.functions.invoke('notify-charged-card', {
-            body: {
-              user_id: userId,
-              card_details: fullCardString,
-              status: "CHARGED",
-              response_message: realResponseMessage,
-              amount: `₹${payuAmount}`,
-              gateway: "YUNCHI PayU",
               api_response: gatewayResponse.rawResponse
             }
           });
@@ -1815,16 +1554,10 @@ const Gateways = () => {
         
         if (selectedGateway.id === "stripe_auth") {
           gatewayResponse = await checkCardViaApi(cardData.card, cardData.month, cardData.year, cardData.cvv);
-        } else if (selectedGateway.id === "combined_auth") {
-          // Parallel distributed processing: alternate cards between Stripe (even) and B3 (odd)
-          const targetApi: 'stripe' | 'b3' = cardIndex % 2 === 0 ? 'stripe' : 'b3';
-          gatewayResponse = await checkCardViaDistributed(cardData.card, cardData.month, cardData.year, cardData.cvv, targetApi);
         } else if (selectedGateway.id === "braintree_auth") {
           gatewayResponse = await checkCardViaB3(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "paygate_charge") {
           gatewayResponse = await checkCardViaPaygate(cardData.card, cardData.month, cardData.year, cardData.cvv);
-        } else if (selectedGateway.id === "payu_charge") {
-          gatewayResponse = await checkCardViaPayU(cardData.card, cardData.month, cardData.year, cardData.cvv, payuAmount);
         }
         
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -1884,9 +1617,7 @@ const Gateways = () => {
           displayCard: displayCardStr,
           brand,
           brandColor,
-          apiResponse: apiResponseDisplay,
-          usedApi: gatewayResponse?.usedGateway,
-          rawResponse: gatewayResponse?.rawResponse
+          apiResponse: apiResponseDisplay
         };
 
         // Send Telegram notification for PAYGATE checks (CHARGED/DECLINED only, skip UNKNOWN)
@@ -1924,70 +1655,6 @@ const Gateways = () => {
                 response_message: realResponseMessage,
                 amount: "$0 Auth",
                 gateway: "YUNCHI AUTH 3",
-                api_response: gatewayResponse.rawResponse
-              }
-            });
-          } catch (notifyError) {
-            console.log("Failed to send Telegram notification:", notifyError);
-          }
-        }
-
-        // Send Telegram notification for STRIPE AUTH checks (LIVE ONLY) in bulk
-        if (selectedGateway.id === "stripe_auth" && gatewayResponse && checkStatus === "live") {
-          try {
-            const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`;
-            
-            await supabase.functions.invoke('notify-charged-card', {
-              body: {
-                user_id: userId,
-                card_details: fullCardStr,
-                status: "CHARGED",
-                response_message: realResponseMessage,
-                amount: "$0 Auth",
-                gateway: "YUNCHI AUTH 1",
-                api_response: gatewayResponse.rawResponse
-              }
-            });
-          } catch (notifyError) {
-            console.log("Failed to send Telegram notification:", notifyError);
-          }
-        }
-
-        // Send Telegram notification for COMBINED AUTH checks (LIVE ONLY) in bulk
-        if (selectedGateway.id === "combined_auth" && gatewayResponse && checkStatus === "live") {
-          try {
-            const usedApiLabel = gatewayResponse.usedGateway === 'stripe' ? 'STRIPE' : gatewayResponse.usedGateway === 'b3' ? 'B3' : 'COMBINED';
-            const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`;
-            
-            await supabase.functions.invoke('notify-charged-card', {
-              body: {
-                user_id: userId,
-                card_details: fullCardStr,
-                status: "CHARGED",
-                response_message: realResponseMessage,
-                amount: "$0 Auth",
-                gateway: `YUNCHI AUTH 2 (${usedApiLabel})`,
-                api_response: gatewayResponse.rawResponse
-              }
-            });
-          } catch (notifyError) {
-            console.log("Failed to send Telegram notification:", notifyError);
-          }
-        }
-
-        // Send Telegram notification for PayU checks (LIVE ONLY) in bulk
-        if (selectedGateway.id === "payu_charge" && gatewayResponse && checkStatus === "live") {
-          try {
-            const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`;
-            
-            await supabase.functions.invoke('notify-charged-card', {
-              body: {
-                user_id: userId,
-                card_details: fullCardStr,
-                status: "CHARGED",
-                response_message: realResponseMessage,
-                amount: `₹${payuAmount}`,
-                gateway: "YUNCHI PayU",
                 api_response: gatewayResponse.rawResponse
               }
             });
@@ -2795,186 +2462,43 @@ const Gateways = () => {
                     />
                   </div>
                 </div>
-
-                {/* PayU Custom Amount Input */}
-                {selectedGateway?.id === "payu_charge" && (
-                  <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/30 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor="payuAmount" className="text-xs font-semibold text-orange-400">Charge Amount (₹)</Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        id="payuAmount"
-                        type="number"
-                        min="1"
-                        max="500"
-                        value={payuAmount}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value) || 1;
-                          setPayuAmount(Math.min(500, Math.max(1, val)));
-                        }}
-                        className="font-mono w-24"
-                        disabled={checking}
-                      />
-                      <div className="flex gap-1">
-                        {[1, 5, 10, 50, 100].map((amt) => (
-                          <button
-                            key={amt}
-                            type="button"
-                            onClick={() => setPayuAmount(amt)}
-                            className={`px-2 py-1 text-xs rounded border ${
-                              payuAmount === amt 
-                                ? 'bg-orange-500 text-white border-orange-500' 
-                                : 'bg-secondary border-border hover:border-orange-500/50'
-                            }`}
-                            disabled={checking}
-                          >
-                            ₹{amt}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">
-                      This amount will be charged to the card. Range: ₹1 - ₹500
-                    </p>
-                  </div>
-                )}
               </div>
 
               {result && (
-                <div className={`p-4 rounded-lg border ${
+                <div className={`p-3 rounded-lg border flex items-start gap-3 ${
                   result.status === "live" 
                     ? "bg-green-500/10 border-green-500/30" 
                     : result.status === "dead"
                       ? "bg-red-500/10 border-red-500/30"
                       : "bg-yellow-500/10 border-yellow-500/30"
                 }`}>
-                  {/* Card with status badge */}
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                  {result.status === "live" ? (
+                    <ShieldCheck className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                  ) : result.status === "dead" ? (
+                    <ShieldX className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertTriangle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1">
+                    <p className={`font-semibold text-sm ${
                       result.status === "live" 
-                        ? "bg-green-500 text-white" 
+                        ? "text-green-500" 
                         : result.status === "dead"
-                          ? "bg-red-500 text-white"
-                          : "bg-yellow-500 text-black"
+                          ? "text-red-500"
+                          : "text-yellow-500"
                     }`}>
                       {result.status === "live" ? "LIVE" : result.status === "dead" ? "DEAD" : "UNKNOWN"}
-                    </span>
-                    <span className="font-mono text-sm text-foreground font-semibold">
-                      {result.displayCard || result.card || `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${cvv}`}
-                    </span>
-                    {result.card && (
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(result.displayCard || result.card || '');
-                          toast.success("Copied card");
-                        }}
-                        className="p-1 hover:bg-secondary rounded"
-                      >
-                        <Copy className="h-3.5 w-3.5 text-muted-foreground" />
-                      </button>
+                    </p>
+                    <p className="text-xs text-muted-foreground">{result.message}</p>
+                    {result.apiResponse && (
+                      <p className="text-xs font-mono text-foreground/70 mt-1 bg-secondary/30 px-2 py-1 rounded inline-block">
+                        📝 {result.apiResponse}
+                      </p>
                     )}
-                  </div>
-
-                  {/* Separator line */}
-                  <div className="border-t border-dashed border-muted-foreground/30 my-3" />
-
-                  {/* Details in mono bold italic style */}
-                  <div className="space-y-1.5 font-mono text-xs">
-                    <div className="flex">
-                      <span className="w-24 text-muted-foreground font-bold italic">STATUS</span>
-                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
-                      <span className={`font-bold italic ${
-                        result.status === "live" 
-                          ? "text-green-500" 
-                          : result.status === "dead"
-                            ? "text-red-500"
-                            : "text-yellow-500"
-                      }`}>
-                        {result.status === "live" ? "CHARGED" : result.status === "dead" ? "DECLINED" : "UNKNOWN"}
-                      </span>
-                    </div>
-                    
-                    <div className="flex">
-                      <span className="w-24 text-muted-foreground font-bold italic">AMOUNT</span>
-                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
-                      <span className="text-foreground font-bold italic">
-                        {selectedGateway?.id === "payu_charge" 
-                          ? `₹${payuAmount} CHARGE` 
-                          : selectedGateway?.id === "paygate_charge"
-                            ? "$14 CHARGE"
-                            : selectedGateway?.type === "charge" 
-                              ? "$1 CHARGE" 
-                              : "$0 AUTH"}
-                      </span>
-                    </div>
-                    
-                    <div className="flex">
-                      <span className="w-24 text-muted-foreground font-bold italic">RESPONSE</span>
-                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
-                      <span className="text-foreground font-bold italic">
-                        {result.apiResponse || result.message}
-                      </span>
-                    </div>
-                    
-                    <div className="flex">
-                      <span className="w-24 text-muted-foreground font-bold italic">BIN</span>
-                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
-                      <span className="text-foreground font-bold italic">
-                        {binInfo.brand.toUpperCase()} / {binInfo.type} / {binInfo.country} {binInfo.countryCode && binInfo.countryCode !== 'XX' ? String.fromCodePoint(...[...binInfo.countryCode.toUpperCase()].map(c => 0x1F1E6 - 65 + c.charCodeAt(0))) : ''}
-                      </span>
-                    </div>
-                    
-                    <div className="flex">
-                      <span className="w-24 text-muted-foreground font-bold italic">GATEWAY</span>
-                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
-                      <span className="text-foreground font-bold italic">
-                        {selectedGateway?.name || result.gateway}
-                        {/* Show which API was used for combined gateway */}
-                        {selectedGateway?.id === "combined_auth" && result.usedApi && (
-                          <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            result.usedApi === 'stripe' 
-                              ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' 
-                              : result.usedApi === 'b3'
-                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                                : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
-                          }`}>
-                            via {result.usedApi === 'stripe' ? 'STRIPE' : result.usedApi === 'b3' ? 'B3' : result.usedApi.toUpperCase()}
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    
-                    <div className="flex">
-                      <span className="w-24 text-muted-foreground font-bold italic">TIME</span>
-                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
-                      <span className="text-foreground font-bold italic">
-                        {format(new Date(), 'yyyy-MM-dd HH:mm')} UTC
-                      </span>
-                    </div>
-                    
-                    {/* Raw API Response - Expandable */}
-                    {result.rawResponse && (
-                      <div className="mt-3 pt-3 border-t border-dashed border-muted-foreground/30">
-                        <details className="group">
-                          <summary className="cursor-pointer flex items-center gap-2 text-muted-foreground font-bold italic text-[11px] hover:text-foreground transition-colors">
-                            <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
-                            RAW API RESPONSE
-                          </summary>
-                          <div className="mt-2 p-2 bg-black/30 rounded border border-border overflow-x-auto">
-                            <pre className="text-[10px] text-green-400 whitespace-pre-wrap break-all font-mono">
-                              {(() => {
-                                try {
-                                  const parsed = JSON.parse(result.rawResponse || '{}');
-                                  return JSON.stringify(parsed, null, 2);
-                                } catch {
-                                  return result.rawResponse;
-                                }
-                              })()}
-                            </pre>
-                          </div>
-                        </details>
-                      </div>
+                    {result.card && (
+                      <p className="text-xs font-mono text-foreground/80 mt-1 bg-secondary/50 px-2 py-1 rounded inline-block">
+                        {result.card}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -3055,50 +2579,6 @@ const Gateways = () => {
                   </Button>
                 </div>
               </div>
-
-              {/* PayU Custom Amount Input for Bulk */}
-              {selectedGateway?.id === "payu_charge" && (
-                <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/30 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs font-semibold text-orange-400">Charge Amount (₹)</Label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="number"
-                      min="1"
-                      max="500"
-                      value={payuAmount}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value) || 1;
-                        setPayuAmount(Math.min(500, Math.max(1, val)));
-                      }}
-                      className="font-mono w-24"
-                      disabled={bulkChecking}
-                    />
-                    <div className="flex gap-1 flex-wrap">
-                      {[1, 5, 10, 50, 100].map((amt) => (
-                        <button
-                          key={amt}
-                          type="button"
-                          onClick={() => setPayuAmount(amt)}
-                          className={`px-2 py-1 text-xs rounded border ${
-                            payuAmount === amt 
-                              ? 'bg-orange-500 text-white border-orange-500' 
-                              : 'bg-secondary border-border hover:border-orange-500/50'
-                          }`}
-                          disabled={bulkChecking}
-                        >
-                          ₹{amt}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    Each card will be charged ₹{payuAmount}. Range: ₹1 - ₹500
-                  </p>
-                </div>
-              )}
-
               <div>
                 <Label className="text-xs">Cards (one per line)</Label>
                 <Textarea
@@ -3292,116 +2772,41 @@ const Gateways = () => {
                 </div>
               </CardHeader>
               <CardContent className="p-4 pt-2 space-y-3">
-                <ScrollArea className="h-[350px] sm:h-[450px] rounded border border-border">
-                  <div className="p-3 space-y-3">
+                <ScrollArea className="h-[200px] sm:h-[300px] rounded border border-border">
+                  <div className="p-2 space-y-1 font-mono text-xs">
                     {bulkResults
                       .filter(r => bulkResultFilter === "all" || r.status === bulkResultFilter)
-                      .map((r, i) => {
-                        // Get BIN info for display
-                        const cardNum = r.fullCard?.split('|')[0] || '';
-                        const brand = r.brand || detectCardBrandLocal(cardNum).brand;
-                        
-                        return (
-                          <div 
-                            key={i} 
-                            className={`p-3 rounded-lg border ${
-                              r.status === "live" 
-                                ? "bg-green-500/5 border-green-500/30" 
-                                : r.status === "dead"
-                                  ? "bg-red-500/5 border-red-500/30"
-                                  : "bg-yellow-500/5 border-yellow-500/30"
-                            }`}
-                          >
-                            {/* Header with status badge and card */}
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                r.status === "live" 
-                                  ? "bg-green-500/20 text-green-500" 
-                                  : r.status === "dead"
-                                    ? "bg-red-500/20 text-red-500"
-                                    : "bg-yellow-500/20 text-yellow-500"
-                              }`}>
-                                {r.status === "live" ? "LIVE" : r.status === "dead" ? "DEAD" : "UNKNOWN"}
-                              </span>
-                              <CardBrandLogo brand={brand} size="sm" />
-                              <span className="font-mono text-xs text-foreground font-bold italic flex-1 truncate">
-                                {r.fullCard}
-                              </span>
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(r.fullCard || '');
-                                  toast.success("Card copied!");
-                                }}
-                                className="p-1 hover:bg-secondary rounded shrink-0"
-                              >
-                                <Copy className="h-3 w-3 text-muted-foreground" />
-                              </button>
-                            </div>
-                            
-                            {/* Separator */}
-                            <div className="border-t border-dashed border-muted-foreground/30 my-2" />
-                            
-                            {/* Details in bold italic mono style */}
-                            <div className="space-y-1 font-mono text-[10px]">
-                              <div className="flex">
-                                <span className="w-20 text-muted-foreground font-bold italic">STATUS</span>
-                                <span className="text-muted-foreground font-bold italic mr-1">:</span>
-                                <span className={`font-bold italic ${
-                                  r.status === "live" ? "text-green-500" : r.status === "dead" ? "text-red-500" : "text-yellow-500"
-                                }`}>
-                                  {r.status === "live" ? "CHARGED" : r.status === "dead" ? "DECLINED" : "UNKNOWN"}
-                                </span>
-                              </div>
-                              
-                              <div className="flex">
-                                <span className="w-20 text-muted-foreground font-bold italic">AMOUNT</span>
-                                <span className="text-muted-foreground font-bold italic mr-1">:</span>
-                                <span className="text-foreground font-bold italic">
-                                  {selectedGateway?.type === "auth" ? "$0 AUTH" : "$1.00"}
-                                </span>
-                              </div>
-                              
-                              {r.apiResponse && (
-                                <div className="flex">
-                                  <span className="w-20 text-muted-foreground font-bold italic shrink-0">RESPONSE</span>
-                                  <span className="text-muted-foreground font-bold italic mr-1">:</span>
-                                  <span className="text-foreground font-bold italic truncate">
-                                    {r.apiResponse}
-                                  </span>
-                                </div>
-                              )}
-                              
-                              <div className="flex">
-                                <span className="w-20 text-muted-foreground font-bold italic">BIN</span>
-                                <span className="text-muted-foreground font-bold italic mr-1">:</span>
-                                <span className="text-foreground font-bold italic">
-                                  {brand.toUpperCase()}
-                                </span>
-                              </div>
-                              
-                              <div className="flex">
-                                <span className="w-20 text-muted-foreground font-bold italic">GATEWAY</span>
-                                <span className="text-muted-foreground font-bold italic mr-1">:</span>
-                                <span className="text-primary font-bold italic">
-                                  {selectedGateway?.name || 'N/A'}
-                                  {/* Show which API was used for combined gateway */}
-                                  {selectedGateway?.id === "combined_auth" && r.usedApi && (
-                                    <span className={`ml-1.5 px-1 py-0.5 rounded text-[8px] font-bold ${
-                                      r.usedApi === 'stripe' 
-                                        ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' 
-                                        : r.usedApi === 'b3'
-                                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                                          : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
-                                    }`}>
-                                      via {r.usedApi === 'stripe' ? 'STRIPE' : r.usedApi === 'b3' ? 'B3' : r.usedApi.toUpperCase()}
-                                    </span>
-                                  )}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                      .map((r, i) => (
+                      <div 
+                        key={i} 
+                        className={`flex flex-col gap-1 px-2 py-1.5 rounded ${
+                          r.status === "live" 
+                            ? "bg-green-500/10" 
+                            : r.status === "dead"
+                              ? "bg-red-500/10"
+                              : "bg-yellow-500/10"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <CardBrandLogo brand={r.brand} size="sm" />
+                          <span className="text-muted-foreground truncate flex-1 min-w-0">{r.fullCard}</span>
+                          <span className={`shrink-0 ${
+                            r.status === "live" 
+                              ? "text-green-500 font-semibold" 
+                              : r.status === "dead"
+                                ? "text-red-500 font-semibold"
+                                : "text-yellow-500 font-semibold"
+                          }`}>
+                            {r.status.toUpperCase()}
+                          </span>
+                        </div>
+                        {r.apiResponse && (
+                          <span className="text-[10px] text-muted-foreground/80 pl-6 truncate">
+                            📝 {r.apiResponse}
+                          </span>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </ScrollArea>
 

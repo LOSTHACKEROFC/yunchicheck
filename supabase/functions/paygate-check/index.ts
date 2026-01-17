@@ -26,15 +26,9 @@ const getRandomUserAgent = (): string => {
 const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" | "unknown" => {
   const status = (data?.status as string)?.toUpperCase() || '';
   const message = (data?.message as string)?.toLowerCase() || '';
-  const rawResponse = JSON.stringify(data).toLowerCase();
   
-  // LIVE: Status is APPROVED/SUCCESS or similar, or "Successful transaction" in response
+  // LIVE: Status is APPROVED/SUCCESS or similar
   if (status === 'APPROVED' || status === 'SUCCESS' || status === 'CHARGED' || status === 'LIVE') {
-    return "live";
-  }
-  
-  // Check for "Successful transaction" anywhere in response (case insensitive)
-  if (rawResponse.includes('successful transaction') || rawResponse.includes('successfully charged')) {
     return "live";
   }
   
