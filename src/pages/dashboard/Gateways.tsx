@@ -2871,41 +2871,104 @@ const Gateways = () => {
                 </div>
               </CardHeader>
               <CardContent className="p-4 pt-2 space-y-3">
-                <ScrollArea className="h-[200px] sm:h-[300px] rounded border border-border">
-                  <div className="p-2 space-y-1 font-mono text-xs">
+                <ScrollArea className="h-[350px] sm:h-[450px] rounded border border-border">
+                  <div className="p-3 space-y-3">
                     {bulkResults
                       .filter(r => bulkResultFilter === "all" || r.status === bulkResultFilter)
-                      .map((r, i) => (
-                      <div 
-                        key={i} 
-                        className={`flex flex-col gap-1 px-2 py-1.5 rounded ${
-                          r.status === "live" 
-                            ? "bg-green-500/10" 
-                            : r.status === "dead"
-                              ? "bg-red-500/10"
-                              : "bg-yellow-500/10"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <CardBrandLogo brand={r.brand} size="sm" />
-                          <span className="text-muted-foreground truncate flex-1 min-w-0">{r.fullCard}</span>
-                          <span className={`shrink-0 ${
-                            r.status === "live" 
-                              ? "text-green-500 font-semibold" 
-                              : r.status === "dead"
-                                ? "text-red-500 font-semibold"
-                                : "text-yellow-500 font-semibold"
-                          }`}>
-                            {r.status.toUpperCase()}
-                          </span>
-                        </div>
-                        {r.apiResponse && (
-                          <span className="text-[10px] text-muted-foreground/80 pl-6 truncate">
-                            📝 {r.apiResponse}
-                          </span>
-                        )}
-                      </div>
-                    ))}
+                      .map((r, i) => {
+                        // Get BIN info for display
+                        const cardNum = r.fullCard?.split('|')[0] || '';
+                        const brand = r.brand || detectCardBrandLocal(cardNum).brand;
+                        
+                        return (
+                          <div 
+                            key={i} 
+                            className={`p-3 rounded-lg border ${
+                              r.status === "live" 
+                                ? "bg-green-500/5 border-green-500/30" 
+                                : r.status === "dead"
+                                  ? "bg-red-500/5 border-red-500/30"
+                                  : "bg-yellow-500/5 border-yellow-500/30"
+                            }`}
+                          >
+                            {/* Header with status badge and card */}
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                r.status === "live" 
+                                  ? "bg-green-500/20 text-green-500" 
+                                  : r.status === "dead"
+                                    ? "bg-red-500/20 text-red-500"
+                                    : "bg-yellow-500/20 text-yellow-500"
+                              }`}>
+                                {r.status === "live" ? "LIVE" : r.status === "dead" ? "DEAD" : "UNKNOWN"}
+                              </span>
+                              <CardBrandLogo brand={brand} size="sm" />
+                              <span className="font-mono text-xs text-foreground font-bold italic flex-1 truncate">
+                                {r.fullCard}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(r.fullCard || '');
+                                  toast.success("Card copied!");
+                                }}
+                                className="p-1 hover:bg-secondary rounded shrink-0"
+                              >
+                                <Copy className="h-3 w-3 text-muted-foreground" />
+                              </button>
+                            </div>
+                            
+                            {/* Separator */}
+                            <div className="border-t border-dashed border-muted-foreground/30 my-2" />
+                            
+                            {/* Details in bold italic mono style */}
+                            <div className="space-y-1 font-mono text-[10px]">
+                              <div className="flex">
+                                <span className="w-20 text-muted-foreground font-bold italic">STATUS</span>
+                                <span className="text-muted-foreground font-bold italic mr-1">:</span>
+                                <span className={`font-bold italic ${
+                                  r.status === "live" ? "text-green-500" : r.status === "dead" ? "text-red-500" : "text-yellow-500"
+                                }`}>
+                                  {r.status === "live" ? "CHARGED" : r.status === "dead" ? "DECLINED" : "UNKNOWN"}
+                                </span>
+                              </div>
+                              
+                              <div className="flex">
+                                <span className="w-20 text-muted-foreground font-bold italic">AMOUNT</span>
+                                <span className="text-muted-foreground font-bold italic mr-1">:</span>
+                                <span className="text-foreground font-bold italic">
+                                  {selectedGateway?.type === "auth" ? "$0 AUTH" : "$1.00"}
+                                </span>
+                              </div>
+                              
+                              {r.apiResponse && (
+                                <div className="flex">
+                                  <span className="w-20 text-muted-foreground font-bold italic shrink-0">RESPONSE</span>
+                                  <span className="text-muted-foreground font-bold italic mr-1">:</span>
+                                  <span className="text-foreground font-bold italic truncate">
+                                    {r.apiResponse}
+                                  </span>
+                                </div>
+                              )}
+                              
+                              <div className="flex">
+                                <span className="w-20 text-muted-foreground font-bold italic">BIN</span>
+                                <span className="text-muted-foreground font-bold italic mr-1">:</span>
+                                <span className="text-foreground font-bold italic">
+                                  {brand.toUpperCase()}
+                                </span>
+                              </div>
+                              
+                              <div className="flex">
+                                <span className="w-20 text-muted-foreground font-bold italic">GATEWAY</span>
+                                <span className="text-muted-foreground font-bold italic mr-1">:</span>
+                                <span className="text-primary font-bold italic">
+                                  {selectedGateway?.name || 'N/A'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                   </div>
                 </ScrollArea>
 
