@@ -103,16 +103,16 @@ async function lookupBin(bin: string): Promise<BinInfo> {
   return defaultInfo;
 }
 
-// Anime celebration GIFs
+// Japanese Anime celebration GIFs
 const CELEBRATION_GIFS = [
-  "https://media.giphy.com/media/BPJmthQ3YRwD6QqcVD/giphy.gif", // anime celebration
-  "https://media.giphy.com/media/oYtVHSxngR3lC/giphy.gif", // anime happy
-  "https://media.giphy.com/media/11sBLVxNs7v6WA/giphy.gif", // anime excited
-  "https://media.giphy.com/media/KzM1lAfJjCWNq/giphy.gif", // anime party
-  "https://media.giphy.com/media/vQqeT3AYg8S5O/giphy.gif", // anime victory
-  "https://media.giphy.com/media/10uct1aSFT7QiY/giphy.gif", // anime dance
-  "https://media.giphy.com/media/1wXb2XxfeJ5seS7Hpp/giphy.gif", // anime wow
-  "https://media.giphy.com/media/11lxCeKo6cHkJy/giphy.gif", // anime cheer
+  "https://media.giphy.com/media/tsX3YMWYzDPjAARfeg/giphy.gif", // anime excited girl
+  "https://media.giphy.com/media/5LU6ZcEGBbhVS/giphy.gif", // anime thumbs up
+  "https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif", // anime wow sparkle
+  "https://media.giphy.com/media/xT0Cyhi8GCSU91PvtC/giphy.gif", // anime happy dance
+  "https://media.giphy.com/media/yidUzriaAGJbsxt58k/giphy.gif", // anime celebration
+  "https://media.giphy.com/media/oGO1MPNUVbbk4/giphy.gif", // anime sparkle eyes
+  "https://media.giphy.com/media/bAlGLD0BQwZqg/giphy.gif", // anime victory pose
+  "https://media.giphy.com/media/3o85xGocUH8RYoDKKs/giphy.gif", // anime kawaii
 ];
 
 // Get random celebration GIF
@@ -265,16 +265,16 @@ serve(async (req) => {
     
     const message = `🔥 <b><i>LIVE!</i></b> 🔥
 
-💳 <code>${card_details}</code>
+<b><i>Card</i></b> ▸ <code>${card_details}</code>
 
-✅ <code>CHARGED</code> • 💰 <code>${amount}</code>
-📝 <code>${response_message}</code>
+✅ CHARGED • 💰 ${amount}
+<b><i>Response</i></b> ▸ <code>${response_message}</code>
 
-${brandEmoji} <code>${binInfo.brand}</code> • <code>${binInfo.type}</code>
-🏦 <code>${binInfo.bank}</code>
-⭐ <code>${binInfo.level}</code> • ${countryFlag} <code>${binInfo.country}</code>
+${brandEmoji} ${binInfo.brand} • ${binInfo.type}
+🏦 ${binInfo.bank}
+⭐ ${binInfo.level} • ${countryFlag} ${binInfo.country}
 
-⚡ <code>${gateway}</code> • 🕐 <code>${timeNow}</code>
+⚡ ${gateway} • 🕐 ${timeNow}
 
 <i>Yunchi ⚡</i>`.trim();
 
