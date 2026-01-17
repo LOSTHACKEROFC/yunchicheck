@@ -217,7 +217,7 @@ const gateways: Gateway[] = [
   },
   { 
     id: "payu_charge",
-    name: "YUNCHI PayU", 
+    name: "PayU",
     code: "PayU",
     type: "charge",
     status: "online", 
