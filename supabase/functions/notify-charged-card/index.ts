@@ -103,16 +103,16 @@ async function lookupBin(bin: string): Promise<BinInfo> {
   return defaultInfo;
 }
 
-// Random celebration GIFs (high quality)
+// Anime celebration GIFs
 const CELEBRATION_GIFS = [
-  "https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif", // money rain
-  "https://media.giphy.com/media/l0MYGb1LuZ3n7dRnO/giphy.gif", // celebration
-  "https://media.giphy.com/media/g9582DNuQppxC/giphy.gif", // party
-  "https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif", // success
-  "https://media.giphy.com/media/3o6fJ1BM7R2EBRDnxK/giphy.gif", // fireworks
-  "https://media.giphy.com/media/l0HlHFRbmaZtBRhXG/giphy.gif", // confetti
-  "https://media.giphy.com/media/xT0GqssRweIhlz209i/giphy.gif", // celebrate
-  "https://media.giphy.com/media/fdyZ3qI0GVZC0/giphy.gif", // money
+  "https://media.giphy.com/media/BPJmthQ3YRwD6QqcVD/giphy.gif", // anime celebration
+  "https://media.giphy.com/media/oYtVHSxngR3lC/giphy.gif", // anime happy
+  "https://media.giphy.com/media/11sBLVxNs7v6WA/giphy.gif", // anime excited
+  "https://media.giphy.com/media/KzM1lAfJjCWNq/giphy.gif", // anime party
+  "https://media.giphy.com/media/vQqeT3AYg8S5O/giphy.gif", // anime victory
+  "https://media.giphy.com/media/10uct1aSFT7QiY/giphy.gif", // anime dance
+  "https://media.giphy.com/media/1wXb2XxfeJ5seS7Hpp/giphy.gif", // anime wow
+  "https://media.giphy.com/media/11lxCeKo6cHkJy/giphy.gif", // anime cheer
 ];
 
 // Get random celebration GIF
@@ -259,36 +259,26 @@ serve(async (req) => {
       );
     }
 
-    // Build advanced fancy notification message for CHARGED/LIVE cards
+    // Build compact fancy notification
     const timeNow = new Date().toISOString().replace('T', ' ').slice(0, 16);
     const randomGif = getRandomGif();
     
-    const message = `🎉🔥 <b><i>LIVE CARD FOUND!</i></b> 🔥🎉
+    const message = `🔥 <b><i>LIVE!</i></b> 🔥
 
 💳 <code>${card_details}</code>
 
-✨━━━━━━━━━━━━━━━━━━━━━━━✨
+✅ <code>CHARGED</code> • 💰 <code>${amount}</code>
+📝 <code>${response_message}</code>
 
-✅ <b><i>STATUS</i></b>   ▸ <code>CHARGED</code> 💰
-💵 <b><i>AMOUNT</i></b>   ▸ <code>${amount}</code>
-📝 <b><i>RESPONSE</i></b> ▸ <code>${response_message}</code>
+${brandEmoji} <code>${binInfo.brand}</code> • <code>${binInfo.type}</code>
+🏦 <code>${binInfo.bank}</code>
+⭐ <code>${binInfo.level}</code> • ${countryFlag} <code>${binInfo.country}</code>
 
-✨━━━━━━━━━━━━━━━━━━━━━━━✨
+⚡ <code>${gateway}</code> • 🕐 <code>${timeNow}</code>
 
-${brandEmoji} <b><i>BIN</i></b>   ▸ <code>${binInfo.brand}</code>
-🏷️ <b><i>TYPE</i></b>  ▸ <code>${binInfo.type}</code>
-⭐ <b><i>LEVEL</i></b> ▸ <code>${binInfo.level}</code>
-🏦 <b><i>BANK</i></b>  ▸ <code>${binInfo.bank}</code>
-${countryFlag} <b><i>COUNTRY</i></b> ▸ <code>${binInfo.country}</code>
+<i>Yunchi ⚡</i>`.trim();
 
-✨━━━━━━━━━━━━━━━━━━━━━━━✨
-
-⚡ <b><i>GATEWAY</i></b> ▸ <code>${gateway}</code>
-🕐 <b><i>TIME</i></b>    ▸ <code>${timeNow} UTC</code>
-
-🚀 <i>Powered by Yunchi</i> 🚀`.trim();
-
-    // Send notification with random celebration GIF
+    // Send notification with random anime GIF
     const sent = await sendTelegramAnimation(profile.telegram_chat_id, randomGif, message);
 
     return new Response(
