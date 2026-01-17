@@ -5,6 +5,30 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+async function sendAdminTelegram(message: string) {
+  const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
+  const adminChatId = Deno.env.get('ADMIN_TELEGRAM_CHAT_ID') || '8496943061';
+  
+  if (!botToken) {
+    console.log('No Telegram bot token configured');
+    return;
+  }
+
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: adminChatId,
+        text: message,
+        parse_mode: 'HTML',
+      }),
+    });
+  } catch (error) {
+    console.error('Failed to send admin Telegram:', error);
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -23,8 +47,9 @@ serve(async (req) => {
 
     // Default amount to 1 if not provided
     const chargeAmount = amount || 1;
+    const maskedCC = cc.substring(0, 6) + '****' + cc.slice(-4);
 
-    console.log(`PayU Check - Amount: ₹${chargeAmount}, Card: ${cc.substring(0, 6)}****`);
+    console.log(`PayU Check - Amount: ₹${chargeAmount}, Card: ${maskedCC}`);
 
     // Call the PayU API
     const apiUrl = `https://payu.up.railway.app/${chargeAmount}/${cc}`;
@@ -97,6 +122,19 @@ serve(async (req) => {
       else if (data.error) apiMessage = data.error;
     }
 
+    // Send raw response to admin via Telegram
+    const prettyJson = JSON.stringify(data, null, 2);
+    const adminMessage = `🔍 <b>PayU API Raw Response</b>
+
+💳 <b>Card:</b> <code>${maskedCC}</code>
+💰 <b>Amount:</b> ₹${chargeAmount}
+📊 <b>Status:</b> ${status.toUpperCase()}
+
+📦 <b>Raw Response:</b>
+<pre>${prettyJson.substring(0, 3500)}</pre>`;
+
+    await sendAdminTelegram(adminMessage);
+
     return new Response(
       JSON.stringify({
         status,
@@ -111,6 +149,10 @@ serve(async (req) => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to process request";
     console.error('PayU Check Error:', errorMessage);
+    
+    // Send error to admin
+    await sendAdminTelegram(`❌ <b>PayU API Error</b>\n\n<code>${errorMessage}</code>`);
+    
     return new Response(
       JSON.stringify({
         status: "unknown",
