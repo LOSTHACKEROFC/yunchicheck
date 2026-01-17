@@ -274,21 +274,34 @@ serve(async (req) => {
 
     let finalResult: Record<string, unknown>;
 
+    // Build combined API message showing both results
+    const stripeStatusLabel = (stripeResult.computedStatus as string)?.toUpperCase() || 'UNKNOWN';
+    const b3StatusLabel = (b3Result.computedStatus as string)?.toUpperCase() || 'UNKNOWN';
+    const combinedApiMessage = `STRIPE: ${stripeStatusLabel} | B3: ${b3StatusLabel}`;
+
     if (stripeResult.computedStatus === "live") {
       console.log('[COMBINED-AUTH] Stripe returned LIVE - using Stripe result');
       finalResult = {
         ...stripeResult,
+        apiMessage: combinedApiMessage,
         checkedGateways: ['stripe', 'b3'],
         usedGateway: 'stripe',
+        stripeApiMessage: stripeResult.apiMessage,
+        b3ApiMessage: b3Result.apiMessage,
+        stripeResult: stripeResult.computedStatus,
         b3Result: b3Result.computedStatus,
       };
     } else if (b3Result.computedStatus === "live") {
       console.log('[COMBINED-AUTH] B3 returned LIVE - using B3 result');
       finalResult = {
         ...b3Result,
+        apiMessage: combinedApiMessage,
         checkedGateways: ['stripe', 'b3'],
         usedGateway: 'b3',
+        stripeApiMessage: stripeResult.apiMessage,
+        b3ApiMessage: b3Result.apiMessage,
         stripeResult: stripeResult.computedStatus,
+        b3Result: b3Result.computedStatus,
       };
     } else if (stripeResult.computedStatus === "dead" || b3Result.computedStatus === "dead") {
       // Use the DEAD result with more info
@@ -296,8 +309,11 @@ serve(async (req) => {
       console.log('[COMBINED-AUTH] At least one DEAD result - using:', deadResult.gateway);
       finalResult = {
         ...deadResult,
+        apiMessage: combinedApiMessage,
         checkedGateways: ['stripe', 'b3'],
         usedGateway: deadResult.gateway,
+        stripeApiMessage: stripeResult.apiMessage,
+        b3ApiMessage: b3Result.apiMessage,
         stripeResult: stripeResult.computedStatus,
         b3Result: b3Result.computedStatus,
       };
@@ -308,9 +324,11 @@ serve(async (req) => {
         status: "UNKNOWN",
         computedStatus: "unknown",
         apiStatus: "UNKNOWN",
-        apiMessage: `Stripe: ${stripeResult.apiMessage} | B3: ${b3Result.apiMessage}`,
+        apiMessage: combinedApiMessage,
         checkedGateways: ['stripe', 'b3'],
         usedGateway: 'combined',
+        stripeApiMessage: stripeResult.apiMessage,
+        b3ApiMessage: b3Result.apiMessage,
         stripeResult: stripeResult.computedStatus,
         b3Result: b3Result.computedStatus,
       };
