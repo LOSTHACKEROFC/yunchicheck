@@ -2507,41 +2507,98 @@ const Gateways = () => {
               </div>
 
               {result && (
-                <div className={`p-3 rounded-lg border flex items-start gap-3 ${
+                <div className={`p-4 rounded-lg border ${
                   result.status === "live" 
                     ? "bg-green-500/10 border-green-500/30" 
                     : result.status === "dead"
                       ? "bg-red-500/10 border-red-500/30"
                       : "bg-yellow-500/10 border-yellow-500/30"
                 }`}>
-                  {result.status === "live" ? (
-                    <ShieldCheck className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
-                  ) : result.status === "dead" ? (
-                    <ShieldX className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertTriangle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />
-                  )}
-                  <div className="flex-1">
-                    <p className={`font-semibold text-sm ${
+                  {/* Card with status badge */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${
                       result.status === "live" 
-                        ? "text-green-500" 
+                        ? "bg-green-500 text-white" 
                         : result.status === "dead"
-                          ? "text-red-500"
-                          : "text-yellow-500"
+                          ? "bg-red-500 text-white"
+                          : "bg-yellow-500 text-black"
                     }`}>
                       {result.status === "live" ? "LIVE" : result.status === "dead" ? "DEAD" : "UNKNOWN"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{result.message}</p>
-                    {result.apiResponse && (
-                      <p className="text-xs font-mono text-foreground/70 mt-1 bg-secondary/30 px-2 py-1 rounded inline-block">
-                        📝 {result.apiResponse}
-                      </p>
-                    )}
+                    </span>
+                    <span className="font-mono text-sm text-foreground font-semibold">
+                      {result.displayCard || result.card || `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${cvv}`}
+                    </span>
                     {result.card && (
-                      <p className="text-xs font-mono text-foreground/80 mt-1 bg-secondary/50 px-2 py-1 rounded inline-block">
-                        {result.card}
-                      </p>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(result.displayCard || result.card || '');
+                          toast.success("Copied card");
+                        }}
+                        className="p-1 hover:bg-secondary rounded"
+                      >
+                        <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
                     )}
+                  </div>
+
+                  {/* Separator line */}
+                  <div className="border-t border-dashed border-muted-foreground/30 my-3" />
+
+                  {/* Details in mono bold italic style */}
+                  <div className="space-y-1.5 font-mono text-xs">
+                    <div className="flex">
+                      <span className="w-24 text-muted-foreground font-bold italic">STATUS</span>
+                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
+                      <span className={`font-bold italic ${
+                        result.status === "live" 
+                          ? "text-green-500" 
+                          : result.status === "dead"
+                            ? "text-red-500"
+                            : "text-yellow-500"
+                      }`}>
+                        {result.status === "live" ? "CHARGED" : result.status === "dead" ? "DECLINED" : "UNKNOWN"}
+                      </span>
+                    </div>
+                    
+                    <div className="flex">
+                      <span className="w-24 text-muted-foreground font-bold italic">AMOUNT</span>
+                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
+                      <span className="text-foreground font-bold italic">
+                        {selectedGateway?.type === "charge" ? "$1 CHARGE" : "$0 AUTH"}
+                      </span>
+                    </div>
+                    
+                    <div className="flex">
+                      <span className="w-24 text-muted-foreground font-bold italic">RESPONSE</span>
+                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
+                      <span className="text-foreground font-bold italic">
+                        {result.apiResponse || result.message}
+                      </span>
+                    </div>
+                    
+                    <div className="flex">
+                      <span className="w-24 text-muted-foreground font-bold italic">BIN</span>
+                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
+                      <span className="text-foreground font-bold italic">
+                        {binInfo.brand.toUpperCase()} / {binInfo.type} / {binInfo.country} {binInfo.countryCode && binInfo.countryCode !== 'XX' ? String.fromCodePoint(...[...binInfo.countryCode.toUpperCase()].map(c => 0x1F1E6 - 65 + c.charCodeAt(0))) : ''}
+                      </span>
+                    </div>
+                    
+                    <div className="flex">
+                      <span className="w-24 text-muted-foreground font-bold italic">GATEWAY</span>
+                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
+                      <span className="text-foreground font-bold italic">
+                        {selectedGateway?.name || result.gateway}
+                      </span>
+                    </div>
+                    
+                    <div className="flex">
+                      <span className="w-24 text-muted-foreground font-bold italic">TIME</span>
+                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
+                      <span className="text-foreground font-bold italic">
+                        {format(new Date(), 'yyyy-MM-dd HH:mm')} UTC
+                      </span>
+                    </div>
                   </div>
                 </div>
               )}
