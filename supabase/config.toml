@@ -77,3 +77,9 @@ verify_jwt = false
 
 [functions.deduct-credits]
 verify_jwt = false
+
+[functions.braintree-auth-check]
+verify_jwt = false
+
+[functions.stripe-auth-check]
+verify_jwt = false
