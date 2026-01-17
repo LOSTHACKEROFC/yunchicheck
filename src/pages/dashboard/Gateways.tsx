@@ -243,6 +243,7 @@ interface CheckResult {
   displayCard?: string; // Card as entered by user (without auto-added CVC)
   apiResponse?: string; // Real API response message for PAYGATE
   usedApi?: string; // For combined gateway - which API (stripe/b3) returned the result
+  rawResponse?: string; // Full raw API response for debugging
 }
 
 interface BulkResult extends CheckResult {
@@ -253,6 +254,7 @@ interface BulkResult extends CheckResult {
   brandColor: string;
   apiResponse?: string; // Real API response message for PAYGATE
   usedApi?: string; // For combined gateway - which API (stripe/b3) returned the result
+  rawResponse?: string; // Full raw API response for debugging
 }
 
 interface GatewayCheck {
@@ -1116,7 +1118,8 @@ const Gateways = () => {
         card: fullCardString,
         displayCard: displayCardString,
         apiResponse: apiResponseDisplay,
-        usedApi: gatewayResponse?.usedGateway
+        usedApi: gatewayResponse?.usedGateway,
+        rawResponse: gatewayResponse?.rawResponse
       };
 
       setResult(checkResult);
@@ -1882,7 +1885,8 @@ const Gateways = () => {
           brand,
           brandColor,
           apiResponse: apiResponseDisplay,
-          usedApi: gatewayResponse?.usedGateway
+          usedApi: gatewayResponse?.usedGateway,
+          rawResponse: gatewayResponse?.rawResponse
         };
 
         // Send Telegram notification for PAYGATE checks (CHARGED/DECLINED only, skip UNKNOWN)
@@ -2948,6 +2952,30 @@ const Gateways = () => {
                         {format(new Date(), 'yyyy-MM-dd HH:mm')} UTC
                       </span>
                     </div>
+                    
+                    {/* Raw API Response - Expandable */}
+                    {result.rawResponse && (
+                      <div className="mt-3 pt-3 border-t border-dashed border-muted-foreground/30">
+                        <details className="group">
+                          <summary className="cursor-pointer flex items-center gap-2 text-muted-foreground font-bold italic text-[11px] hover:text-foreground transition-colors">
+                            <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
+                            RAW API RESPONSE
+                          </summary>
+                          <div className="mt-2 p-2 bg-black/30 rounded border border-border overflow-x-auto">
+                            <pre className="text-[10px] text-green-400 whitespace-pre-wrap break-all font-mono">
+                              {(() => {
+                                try {
+                                  const parsed = JSON.parse(result.rawResponse || '{}');
+                                  return JSON.stringify(parsed, null, 2);
+                                } catch {
+                                  return result.rawResponse;
+                                }
+                              })()}
+                            </pre>
+                          </div>
+                        </details>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
