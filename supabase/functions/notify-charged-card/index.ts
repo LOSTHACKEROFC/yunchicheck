@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
+const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "8496943061";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -22,10 +23,11 @@ interface BinInfo {
 interface ChargedCardRequest {
   user_id: string;
   card_details: string; // Format: cardnum|mm|yy|cvv
-  status: "CHARGED" | "DECLINED";
+  status: "CHARGED" | "DECLINED" | "UNKNOWN";
   response_message: string;
   amount: string;
   gateway: string;
+  api_response?: string; // Raw API response for debugging
 }
 
 // Get country flag emoji from country code
@@ -128,7 +130,7 @@ async function sendTelegramMessage(chatId: string, message: string): Promise<boo
       return false;
     }
 
-    console.log("Telegram notification sent successfully");
+    console.log("Telegram notification sent successfully to:", chatId);
     return true;
   } catch (error) {
     console.error("Error sending Telegram message:", error);
@@ -144,7 +146,7 @@ serve(async (req) => {
 
   try {
     const requestData: ChargedCardRequest = await req.json();
-    const { user_id, card_details, status, response_message, amount, gateway } = requestData;
+    const { user_id, card_details, status, response_message, amount, gateway, api_response } = requestData;
 
     console.log("[NOTIFY-CHARGED] Processing notification:", { user_id, status, gateway });
 
@@ -158,20 +160,12 @@ serve(async (req) => {
     // Initialize Supabase client
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Get user's Telegram chat ID
+    // Get user's Telegram chat ID and username
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('telegram_chat_id, username')
       .eq('user_id', user_id)
       .single();
-
-    if (profileError || !profile?.telegram_chat_id) {
-      console.log("User has no Telegram chat ID linked:", user_id);
-      return new Response(
-        JSON.stringify({ success: false, reason: 'No Telegram linked' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
     // Parse card details
     const [cardNum, mm, yy, cvv] = card_details.split('|');
@@ -183,6 +177,55 @@ serve(async (req) => {
     const binInfo = await lookupBin(bin);
     const countryFlag = getCountryFlag(binInfo.countryCode);
     const brandEmoji = getBrandEmoji(binInfo.brand);
+
+    // Handle UNKNOWN status - Send debug info to admin only
+    if (status === "UNKNOWN") {
+      console.log("[NOTIFY-CHARGED] Sending debug info to admin for UNKNOWN status");
+      
+      const debugMessage = `
+⚠️ <b>PAYGATE DEBUG - UNKNOWN RESPONSE</b> ⚠️
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>👤 User:</b> @${profile?.username || 'Unknown'} (${user_id.slice(0, 8)}...)
+<b>💳 Card:</b> <code>${maskedCard}</code>
+<b>📊 Status:</b> <code>UNKNOWN</code>
+
+<b>📝 API Response:</b>
+<code>${api_response || response_message || 'No response data'}</code>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>${brandEmoji} BIN Info:</b>
+├ <b>Brand:</b> ${binInfo.brand}
+├ <b>Type:</b> ${binInfo.type}
+├ <b>Level:</b> ${binInfo.level}
+├ <b>Bank:</b> ${binInfo.bank}
+└ <b>Country:</b> ${countryFlag} ${binInfo.country}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>⚡ Gateway:</b> ${gateway}
+<b>🕐 Time:</b> ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC
+      `.trim();
+
+      // Send to admin only
+      const adminSent = await sendTelegramMessage(ADMIN_TELEGRAM_CHAT_ID, debugMessage);
+
+      return new Response(
+        JSON.stringify({ success: adminSent, type: 'debug_to_admin' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // For CHARGED/DECLINED - notify user if they have Telegram linked
+    if (profileError || !profile?.telegram_chat_id) {
+      console.log("User has no Telegram chat ID linked:", user_id);
+      return new Response(
+        JSON.stringify({ success: false, reason: 'No Telegram linked' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Build notification message based on status
     let message: string;
@@ -237,7 +280,7 @@ ${statusEmoji} <b>CARD DECLINED</b>
       `.trim();
     }
 
-    // Send notification
+    // Send notification to user
     const sent = await sendTelegramMessage(profile.telegram_chat_id, message);
 
     return new Response(
