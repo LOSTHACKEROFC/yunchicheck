@@ -75,7 +75,9 @@ serve(async (req) => {
                lowerResponse.includes("insufficient") ||
                lowerResponse.includes("expired") ||
                lowerResponse.includes("error") ||
-               lowerResponse.includes("rejected")) {
+               lowerResponse.includes("rejected") ||
+               lowerResponse.includes("could not") ||
+               lowerResponse.includes("transaction failed")) {
       status = "dead";
     }
 
