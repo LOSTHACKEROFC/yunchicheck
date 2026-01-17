@@ -824,13 +824,63 @@ const Gateways = () => {
     };
   };
 
-  // Fallback simulation for non-API gateways
-  const simulateCheck = async (): Promise<"live" | "dead" | "unknown"> => {
+  // Fallback simulation for non-API gateways - returns GatewayApiResponse for consistent UI
+  const simulateCheck = async (gatewayId: string): Promise<GatewayApiResponse> => {
     await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 700));
     const random = Math.random();
-    if (random > 0.3) return "live";
-    if (random > 0.1) return "dead";
-    return "unknown";
+    
+    // Get gateway-specific response messages
+    const gatewayMessages: Record<string, { live: string; dead: string; unknown: string }> = {
+      stripe_preauth: {
+        live: "Authorization Approved - Card Valid",
+        dead: "Authorization Declined - Card Invalid",
+        unknown: "Authorization Pending - Try Again"
+      },
+      clover_charge: {
+        live: "Charge Successful - $0.50",
+        dead: "Charge Declined - Insufficient Funds",
+        unknown: "Transaction Timeout - Retry"
+      },
+      square_charge: {
+        live: "Payment Authorized - $0.50",
+        dead: "Payment Declined - Card Error",
+        unknown: "Processing Error - Retry"
+      },
+      shopify_charge: {
+        live: "Order Charged - $1.00",
+        dead: "Payment Failed - Card Declined",
+        unknown: "Gateway Timeout - Retry"
+      }
+    };
+
+    const messages = gatewayMessages[gatewayId] || {
+      live: "Verification Successful",
+      dead: "Verification Failed",
+      unknown: "Verification Pending"
+    };
+
+    if (random > 0.3) {
+      return {
+        status: "live",
+        apiStatus: "APPROVED",
+        apiMessage: messages.live,
+        rawResponse: JSON.stringify({ status: "approved", message: messages.live, simulated: true })
+      };
+    }
+    if (random > 0.1) {
+      return {
+        status: "dead",
+        apiStatus: "DECLINED",
+        apiMessage: messages.dead,
+        rawResponse: JSON.stringify({ status: "declined", message: messages.dead, simulated: true })
+      };
+    }
+    return {
+      status: "unknown",
+      apiStatus: "UNKNOWN",
+      apiMessage: messages.unknown,
+      rawResponse: JSON.stringify({ status: "unknown", message: messages.unknown, simulated: true })
+    };
   };
 
   const performCheck = async () => {
@@ -860,7 +910,7 @@ const Gateways = () => {
       const internalCvv = cvv || "000";
 
       // Use real API for YUNCHI AUTH gateways and PAYGATE, simulation for others
-      let gatewayResponse: GatewayApiResponse | null = null;
+      let gatewayResponse: GatewayApiResponse;
       
       if (selectedGateway.id === "stripe_auth") {
         gatewayResponse = await checkCardViaApi(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
@@ -868,9 +918,12 @@ const Gateways = () => {
         gatewayResponse = await checkCardViaB3(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "paygate_charge") {
         gatewayResponse = await checkCardViaPaygate(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+      } else {
+        // Simulated gateways also return GatewayApiResponse for consistent UI
+        gatewayResponse = await simulateCheck(selectedGateway.id);
       }
       
-      const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
+      const checkStatus = gatewayResponse.status;
 
       // Determine credit cost based on result: LIVE = 2, DEAD = 1, ERROR = 0
       const creditCost = checkStatus === "live" 
@@ -908,9 +961,7 @@ const Gateways = () => {
         });
       
       // Build API response string for display
-      const apiResponseDisplay = gatewayResponse 
-        ? `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}${gatewayResponse.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`
-        : undefined;
+      const apiResponseDisplay = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}${gatewayResponse.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`;
       
       const checkResult: CheckResult = {
         status: checkStatus,
@@ -928,7 +979,7 @@ const Gateways = () => {
       setResult(checkResult);
 
       // Send Telegram notification for PAYGATE checks (CHARGED/DECLINED only, skip UNKNOWN)
-      if (selectedGateway.id === "paygate_charge" && gatewayResponse && checkStatus !== "unknown") {
+      if (selectedGateway.id === "paygate_charge" && checkStatus !== "unknown") {
         try {
           // Build real response message from API
           const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}${gatewayResponse.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`;
@@ -1550,7 +1601,7 @@ const Gateways = () => {
 
       try {
         // Use real API for YUNCHI AUTH gateways and PAYGATE, simulation for others
-        let gatewayResponse: GatewayApiResponse | null = null;
+        let gatewayResponse: GatewayApiResponse;
         
         if (selectedGateway.id === "stripe_auth") {
           gatewayResponse = await checkCardViaApi(cardData.card, cardData.month, cardData.year, cardData.cvv);
@@ -1558,9 +1609,12 @@ const Gateways = () => {
           gatewayResponse = await checkCardViaB3(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "paygate_charge") {
           gatewayResponse = await checkCardViaPaygate(cardData.card, cardData.month, cardData.year, cardData.cvv);
+        } else {
+          // Simulated gateways also return GatewayApiResponse for consistent UI
+          gatewayResponse = await simulateCheck(selectedGateway.id);
         }
         
-        const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
+        const checkStatus = gatewayResponse.status;
 
         const fullCardStr = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
         const displayCardStr = cardData.originalCvv 
@@ -1600,9 +1654,7 @@ const Gateways = () => {
         const { brand, brandColor } = detectCardBrandLocal(cardData.card);
         
         // Build API response string for display
-        const apiResponseDisplay = gatewayResponse 
-          ? `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}${gatewayResponse.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`
-          : undefined;
+        const apiResponseDisplay = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}${gatewayResponse.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`;
         
         const bulkResult: BulkResult = {
           status: checkStatus,
@@ -1621,7 +1673,7 @@ const Gateways = () => {
         };
 
         // Send Telegram notification for PAYGATE checks (CHARGED/DECLINED only, skip UNKNOWN)
-        if (selectedGateway.id === "paygate_charge" && gatewayResponse && checkStatus !== "unknown") {
+        if (selectedGateway.id === "paygate_charge" && checkStatus !== "unknown") {
           try {
             // Build real response message from API
             const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}${gatewayResponse.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`;
