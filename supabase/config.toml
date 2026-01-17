@@ -71,3 +71,6 @@ verify_jwt = false
 
 [functions.paygate-check]
 verify_jwt = false
+
+[functions.notify-charged-card]
+verify_jwt = false
