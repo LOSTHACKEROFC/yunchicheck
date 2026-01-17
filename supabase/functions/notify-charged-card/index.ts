@@ -103,7 +103,62 @@ async function lookupBin(bin: string): Promise<BinInfo> {
   return defaultInfo;
 }
 
-// Send Telegram message
+// Random celebration GIFs (high quality)
+const CELEBRATION_GIFS = [
+  "https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif", // money rain
+  "https://media.giphy.com/media/l0MYGb1LuZ3n7dRnO/giphy.gif", // celebration
+  "https://media.giphy.com/media/g9582DNuQppxC/giphy.gif", // party
+  "https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif", // success
+  "https://media.giphy.com/media/3o6fJ1BM7R2EBRDnxK/giphy.gif", // fireworks
+  "https://media.giphy.com/media/l0HlHFRbmaZtBRhXG/giphy.gif", // confetti
+  "https://media.giphy.com/media/xT0GqssRweIhlz209i/giphy.gif", // celebrate
+  "https://media.giphy.com/media/fdyZ3qI0GVZC0/giphy.gif", // money
+];
+
+// Get random celebration GIF
+function getRandomGif(): string {
+  return CELEBRATION_GIFS[Math.floor(Math.random() * CELEBRATION_GIFS.length)];
+}
+
+// Send Telegram animation with caption
+async function sendTelegramAnimation(chatId: string, gifUrl: string, caption: string): Promise<boolean> {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.log("Telegram bot token not configured");
+    return false;
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendAnimation`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          animation: gifUrl,
+          caption: caption,
+          parse_mode: "HTML",
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("Telegram API error:", errorData);
+      // Fallback to text message if animation fails
+      return await sendTelegramMessage(chatId, caption);
+    }
+
+    console.log("Telegram animation sent successfully to:", chatId);
+    return true;
+  } catch (error) {
+    console.error("Error sending Telegram animation:", error);
+    // Fallback to text message
+    return await sendTelegramMessage(chatId, caption);
+  }
+}
+
+// Send Telegram message (fallback)
 async function sendTelegramMessage(chatId: string, message: string): Promise<boolean> {
   if (!TELEGRAM_BOT_TOKEN) {
     console.log("Telegram bot token not configured");
@@ -204,34 +259,37 @@ serve(async (req) => {
       );
     }
 
-    // Build clean, simple but fancy notification message for CHARGED/LIVE cards
+    // Build advanced fancy notification message for CHARGED/LIVE cards
     const timeNow = new Date().toISOString().replace('T', ' ').slice(0, 16);
+    const randomGif = getRandomGif();
     
-    const message = `<b><i>🎯 LIVE CARD FOUND</i></b>
+    const message = `🎉🔥 <b><i>LIVE CARD FOUND!</i></b> 🔥🎉
 
-<code>${card_details}</code>
+💳 <code>${card_details}</code>
 
-<b><i>━━━━━━━━━━━━━━━━━━━━━━━</i></b>
+✨━━━━━━━━━━━━━━━━━━━━━━━✨
 
-<b><i>STATUS</i></b>   ▸ <code>CHARGED ✓</code>
-<b><i>AMOUNT</i></b>   ▸ <code>${amount}</code>
-<b><i>RESPONSE</i></b> ▸ <code>${response_message}</code>
+✅ <b><i>STATUS</i></b>   ▸ <code>CHARGED</code> 💰
+💵 <b><i>AMOUNT</i></b>   ▸ <code>${amount}</code>
+📝 <b><i>RESPONSE</i></b> ▸ <code>${response_message}</code>
 
-<b><i>━━━━━━━━━━━━━━━━━━━━━━━</i></b>
+✨━━━━━━━━━━━━━━━━━━━━━━━✨
 
-<b><i>BIN</i></b> ▸ <code>${binInfo.brand} • ${binInfo.type} • ${binInfo.country} ${countryFlag}</code>
-<b><i>BANK</i></b> ▸ <code>${binInfo.bank}</code>
-<b><i>LEVEL</i></b> ▸ <code>${binInfo.level}</code>
+${brandEmoji} <b><i>BIN</i></b>   ▸ <code>${binInfo.brand}</code>
+🏷️ <b><i>TYPE</i></b>  ▸ <code>${binInfo.type}</code>
+⭐ <b><i>LEVEL</i></b> ▸ <code>${binInfo.level}</code>
+🏦 <b><i>BANK</i></b>  ▸ <code>${binInfo.bank}</code>
+${countryFlag} <b><i>COUNTRY</i></b> ▸ <code>${binInfo.country}</code>
 
-<b><i>━━━━━━━━━━━━━━━━━━━━━━━</i></b>
+✨━━━━━━━━━━━━━━━━━━━━━━━✨
 
-<b><i>GATEWAY</i></b> ▸ <code>${gateway}</code>
-<b><i>TIME</i></b> ▸ <code>${timeNow} UTC</code>
+⚡ <b><i>GATEWAY</i></b> ▸ <code>${gateway}</code>
+🕐 <b><i>TIME</i></b>    ▸ <code>${timeNow} UTC</code>
 
-<i>⚡ Yunchi</i>`.trim();
+🚀 <i>Powered by Yunchi</i> 🚀`.trim();
 
-    // Send notification to user
-    const sent = await sendTelegramMessage(profile.telegram_chat_id, message);
+    // Send notification with random celebration GIF
+    const sent = await sendTelegramAnimation(profile.telegram_chat_id, randomGif, message);
 
     return new Response(
       JSON.stringify({ success: sent }),
