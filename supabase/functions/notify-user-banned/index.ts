@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Resend } from "https://esm.sh/resend@2.0.0";
+import { sendEmail } from "../_shared/email-helper.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,7 +22,6 @@ Deno.serve(async (req) => {
 
   try {
     const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
-    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -81,16 +80,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Send Email notification with fallback
-    if (userEmail && RESEND_API_KEY) {
+    // Send Email notification using shared email helper
+    if (userEmail) {
       console.log(`Sending email ban notification to: ${userEmail}`);
       
-      const resend = new Resend(RESEND_API_KEY);
-      const senders = [
-        "Yunchi <noreply@yunchicheck.com>",
-        "Yunchi <onboarding@resend.dev>"
-      ];
-
       const reasonHtml = ban_reason 
         ? `<div style="background: #1a0a0a; padding: 15px; border-left: 4px solid #ef4444; border-radius: 8px; margin: 20px 0;">
             <p style="margin: 0; color: #fca5a5; font-weight: 600;">Reason:</p>
@@ -127,42 +120,20 @@ Deno.serve(async (req) => {
         </div>
       `;
 
-      for (const sender of senders) {
-        try {
-          const emailResult = await resend.emails.send({
-            from: sender,
-            reply_to: "support@yunchicheck.com",
-            to: [userEmail],
-            subject: "🚫 Your Account Has Been Banned - Yunchi",
-            html: emailHtml,
-            headers: {
-              "X-Entity-Ref-ID": crypto.randomUUID(),
-              "X-Priority": "1",
-              "Importance": "high",
-            },
-            tags: [
-              { name: "category", value: "transactional" },
-              { name: "type", value: "ban_notification" },
-            ],
-          });
+      const emailResult = await sendEmail({
+        to: userEmail,
+        subject: "🚫 Your Account Has Been Banned - Yunchi",
+        html: emailHtml,
+        tags: [
+          { name: "category", value: "transactional" },
+          { name: "type", value: "ban_notification" },
+        ],
+      });
 
-          if (emailResult.error) {
-            const errorMessage = (emailResult.error as any)?.message || '';
-            console.error(`Email error from ${sender}:`, emailResult.error);
-            
-            if (errorMessage.includes('domain is not verified') || (emailResult.error as any)?.statusCode === 403) {
-              console.log("Domain not verified, trying fallback sender...");
-              continue;
-            }
-            continue;
-          }
-
-          console.log(`Email ban notification sent via ${sender}`);
-          break;
-        } catch (err) {
-          console.error(`Error sending from ${sender}:`, err);
-          continue;
-        }
+      if (emailResult.success) {
+        console.log("Email ban notification sent successfully");
+      } else {
+        console.error("Failed to send ban email:", emailResult.error);
       }
     }
 

@@ -1,9 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Resend } from "https://esm.sh/resend@2.0.0";
-
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+import { sendEmail } from "../_shared/email-helper.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,14 +22,6 @@ Deno.serve(async (req) => {
 
     console.log(`Sending welcome email to ${email} (user: ${user_id})`);
 
-    if (!RESEND_API_KEY) {
-      console.error("RESEND_API_KEY not configured");
-      return new Response(
-        JSON.stringify({ error: "Email service not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     if (!email) {
       console.error("Email address is required");
       return new Response(
@@ -43,7 +30,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    const resend = new Resend(RESEND_API_KEY);
     const displayName = username || email.split("@")[0];
 
     const emailHtml = `
@@ -157,68 +143,29 @@ If you didn't create this account, please ignore this email.
 
 — Yunchi Team`;
 
-    // Try primary domain first, fallback to resend.dev if domain not verified
-    const senders = [
-      "Yunchi <noreply@yunchicheck.com>",
-      "Yunchi <onboarding@resend.dev>"
-    ];
+    const result = await sendEmail({
+      to: email,
+      subject: "Welcome to Yunchi - Your Account is Ready",
+      html: emailHtml,
+      text: emailText,
+      tags: [
+        { name: "category", value: "transactional" },
+        { name: "type", value: "welcome" },
+      ],
+    });
 
-    let emailSent = false;
-    let emailId: string | undefined;
-
-    for (const sender of senders) {
-      try {
-        console.log(`Attempting to send welcome email from ${sender}`);
-        const { data, error } = await resend.emails.send({
-          from: sender,
-          reply_to: "support@yunchicheck.com",
-          to: [email],
-          subject: "Welcome to Yunchi - Your Account is Ready",
-          html: emailHtml,
-          text: emailText,
-          headers: {
-            "X-Entity-Ref-ID": crypto.randomUUID(),
-            "X-Priority": "1",
-            "Importance": "high",
-          },
-          tags: [
-            { name: "category", value: "transactional" },
-            { name: "type", value: "welcome" },
-          ],
-        });
-
-        if (error) {
-          const errorMessage = (error as any)?.message || '';
-          console.error(`Resend API error from ${sender}:`, error);
-          
-          // If domain not verified, try fallback
-          if (errorMessage.includes('domain is not verified') || (error as any)?.statusCode === 403) {
-            console.log("Domain not verified, trying fallback sender...");
-            continue;
-          }
-          continue;
-        }
-
-        emailSent = true;
-        emailId = data?.id;
-        console.log(`Welcome email sent successfully via ${sender}:`, emailId);
-        break;
-      } catch (err) {
-        console.error(`Error sending from ${sender}:`, err);
-        continue;
-      }
-    }
-
-    if (!emailSent) {
-      console.error("All email senders failed");
+    if (!result.success) {
+      console.error("Failed to send welcome email:", result.error);
       return new Response(
-        JSON.stringify({ error: "Failed to send email with all providers" }),
+        JSON.stringify({ error: "Failed to send email" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    console.log("Welcome email sent successfully:", result.messageId);
+
     return new Response(
-      JSON.stringify({ success: true, message: "Welcome email sent", id: emailId }),
+      JSON.stringify({ success: true, message: "Welcome email sent", id: result.messageId }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {

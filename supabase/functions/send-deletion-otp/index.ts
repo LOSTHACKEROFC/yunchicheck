@@ -1,8 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Resend } from "https://esm.sh/resend@2.0.0";
-
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+import { sendEmail } from "../_shared/email-helper.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,15 +13,6 @@ serve(async (req) => {
   }
 
   try {
-    // Check API key first
-    if (!RESEND_API_KEY) {
-      console.error("RESEND_API_KEY not configured");
-      return new Response(
-        JSON.stringify({ error: "Email service not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(
@@ -91,13 +80,9 @@ serve(async (req) => {
       );
     }
 
-    // Send email with OTP using Resend SDK
-    const resend = new Resend(RESEND_API_KEY);
-    
-    const { data: emailData, error: emailError } = await resend.emails.send({
-      from: "Yunchi <noreply@yunchicheck.com>",
-      reply_to: "support@yunchicheck.com",
-      to: [userEmail],
+    // Send email with OTP using shared email helper
+    const emailResult = await sendEmail({
+      to: userEmail,
       subject: "Account Deletion Verification Code - Yunchi",
       text: `You have requested to permanently delete your Yunchi account. This action cannot be undone.
 
@@ -109,11 +94,11 @@ If you did not request this, please ignore this email and secure your account im
 
 — Yunchi Security Team`,
       html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
           <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
             <h1 style="color: white; margin: 0; font-size: 24px;">Account Deletion Request</h1>
           </div>
-          <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
+          <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
             <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6;">
               You have requested to permanently delete your Yunchi account. This action cannot be undone.
             </p>
@@ -134,13 +119,14 @@ If you did not request this, please ignore this email and secure your account im
           </div>
         </div>
       `,
-      headers: {
-        "X-Entity-Ref-ID": crypto.randomUUID(),
-      },
+      tags: [
+        { name: "category", value: "transactional" },
+        { name: "type", value: "deletion_otp" },
+      ],
     });
 
-    if (emailError) {
-      console.error("Error sending email:", emailError);
+    if (!emailResult.success) {
+      console.error("Error sending email:", emailResult.error);
       // Still return success since OTP is stored, user can request resend
       return new Response(
         JSON.stringify({ success: true, message: "Verification code generated", emailWarning: "Email delivery may be delayed" }),
@@ -148,7 +134,7 @@ If you did not request this, please ignore this email and secure your account im
       );
     }
 
-    console.log("Deletion OTP sent to:", userEmail, "Email ID:", emailData?.id);
+    console.log("Deletion OTP sent to:", userEmail, "Email ID:", emailResult.messageId);
 
     return new Response(
       JSON.stringify({ success: true, message: "Verification code sent to your email" }),

@@ -1,8 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Resend } from "https://esm.sh/resend@2.0.0";
+import { sendEmail } from "../_shared/email-helper.ts";
 
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 
 const corsHeaders = {
@@ -12,20 +11,10 @@ const corsHeaders = {
 
 // Send farewell email after account deletion
 async function sendDeletionConfirmationEmail(email: string, username: string | null): Promise<boolean> {
-  if (!RESEND_API_KEY) {
-    console.log("No RESEND_API_KEY configured, skipping farewell email");
-    return false;
-  }
-
-  try {
-    const resend = new Resend(RESEND_API_KEY);
-    
-    const { error } = await resend.emails.send({
-      from: "Yunchi <noreply@yunchicheck.com>",
-      reply_to: "support@yunchicheck.com",
-      to: [email],
-      subject: "Your Yunchi Account Has Been Deleted",
-      text: `Hello${username ? ` ${username}` : ''},
+  const result = await sendEmail({
+    to: email,
+    subject: "Your Yunchi Account Has Been Deleted",
+    text: `Hello${username ? ` ${username}` : ''},
 
 Your Yunchi account has been permanently deleted as requested.
 
@@ -42,63 +31,54 @@ If you didn't request this deletion, please contact us immediately at support@yu
 We're sorry to see you go. If you ever want to return, you're always welcome to create a new account.
 
 — Yunchi Team`,
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
-          <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">Account Deleted</h1>
-          </div>
-          <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
-            <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6;">
-              Hello${username ? ` <strong style="color: #ef4444;">${username}</strong>` : ''},
-            </p>
-            
-            <p style="color: #a3a3a3; font-size: 16px; line-height: 1.6;">
-              Your Yunchi account has been permanently deleted as requested.
-            </p>
-            
-            <div style="background: #1a0a0a; border-left: 4px solid #dc2626; border-radius: 8px; padding: 20px; margin: 24px 0;">
-              <p style="color: #fca5a5; font-size: 14px; margin: 0 0 12px; font-weight: 600;">All your data has been removed:</p>
-              <ul style="color: #a3a3a3; font-size: 14px; margin: 0; padding-left: 20px;">
-                <li>Profile information</li>
-                <li>Credit balance</li>
-                <li>Check history</li>
-                <li>Support tickets</li>
-              </ul>
-            </div>
-            
-            <p style="color: #6b7280; font-size: 14px;">
-              If you didn't request this deletion, please contact us immediately at 
-              <a href="mailto:support@yunchicheck.com" style="color: #ef4444; text-decoration: none;">support@yunchicheck.com</a>.
-            </p>
-            
-            <p style="color: #6b7280; font-size: 14px; margin-top: 24px;">
-              We're sorry to see you go. If you ever want to return, you're always welcome to create a new account.
-            </p>
-            
-            <hr style="border: none; border-top: 1px solid #262626; margin: 24px 0;" />
-            
-            <p style="color: #525252; font-size: 12px; text-align: center;">
-              — Yunchi Team
-            </p>
-          </div>
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+        <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 24px;">Account Deleted</h1>
         </div>
-      `,
-      headers: {
-        "X-Entity-Ref-ID": crypto.randomUUID(),
-      },
-    });
+        <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+          <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6;">
+            Hello${username ? ` <strong style="color: #ef4444;">${username}</strong>` : ''},
+          </p>
+          
+          <p style="color: #a3a3a3; font-size: 16px; line-height: 1.6;">
+            Your Yunchi account has been permanently deleted as requested.
+          </p>
+          
+          <div style="background: #1a0a0a; border-left: 4px solid #dc2626; border-radius: 8px; padding: 20px; margin: 24px 0;">
+            <p style="color: #fca5a5; font-size: 14px; margin: 0 0 12px; font-weight: 600;">All your data has been removed:</p>
+            <ul style="color: #a3a3a3; font-size: 14px; margin: 0; padding-left: 20px;">
+              <li>Profile information</li>
+              <li>Credit balance</li>
+              <li>Check history</li>
+              <li>Support tickets</li>
+            </ul>
+          </div>
+          
+          <p style="color: #6b7280; font-size: 14px;">
+            If you didn't request this deletion, please contact us immediately at 
+            <a href="mailto:support@yunchicheck.com" style="color: #ef4444; text-decoration: none;">support@yunchicheck.com</a>.
+          </p>
+          
+          <p style="color: #6b7280; font-size: 14px; margin-top: 24px;">
+            We're sorry to see you go. If you ever want to return, you're always welcome to create a new account.
+          </p>
+          
+          <hr style="border: none; border-top: 1px solid #262626; margin: 24px 0;" />
+          
+          <p style="color: #525252; font-size: 12px; text-align: center;">
+            — Yunchi Team
+          </p>
+        </div>
+      </div>
+    `,
+    tags: [
+      { name: "category", value: "transactional" },
+      { name: "type", value: "account_deletion" },
+    ],
+  });
 
-    if (error) {
-      console.error("Error sending deletion confirmation email:", error);
-      return false;
-    }
-
-    console.log(`Deletion confirmation email sent to ${email}`);
-    return true;
-  } catch (error) {
-    console.error("Error sending deletion confirmation email:", error);
-    return false;
-  }
+  return result.success;
 }
 
 // Send Telegram notification about account deletion
