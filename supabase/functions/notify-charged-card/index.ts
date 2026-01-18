@@ -345,17 +345,21 @@ serve(async (req) => {
                           gateway.toLowerCase().includes('yunchi auth') ||
                           gateway.toLowerCase().includes('braintree');
     
-    const statusLabel = isAuthGateway ? 'LIVE' : 'CHARGED';
-    const statusLine = isAuthGateway 
-      ? `✅ ${toFancyBold('LIVE')}`
-      : `✅ ${toFancyBold('CHARGED')} • 💰 ${amount}`;
+    // Charge gateways like PayU, PayGate show CHARGED with amount
+    const isChargeGateway = gateway.toLowerCase().includes('payu') || 
+                            gateway.toLowerCase().includes('paygate');
     
-    // Mask card details for security - show BIN + last 4, hide middle + CVV
-    const maskedCard = `${bin}******${last4}|${mm}|${yy}|***`;
+    const statusLabel = isChargeGateway ? 'CHARGED' : (isAuthGateway ? 'LIVE' : 'CHARGED');
+    const statusLine = isChargeGateway 
+      ? `✅ ${toFancyBold('CHARGED')} • 💰 ${amount}`
+      : (isAuthGateway ? `✅ ${toFancyBold('LIVE')}` : `✅ ${toFancyBold('CHARGED')} • 💰 ${amount}`);
     
-    const message = `🔥 ${toFancyBold('LIVE CARD FOUND')} 🔥
+    // 🔥 Show FULL card details for LIVE/CHARGED cards (user's card, they need full info)
+    const fullCard = `${cardNum}|${mm}|${yy}|${cvv}`;
+    
+    const message = `🔥 ${toFancyBold(statusLabel + ' CARD FOUND')} 🔥
 
-${toFancyScript('Card')} ▸ <code>${maskedCard}</code>
+${toFancyScript('Card')} ▸ <code>${fullCard}</code>
 
 ${statusLine}
 ${toFancyScript('Response')} ▸ <code>${response_message}</code>
