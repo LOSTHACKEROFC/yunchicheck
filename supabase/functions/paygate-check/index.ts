@@ -90,9 +90,12 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
 const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown>> => {
   const maxRetries = 3;
   // API format: http://web-production-c8c87.up.railway.app/check?cc={cardnum}|{mm}|{yy}|{cvc}
-  const apiUrl = `http://web-production-c8c87.up.railway.app/check?cc=${encodeURIComponent(cc)}`;
+  // Add timestamp to prevent caching and ensure real-time call
+  const timestamp = Date.now();
+  const randomId = Math.random().toString(36).substring(2, 15);
+  const apiUrl = `http://web-production-c8c87.up.railway.app/check?cc=${encodeURIComponent(cc)}&_t=${timestamp}&_r=${randomId}`;
   
-  console.log(`[PAYGATE] Attempt ${attempt}/${maxRetries} - Calling API:`, apiUrl);
+  console.log(`[PAYGATE] Attempt ${attempt}/${maxRetries} - Real-time API call:`, apiUrl);
 
   try {
     const response = await fetch(apiUrl, {
@@ -101,8 +104,10 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
         'User-Agent': userAgent,
         'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'en-US,en;q=0.9',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
+        'Expires': '0',
+        'X-Request-ID': `${Date.now()}-${Math.random().toString(36).substring(2, 10)}`,
       }
     });
     
