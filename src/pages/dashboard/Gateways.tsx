@@ -118,7 +118,7 @@ interface Gateway {
   name: string;
   code?: string;
   type: "auth" | "preauth" | "charge";
-  status: "online" | "maintenance" | "offline";
+  status: "online" | "maintenance" | "offline" | "unavailable";
   cardTypes: string;
   speed: string;
   successRate: string;
@@ -127,7 +127,8 @@ interface Gateway {
   iconColor: string;
 }
 
-const gateways: Gateway[] = [
+// Default gateway configurations (status will be overridden from database)
+const defaultGateways: Gateway[] = [
   { 
     id: "stripe_auth",
     name: "YUNCHI AUTH 1",
@@ -299,6 +300,10 @@ const Gateways = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [liveIndicator, setLiveIndicator] = useState(false);
 
+  // Dynamic gateways state - merged from default config + database status
+  const [gateways, setGateways] = useState<Gateway[]>(defaultGateways);
+  const [loadingGateways, setLoadingGateways] = useState(true);
+
   const onlineCount = gateways.filter(g => g.status === "online").length;
   
   // Live card sound hook with settings check
@@ -384,6 +389,66 @@ const Gateways = () => {
 
   useEffect(() => {
     fetchUserCredits();
+    fetchGatewayStatus();
+  }, []);
+
+  // Fetch gateway status from database and subscribe to real-time updates
+  const fetchGatewayStatus = async () => {
+    setLoadingGateways(true);
+    try {
+      const { data: statusData, error } = await supabase
+        .from('gateway_status')
+        .select('id, status');
+
+      if (error) throw error;
+
+      if (statusData && statusData.length > 0) {
+        // Merge database status with default gateway config
+        setGateways(defaultGateways.map(gateway => {
+          const dbStatus = statusData.find(s => s.id === gateway.id);
+          if (dbStatus) {
+            // Map 'unavailable' to 'maintenance' for UI display
+            const displayStatus = dbStatus.status === 'unavailable' ? 'maintenance' : dbStatus.status;
+            return { ...gateway, status: displayStatus as Gateway['status'] };
+          }
+          return gateway;
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to fetch gateway status:', err);
+    } finally {
+      setLoadingGateways(false);
+    }
+  };
+
+  // Subscribe to real-time gateway status updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('gateway-status-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'gateway_status',
+        },
+        (payload) => {
+          const updated = payload.new as { id: string; status: string };
+          setGateways(prev => prev.map(gateway => {
+            if (gateway.id === updated.id) {
+              // Map 'unavailable' to 'maintenance' for UI display
+              const displayStatus = updated.status === 'unavailable' ? 'maintenance' : updated.status;
+              return { ...gateway, status: displayStatus as Gateway['status'] };
+            }
+            return gateway;
+          }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Fetch gateway history when gateway is selected and subscribe to real-time updates
