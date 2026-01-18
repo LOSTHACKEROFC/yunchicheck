@@ -76,6 +76,7 @@ const AdminTopups = () => {
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
 
   // Check admin status
   useEffect(() => {
@@ -135,6 +136,24 @@ const AdminTopups = () => {
         });
         setProfiles(profilesMap);
       }
+
+      // Generate signed URLs for proof images (bucket is now private)
+      const urlMap: Record<string, string> = {};
+      for (const tx of data || []) {
+        if (tx.proof_image_url && !tx.proof_image_url.startsWith('http')) {
+          // It's a file path, generate signed URL
+          const { data: signedData } = await supabase.storage
+            .from('payment-proofs')
+            .createSignedUrl(tx.proof_image_url, 3600); // 1 hour expiry
+          if (signedData?.signedUrl) {
+            urlMap[tx.id] = signedData.signedUrl;
+          }
+        } else if (tx.proof_image_url) {
+          // Already a URL (legacy), use as-is
+          urlMap[tx.id] = tx.proof_image_url;
+        }
+      }
+      setSignedUrls(urlMap);
     }
     setLoading(false);
   };
@@ -462,7 +481,7 @@ const AdminTopups = () => {
                 </div>
               </div>
 
-              {selectedTx.proof_image_url && (
+              {selectedTx.proof_image_url && signedUrls[selectedTx.id] && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-muted-foreground flex items-center gap-2">
@@ -471,14 +490,14 @@ const AdminTopups = () => {
                     </p>
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => setLightboxImage(selectedTx.proof_image_url)}
+                        onClick={() => setLightboxImage(signedUrls[selectedTx.id])}
                         className="text-xs text-primary hover:underline flex items-center gap-1"
                       >
                         <ZoomIn className="h-3 w-3" />
                         Zoom
                       </button>
                       <a
-                        href={selectedTx.proof_image_url}
+                        href={signedUrls[selectedTx.id]}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-xs text-primary hover:underline flex items-center gap-1"
@@ -490,10 +509,10 @@ const AdminTopups = () => {
                   </div>
                   <div 
                     className="relative rounded-lg overflow-hidden border border-border bg-secondary cursor-zoom-in group"
-                    onClick={() => setLightboxImage(selectedTx.proof_image_url)}
+                    onClick={() => setLightboxImage(signedUrls[selectedTx.id])}
                   >
                     <img
-                      src={selectedTx.proof_image_url}
+                      src={signedUrls[selectedTx.id]}
                       alt="Payment proof"
                       className="w-full max-h-64 object-contain transition-transform group-hover:scale-105"
                     />

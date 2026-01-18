@@ -290,15 +290,11 @@ const Topup = () => {
         return;
       }
 
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('payment-proofs')
-        .getPublicUrl(fileName);
-
-      // Update transaction with proof image URL
+      // Store the file path (not public URL) since bucket is now private
+      // Admin will generate signed URLs when viewing
       const { error: updateError } = await supabase
         .from('topup_transactions')
-        .update({ proof_image_url: publicUrl })
+        .update({ proof_image_url: fileName })
         .eq('id', currentTransaction.id);
 
       if (updateError) {
@@ -308,6 +304,11 @@ const Topup = () => {
         return;
       }
 
+      // Generate signed URL for the notification (short-lived)
+      const { data: signedUrlData } = await supabase.storage
+        .from('payment-proofs')
+        .createSignedUrl(fileName, 3600); // 1 hour expiry
+
       // Call edge function to notify admin via Telegram
       const { error: notifyError } = await supabase.functions.invoke('notify-topup-proof', {
         body: { 
@@ -315,7 +316,7 @@ const Topup = () => {
           user_id: user.id,
           amount: currentTransaction.amount,
           payment_method: currentTransaction.payment_method,
-          proof_image_url: publicUrl
+          proof_image_url: signedUrlData?.signedUrl || fileName
         }
       });
 
