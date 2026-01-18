@@ -202,8 +202,9 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
       computedStatus,
       responseMessage,
       apiStatus: data.status || 'UNKNOWN',
-      apiMessage,
-      rawResponse: data
+      apiMessage: data.message || responseMessage,
+      apiTotal: data.total || null,
+      rawResponse: JSON.stringify(data)
     };
   } catch (error) {
     console.error(`[PAYGATE] Attempt ${attempt} - Fetch error:`, error);
