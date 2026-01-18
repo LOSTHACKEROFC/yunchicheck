@@ -259,8 +259,26 @@ serve(async (req) => {
       }
     }
     
-    // 🔥 CHECK FOR "VERIFICATION" - Mark as DECLINED immediately
-    if (lowerResponse.includes("verification")) {
+    // 🔥 CHECK FOR 3DS/VERIFICATION in final_url - Mark as DECLINED with specific message
+    const finalUrl = data?.transaction?.final_url || data?.final_url || "";
+    const lowerFinalUrl = String(finalUrl).toLowerCase();
+    
+    const has3DSKeywords = lowerFinalUrl.includes("authentication") ||
+                           lowerFinalUrl.includes("3d") ||
+                           lowerFinalUrl.includes("threedsecure") ||
+                           lowerFinalUrl.includes("verification") ||
+                           lowerFinalUrl.includes("otp") ||
+                           lowerFinalUrl.includes("3ds") ||
+                           lowerFinalUrl.includes("secure3d") ||
+                           lowerFinalUrl.includes("verify");
+    
+    if (has3DSKeywords) {
+      status = "dead";
+      apiMessage = "DECLINED (3DS / Verification Required)";
+      console.log(`❌ DEAD CARD - 3DS/Verification detected in final_url: ${finalUrl}`);
+    }
+    // 🔥 CHECK FOR "VERIFICATION" in response text - Mark as DECLINED immediately
+    else if (lowerResponse.includes("verification")) {
       status = "dead";
       const retryDetails = data?.transaction?.retryOptions?.details;
       if (retryDetails?.error_message && String(retryDetails.error_message).toLowerCase() !== "none") {
