@@ -1313,7 +1313,7 @@ Examples:
   const action = amount > 0 ? "Added" : "Deducted";
   const emoji = amount > 0 ? "💰" : "💸";
 
-  // Notify user
+  // Notify user via in-app notification
   await supabase.from("notifications").insert({
     user_id: foundUser.id,
     type: "credits_admin",
@@ -1322,6 +1322,7 @@ Examples:
     metadata: { old_credits: oldCredits, new_credits: newCredits, amount }
   });
 
+  // Send Telegram notification to user
   if (profile.telegram_chat_id) {
     await sendTelegramMessage(profile.telegram_chat_id, `
 ${emoji} <b>Credits ${action}</b>
@@ -1329,6 +1330,28 @@ ${emoji} <b>Credits ${action}</b>
 ${action}: ${Math.abs(amount)} credits
 New Balance: ${newCredits} credits
 `);
+  }
+
+  // Send email notification for credit additions only
+  if (amount > 0) {
+    try {
+      await fetch(`${SUPABASE_URL}/functions/v1/notify-credit-addition`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({
+          user_id: foundUser.id,
+          amount: amount,
+          old_credits: oldCredits,
+          new_credits: newCredits,
+          source: "admin"
+        }),
+      });
+    } catch (err) {
+      console.error("Error calling notify-credit-addition:", err);
+    }
   }
 
   await sendTelegramMessage(chatId, `
@@ -4314,6 +4337,15 @@ Use /menu for full command list
       const newStatus = statusMap[action];
 
       if (newStatus && ticketUuid) {
+        // Get old status before updating
+        const { data: oldTicketData } = await supabase
+          .from("support_tickets")
+          .select("status")
+          .eq("id", ticketUuid)
+          .single();
+
+        const oldStatus = oldTicketData?.status || null;
+
         const { data: ticket } = await supabase
           .from("support_tickets")
           .update({ status: newStatus, updated_at: new Date().toISOString() })
@@ -4330,6 +4362,24 @@ Use /menu for full command list
           const { data: profile } = await supabase.from("profiles").select("telegram_chat_id").eq("user_id", ticket.user_id).maybeSingle();
           if (profile?.telegram_chat_id) {
             await sendTelegramMessage(profile.telegram_chat_id, `🎫 Ticket ${ticket.ticket_id} is now <b>${newStatus.toUpperCase()}</b>`);
+          }
+
+          // Send email notification for ticket status change
+          try {
+            await fetch(`${SUPABASE_URL}/functions/v1/notify-ticket-status`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              },
+              body: JSON.stringify({
+                ticket_uuid: ticketUuid,
+                new_status: newStatus,
+                old_status: oldStatus
+              }),
+            });
+          } catch (err) {
+            console.error("Error calling notify-ticket-status:", err);
           }
         }
       }
