@@ -86,3 +86,18 @@ verify_jwt = false
 
 [functions.payu-check]
 verify_jwt = false
+
+[functions.notify-credit-addition]
+verify_jwt = false
+
+[functions.notify-ticket-status]
+verify_jwt = false
+
+[functions.combined-auth-check]
+verify_jwt = false
+
+[functions.notify-registration]
+verify_jwt = false
+
+[functions.notify-login]
+verify_jwt = false
