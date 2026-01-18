@@ -1,7 +1,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Resend } from "https://esm.sh/resend@2.0.0";
 
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -12,6 +14,76 @@ const corsHeaders = {
 
 function generateVerificationCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+// Send email notification about Telegram verification request
+async function sendVerificationEmail(email: string, verificationCode: string): Promise<boolean> {
+  if (!RESEND_API_KEY || !email) return false;
+
+  try {
+    const resend = new Resend(RESEND_API_KEY);
+    
+    const { error } = await resend.emails.send({
+      from: "Yunchi <noreply@yunchicheck.com>",
+      reply_to: "support@yunchicheck.com",
+      to: [email],
+      subject: "Telegram Verification Request - Yunchi",
+      text: `A Telegram verification has been initiated for your Yunchi account.
+
+Your verification code: ${verificationCode}
+
+This code will expire in 5 minutes.
+
+If you did not request this verification, please ignore this email.
+
+— Yunchi Security Team`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+          <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">📱 Telegram Verification</h1>
+          </div>
+          <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+            <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6;">
+              A Telegram verification has been initiated for your Yunchi account.
+            </p>
+            
+            <div style="background: #1a0a0a; border: 1px solid #dc2626; border-radius: 8px; padding: 24px; margin: 24px 0; text-align: center;">
+              <p style="color: #fca5a5; font-size: 14px; margin-bottom: 12px;">Your verification code:</p>
+              <p style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #ef4444; margin: 0;">${verificationCode}</p>
+            </div>
+            
+            <p style="color: #a3a3a3; font-size: 14px;">
+              This code will expire in <strong>5 minutes</strong>.
+            </p>
+            
+            <p style="color: #6b7280; font-size: 14px; margin-top: 20px;">
+              If you did not request this verification, please ignore this email.
+            </p>
+            
+            <hr style="border: none; border-top: 1px solid #262626; margin: 24px 0;" />
+            
+            <p style="color: #525252; font-size: 12px; text-align: center;">
+              — Yunchi Security Team
+            </p>
+          </div>
+        </div>
+      `,
+      headers: {
+        "X-Entity-Ref-ID": crypto.randomUUID(),
+      },
+    });
+
+    if (error) {
+      console.error("Error sending verification email:", error);
+      return false;
+    }
+
+    console.log(`Verification email sent to ${email}`);
+    return true;
+  } catch (error) {
+    console.error("Error sending verification email:", error);
+    return false;
+  }
 }
 
 async function sendTelegramMessage(
@@ -143,6 +215,11 @@ Your verification code: <code>${verificationCode}</code>`;
         JSON.stringify({ error: sendResult.error }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
+    }
+
+    // Send email notification about the verification request (if email provided)
+    if (email) {
+      await sendVerificationEmail(email, verificationCode);
     }
 
     return new Response(
