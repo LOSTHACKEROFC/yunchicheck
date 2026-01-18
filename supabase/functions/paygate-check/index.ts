@@ -118,10 +118,10 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
 
     console.log(`[PAYGATE] Attempt ${attempt} - Parsed response:`, data);
 
-    // Add our computed status and response message for frontend
+    // Add our computed status and response message for frontend (no raw response)
     const computedStatus = getStatusFromResponse(data);
-    data.computedStatus = computedStatus;
-    data.responseMessage = extractResponseMessage(data);
+    const responseMessage = extractResponseMessage(data);
+    const apiMessage = data.message || 'No response message';
 
     // Check if response is UNKNOWN and should retry
     if (computedStatus === "unknown" && attempt < maxRetries) {
@@ -133,7 +133,13 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
       return performCheck(cc, newUserAgent, attempt + 1);
     }
 
-    return data;
+    // Return only necessary fields - no raw response
+    return {
+      computedStatus,
+      responseMessage,
+      apiStatus: data.status || 'UNKNOWN',
+      apiMessage
+    };
   } catch (error) {
     console.error(`[PAYGATE] Attempt ${attempt} - Fetch error:`, error);
     
@@ -145,8 +151,8 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     }
     
     return { 
-      status: "ERROR", 
-      message: error instanceof Error ? error.message : "Unknown fetch error",
+      apiStatus: "ERROR",
+      apiMessage: error instanceof Error ? error.message : "Unknown fetch error",
       computedStatus: "unknown",
       responseMessage: error instanceof Error ? error.message : "Unknown error"
     };
