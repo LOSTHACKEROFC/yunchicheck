@@ -243,6 +243,7 @@ export type Database = {
         Row: {
           created_at: string
           email_announcements: boolean | null
+          email_credit_additions: boolean | null
           email_ticket_replies: boolean | null
           email_topup_status: boolean | null
           id: string
@@ -252,6 +253,7 @@ export type Database = {
         Insert: {
           created_at?: string
           email_announcements?: boolean | null
+          email_credit_additions?: boolean | null
           email_ticket_replies?: boolean | null
           email_topup_status?: boolean | null
           id?: string
@@ -261,6 +263,7 @@ export type Database = {
         Update: {
           created_at?: string
           email_announcements?: boolean | null
+          email_credit_additions?: boolean | null
           email_ticket_replies?: boolean | null
           email_topup_status?: boolean | null
           id?: string
