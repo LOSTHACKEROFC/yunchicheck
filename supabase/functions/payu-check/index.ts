@@ -1,31 +1,38 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Max-Age": "86400",
 };
 
+// Helper function to send admin notification via Telegram
 async function sendAdminTelegram(message: string) {
-  const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
-  const adminChatId = Deno.env.get('ADMIN_TELEGRAM_CHAT_ID') || '8496943061';
+  const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
+  const ADMIN_CHAT_ID = Deno.env.get("ADMIN_CHAT_ID");
   
-  if (!botToken) {
-    console.log('No Telegram bot token configured');
+  if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) {
+    console.log("Missing Telegram config, skipping admin notification");
     return;
   }
-
+  
   try {
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        chat_id: adminChatId,
+        chat_id: ADMIN_CHAT_ID,
         text: message,
-        parse_mode: 'HTML',
-      }),
+        parse_mode: "HTML"
+      })
     });
-  } catch (error) {
-    console.error('Failed to send admin Telegram:', error);
+  } catch (e) {
+    console.error("Failed to send admin Telegram:", e);
   }
 }
 
@@ -36,6 +43,42 @@ serve(async (req) => {
   }
 
   try {
+    // REQUIRE AUTHENTICATION
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // VERIFY USER TOKEN
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Invalid token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // CHECK USER IS NOT BANNED
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_banned")
+      .eq("user_id", user.id)
+      .single();
+
+    if (profile?.is_banned) {
+      return new Response(
+        JSON.stringify({ error: "Account suspended" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const { cc, amount } = await req.json();
 
     if (!cc) {
@@ -49,7 +92,7 @@ serve(async (req) => {
     const chargeAmount = amount || 1;
     const maskedCC = cc.substring(0, 6) + '****' + cc.slice(-4);
 
-    console.log(`PayU Check - Amount: ₹${chargeAmount}, Card: ${maskedCC}`);
+    console.log(`PayU Check - User: ${user.id}, Amount: ₹${chargeAmount}, Card: ${maskedCC}`);
 
     // Call the PayU API
     const apiUrl = `https://payu.up.railway.app/${chargeAmount}/${cc}`;
@@ -77,7 +120,7 @@ serve(async (req) => {
 
     const lowerResponse = responseText.toLowerCase();
     
-    // Check for failure indicators FIRST (they can appear alongside "success" in the wrapper)
+    // Check for failure indicators FIRST
     const hasFailureIndicators = 
         lowerResponse.includes("3d") || 
         lowerResponse.includes("3ds") ||
@@ -100,7 +143,6 @@ serve(async (req) => {
 
     if (hasFailureIndicators) {
       status = "dead";
-      // Extract error message if available
       if (data && typeof data === 'object' && data.transaction?.retryOptions?.details?.error_message) {
         apiMessage = data.transaction.retryOptions.details.error_message;
       } else if (data && typeof data === 'object' && data.transaction?.retryOptions?.details?.error_title) {
@@ -122,7 +164,7 @@ serve(async (req) => {
       else if (data.error) apiMessage = data.error;
     }
 
-    // Send raw response to admin via Telegram
+    // Send raw response to admin via Telegram (masked card)
     const prettyJson = JSON.stringify(data, null, 2);
     const adminMessage = `🔍 <b>PayU API Raw Response</b>
 
@@ -150,7 +192,6 @@ serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : "Failed to process request";
     console.error('PayU Check Error:', errorMessage);
     
-    // Send error to admin
     await sendAdminTelegram(`❌ <b>PayU API Error</b>\n\n<code>${errorMessage}</code>`);
     
     return new Response(
