@@ -1,8 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Resend } from "https://esm.sh/resend@2.0.0";
+import { sendEmail } from "../_shared/email-helper.ts";
 
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -134,21 +133,11 @@ const handler = async (req: Request): Promise<Response> => {
     if (emailOptedOut) {
       console.log("Skipping email - user opted out of ticket reply emails");
       emailSkipped = true;
-    } else if (RESEND_API_KEY && ticket.user_email) {
-      const resend = new Resend(RESEND_API_KEY);
-      const senders = [
-        "Yunchi <noreply@yunchicheck.com>",
-        "Yunchi <onboarding@resend.dev>"
-      ];
-
-      for (const sender of senders) {
-        try {
-          const { error: emailError } = await resend.emails.send({
-            from: sender,
-            reply_to: "support@yunchicheck.com",
-            to: [ticket.user_email],
-            subject: `[${ticket.ticket_id}] New Reply to Your Support Ticket`,
-            text: `New Reply to Your Ticket
+    } else if (ticket.user_email) {
+      const emailResult = await sendEmail({
+        to: ticket.user_email,
+        subject: `[${ticket.ticket_id}] New Reply to Your Support Ticket`,
+        text: `New Reply to Your Ticket
 
 Ticket: ${ticket.ticket_id}
 Subject: ${ticket.subject}
@@ -161,64 +150,46 @@ You can view the full conversation by logging into your account.
 View Ticket: https://yunchicheck.com/dashboard/support
 
 — Yunchi Support Team`,
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
-                <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                  <h1 style="color: white; margin: 0;">💬 New Reply to Your Ticket</h1>
-                </div>
-                <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
-                  <div style="background: #1a0a0a; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #2a1a1a;">
-                    <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Ticket:</strong> ${ticket.ticket_id}</p>
-                    <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Subject:</strong> ${ticket.subject}</p>
-                  </div>
-                  <div style="background: #1a0a0a; padding: 20px; border-radius: 8px; border-left: 4px solid #dc2626;">
-                    <p style="color: #ef4444; margin-bottom: 10px;"><strong>${adminName || 'Support Team'}:</strong></p>
-                    <p style="white-space: pre-wrap; margin: 0; line-height: 1.6; color: #e5e5e5;">${message}</p>
-                  </div>
-                  <p style="color: #737373; font-size: 14px; margin-top: 20px;">
-                    You can view the full conversation by logging into your account.
-                  </p>
-                  <div style="text-align: center; margin-top: 25px;">
-                    <a href="https://yunchicheck.com/dashboard/support" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View Ticket</a>
-                  </div>
-                  <p style="color: #404040; font-size: 12px; text-align: center; margin-top: 30px;">
-                    This is an automated notification from Yunchi Checker support.
-                  </p>
-                </div>
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+            <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+              <h1 style="color: white; margin: 0;">💬 New Reply to Your Ticket</h1>
+            </div>
+            <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+              <div style="background: #1a0a0a; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #2a1a1a;">
+                <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Ticket:</strong> ${ticket.ticket_id}</p>
+                <p style="margin: 5px 0; color: #a3a3a3;"><strong style="color: #e5e5e5;">Subject:</strong> ${ticket.subject}</p>
               </div>
-            `,
-            headers: {
-              "X-Entity-Ref-ID": crypto.randomUUID(),
-              "X-Priority": "1",
-              "Importance": "high",
-            },
-            tags: [
-              { name: "category", value: "transactional" },
-              { name: "type", value: "ticket_reply" },
-            ],
-          });
+              <div style="background: #1a0a0a; padding: 20px; border-radius: 8px; border-left: 4px solid #dc2626;">
+                <p style="color: #ef4444; margin-bottom: 10px;"><strong>${adminName || 'Support Team'}:</strong></p>
+                <p style="white-space: pre-wrap; margin: 0; line-height: 1.6; color: #e5e5e5;">${message}</p>
+              </div>
+              <p style="color: #737373; font-size: 14px; margin-top: 20px;">
+                You can view the full conversation by logging into your account.
+              </p>
+              <div style="text-align: center; margin-top: 25px;">
+                <a href="https://yunchicheck.com/dashboard/support" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">View Ticket</a>
+              </div>
+              <p style="color: #404040; font-size: 12px; text-align: center; margin-top: 30px;">
+                This is an automated notification from Yunchi Checker support.
+              </p>
+            </div>
+          </div>
+        `,
+        tags: [
+          { name: "category", value: "transactional" },
+          { name: "type", value: "ticket_reply" },
+        ],
+      });
 
-          if (emailError) {
-            const errorMessage = (emailError as any)?.message || '';
-            console.error(`Email error from ${sender}:`, emailError);
-            
-            if (errorMessage.includes('domain is not verified') || (emailError as any)?.statusCode === 403) {
-              console.log("Domain not verified, trying fallback sender...");
-              continue;
-            }
-            continue;
-          }
-
-          emailSent = true;
-          console.log(`Email notification sent via ${sender}`);
-          break;
-        } catch (emailErr) {
-          console.error(`Error sending from ${sender}:`, emailErr);
-          continue;
-        }
+      emailSent = emailResult.success;
+      if (emailSent) {
+        console.log("Email notification sent");
+      } else {
+        console.error("Failed to send email:", emailResult.error);
       }
     } else {
-      console.log("Email not sent: RESEND_API_KEY not configured or no user email");
+      console.log("Email not sent: no user email");
     }
 
     // Send Telegram notification if user has chat ID configured
