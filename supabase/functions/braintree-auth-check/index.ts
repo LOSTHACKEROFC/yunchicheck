@@ -102,14 +102,10 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
 
     console.log(`[B3-AUTH] Attempt ${attempt} - Parsed response:`, data);
 
-    // Add our computed status for frontend
+    // Add our computed status for frontend (no raw response)
     const computedStatus = getStatusFromResponse(data);
-    data.computedStatus = computedStatus;
+    const apiMessage = data.message || data.msg || 'No response message';
     
-    // Normalize API response fields
-    data.apiStatus = data.status || data.result || 'UNKNOWN';
-    data.apiMessage = data.message || data.msg || (data.raw as string) || 'No response message';
-
     // Check if response is UNKNOWN and should retry
     if (computedStatus === "unknown" && attempt < maxRetries) {
       console.log(`[B3-AUTH] UNKNOWN response on attempt ${attempt}, retrying with new user agent...`);
@@ -120,7 +116,12 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
       return performCheck(cc, newUserAgent, attempt + 1);
     }
 
-    return data;
+    // Return only necessary fields - no raw response
+    return {
+      computedStatus,
+      apiStatus: data.status || data.result || 'UNKNOWN',
+      apiMessage
+    };
   } catch (error) {
     console.error(`[B3-AUTH] Attempt ${attempt} - Fetch error:`, error);
     
@@ -132,8 +133,6 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     }
     
     return { 
-      status: "ERROR", 
-      message: error instanceof Error ? error.message : "Unknown fetch error",
       apiStatus: "ERROR",
       apiMessage: error instanceof Error ? error.message : "Unknown fetch error",
       computedStatus: "unknown"

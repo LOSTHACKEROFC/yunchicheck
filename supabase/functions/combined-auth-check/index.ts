@@ -122,10 +122,7 @@ const performStripeCheck = async (cc: string, userAgent: string, attempt: number
     console.log(`[COMBINED-STRIPE] Attempt ${attempt} - Parsed response:`, data);
 
     const computedStatus = getStripeStatusFromResponse(data);
-    data.computedStatus = computedStatus;
-    data.apiStatus = data.status || 'UNKNOWN';
-    data.apiMessage = data.message || (data.raw as string) || 'No response message';
-    data.gateway = 'stripe';
+    const apiMessage = data.message || 'No response message';
 
     // Retry if unknown
     if (computedStatus === "unknown" && attempt < maxRetries) {
@@ -135,7 +132,13 @@ const performStripeCheck = async (cc: string, userAgent: string, attempt: number
       return performStripeCheck(cc, newUserAgent, attempt + 1);
     }
 
-    return data;
+    // Return only necessary fields - no raw response
+    return {
+      computedStatus,
+      apiStatus: data.status || 'UNKNOWN',
+      apiMessage,
+      gateway: 'stripe'
+    };
   } catch (error) {
     console.error(`[COMBINED-STRIPE] Attempt ${attempt} - Fetch error:`, error);
     
@@ -146,8 +149,6 @@ const performStripeCheck = async (cc: string, userAgent: string, attempt: number
     }
     
     return { 
-      status: "ERROR", 
-      message: error instanceof Error ? error.message : "Unknown fetch error",
       apiStatus: "ERROR",
       apiMessage: error instanceof Error ? error.message : "Unknown fetch error",
       computedStatus: "unknown",
@@ -196,10 +197,7 @@ const performB3Check = async (cc: string, userAgent: string, attempt: number = 1
     console.log(`[COMBINED-B3] Attempt ${attempt} - Parsed response:`, data);
 
     const computedStatus = getB3StatusFromResponse(data);
-    data.computedStatus = computedStatus;
-    data.apiStatus = data.status || data.result || 'UNKNOWN';
-    data.apiMessage = data.message || data.msg || (data.raw as string) || 'No response message';
-    data.gateway = 'b3';
+    const apiMessage = data.message || data.msg || 'No response message';
 
     // Retry if unknown
     if (computedStatus === "unknown" && attempt < maxRetries) {
@@ -209,7 +207,13 @@ const performB3Check = async (cc: string, userAgent: string, attempt: number = 1
       return performB3Check(cc, newUserAgent, attempt + 1);
     }
 
-    return data;
+    // Return only necessary fields - no raw response
+    return {
+      computedStatus,
+      apiStatus: data.status || data.result || 'UNKNOWN',
+      apiMessage,
+      gateway: 'b3'
+    };
   } catch (error) {
     console.error(`[COMBINED-B3] Attempt ${attempt} - Fetch error:`, error);
     
@@ -220,8 +224,6 @@ const performB3Check = async (cc: string, userAgent: string, attempt: number = 1
     }
     
     return { 
-      status: "ERROR", 
-      message: error instanceof Error ? error.message : "Unknown fetch error",
       apiStatus: "ERROR",
       apiMessage: error instanceof Error ? error.message : "Unknown fetch error",
       computedStatus: "unknown",
