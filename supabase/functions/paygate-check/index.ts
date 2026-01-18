@@ -86,6 +86,21 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
   
   console.log('[PAYGATE] Analyzing response - status:', status, 'message:', message);
   
+  // UNKNOWN: Check for API/gateway errors first (iframe, step, timeout, error, etc.)
+  if (
+    rawResponse.includes('iframe') ||
+    rawResponse.includes('step') ||
+    rawResponse.includes('timeout') ||
+    rawResponse.includes('not found') ||
+    rawResponse.includes('error') ||
+    rawResponse.includes('exception') ||
+    status === 'retry' ||
+    rawResponse.includes('retry')
+  ) {
+    console.log('[PAYGATE] Detected API/Gateway error - marking as UNKNOWN');
+    return "unknown";
+  }
+  
   // LIVE: Check for success, successful transaction, successfully transaction
   if (
     status === 'success' ||
@@ -97,12 +112,6 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
   ) {
     console.log('[PAYGATE] Detected LIVE status');
     return "live";
-  }
-  
-  // UNKNOWN: Check for retry status
-  if (status === 'retry' || rawResponse.includes('retry')) {
-    console.log('[PAYGATE] Detected RETRY - marking as UNKNOWN');
-    return "unknown";
   }
   
   // DEAD: Check for declined, failed, rejected, verification, 3d, otp
