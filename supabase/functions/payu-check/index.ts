@@ -357,7 +357,6 @@ ${mcpAmount ? `💵 <b>MCP:</b> ${mcpAmount}` : ''}
         status,
         apiStatus: status.toUpperCase(),
         apiMessage,
-        rawResponse: responseText,
         amount: chargeAmount,
         mcp: mcpAmount || null
       }),
