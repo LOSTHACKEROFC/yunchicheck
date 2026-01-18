@@ -510,6 +510,7 @@ async function setBotCommands(): Promise<void> {
     { command: "blockdevice", description: "Block device/IP manually" },
     { command: "userdevices", description: "View user's devices" },
     { command: "healthsites", description: "Health check gateway sites" },
+    { command: "gate", description: "Set gateway availability" },
   ];
 
   try {
@@ -885,6 +886,10 @@ async function handleAdminCmd(chatId: string, supabase: any, messageId?: number)
 
 <b>📢 Communication</b>
 /broadcast <code>[message]</code> - Send to all users
+
+<b>🌐 Gateways</b>
+/gate - Set gateway availability
+/healthsites - Health check sites
 
 <b>👮 Moderation</b>
 /promote <code>[chat_id]</code> - Promote to moderator
@@ -2856,6 +2861,191 @@ const handler = async (req: Request): Promise<Response> => {
           }
         }
 
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ─────────────────────────────────────────────────────────
+      // GATEWAY STATUS CALLBACKS
+      // ─────────────────────────────────────────────────────────
+      
+      // Gateway selection - show status options
+      if (callbackData.startsWith("gate_select_")) {
+        if (!isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can manage gateways");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const gatewayId = callbackData.replace("gate_select_", "");
+        
+        // Fetch current gateway status
+        const { data: gateway } = await supabase
+          .from("gateway_status")
+          .select("id, name, status")
+          .eq("id", gatewayId)
+          .single();
+
+        if (!gateway) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Gateway not found");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const statusEmojis: Record<string, string> = {
+          online: "🟢",
+          offline: "🔴",
+          unavailable: "🟡"
+        };
+
+        const statusMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+   🔧 <b>GATEWAY SETTINGS</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>Gateway:</b> ${gateway.name}
+<b>Current Status:</b> ${statusEmojis[gateway.status]} ${gateway.status.toUpperCase()}
+
+━━━━━━━━━━━━━━━━━━━━━━
+<i>Select a new status:</i>
+`;
+
+        const statusKeyboard = {
+          inline_keyboard: [
+            [
+              { text: gateway.status === "online" ? "✅ Online" : "🟢 Online", callback_data: `gate_set_${gatewayId}_online` },
+            ],
+            [
+              { text: gateway.status === "offline" ? "✅ Offline" : "🔴 Offline", callback_data: `gate_set_${gatewayId}_offline` },
+            ],
+            [
+              { text: gateway.status === "unavailable" ? "✅ Unavailable" : "🟡 Unavailable", callback_data: `gate_set_${gatewayId}_unavailable` },
+            ],
+            [
+              { text: "🔙 Back to Gateways", callback_data: "gate_back" }
+            ]
+          ]
+        };
+
+        if (messageId && callbackChatId) {
+          await editTelegramMessage(callbackChatId, messageId, statusMessage, statusKeyboard);
+        }
+        await answerCallbackQuery(update.callback_query.id, `Selected: ${gateway.name}`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Gateway status update - set new status
+      if (callbackData.startsWith("gate_set_")) {
+        if (!isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can manage gateways");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const parts = callbackData.replace("gate_set_", "").split("_");
+        const newStatus = parts.pop(); // Last part is the status
+        const gatewayId = parts.join("_"); // Rest is the gateway ID
+
+        if (!["online", "offline", "unavailable"].includes(newStatus || "")) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Invalid status");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Update gateway status
+        const { data: updatedGateway, error: updateError } = await supabase
+          .from("gateway_status")
+          .update({ 
+            status: newStatus, 
+            updated_at: new Date().toISOString(),
+            updated_by: callbackChatId 
+          })
+          .eq("id", gatewayId)
+          .select("id, name, status")
+          .single();
+
+        if (updateError || !updatedGateway) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Failed to update gateway");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const statusEmojis: Record<string, string> = {
+          online: "🟢",
+          offline: "🔴",
+          unavailable: "🟡"
+        };
+
+        const confirmMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+   ✅ <b>STATUS UPDATED</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>Gateway:</b> ${updatedGateway.name}
+<b>New Status:</b> ${statusEmojis[updatedGateway.status]} ${updatedGateway.status.toUpperCase()}
+
+<i>Change is now live on the website!</i>
+━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+        const confirmKeyboard = {
+          inline_keyboard: [
+            [{ text: "🔧 Edit Again", callback_data: `gate_select_${gatewayId}` }],
+            [{ text: "🔙 Back to Gateways", callback_data: "gate_back" }],
+            [{ text: "🏠 Main Menu", callback_data: "menu_back" }]
+          ]
+        };
+
+        if (messageId && callbackChatId) {
+          await editTelegramMessage(callbackChatId, messageId, confirmMessage, confirmKeyboard);
+        }
+        await answerCallbackQuery(update.callback_query.id, `✅ ${updatedGateway.name} set to ${newStatus}`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Back to gateway list
+      if (callbackData === "gate_back") {
+        if (!isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can manage gateways");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Fetch all gateways with their current status
+        const { data: gateways } = await supabase
+          .from("gateway_status")
+          .select("id, name, status, updated_at")
+          .order("name", { ascending: true });
+
+        const statusEmojis: Record<string, string> = {
+          online: "🟢",
+          offline: "🔴",
+          unavailable: "🟡"
+        };
+
+        let gateMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+   🌐 <b>GATEWAY CONTROL</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>📊 Current Status:</b>
+`;
+
+        gateways?.forEach((g: any) => {
+          gateMessage += `${statusEmojis[g.status] || "⚪"} <b>${g.name}</b> - ${g.status.toUpperCase()}\n`;
+        });
+
+        gateMessage += `
+━━━━━━━━━━━━━━━━━━━━━━
+<i>Select a gateway to change its status</i>
+`;
+
+        const gatewayButtons: any[][] = [];
+        gateways?.forEach((g: any) => {
+          gatewayButtons.push([{
+            text: `${statusEmojis[g.status] || "⚪"} ${g.name}`,
+            callback_data: `gate_select_${g.id}`
+          }]);
+        });
+        gatewayButtons.push([{ text: "🔙 Back to Menu", callback_data: "menu_back" }]);
+
+        if (messageId && callbackChatId) {
+          await editTelegramMessage(callbackChatId, messageId, gateMessage, { inline_keyboard: gatewayButtons });
+        }
+        await answerCallbackQuery(update.callback_query.id, "🌐 Gateway Control");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -5697,6 +5887,66 @@ ${resultsDisplay || "Waiting for results..."}
         `📊 <b>Full Health Check Report</b>\n\n✅ Success: ${successCount}\n❌ Errors: ${errorCount}\n💰 Price Groups: ${sortedPriceKeys.filter(k => k !== "ERROR").length}\n\n<i>Contains full raw API responses</i>`
       );
 
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // GATEWAY STATUS COMMAND (Admin Only)
+    // ─────────────────────────────────────────────────────────
+
+    // /gate - Set gateway availability status
+    if (text === "/gate") {
+      const isAdminUser = await isAdminAsync(chatId, supabase);
+      if (!isAdminUser) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can use this command.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Fetch all gateways with their current status
+      const { data: gateways, error: gateError } = await supabase
+        .from("gateway_status")
+        .select("id, name, status, updated_at")
+        .order("name", { ascending: true });
+
+      if (gateError) {
+        await sendTelegramMessage(chatId, "❌ <b>Error</b>\n\nFailed to fetch gateway status.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const statusEmojis: Record<string, string> = {
+        online: "🟢",
+        offline: "🔴",
+        unavailable: "🟡"
+      };
+
+      let gateMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+   🌐 <b>GATEWAY CONTROL</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>📊 Current Status:</b>
+`;
+
+      gateways?.forEach((g: any) => {
+        gateMessage += `${statusEmojis[g.status] || "⚪"} <b>${g.name}</b> - ${g.status.toUpperCase()}\n`;
+      });
+
+      gateMessage += `
+━━━━━━━━━━━━━━━━━━━━━━
+<i>Select a gateway to change its status</i>
+`;
+
+      // Build gateway selection keyboard
+      const gatewayButtons: any[][] = [];
+      gateways?.forEach((g: any) => {
+        gatewayButtons.push([{
+          text: `${statusEmojis[g.status] || "⚪"} ${g.name}`,
+          callback_data: `gate_select_${g.id}`
+        }]);
+      });
+      gatewayButtons.push([{ text: "🔙 Back to Menu", callback_data: "menu_back" }]);
+
+      await sendTelegramMessage(chatId, gateMessage, { inline_keyboard: gatewayButtons });
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 

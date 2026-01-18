@@ -170,6 +170,30 @@ export type Database = {
         }
         Relationships: []
       }
+      gateway_status: {
+        Row: {
+          id: string
+          name: string
+          status: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id: string
+          name: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       gateway_urls: {
         Row: {
           created_at: string
