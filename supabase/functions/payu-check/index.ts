@@ -259,12 +259,25 @@ serve(async (req) => {
       }
     }
     
+    // 🔥 CHECK FOR "VERIFICATION" - Mark as DECLINED immediately
+    if (lowerResponse.includes("verification")) {
+      status = "dead";
+      const retryDetails = data?.transaction?.retryOptions?.details;
+      if (retryDetails?.error_message && String(retryDetails.error_message).toLowerCase() !== "none") {
+        apiMessage = retryDetails.error_message;
+      } else if (retryDetails?.error_title && String(retryDetails.error_title).toLowerCase() !== "none") {
+        apiMessage = retryDetails.error_title;
+      } else {
+        apiMessage = "VERIFICATION REQUIRED - DECLINED";
+      }
+      console.log(`❌ DEAD CARD - Verification required - ${apiMessage}`);
+    }
+    
     // Fallback: Check for failure indicators if status still unknown
     if (status === "unknown") {
       const hasFailureIndicators = 
           lowerResponse.includes("3d") || 
           lowerResponse.includes("3ds") ||
-          lowerResponse.includes("verification") ||
           lowerResponse.includes("verify") ||
           lowerResponse.includes("authenticate") ||
           lowerResponse.includes("otp") ||
