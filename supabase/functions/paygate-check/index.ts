@@ -61,15 +61,25 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
     return "live";
   }
   
-  // DEAD: Status is DECLINED or message indicates decline OR contains "verification"
+  // DEAD: Status is DECLINED or message indicates decline
   if (status === 'DECLINED' || status === 'DEAD' || status === 'FAILED') {
     return "dead";
   }
   
-  // Check for "verification" in response - mark as DECLINED
-  if (rawResponse.includes('verification')) {
-    console.log('[PAYGATE] Found "verification" in response - marking as DECLINED');
-    return "dead";
+  // Check for 3D Secure/Verification/OTP/Redirect indicators - mark as DECLINED
+  const declineIndicators = [
+    'verification', '3d', 'otp', 'redirect', 
+    'declined', 'failed', 'could not', 'transaction failed', 
+    'try again', 'authentication required', 'secure', '3ds',
+    'do not honor', 'not permitted', 'restricted', 'lost card',
+    'stolen card', 'pickup card', 'fraud', 'security violation'
+  ];
+  
+  for (const indicator of declineIndicators) {
+    if (rawResponse.includes(indicator)) {
+      console.log(`[PAYGATE] Found "${indicator}" in response - marking as DECLINED`);
+      return "dead";
+    }
   }
   
   if (message.includes('decline') || message.includes('declined') || 
