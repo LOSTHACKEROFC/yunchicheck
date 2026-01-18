@@ -40,6 +40,7 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
   ];
 
   const recipients = Array.isArray(options.to) ? options.to : [options.to];
+  const supportEmail = "support@yunchicheck.com";
 
   for (const sender of senders) {
     try {
@@ -47,7 +48,7 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
       
       const emailPayload: any = {
         from: sender,
-        reply_to: options.replyTo || "support@yunchicheck.com",
+        reply_to: options.replyTo || supportEmail,
         to: recipients,
         subject: options.subject,
         html: options.html,
