@@ -207,14 +207,14 @@ serve(async (req) => {
     const authUser = authData?.users?.find((u: any) => u.id === user_id);
     const userEmail = authUser?.email;
 
-    // Check email preferences
+    // Check email preferences for credit additions
     const { data: emailPrefs } = await supabase
       .from("notification_preferences")
-      .select("email_announcements")
+      .select("email_credit_additions")
       .eq("user_id", user_id)
       .single();
 
-    const emailOptedOut = emailPrefs?.email_announcements === false;
+    const emailOptedOut = emailPrefs?.email_credit_additions === false;
 
     let emailSent = false;
     let emailSkipped = false;

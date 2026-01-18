@@ -51,6 +51,7 @@ interface EmailPreferences {
   email_announcements: boolean;
   email_topup_status: boolean;
   email_ticket_replies: boolean;
+  email_credit_additions: boolean;
 }
 
 interface SettingsDropdownProps {
@@ -72,6 +73,7 @@ const defaultEmailPrefs: EmailPreferences = {
   email_announcements: true,
   email_topup_status: true,
   email_ticket_replies: true,
+  email_credit_additions: true,
 };
 
 const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps) => {
@@ -104,6 +106,7 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
           email_announcements: data.email_announcements ?? true,
           email_topup_status: data.email_topup_status ?? true,
           email_ticket_replies: data.email_ticket_replies ?? true,
+          email_credit_additions: (data as any).email_credit_additions ?? true,
         });
       }
       setEmailPrefsLoaded(true);
@@ -401,6 +404,18 @@ const SettingsDropdown = ({ soundEnabled, onSoundToggle }: SettingsDropdownProps
                   <Switch
                     checked={emailPrefs.email_ticket_replies}
                     onCheckedChange={(v) => handleEmailPrefChange("email_ticket_replies", v)}
+                    disabled={!emailPrefsLoaded}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-emerald-500" />
+                    <span className="text-sm">Credit Addition Emails</span>
+                  </div>
+                  <Switch
+                    checked={emailPrefs.email_credit_additions}
+                    onCheckedChange={(v) => handleEmailPrefChange("email_credit_additions", v)}
                     disabled={!emailPrefsLoaded}
                   />
                 </div>
