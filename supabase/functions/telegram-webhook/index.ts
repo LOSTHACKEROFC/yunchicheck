@@ -5310,40 +5310,47 @@ ${ticket.message}
         };
       };
 
+      // API endpoint for checking sites
+      const API_BASE = "https://shopify-production-a2ac.up.railway.app/api";
+      const TEST_CC = "4000222732521176|01|27|906";
+
       // Process URLs in batches
       for (let i = 0; i < gatewayUrls.length; i += batchSize) {
         const batch = gatewayUrls.slice(i, i + batchSize);
         
         const batchPromises = batch.map(async (item) => {
-          const url = item.url;
+          const siteUrl = item.url;
           try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+            const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout for API
 
-            const response = await fetch(url, {
+            // Call the API with the site URL
+            const apiUrl = `${API_BASE}?storeurl=${encodeURIComponent(siteUrl)}&cc=${TEST_CC}`;
+            
+            const response = await fetch(apiUrl, {
               method: "GET",
               signal: controller.signal,
               headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Accept": "text/html,application/json,*/*",
+                "User-Agent": "Mozilla/5.0",
+                "Accept": "application/json,*/*",
               }
             });
 
             clearTimeout(timeoutId);
 
-            const text = await response.text();
-            const { price, priceStr } = extractPrice(text);
+            const responseText = await response.text();
+            const { price, priceStr } = extractPrice(responseText);
 
             return {
-              url,
+              url: siteUrl,
               price,
               priceStr,
-              rawResponse: text.substring(0, 500), // First 500 chars of response
+              rawResponse: responseText.substring(0, 500), // First 500 chars of response
               status: "success" as const
             };
           } catch (error) {
             return {
-              url,
+              url: siteUrl,
               price: -1, // Error sites go at the end
               priceStr: "ERROR",
               rawResponse: "",
