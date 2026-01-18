@@ -150,12 +150,13 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
       return performCheck(cc, newUserAgent, attempt + 1);
     }
 
-    // Return only necessary fields - no raw response
+    // Return response with raw API data
     return {
       computedStatus,
       responseMessage,
       apiStatus: data.status || 'UNKNOWN',
-      apiMessage
+      apiMessage,
+      rawResponse: data
     };
   } catch (error) {
     console.error(`[PAYGATE] Attempt ${attempt} - Fetch error:`, error);
