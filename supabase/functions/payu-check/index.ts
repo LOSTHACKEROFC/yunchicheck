@@ -175,28 +175,52 @@ serve(async (req) => {
         mcpAmount = data.mcp;
       }
       
-      // Check for success status with valid transaction (no errors)
+      // Check retryOptions.details for error indicators
       const retryDetails = data.transaction?.retryOptions?.details;
-      const hasNoErrors = retryDetails?.failed === null || 
-                          retryDetails?.failed === "None" ||
-                          String(retryDetails?.failed).toLowerCase() === "none" ||
-                          retryDetails?.error_code === "None" ||
-                          retryDetails?.error_code === null ||
-                          String(retryDetails?.error_code).toLowerCase() === "none";
       
-      // LIVE: status success + mcp present + no real errors
-      if (data.status === "success" && data.mcp && hasNoErrors) {
-        status = "live";
-        apiMessage = `CHARGED | MCP: ${mcpAmount}`;
-        console.log(`✅ LIVE CARD DETECTED - MCP: ${mcpAmount}`);
-      } 
-      // LIVE: status success with no error indicators
-      else if (data.status === "success" && hasNoErrors && !retryDetails?.error_message) {
+      // 🔥 LIVE CARD: When ALL error fields are "None" or null
+      // { "error_message": "None", "error_title": "None", "failed": None, "error_code": "None" }
+      const isErrorMessageNone = !retryDetails?.error_message || 
+                                  retryDetails.error_message === "None" ||
+                                  String(retryDetails.error_message).toLowerCase() === "none";
+      const isErrorTitleNone = !retryDetails?.error_title || 
+                                retryDetails.error_title === "None" ||
+                                String(retryDetails.error_title).toLowerCase() === "none";
+      const isFailedNone = retryDetails?.failed === null || 
+                           retryDetails?.failed === undefined ||
+                           retryDetails?.failed === "None" ||
+                           String(retryDetails?.failed).toLowerCase() === "none" ||
+                           retryDetails?.failed === false;
+      const isErrorCodeNone = !retryDetails?.error_code || 
+                              retryDetails.error_code === "None" ||
+                              retryDetails.error_code === null ||
+                              String(retryDetails.error_code).toLowerCase() === "none";
+      
+      // ALL error fields are None/null = CHARGED/LIVE
+      const allErrorsNone = isErrorMessageNone && isErrorTitleNone && isFailedNone && isErrorCodeNone;
+      
+      console.log(`PayU Details Check - error_message: ${retryDetails?.error_message}, error_title: ${retryDetails?.error_title}, failed: ${retryDetails?.failed}, error_code: ${retryDetails?.error_code}`);
+      console.log(`PayU All Errors None: ${allErrorsNone}`);
+      
+      // LIVE: status success + all error fields are None
+      if (data.status === "success" && allErrorsNone) {
         status = "live";
         apiMessage = mcpAmount ? `CHARGED | MCP: ${mcpAmount}` : "CHARGED";
-        console.log(`✅ LIVE CARD DETECTED - Charged`);
+        console.log(`✅ LIVE CARD DETECTED - All errors None - MCP: ${mcpAmount || 'N/A'}`);
       }
-      // DEAD: explicit failure indicators
+      // DEAD: has any real error message/code/failed=true
+      else if (data.status === "success" && !allErrorsNone) {
+        status = "dead";
+        if (retryDetails?.error_message && String(retryDetails.error_message).toLowerCase() !== "none") {
+          apiMessage = retryDetails.error_message;
+        } else if (retryDetails?.error_title && String(retryDetails.error_title).toLowerCase() !== "none") {
+          apiMessage = retryDetails.error_title;
+        } else {
+          apiMessage = "Transaction Failed";
+        }
+        console.log(`❌ DEAD CARD - Has errors - ${apiMessage}`);
+      }
+      // DEAD: explicit failure status
       else if (data.status === "failed" || data.status === "error") {
         status = "dead";
         if (retryDetails?.error_message && String(retryDetails.error_message).toLowerCase() !== "none") {
