@@ -56,22 +56,28 @@ async function sendCreditAdditionEmail(
     return false;
   }
 
-  try {
-    const resend = new Resend(RESEND_API_KEY);
-    
-    const sourceLabel = {
-      "admin": "Admin Credit",
-      "topup": "Top-up Approved",
-      "bonus": "Bonus Credit",
-      "refund": "Refund Credit"
-    }[source] || "Credit Addition";
+  const resend = new Resend(RESEND_API_KEY);
+  const senders = [
+    "Yunchi <noreply@yunchicheck.com>",
+    "Yunchi <onboarding@resend.dev>"
+  ];
 
-    const { error } = await resend.emails.send({
-      from: "Yunchi <noreply@yunchicheck.com>",
-      reply_to: "support@yunchicheck.com",
-      to: [email],
-      subject: `💰 ${amount} Credits Added to Your Account - Yunchi`,
-      text: `Hello${username ? ` ${username}` : ''},
+  const sourceLabel = {
+    "admin": "Admin Credit",
+    "topup": "Top-up Approved",
+    "bonus": "Bonus Credit",
+    "refund": "Refund Credit"
+  }[source] || "Credit Addition";
+
+  for (const sender of senders) {
+    try {
+      console.log(`Sending credit addition email from ${sender}`);
+      const { error } = await resend.emails.send({
+        from: sender,
+        reply_to: "support@yunchicheck.com",
+        to: [email],
+        subject: `💰 ${amount} Credits Added to Your Account - Yunchi`,
+        text: `Hello${username ? ` ${username}` : ''},
 
 Great news! ${amount} credits have been added to your Yunchi account.
 
@@ -82,73 +88,83 @@ New Balance: ${newBalance} credits
 Thank you for using Yunchi Checker!
 
 — Yunchi Team`,
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
-          <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">💰 Credits Added!</h1>
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+            <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">💰 Credits Added!</h1>
+            </div>
+            <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+              <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6;">
+                Hello${username ? ` <strong style="color: #ef4444;">${username}</strong>` : ''},
+              </p>
+              
+              <p style="color: #a3a3a3; font-size: 16px; line-height: 1.6;">
+                Great news! Credits have been added to your account.
+              </p>
+              
+              <div style="background: #1a0a0a; border: 1px solid #dc2626; border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
+                <p style="color: #fca5a5; font-size: 14px; margin: 0 0 8px;">Credits Added</p>
+                <p style="font-size: 42px; font-weight: bold; color: #22c55e; margin: 0;">+${amount}</p>
+              </div>
+              
+              <div style="background: #1a1a1a; border-radius: 8px; padding: 16px; margin: 20px 0;">
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="color: #a3a3a3; padding: 8px 0;">Type:</td>
+                    <td style="color: #e5e5e5; padding: 8px 0; text-align: right; font-weight: 600;">${sourceLabel}</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #a3a3a3; padding: 8px 0; border-top: 1px solid #262626;">New Balance:</td>
+                    <td style="color: #ef4444; padding: 8px 0; text-align: right; font-weight: 600; border-top: 1px solid #262626;">${newBalance} credits</td>
+                  </tr>
+                </table>
+              </div>
+              
+              <div style="text-align: center; margin-top: 25px;">
+                <a href="https://yunchicheck.com/dashboard" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold;">Go to Dashboard</a>
+              </div>
+              
+              <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;" />
+              
+              <p style="color: #525252; font-size: 12px; text-align: center;">
+                Thank you for using Yunchi Checker!<br>
+                — Yunchi Team
+              </p>
+            </div>
           </div>
-          <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
-            <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6;">
-              Hello${username ? ` <strong style="color: #ef4444;">${username}</strong>` : ''},
-            </p>
-            
-            <p style="color: #a3a3a3; font-size: 16px; line-height: 1.6;">
-              Great news! Credits have been added to your account.
-            </p>
-            
-            <div style="background: #1a0a0a; border: 1px solid #dc2626; border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
-              <p style="color: #fca5a5; font-size: 14px; margin: 0 0 8px;">Credits Added</p>
-              <p style="font-size: 42px; font-weight: bold; color: #22c55e; margin: 0;">+${amount}</p>
-            </div>
-            
-            <div style="background: #1a1a1a; border-radius: 8px; padding: 16px; margin: 20px 0;">
-              <table style="width: 100%; border-collapse: collapse;">
-                <tr>
-                  <td style="color: #a3a3a3; padding: 8px 0;">Type:</td>
-                  <td style="color: #e5e5e5; padding: 8px 0; text-align: right; font-weight: 600;">${sourceLabel}</td>
-                </tr>
-                <tr>
-                  <td style="color: #a3a3a3; padding: 8px 0; border-top: 1px solid #262626;">New Balance:</td>
-                  <td style="color: #ef4444; padding: 8px 0; text-align: right; font-weight: 600; border-top: 1px solid #262626;">${newBalance} credits</td>
-                </tr>
-              </table>
-            </div>
-            
-            <div style="text-align: center; margin-top: 25px;">
-              <a href="https://yunchicheck.com/dashboard" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold;">Go to Dashboard</a>
-            </div>
-            
-            <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;" />
-            
-            <p style="color: #525252; font-size: 12px; text-align: center;">
-              Thank you for using Yunchi Checker!<br>
-              — Yunchi Team
-            </p>
-          </div>
-        </div>
-      `,
-      headers: {
-        "X-Entity-Ref-ID": crypto.randomUUID(),
-        "X-Priority": "1",
-        "Importance": "high",
-      },
-      tags: [
-        { name: "category", value: "transactional" },
-        { name: "type", value: "credit_addition" },
-      ],
-    });
+        `,
+        headers: {
+          "X-Entity-Ref-ID": crypto.randomUUID(),
+          "X-Priority": "1",
+          "Importance": "high",
+        },
+        tags: [
+          { name: "category", value: "transactional" },
+          { name: "type", value: "credit_addition" },
+        ],
+      });
 
-    if (error) {
-      console.error("Error sending credit addition email:", error);
-      return false;
+      if (error) {
+        const errorMessage = (error as any)?.message || '';
+        console.error(`Error from ${sender}:`, error);
+        
+        if (errorMessage.includes('domain is not verified') || (error as any)?.statusCode === 403) {
+          console.log("Domain not verified, trying fallback sender...");
+          continue;
+        }
+        continue;
+      }
+
+      console.log(`Credit addition email sent via ${sender} to ${email}`);
+      return true;
+    } catch (error) {
+      console.error(`Error sending from ${sender}:`, error);
+      continue;
     }
-
-    console.log(`Credit addition email sent to ${email}`);
-    return true;
-  } catch (error) {
-    console.error("Error sending credit addition email:", error);
-    return false;
   }
+
+  console.error("All email senders failed");
+  return false;
 }
 
 serve(async (req) => {

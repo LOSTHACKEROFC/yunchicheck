@@ -157,36 +157,68 @@ If you didn't create this account, please ignore this email.
 
 — Yunchi Team`;
 
-    const { data, error } = await resend.emails.send({
-      from: "Yunchi <noreply@yunchicheck.com>",
-      reply_to: "support@yunchicheck.com",
-      to: [email],
-      subject: "Welcome to Yunchi - Your Account is Ready",
-      html: emailHtml,
-      text: emailText,
-      headers: {
-        "X-Entity-Ref-ID": crypto.randomUUID(),
-        "X-Priority": "1",
-        "Importance": "high",
-      },
-      tags: [
-        { name: "category", value: "transactional" },
-        { name: "type", value: "welcome" },
-      ],
-    });
+    // Try primary domain first, fallback to resend.dev if domain not verified
+    const senders = [
+      "Yunchi <noreply@yunchicheck.com>",
+      "Yunchi <onboarding@resend.dev>"
+    ];
 
-    if (error) {
-      console.error("Resend API error:", error);
+    let emailSent = false;
+    let emailId: string | undefined;
+
+    for (const sender of senders) {
+      try {
+        console.log(`Attempting to send welcome email from ${sender}`);
+        const { data, error } = await resend.emails.send({
+          from: sender,
+          reply_to: "support@yunchicheck.com",
+          to: [email],
+          subject: "Welcome to Yunchi - Your Account is Ready",
+          html: emailHtml,
+          text: emailText,
+          headers: {
+            "X-Entity-Ref-ID": crypto.randomUUID(),
+            "X-Priority": "1",
+            "Importance": "high",
+          },
+          tags: [
+            { name: "category", value: "transactional" },
+            { name: "type", value: "welcome" },
+          ],
+        });
+
+        if (error) {
+          const errorMessage = (error as any)?.message || '';
+          console.error(`Resend API error from ${sender}:`, error);
+          
+          // If domain not verified, try fallback
+          if (errorMessage.includes('domain is not verified') || (error as any)?.statusCode === 403) {
+            console.log("Domain not verified, trying fallback sender...");
+            continue;
+          }
+          continue;
+        }
+
+        emailSent = true;
+        emailId = data?.id;
+        console.log(`Welcome email sent successfully via ${sender}:`, emailId);
+        break;
+      } catch (err) {
+        console.error(`Error sending from ${sender}:`, err);
+        continue;
+      }
+    }
+
+    if (!emailSent) {
+      console.error("All email senders failed");
       return new Response(
-        JSON.stringify({ error: "Failed to send email", details: error.message }),
+        JSON.stringify({ error: "Failed to send email with all providers" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`Welcome email sent successfully to ${email}:`, data);
-
     return new Response(
-      JSON.stringify({ success: true, message: "Welcome email sent", id: data?.id }),
+      JSON.stringify({ success: true, message: "Welcome email sent", id: emailId }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {
