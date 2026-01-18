@@ -21,6 +21,30 @@ const userAgents = [
 
 const getRandomUserAgent = () => userAgents[Math.floor(Math.random() * userAgents.length)];
 
+// Extract single key response message from API
+const extractResponseMessage = (data: Record<string, unknown>): string => {
+  // Priority: message > status > first meaningful field
+  if (data?.message && typeof data.message === 'string') {
+    return data.message;
+  }
+  if (data?.status && typeof data.status === 'string') {
+    return data.status;
+  }
+  if (data?.error && typeof data.error === 'string') {
+    return data.error;
+  }
+  if (data?.result && typeof data.result === 'string') {
+    return data.result;
+  }
+  // Fallback to first string value found
+  for (const key of Object.keys(data)) {
+    if (typeof data[key] === 'string' && data[key]) {
+      return data[key] as string;
+    }
+  }
+  return 'No response message';
+};
+
 // Determine status from API response
 const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" | "unknown" => {
   const status = (data?.status as string)?.toUpperCase() || '';
@@ -37,8 +61,14 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
     return "live";
   }
   
-  // DEAD: Status is DECLINED or message indicates decline
+  // DEAD: Status is DECLINED or message indicates decline OR contains "verification"
   if (status === 'DECLINED' || status === 'DEAD' || status === 'FAILED') {
+    return "dead";
+  }
+  
+  // Check for "verification" in response - mark as DECLINED
+  if (rawResponse.includes('verification')) {
+    console.log('[PAYGATE] Found "verification" in response - marking as DECLINED');
     return "dead";
   }
   
@@ -88,9 +118,10 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
 
     console.log(`[PAYGATE] Attempt ${attempt} - Parsed response:`, data);
 
-    // Add our computed status for frontend
+    // Add our computed status and response message for frontend
     const computedStatus = getStatusFromResponse(data);
     data.computedStatus = computedStatus;
+    data.responseMessage = extractResponseMessage(data);
 
     // Check if response is UNKNOWN and should retry
     if (computedStatus === "unknown" && attempt < maxRetries) {
@@ -116,7 +147,8 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     return { 
       status: "ERROR", 
       message: error instanceof Error ? error.message : "Unknown fetch error",
-      computedStatus: "unknown"
+      computedStatus: "unknown",
+      responseMessage: error instanceof Error ? error.message : "Unknown error"
     };
   }
 };
