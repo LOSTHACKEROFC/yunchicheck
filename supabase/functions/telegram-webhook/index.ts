@@ -246,6 +246,44 @@ async function sendTelegramMessage(
   }
 }
 
+// Send message and return the message ID for editing
+async function sendTelegramMessageWithId(
+  chatId: string | number,
+  message: string,
+  replyMarkup?: object
+): Promise<number | null> {
+  if (!TELEGRAM_BOT_TOKEN) return null;
+
+  try {
+    const body: Record<string, unknown> = {
+      chat_id: chatId,
+      text: message,
+      parse_mode: "HTML",
+    };
+    if (replyMarkup) body.reply_markup = replyMarkup;
+
+    const response = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }
+    );
+
+    if (!response.ok) {
+      console.error("Telegram API error:", await response.json());
+      return null;
+    }
+    
+    const data = await response.json();
+    return data.result?.message_id || null;
+  } catch (error) {
+    console.error("Error sending Telegram message:", error);
+    return null;
+  }
+}
+
 async function editTelegramMessage(
   chatId: string | number,
   messageId: number,
@@ -5238,7 +5276,7 @@ ${ticket.message}
     // HEALTH CHECK COMMAND (Admin Only)
     // ─────────────────────────────────────────────────────────
 
-    // /healthsites - Health check all gateway sites
+    // /healthsites - Health check all gateway sites with live updates
     if (text === "/healthsites") {
       const isAdminUser = await isAdminAsync(chatId, supabase);
       if (!isAdminUser) {
@@ -5246,20 +5284,37 @@ ${ticket.message}
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      await sendTelegramMessage(chatId, "⏳ <b>Starting Health Check...</b>\n\nFetching gateway URLs from database. This may take a while for large datasets.");
-
       // Fetch all gateway URLs from database
       const { data: gatewayUrls, error: urlError } = await supabase
         .from("gateway_urls")
         .select("url")
-        .limit(500); // Limit to prevent timeout
+        .limit(100); // Limit for live updates
 
       if (urlError || !gatewayUrls || gatewayUrls.length === 0) {
         await sendTelegramMessage(chatId, "❌ <b>No URLs Found</b>\n\nThe gateway_urls table is empty or there was an error fetching data.");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      await sendTelegramMessage(chatId, `📡 <b>Checking ${gatewayUrls.length} sites...</b>\n\nPlease wait while I fetch responses from each gateway.`);
+      // Send initial message and get message ID for editing
+      const initialMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+   🔍 <b>HEALTH CHECK</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+📡 <b>Starting scan...</b>
+📊 Total Sites: <code>${gatewayUrls.length}</code>
+
+⏳ Initializing...
+
+━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+      const liveMessageId = await sendTelegramMessageWithId(chatId, initialMessage);
+      
+      if (!liveMessageId) {
+        await sendTelegramMessage(chatId, "❌ Failed to create live update message.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
 
       interface SiteResult {
         url: string;
@@ -5271,19 +5326,15 @@ ${ticket.message}
       }
 
       const results: SiteResult[] = [];
-      const batchSize = 10; // Process in batches to avoid overwhelming
-
+      
       // Helper function to extract price from response
       const extractPrice = (response: string): { price: number; priceStr: string } => {
-        // Common price patterns
         const pricePatterns = [
-          /\$[\d,]+\.?\d*/g,                    // $10.00, $1,000.00
-          /USD\s*[\d,]+\.?\d*/gi,               // USD 10.00
-          /[\d,]+\.?\d*\s*USD/gi,               // 10.00 USD
-          /"price":\s*"?[\d.]+/gi,              // "price": 10.00
-          /"amount":\s*"?[\d.]+/gi,             // "amount": 10.00
-          /"total":\s*"?[\d.]+/gi,              // "total": 10.00
-          /price["\s:=]+[\d.]+/gi,              // price=10.00
+          /\$[\d,]+\.?\d*/g,
+          /USD\s*[\d,]+\.?\d*/gi,
+          /"price":\s*"?[\d.]+/gi,
+          /"amount":\s*"?[\d.]+/gi,
+          /"total":\s*"?[\d.]+/gi,
         ];
 
         let lowestPrice = Infinity;
@@ -5293,7 +5344,6 @@ ${ticket.message}
           const matches = response.match(pattern);
           if (matches) {
             for (const match of matches) {
-              // Extract numeric value
               const numericMatch = match.replace(/[^0-9.]/g, "");
               const value = parseFloat(numericMatch);
               if (!isNaN(value) && value >= 0 && value < lowestPrice) {
@@ -5310,63 +5360,126 @@ ${ticket.message}
         };
       };
 
+      // Helper to build live update message
+      const buildLiveMessage = (
+        currentIndex: number,
+        totalSites: number,
+        currentUrl: string,
+        lastResponse: string,
+        recentResults: SiteResult[]
+      ): string => {
+        const progress = Math.round((currentIndex / totalSites) * 100);
+        const progressBar = "█".repeat(Math.floor(progress / 5)) + "░".repeat(20 - Math.floor(progress / 5));
+        
+        const successCount = recentResults.filter(r => r.status === "success").length;
+        const errorCount = recentResults.filter(r => r.status === "error").length;
+        
+        // Get last 5 results for display
+        const lastResults = recentResults.slice(-5).reverse();
+        
+        let resultsDisplay = "";
+        for (const r of lastResults) {
+          const icon = r.status === "success" ? "✅" : "❌";
+          const shortUrl = r.url.length > 30 ? r.url.substring(0, 30) + "..." : r.url;
+          resultsDisplay += `${icon} ${shortUrl} → ${r.priceStr}\n`;
+        }
+
+        return `
+━━━━━━━━━━━━━━━━━━━━━━
+   🔍 <b>HEALTH CHECK</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+📊 <b>Progress:</b> ${currentIndex}/${totalSites}
+[${progressBar}] ${progress}%
+
+┌─────────────────────
+│ ✅ Success: <b>${successCount}</b>
+│ ❌ Errors: <b>${errorCount}</b>
+└─────────────────────
+
+🔄 <b>Checking:</b>
+<code>${currentUrl.substring(0, 50)}${currentUrl.length > 50 ? "..." : ""}</code>
+
+📝 <b>Response:</b>
+<code>${lastResponse.substring(0, 100)}${lastResponse.length > 100 ? "..." : ""}</code>
+
+━━━━━━━━━━━━━━━━━━━━━━
+   <b>RECENT RESULTS</b>
+━━━━━━━━━━━━━━━━━━━━━━
+${resultsDisplay || "Waiting for results..."}
+━━━━━━━━━━━━━━━━━━━━━━
+`;
+      };
+
       // API endpoint for checking sites
       const API_BASE = "https://shopify-production-a2ac.up.railway.app/api";
       const TEST_CC = "4000222732521176|01|27|906";
 
-      // Process URLs in batches
-      for (let i = 0; i < gatewayUrls.length; i += batchSize) {
-        const batch = gatewayUrls.slice(i, i + batchSize);
+      // Process URLs one by one for live updates
+      for (let i = 0; i < gatewayUrls.length; i++) {
+        const siteUrl = gatewayUrls[i].url;
         
-        const batchPromises = batch.map(async (item) => {
-          const siteUrl = item.url;
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout for API
+        // Update message with current site being checked
+        await editTelegramMessage(
+          chatId,
+          liveMessageId,
+          buildLiveMessage(i, gatewayUrls.length, siteUrl, "Fetching...", results)
+        );
 
-            // Call the API with the site URL
-            const apiUrl = `${API_BASE}?storeurl=${encodeURIComponent(siteUrl)}&cc=${TEST_CC}`;
-            
-            const response = await fetch(apiUrl, {
-              method: "GET",
-              signal: controller.signal,
-              headers: {
-                "User-Agent": "Mozilla/5.0",
-                "Accept": "application/json,*/*",
-              }
-            });
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-            clearTimeout(timeoutId);
+          const apiUrl = `${API_BASE}?storeurl=${encodeURIComponent(siteUrl)}&cc=${TEST_CC}`;
+          
+          const response = await fetch(apiUrl, {
+            method: "GET",
+            signal: controller.signal,
+            headers: {
+              "User-Agent": "Mozilla/5.0",
+              "Accept": "application/json,*/*",
+            }
+          });
 
-            const responseText = await response.text();
-            const { price, priceStr } = extractPrice(responseText);
+          clearTimeout(timeoutId);
 
-            return {
-              url: siteUrl,
-              price,
-              priceStr,
-              rawResponse: responseText.substring(0, 500), // First 500 chars of response
-              status: "success" as const
-            };
-          } catch (error) {
-            return {
-              url: siteUrl,
-              price: -1, // Error sites go at the end
-              priceStr: "ERROR",
-              rawResponse: "",
-              status: "error" as const,
-              error: error instanceof Error ? error.message : "Unknown error"
-            };
-          }
-        });
+          const responseText = await response.text();
+          const { price, priceStr } = extractPrice(responseText);
 
-        const batchResults = await Promise.all(batchPromises);
-        results.push(...batchResults);
+          results.push({
+            url: siteUrl,
+            price,
+            priceStr,
+            rawResponse: responseText.substring(0, 500),
+            status: "success"
+          });
 
-        // Progress update every 50 URLs
-        if ((i + batchSize) % 50 === 0) {
-          await sendTelegramMessage(chatId, `📊 Progress: ${Math.min(i + batchSize, gatewayUrls.length)}/${gatewayUrls.length} sites checked...`);
+          // Update with result
+          await editTelegramMessage(
+            chatId,
+            liveMessageId,
+            buildLiveMessage(i + 1, gatewayUrls.length, siteUrl, responseText, results)
+          );
+
+        } catch (error) {
+          results.push({
+            url: siteUrl,
+            price: -1,
+            priceStr: "ERROR",
+            rawResponse: "",
+            status: "error",
+            error: error instanceof Error ? error.message : "Unknown error"
+          });
+
+          await editTelegramMessage(
+            chatId,
+            liveMessageId,
+            buildLiveMessage(i + 1, gatewayUrls.length, siteUrl, `Error: ${error instanceof Error ? error.message : "Unknown"}`, results)
+          );
         }
+
+        // Small delay to avoid rate limiting on Telegram API
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
 
       // Sort by price (lowest to highest), errors at the end
@@ -5387,20 +5500,6 @@ ${ticket.message}
         priceGroups[key].push(result);
       }
 
-      // Generate report
-      let reportContent = `═══════════════════════════════════════\n`;
-      reportContent += `       GATEWAY HEALTH CHECK REPORT\n`;
-      reportContent += `       ${new Date().toISOString()}\n`;
-      reportContent += `═══════════════════════════════════════\n\n`;
-      reportContent += `Total Sites Checked: ${results.length}\n`;
-      reportContent += `Successful: ${results.filter(r => r.status === "success").length}\n`;
-      reportContent += `Errors: ${results.filter(r => r.status === "error").length}\n\n`;
-      reportContent += `───────────────────────────────────────\n`;
-      reportContent += `           RESULTS BY PRICE\n`;
-      reportContent += `       (Sorted: $0.00 → Highest)\n`;
-      reportContent += `───────────────────────────────────────\n\n`;
-
-      // Add sites grouped by price
       const sortedPriceKeys = Object.keys(priceGroups).sort((a, b) => {
         if (a === "ERROR") return 1;
         if (b === "ERROR") return -1;
@@ -5408,6 +5507,73 @@ ${ticket.message}
         const priceB = parseFloat(b.replace("$", "")) || 0;
         return priceA - priceB;
       });
+
+      // Build final summary message
+      const successCount = results.filter(r => r.status === "success").length;
+      const errorCount = results.filter(r => r.status === "error").length;
+
+      let finalMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+   ✅ <b>SCAN COMPLETE</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+📊 <b>Summary:</b>
+┌─────────────────────
+│ 📁 Total Sites: <b>${results.length}</b>
+│ ✅ Success: <b>${successCount}</b>
+│ ❌ Errors: <b>${errorCount}</b>
+│ 💰 Price Groups: <b>${sortedPriceKeys.filter(k => k !== "ERROR").length}</b>
+└─────────────────────
+
+━━━━━━━━━━━━━━━━━━━━━━
+   <b>RESULTS BY PRICE</b>
+   (Sorted: $0.00 → Highest)
+━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+      // Add top results to message (limited to avoid message length issues)
+      let resultCount = 0;
+      for (const priceKey of sortedPriceKeys) {
+        if (resultCount >= 15) {
+          finalMessage += `\n<i>... and more in the report file</i>`;
+          break;
+        }
+        const sites = priceGroups[priceKey];
+        finalMessage += `\n<b>【 ${priceKey} 】</b> (${sites.length} sites)\n`;
+        for (const site of sites.slice(0, 3)) {
+          const shortUrl = site.url.length > 35 ? site.url.substring(0, 35) + "..." : site.url;
+          if (site.status === "error") {
+            finalMessage += `❌ ${shortUrl}\n`;
+          } else {
+            finalMessage += `✅ ${shortUrl}\n`;
+          }
+          resultCount++;
+        }
+        if (sites.length > 3) {
+          finalMessage += `<i>   + ${sites.length - 3} more...</i>\n`;
+        }
+      }
+
+      finalMessage += `
+━━━━━━━━━━━━━━━━━━━━━━
+📄 <i>Full report attached below</i>
+━━━━━━━━━━━━━━━━━━━━━━`;
+
+      // Update final message
+      await editTelegramMessage(chatId, liveMessageId, finalMessage);
+
+      // Generate full report file
+      let reportContent = `═══════════════════════════════════════\n`;
+      reportContent += `       GATEWAY HEALTH CHECK REPORT\n`;
+      reportContent += `       ${new Date().toISOString()}\n`;
+      reportContent += `═══════════════════════════════════════\n\n`;
+      reportContent += `Total Sites Checked: ${results.length}\n`;
+      reportContent += `Successful: ${successCount}\n`;
+      reportContent += `Errors: ${errorCount}\n\n`;
+      reportContent += `───────────────────────────────────────\n`;
+      reportContent += `           RESULTS BY PRICE\n`;
+      reportContent += `       (Sorted: $0.00 → Highest)\n`;
+      reportContent += `───────────────────────────────────────\n\n`;
 
       for (const priceKey of sortedPriceKeys) {
         const sites = priceGroups[priceKey];
@@ -5419,7 +5585,7 @@ ${ticket.message}
           if (site.status === "error") {
             reportContent += `Error: ${site.error}\n`;
           } else {
-            reportContent += `Response Preview:\n${site.rawResponse.substring(0, 200)}...\n`;
+            reportContent += `Response: ${site.rawResponse.substring(0, 200)}...\n`;
           }
           reportContent += `\n`;
         }
@@ -5429,18 +5595,13 @@ ${ticket.message}
       reportContent += `              END OF REPORT\n`;
       reportContent += `═══════════════════════════════════════\n`;
 
-      // Send the report as a file
       const filename = `healthcheck_${new Date().toISOString().split("T")[0]}.txt`;
-      
-      const successCount = results.filter(r => r.status === "success").length;
-      const errorCount = results.filter(r => r.status === "error").length;
-      const uniquePrices = sortedPriceKeys.filter(k => k !== "ERROR").length;
 
       await sendTelegramDocument(
         chatId,
         reportContent,
         filename,
-        `📊 <b>Gateway Health Check Complete</b>\n\n✅ Success: ${successCount}\n❌ Errors: ${errorCount}\n💰 Price Groups: ${uniquePrices}\n\n📁 Total Sites: ${results.length}`
+        `📊 <b>Full Health Check Report</b>\n\n✅ Success: ${successCount}\n❌ Errors: ${errorCount}\n💰 Price Groups: ${sortedPriceKeys.filter(k => k !== "ERROR").length}`
       );
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
