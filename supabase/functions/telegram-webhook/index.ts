@@ -2827,6 +2827,39 @@ const handler = async (req: Request): Promise<Response> => {
       const isCallbackStaff = callbackChatId ? await isStaffAsync(callbackChatId, supabase) : false;
 
       // ─────────────────────────────────────────────────────────
+      // HEALTH CHECK STOP CALLBACK
+      // ─────────────────────────────────────────────────────────
+      if (callbackData === "healthcheck_stop") {
+        if (!isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can stop scans");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Find and update the session to stop it
+        if (callbackChatId && messageId) {
+          const { data: session } = await supabase
+            .from("health_check_sessions")
+            .select("id")
+            .eq("chat_id", callbackChatId)
+            .eq("message_id", messageId)
+            .single();
+
+          if (session) {
+            await supabase
+              .from("health_check_sessions")
+              .update({ is_stopped: true, updated_at: new Date().toISOString() })
+              .eq("id", session.id);
+
+            await answerCallbackQuery(update.callback_query.id, "🛑 Stopping scan...");
+          } else {
+            await answerCallbackQuery(update.callback_query.id, "❌ Scan already finished or not found");
+          }
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ─────────────────────────────────────────────────────────
       // REGISTRATION VERIFICATION CALLBACK
       // ─────────────────────────────────────────────────────────
       if (callbackData.startsWith("verify_")) {
@@ -5284,18 +5317,17 @@ ${ticket.message}
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Fetch all gateway URLs from database
+      // Fetch ALL gateway URLs from database (no limit)
       const { data: gatewayUrls, error: urlError } = await supabase
         .from("gateway_urls")
-        .select("url")
-        .limit(100); // Limit for live updates
+        .select("url");
 
       if (urlError || !gatewayUrls || gatewayUrls.length === 0) {
         await sendTelegramMessage(chatId, "❌ <b>No URLs Found</b>\n\nThe gateway_urls table is empty or there was an error fetching data.");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Send initial message and get message ID for editing
+      // Send initial message with Stop button
       const initialMessage = `
 ━━━━━━━━━━━━━━━━━━━━━━
    🔍 <b>HEALTH CHECK</b>
@@ -5306,15 +5338,33 @@ ${ticket.message}
 
 ⏳ Initializing...
 
+<i>Press Stop to cancel scan</i>
 ━━━━━━━━━━━━━━━━━━━━━━
 `;
 
-      const liveMessageId = await sendTelegramMessageWithId(chatId, initialMessage);
+      const stopButton = {
+        inline_keyboard: [[{ text: "🛑 Stop Scan", callback_data: "healthcheck_stop" }]]
+      };
+
+      const liveMessageId = await sendTelegramMessageWithId(chatId, initialMessage, stopButton);
       
       if (!liveMessageId) {
         await sendTelegramMessage(chatId, "❌ Failed to create live update message.");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
+
+      // Create session in database to track stop state
+      const { data: session } = await supabase
+        .from("health_check_sessions")
+        .insert({
+          chat_id: chatId.toString(),
+          message_id: liveMessageId,
+          is_stopped: false
+        })
+        .select()
+        .single();
+
+      const sessionId = session?.id;
 
       interface SiteResult {
         url: string;
@@ -5360,13 +5410,14 @@ ${ticket.message}
         };
       };
 
-      // Helper to build live update message
+      // Helper to build live update message with full raw response
       const buildLiveMessage = (
         currentIndex: number,
         totalSites: number,
         currentUrl: string,
-        lastResponse: string,
-        recentResults: SiteResult[]
+        fullResponse: string,
+        recentResults: SiteResult[],
+        isStopped: boolean = false
       ): string => {
         const progress = Math.round((currentIndex / totalSites) * 100);
         const progressBar = "█".repeat(Math.floor(progress / 5)) + "░".repeat(20 - Math.floor(progress / 5));
@@ -5374,20 +5425,23 @@ ${ticket.message}
         const successCount = recentResults.filter(r => r.status === "success").length;
         const errorCount = recentResults.filter(r => r.status === "error").length;
         
-        // Get last 5 results for display
-        const lastResults = recentResults.slice(-5).reverse();
+        // Get last 3 results for display
+        const lastResults = recentResults.slice(-3).reverse();
         
         let resultsDisplay = "";
         for (const r of lastResults) {
           const icon = r.status === "success" ? "✅" : "❌";
-          const shortUrl = r.url.length > 30 ? r.url.substring(0, 30) + "..." : r.url;
+          const shortUrl = r.url.length > 25 ? r.url.substring(0, 25) + "..." : r.url;
           resultsDisplay += `${icon} ${shortUrl} → ${r.priceStr}\n`;
         }
+
+        const statusText = isStopped ? "🛑 <b>STOPPED</b>" : "🔄 <b>SCANNING...</b>";
 
         return `
 ━━━━━━━━━━━━━━━━━━━━━━
    🔍 <b>HEALTH CHECK</b>
 ━━━━━━━━━━━━━━━━━━━━━━
+${statusText}
 
 📊 <b>Progress:</b> ${currentIndex}/${totalSites}
 [${progressBar}] ${progress}%
@@ -5397,11 +5451,13 @@ ${ticket.message}
 │ ❌ Errors: <b>${errorCount}</b>
 └─────────────────────
 
-🔄 <b>Checking:</b>
-<code>${currentUrl.substring(0, 50)}${currentUrl.length > 50 ? "..." : ""}</code>
+🌐 <b>Current Site:</b>
+<code>${currentUrl}</code>
 
-📝 <b>Response:</b>
-<code>${lastResponse.substring(0, 100)}${lastResponse.length > 100 ? "..." : ""}</code>
+━━━━━━━━━━━━━━━━━━━━━━
+📝 <b>RAW API RESPONSE:</b>
+━━━━━━━━━━━━━━━━━━━━━━
+<code>${fullResponse.substring(0, 800)}${fullResponse.length > 800 ? "\n... (truncated)" : ""}</code>
 
 ━━━━━━━━━━━━━━━━━━━━━━
    <b>RECENT RESULTS</b>
@@ -5415,20 +5471,42 @@ ${resultsDisplay || "Waiting for results..."}
       const API_BASE = "https://shopify-production-a2ac.up.railway.app/api";
       const TEST_CC = "4000222732521176|01|27|906";
 
+      let wasStopped = false;
+
       // Process URLs one by one for live updates
       for (let i = 0; i < gatewayUrls.length; i++) {
+        // Check if scan was stopped
+        if (sessionId) {
+          const { data: currentSession } = await supabase
+            .from("health_check_sessions")
+            .select("is_stopped")
+            .eq("id", sessionId)
+            .single();
+          
+          if (currentSession?.is_stopped) {
+            wasStopped = true;
+            await editTelegramMessage(
+              chatId,
+              liveMessageId,
+              buildLiveMessage(i, gatewayUrls.length, "Scan stopped by user", "Process terminated", results, true)
+            );
+            break;
+          }
+        }
+
         const siteUrl = gatewayUrls[i].url;
         
         // Update message with current site being checked
         await editTelegramMessage(
           chatId,
           liveMessageId,
-          buildLiveMessage(i, gatewayUrls.length, siteUrl, "Fetching...", results)
+          buildLiveMessage(i, gatewayUrls.length, siteUrl, "⏳ Fetching response...", results),
+          stopButton
         );
 
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
+          const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
 
           const apiUrl = `${API_BASE}?storeurl=${encodeURIComponent(siteUrl)}&cc=${TEST_CC}`;
           
@@ -5450,36 +5528,44 @@ ${resultsDisplay || "Waiting for results..."}
             url: siteUrl,
             price,
             priceStr,
-            rawResponse: responseText.substring(0, 500),
+            rawResponse: responseText, // Store full response
             status: "success"
           });
 
-          // Update with result
+          // Update with full raw response
           await editTelegramMessage(
             chatId,
             liveMessageId,
-            buildLiveMessage(i + 1, gatewayUrls.length, siteUrl, responseText, results)
+            buildLiveMessage(i + 1, gatewayUrls.length, siteUrl, responseText, results),
+            stopButton
           );
 
         } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : "Unknown error";
           results.push({
             url: siteUrl,
             price: -1,
             priceStr: "ERROR",
-            rawResponse: "",
+            rawResponse: errorMsg,
             status: "error",
-            error: error instanceof Error ? error.message : "Unknown error"
+            error: errorMsg
           });
 
           await editTelegramMessage(
             chatId,
             liveMessageId,
-            buildLiveMessage(i + 1, gatewayUrls.length, siteUrl, `Error: ${error instanceof Error ? error.message : "Unknown"}`, results)
+            buildLiveMessage(i + 1, gatewayUrls.length, siteUrl, `❌ Error: ${errorMsg}`, results),
+            stopButton
           );
         }
 
         // Small delay to avoid rate limiting on Telegram API
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      // Clean up session
+      if (sessionId) {
+        await supabase.from("health_check_sessions").delete().eq("id", sessionId);
       }
 
       // Sort by price (lowest to highest), errors at the end
@@ -5514,12 +5600,12 @@ ${resultsDisplay || "Waiting for results..."}
 
       let finalMessage = `
 ━━━━━━━━━━━━━━━━━━━━━━
-   ✅ <b>SCAN COMPLETE</b>
+   ${wasStopped ? "🛑 <b>SCAN STOPPED</b>" : "✅ <b>SCAN COMPLETE</b>"}
 ━━━━━━━━━━━━━━━━━━━━━━
 
 📊 <b>Summary:</b>
 ┌─────────────────────
-│ 📁 Total Sites: <b>${results.length}</b>
+│ 📁 Total Checked: <b>${results.length}</b>
 │ ✅ Success: <b>${successCount}</b>
 │ ❌ Errors: <b>${errorCount}</b>
 │ 💰 Price Groups: <b>${sortedPriceKeys.filter(k => k !== "ERROR").length}</b>
@@ -5531,17 +5617,17 @@ ${resultsDisplay || "Waiting for results..."}
 ━━━━━━━━━━━━━━━━━━━━━━
 `;
 
-      // Add top results to message (limited to avoid message length issues)
+      // Add top results to message
       let resultCount = 0;
       for (const priceKey of sortedPriceKeys) {
-        if (resultCount >= 15) {
+        if (resultCount >= 12) {
           finalMessage += `\n<i>... and more in the report file</i>`;
           break;
         }
         const sites = priceGroups[priceKey];
         finalMessage += `\n<b>【 ${priceKey} 】</b> (${sites.length} sites)\n`;
-        for (const site of sites.slice(0, 3)) {
-          const shortUrl = site.url.length > 35 ? site.url.substring(0, 35) + "..." : site.url;
+        for (const site of sites.slice(0, 2)) {
+          const shortUrl = site.url.length > 30 ? site.url.substring(0, 30) + "..." : site.url;
           if (site.status === "error") {
             finalMessage += `❌ ${shortUrl}\n`;
           } else {
@@ -5549,27 +5635,28 @@ ${resultsDisplay || "Waiting for results..."}
           }
           resultCount++;
         }
-        if (sites.length > 3) {
-          finalMessage += `<i>   + ${sites.length - 3} more...</i>\n`;
+        if (sites.length > 2) {
+          finalMessage += `<i>   + ${sites.length - 2} more...</i>\n`;
         }
       }
 
       finalMessage += `
 ━━━━━━━━━━━━━━━━━━━━━━
-📄 <i>Full report attached below</i>
+📄 <i>Full report with raw responses attached</i>
 ━━━━━━━━━━━━━━━━━━━━━━`;
 
-      // Update final message
+      // Update final message (remove stop button)
       await editTelegramMessage(chatId, liveMessageId, finalMessage);
 
-      // Generate full report file
+      // Generate full report file with raw responses
       let reportContent = `═══════════════════════════════════════\n`;
       reportContent += `       GATEWAY HEALTH CHECK REPORT\n`;
       reportContent += `       ${new Date().toISOString()}\n`;
       reportContent += `═══════════════════════════════════════\n\n`;
       reportContent += `Total Sites Checked: ${results.length}\n`;
       reportContent += `Successful: ${successCount}\n`;
-      reportContent += `Errors: ${errorCount}\n\n`;
+      reportContent += `Errors: ${errorCount}\n`;
+      reportContent += `Status: ${wasStopped ? "STOPPED BY USER" : "COMPLETED"}\n\n`;
       reportContent += `───────────────────────────────────────\n`;
       reportContent += `           RESULTS BY PRICE\n`;
       reportContent += `       (Sorted: $0.00 → Highest)\n`;
@@ -5577,15 +5664,21 @@ ${resultsDisplay || "Waiting for results..."}
 
       for (const priceKey of sortedPriceKeys) {
         const sites = priceGroups[priceKey];
-        reportContent += `\n【 ${priceKey} 】 (${sites.length} sites)\n`;
-        reportContent += `─────────────────────────────────\n`;
+        reportContent += `\n════════════════════════════════════════\n`;
+        reportContent += `【 ${priceKey} 】 (${sites.length} sites)\n`;
+        reportContent += `════════════════════════════════════════\n`;
         
         for (const site of sites) {
+          reportContent += `\n────────────────────────────────────────\n`;
           reportContent += `URL: ${site.url}\n`;
+          reportContent += `Price: ${site.priceStr}\n`;
+          reportContent += `Status: ${site.status.toUpperCase()}\n`;
+          reportContent += `────────────────────────────────────────\n`;
           if (site.status === "error") {
             reportContent += `Error: ${site.error}\n`;
           } else {
-            reportContent += `Response: ${site.rawResponse.substring(0, 200)}...\n`;
+            reportContent += `FULL RAW RESPONSE:\n`;
+            reportContent += `${site.rawResponse}\n`;
           }
           reportContent += `\n`;
         }
@@ -5595,13 +5688,13 @@ ${resultsDisplay || "Waiting for results..."}
       reportContent += `              END OF REPORT\n`;
       reportContent += `═══════════════════════════════════════\n`;
 
-      const filename = `healthcheck_${new Date().toISOString().split("T")[0]}.txt`;
+      const filename = `healthcheck_${new Date().toISOString().split("T")[0]}_${Date.now()}.txt`;
 
       await sendTelegramDocument(
         chatId,
         reportContent,
         filename,
-        `📊 <b>Full Health Check Report</b>\n\n✅ Success: ${successCount}\n❌ Errors: ${errorCount}\n💰 Price Groups: ${sortedPriceKeys.filter(k => k !== "ERROR").length}`
+        `📊 <b>Full Health Check Report</b>\n\n✅ Success: ${successCount}\n❌ Errors: ${errorCount}\n💰 Price Groups: ${sortedPriceKeys.filter(k => k !== "ERROR").length}\n\n<i>Contains full raw API responses</i>`
       );
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });

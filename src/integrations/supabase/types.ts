@@ -188,6 +188,33 @@ export type Database = {
         }
         Relationships: []
       }
+      health_check_sessions: {
+        Row: {
+          chat_id: string
+          created_at: string
+          id: string
+          is_stopped: boolean | null
+          message_id: number
+          updated_at: string
+        }
+        Insert: {
+          chat_id: string
+          created_at?: string
+          id?: string
+          is_stopped?: boolean | null
+          message_id: number
+          updated_at?: string
+        }
+        Update: {
+          chat_id?: string
+          created_at?: string
+          id?: string
+          is_stopped?: boolean | null
+          message_id?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       notification_preferences: {
         Row: {
           created_at: string
