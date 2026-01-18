@@ -701,11 +701,11 @@ const Gateways = () => {
         
         console.log('[PAYGATE] API response:', data);
         
-        // Extract real API response data
-        const apiStatus = data?.status || 'UNKNOWN';
-        const apiMessage = data?.message || 'No message';
-        const apiTotal = data?.total;
-        const rawResponse = JSON.stringify(data);
+        // Extract real API response data from edge function
+        const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
+        const apiMessage = data?.apiMessage || data?.responseMessage || data?.message || 'No message';
+        const apiTotal = data?.apiTotal || null;
+        const rawResponse = data?.rawResponse || JSON.stringify(data);
         
         // Use computedStatus from edge function
         const computedStatus = data?.computedStatus;
