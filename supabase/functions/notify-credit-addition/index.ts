@@ -191,11 +191,24 @@ serve(async (req) => {
     const authUser = authData?.users?.find((u: any) => u.id === user_id);
     const userEmail = authUser?.email;
 
+    // Check email preferences
+    const { data: emailPrefs } = await supabase
+      .from("notification_preferences")
+      .select("email_announcements")
+      .eq("user_id", user_id)
+      .single();
+
+    const emailOptedOut = emailPrefs?.email_announcements === false;
+
     let emailSent = false;
+    let emailSkipped = false;
     let telegramSent = false;
 
-    // Send email notification
-    if (userEmail) {
+    // Send email notification (respect preferences)
+    if (emailOptedOut) {
+      console.log("Skipping email - user opted out");
+      emailSkipped = true;
+    } else if (userEmail) {
       emailSent = await sendCreditAdditionEmail(
         userEmail, 
         profile?.username || null, 
@@ -226,10 +239,10 @@ ${admin_name ? `\nBy: ${admin_name}` : ""}
       telegramSent = await sendTelegramMessage(profile.telegram_chat_id, telegramMessage);
     }
 
-    console.log(`Notifications sent - Email: ${emailSent}, Telegram: ${telegramSent}`);
+    console.log(`Notifications sent - Email: ${emailSent} (skipped: ${emailSkipped}), Telegram: ${telegramSent}`);
 
     return new Response(
-      JSON.stringify({ success: true, emailSent, telegramSent }),
+      JSON.stringify({ success: true, emailSent, emailSkipped, telegramSent }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {
