@@ -173,6 +173,25 @@ serve(async (req) => {
       );
     }
 
+    // Validate card format: CardNumber|MM|YY|CVC - CVC is MANDATORY
+    const cardParts = cc.split('|');
+    if (cardParts.length < 4) {
+      return new Response(
+        JSON.stringify({ error: "Invalid card format. Required: CardNumber|MM|YY|CVC", computedStatus: 'unknown' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const [cardNumber, mm, yy, cvc] = cardParts;
+    
+    // Validate CVC is present and valid (3-4 digits)
+    if (!cvc || cvc.length < 3 || cvc.length > 4 || !/^\d+$/.test(cvc)) {
+      return new Response(
+        JSON.stringify({ error: "CVC is mandatory and must be 3-4 digits", computedStatus: 'unknown' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const userAgent = getRandomUserAgent();
     console.log('[PAYGATE] Checking card for user:', user.id);
     console.log('[PAYGATE] Using User-Agent:', userAgent);

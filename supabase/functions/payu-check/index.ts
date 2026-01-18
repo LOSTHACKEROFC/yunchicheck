@@ -132,6 +132,25 @@ serve(async (req) => {
       );
     }
 
+    // Validate card format: CardNumber|MM|YY|CVC - CVC is MANDATORY
+    const cardParts = cc.split('|');
+    if (cardParts.length < 4) {
+      return new Response(
+        JSON.stringify({ error: "Invalid card format. Required: CardNumber|MM|YY|CVC" }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const [cardNumber, mm, yy, cvc] = cardParts;
+    
+    // Validate CVC is present and valid (3-4 digits)
+    if (!cvc || cvc.length < 3 || cvc.length > 4 || !/^\d+$/.test(cvc)) {
+      return new Response(
+        JSON.stringify({ error: "CVC is mandatory and must be 3-4 digits" }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Default amount to 1 if not provided
     const chargeAmount = amount || 1;
     const maskedCC = cc.substring(0, 6) + '****' + cc.slice(-4);

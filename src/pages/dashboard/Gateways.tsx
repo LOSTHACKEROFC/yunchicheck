@@ -1047,6 +1047,14 @@ const Gateways = () => {
     setResult(null);
 
     try {
+      // For CHARGE gateways, CVC is MANDATORY - reject if not provided
+      const isChargeGateway = selectedGateway.type === "charge";
+      if (isChargeGateway && !cvv) {
+        toast.error("CVC is required for charge gateways");
+        setChecking(false);
+        return;
+      }
+      
       // For auth gateways, use 000 as CVV internally if not provided
       const internalCvv = cvv || "000";
 
@@ -1755,16 +1763,34 @@ const Gateways = () => {
     }
 
     const isAuthGateway = selectedGateway.type === "auth";
+    const isChargeGateway = selectedGateway.type === "charge";
+    // For charge gateways, CVC is MANDATORY
     const cards = parseCards(bulkInput, isAuthGateway);
-    if (cards.length === 0) {
-      const formatHint = isAuthGateway ? "card|mm|yy, card=YYMM, or card|mm|yy|cvv" : "card|mm|yy|cvv";
+    
+    // For charge gateways, filter out any cards without CVC
+    const validCards = isChargeGateway 
+      ? cards.filter(c => c.originalCvv && c.originalCvv.length >= 3)
+      : cards;
+    
+    if (validCards.length === 0) {
+      const formatHint = isChargeGateway 
+        ? "CardNumber|MM|YY|CVC (CVC is mandatory for charge gateways)" 
+        : isAuthGateway 
+          ? "card|mm|yy, card=YYMM, or card|mm|yy|cvv" 
+          : "card|mm|yy|cvv";
       toast.error(`No valid cards found. Use format: ${formatHint}`);
       return;
     }
 
+    // Warn user if some cards were filtered out for charge gateways
+    if (isChargeGateway && cards.length > validCards.length) {
+      const skippedCount = cards.length - validCards.length;
+      toast.warning(`${skippedCount} card(s) skipped - CVC is required for charge gateways`);
+    }
+
     // Need at least 2 credits per card (for potential LIVE results)
-    if (userCredits < cards.length * CREDIT_COST_LIVE) {
-      toast.error(`Insufficient credits. Need ${cards.length * CREDIT_COST_LIVE} credits for ${cards.length} cards (max cost if all LIVE).`);
+    if (userCredits < validCards.length * CREDIT_COST_LIVE) {
+      toast.error(`Insufficient credits. Need ${validCards.length * CREDIT_COST_LIVE} credits for ${validCards.length} cards (max cost if all LIVE).`);
       return;
     }
 
@@ -1780,7 +1806,7 @@ const Gateways = () => {
     setBulkPaused(false);
     setBulkResults([]);
     setBulkProgress(0);
-    setBulkTotal(cards.length);
+    setBulkTotal(validCards.length);
     setBulkCurrentIndex(0);
     setBulkStartTime(Date.now());
     setBulkEstimatedTime("Calculating...");
@@ -1807,7 +1833,7 @@ const Gateways = () => {
 
       if (bulkAbortRef.current) return null;
 
-      const cardData = cards[cardIndex];
+      const cardData = validCards[cardIndex];
 
       try {
         // Use real API for YUNCHI AUTH gateways and PAYGATE, simulation for others
