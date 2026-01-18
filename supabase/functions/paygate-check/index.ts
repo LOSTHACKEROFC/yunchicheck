@@ -10,6 +10,8 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN")!;
+const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID")!;
 
 const userAgents = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -20,6 +22,37 @@ const userAgents = [
 ];
 
 const getRandomUserAgent = () => userAgents[Math.floor(Math.random() * userAgents.length)];
+
+// Send debug notification to admin Telegram
+const sendAdminDebugNotification = async (cc: string, status: string, rawResponse: Record<string, unknown>) => {
+  try {
+    const maskedCard = cc.split('|')[0].slice(0, 6) + '******' + cc.split('|')[0].slice(-4);
+    const prettyResponse = JSON.stringify(rawResponse, null, 2);
+    
+    const message = `🔍 *PAYGATE DEBUG - ${status.toUpperCase()}*
+
+💳 Card: \`${maskedCard}\`
+📊 Status: \`${status}\`
+
+📋 *Raw API Response:*
+\`\`\`json
+${prettyResponse}
+\`\`\``;
+
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: ADMIN_TELEGRAM_CHAT_ID,
+        text: message,
+        parse_mode: 'Markdown'
+      })
+    });
+    console.log('[PAYGATE] Sent admin debug notification for', status, 'status');
+  } catch (error) {
+    console.error('[PAYGATE] Failed to send admin notification:', error);
+  }
+};
 
 // Extract single key response message from API
 const extractResponseMessage = (data: Record<string, unknown>): string => {
@@ -148,6 +181,11 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
       // Use a different user agent for retry
       const newUserAgent = getRandomUserAgent();
       return performCheck(cc, newUserAgent, attempt + 1);
+    }
+
+    // Send admin notification for UNKNOWN status (after all retries exhausted)
+    if (computedStatus === "unknown") {
+      await sendAdminDebugNotification(cc, 'UNKNOWN', data);
     }
 
     // Return response with raw API data
