@@ -471,6 +471,7 @@ async function setBotCommands(): Promise<void> {
     { command: "unblockdevice", description: "Unblock device/IP" },
     { command: "blockdevice", description: "Block device/IP manually" },
     { command: "userdevices", description: "View user's devices" },
+    { command: "healthsites", description: "Health check gateway sites" },
   ];
 
   try {
@@ -5230,6 +5231,211 @@ ${ticket.message}
 [${ticket.id}]
 <i>Reply to this message to respond</i>
 `, keyboard);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // HEALTH CHECK COMMAND (Admin Only)
+    // ─────────────────────────────────────────────────────────
+
+    // /healthsites - Health check all gateway sites
+    if (text === "/healthsites") {
+      const isAdminUser = await isAdminAsync(chatId, supabase);
+      if (!isAdminUser) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can use this command.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      await sendTelegramMessage(chatId, "⏳ <b>Starting Health Check...</b>\n\nFetching gateway URLs from database. This may take a while for large datasets.");
+
+      // Fetch all gateway URLs from database
+      const { data: gatewayUrls, error: urlError } = await supabase
+        .from("gateway_urls")
+        .select("url")
+        .limit(500); // Limit to prevent timeout
+
+      if (urlError || !gatewayUrls || gatewayUrls.length === 0) {
+        await sendTelegramMessage(chatId, "❌ <b>No URLs Found</b>\n\nThe gateway_urls table is empty or there was an error fetching data.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      await sendTelegramMessage(chatId, `📡 <b>Checking ${gatewayUrls.length} sites...</b>\n\nPlease wait while I fetch responses from each gateway.`);
+
+      interface SiteResult {
+        url: string;
+        price: number;
+        priceStr: string;
+        rawResponse: string;
+        status: "success" | "error";
+        error?: string;
+      }
+
+      const results: SiteResult[] = [];
+      const batchSize = 10; // Process in batches to avoid overwhelming
+
+      // Helper function to extract price from response
+      const extractPrice = (response: string): { price: number; priceStr: string } => {
+        // Common price patterns
+        const pricePatterns = [
+          /\$[\d,]+\.?\d*/g,                    // $10.00, $1,000.00
+          /USD\s*[\d,]+\.?\d*/gi,               // USD 10.00
+          /[\d,]+\.?\d*\s*USD/gi,               // 10.00 USD
+          /"price":\s*"?[\d.]+/gi,              // "price": 10.00
+          /"amount":\s*"?[\d.]+/gi,             // "amount": 10.00
+          /"total":\s*"?[\d.]+/gi,              // "total": 10.00
+          /price["\s:=]+[\d.]+/gi,              // price=10.00
+        ];
+
+        let lowestPrice = Infinity;
+        let priceStr = "$0.00";
+
+        for (const pattern of pricePatterns) {
+          const matches = response.match(pattern);
+          if (matches) {
+            for (const match of matches) {
+              // Extract numeric value
+              const numericMatch = match.replace(/[^0-9.]/g, "");
+              const value = parseFloat(numericMatch);
+              if (!isNaN(value) && value >= 0 && value < lowestPrice) {
+                lowestPrice = value;
+                priceStr = `$${value.toFixed(2)}`;
+              }
+            }
+          }
+        }
+
+        return {
+          price: lowestPrice === Infinity ? 0 : lowestPrice,
+          priceStr: lowestPrice === Infinity ? "$0.00" : priceStr
+        };
+      };
+
+      // Process URLs in batches
+      for (let i = 0; i < gatewayUrls.length; i += batchSize) {
+        const batch = gatewayUrls.slice(i, i + batchSize);
+        
+        const batchPromises = batch.map(async (item) => {
+          const url = item.url;
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+            const response = await fetch(url, {
+              method: "GET",
+              signal: controller.signal,
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "text/html,application/json,*/*",
+              }
+            });
+
+            clearTimeout(timeoutId);
+
+            const text = await response.text();
+            const { price, priceStr } = extractPrice(text);
+
+            return {
+              url,
+              price,
+              priceStr,
+              rawResponse: text.substring(0, 500), // First 500 chars of response
+              status: "success" as const
+            };
+          } catch (error) {
+            return {
+              url,
+              price: -1, // Error sites go at the end
+              priceStr: "ERROR",
+              rawResponse: "",
+              status: "error" as const,
+              error: error instanceof Error ? error.message : "Unknown error"
+            };
+          }
+        });
+
+        const batchResults = await Promise.all(batchPromises);
+        results.push(...batchResults);
+
+        // Progress update every 50 URLs
+        if ((i + batchSize) % 50 === 0) {
+          await sendTelegramMessage(chatId, `📊 Progress: ${Math.min(i + batchSize, gatewayUrls.length)}/${gatewayUrls.length} sites checked...`);
+        }
+      }
+
+      // Sort by price (lowest to highest), errors at the end
+      results.sort((a, b) => {
+        if (a.status === "error" && b.status === "error") return 0;
+        if (a.status === "error") return 1;
+        if (b.status === "error") return -1;
+        return a.price - b.price;
+      });
+
+      // Group by price
+      const priceGroups: Record<string, SiteResult[]> = {};
+      for (const result of results) {
+        const key = result.status === "error" ? "ERROR" : result.priceStr;
+        if (!priceGroups[key]) {
+          priceGroups[key] = [];
+        }
+        priceGroups[key].push(result);
+      }
+
+      // Generate report
+      let reportContent = `═══════════════════════════════════════\n`;
+      reportContent += `       GATEWAY HEALTH CHECK REPORT\n`;
+      reportContent += `       ${new Date().toISOString()}\n`;
+      reportContent += `═══════════════════════════════════════\n\n`;
+      reportContent += `Total Sites Checked: ${results.length}\n`;
+      reportContent += `Successful: ${results.filter(r => r.status === "success").length}\n`;
+      reportContent += `Errors: ${results.filter(r => r.status === "error").length}\n\n`;
+      reportContent += `───────────────────────────────────────\n`;
+      reportContent += `           RESULTS BY PRICE\n`;
+      reportContent += `       (Sorted: $0.00 → Highest)\n`;
+      reportContent += `───────────────────────────────────────\n\n`;
+
+      // Add sites grouped by price
+      const sortedPriceKeys = Object.keys(priceGroups).sort((a, b) => {
+        if (a === "ERROR") return 1;
+        if (b === "ERROR") return -1;
+        const priceA = parseFloat(a.replace("$", "")) || 0;
+        const priceB = parseFloat(b.replace("$", "")) || 0;
+        return priceA - priceB;
+      });
+
+      for (const priceKey of sortedPriceKeys) {
+        const sites = priceGroups[priceKey];
+        reportContent += `\n【 ${priceKey} 】 (${sites.length} sites)\n`;
+        reportContent += `─────────────────────────────────\n`;
+        
+        for (const site of sites) {
+          reportContent += `URL: ${site.url}\n`;
+          if (site.status === "error") {
+            reportContent += `Error: ${site.error}\n`;
+          } else {
+            reportContent += `Response Preview:\n${site.rawResponse.substring(0, 200)}...\n`;
+          }
+          reportContent += `\n`;
+        }
+      }
+
+      reportContent += `\n═══════════════════════════════════════\n`;
+      reportContent += `              END OF REPORT\n`;
+      reportContent += `═══════════════════════════════════════\n`;
+
+      // Send the report as a file
+      const filename = `healthcheck_${new Date().toISOString().split("T")[0]}.txt`;
+      
+      const successCount = results.filter(r => r.status === "success").length;
+      const errorCount = results.filter(r => r.status === "error").length;
+      const uniquePrices = sortedPriceKeys.filter(k => k !== "ERROR").length;
+
+      await sendTelegramDocument(
+        chatId,
+        reportContent,
+        filename,
+        `📊 <b>Gateway Health Check Complete</b>\n\n✅ Success: ${successCount}\n❌ Errors: ${errorCount}\n💰 Price Groups: ${uniquePrices}\n\n📁 Total Sites: ${results.length}`
+      );
+
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
