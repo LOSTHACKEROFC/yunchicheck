@@ -170,6 +170,24 @@ export type Database = {
         }
         Relationships: []
       }
+      gateway_urls: {
+        Row: {
+          created_at: string
+          id: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          url?: string
+        }
+        Relationships: []
+      }
       notification_preferences: {
         Row: {
           created_at: string
