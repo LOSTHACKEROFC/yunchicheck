@@ -47,42 +47,54 @@ const extractResponseMessage = (data: Record<string, unknown>): string => {
 
 // Determine status from API response
 const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" | "unknown" => {
-  const status = (data?.status as string)?.toUpperCase() || '';
-  const message = (data?.message as string)?.toLowerCase() || '';
   const rawResponse = JSON.stringify(data).toLowerCase();
+  const status = (data?.status as string)?.toLowerCase() || '';
+  const message = (data?.message as string)?.toLowerCase() || '';
   
-  // LIVE: Status is APPROVED/SUCCESS or similar, or "Successful transaction" in response
-  if (status === 'APPROVED' || status === 'SUCCESS' || status === 'CHARGED' || status === 'LIVE') {
+  console.log('[PAYGATE] Analyzing response - status:', status, 'message:', message);
+  
+  // LIVE: Check for success, successful transaction, successfully transaction
+  if (
+    status === 'success' ||
+    rawResponse.includes('success') ||
+    rawResponse.includes('successful transaction') ||
+    rawResponse.includes('successfully transaction') ||
+    rawResponse.includes('successfully charged') ||
+    rawResponse.includes('approved')
+  ) {
+    console.log('[PAYGATE] Detected LIVE status');
     return "live";
   }
   
-  // Check for "Successful transaction" anywhere in response (case insensitive)
-  if (rawResponse.includes('successful transaction') || rawResponse.includes('successfully charged')) {
-    return "live";
+  // UNKNOWN: Check for retry status
+  if (status === 'retry' || rawResponse.includes('retry')) {
+    console.log('[PAYGATE] Detected RETRY - marking as UNKNOWN');
+    return "unknown";
   }
   
-  // DEAD: Status is DECLINED or message indicates decline
-  if (status === 'DECLINED' || status === 'DEAD' || status === 'FAILED') {
+  // DEAD: Check for declined, failed, rejected, verification, 3d, otp
+  if (
+    status === 'declined' ||
+    status === 'failed' ||
+    status === 'rejected' ||
+    status === 'dead' ||
+    rawResponse.includes('declined') ||
+    rawResponse.includes('failed') ||
+    rawResponse.includes('rejected') ||
+    rawResponse.includes('verification') ||
+    rawResponse.includes('3d') ||
+    rawResponse.includes('otp') ||
+    rawResponse.includes('insufficient') ||
+    rawResponse.includes('invalid') ||
+    rawResponse.includes('expired') ||
+    rawResponse.includes('card was declined')
+  ) {
+    console.log('[PAYGATE] Detected DECLINED status');
     return "dead";
   }
   
-  // Check for "verification" in response - mark as DECLINED
-  if (rawResponse.includes('verification')) {
-    console.log('[PAYGATE] Found "verification" in response - marking as DECLINED');
-    return "dead";
-  }
-  
-  if (message.includes('decline') || message.includes('declined') || 
-      message.includes('insufficient') || message.includes('card was declined') ||
-      message.includes('invalid') || message.includes('expired')) {
-    return "dead";
-  }
-  
-  if (message.includes('approved') || message.includes('success') || message.includes('charged')) {
-    return "live";
-  }
-  
-  // Everything else is UNKNOWN
+  // Default to UNKNOWN for unrecognized responses
+  console.log('[PAYGATE] Unrecognized response - marking as UNKNOWN');
   return "unknown";
 };
 
