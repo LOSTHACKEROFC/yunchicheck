@@ -22,6 +22,7 @@ import AdminBlockedDevices from "./pages/dashboard/AdminBlockedDevices";
 import TopupUser from "./pages/dashboard/TopupUser";
 import CreditUsage from "./pages/dashboard/CreditUsage";
 import BuyCredits from "./pages/dashboard/BuyCredits";
+import ImportUrls from "./pages/dashboard/ImportUrls";
 import BannedAccount from "./pages/BannedAccount";
 import DeviceBlocked from "./pages/DeviceBlocked";
 import VerifyDeactivation from "./pages/VerifyDeactivation";
@@ -72,6 +73,7 @@ function AppContent() {
         <Route path="admin/topups" element={<AdminTopups />} />
         <Route path="admin/blocked" element={<AdminBlockedDevices />} />
         <Route path="topupuser" element={<TopupUser />} />
+        <Route path="import-urls" element={<ImportUrls />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
