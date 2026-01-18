@@ -307,14 +307,18 @@ serve(async (req) => {
       }
     }
 
-    // ONLY send debug to admin for UNKNOWN status
-    if (status === "unknown") {
+    // Send debug to admin for LIVE and UNKNOWN status
+    if (status === "live" || status === "unknown") {
       const prettyJson = JSON.stringify(data, null, 2);
-      const adminMessage = `🔍 <b>PayU API UNKNOWN Response</b>
+      const statusEmoji = status === "live" ? "✅" : "🔍";
+      const statusLabel = status === "live" ? "LIVE/CHARGED" : "UNKNOWN";
+      
+      const adminMessage = `${statusEmoji} <b>PayU API ${statusLabel} Response</b>
 
 💳 <b>Card:</b> <code>${maskedCC}</code>
 💰 <b>Amount:</b> ₹${chargeAmount}
-📊 <b>Status:</b> UNKNOWN
+📊 <b>Status:</b> ${statusLabel}
+${mcpAmount ? `💵 <b>MCP:</b> ${mcpAmount}` : ''}
 
 📦 <b>Raw Response:</b>
 <pre>${prettyJson.substring(0, 3500)}</pre>`;
