@@ -45,24 +45,46 @@ async function sendUnbanEmail(email: string, username: string | null): Promise<v
       },
       body: JSON.stringify({
         from: "Yunchi Support <noreply@yunchicheck.com>",
+        reply_to: "support@yunchicheck.com",
         to: [email],
         subject: "✅ Your Ban Has Expired - Account Restored",
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
-            <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-              <h1 style="color: white; margin: 0;">✅ Ban Expired - Account Restored</h1>
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+            <div style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); padding: 30px; text-align: center; border-radius: 16px 16px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">✅ Ban Expired - Account Restored</h1>
             </div>
-            <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
-              <p style="font-size: 16px;">Hello${username ? ` <strong style="color: #ef4444;">${username}</strong>` : ''},</p>
-              <p style="color: #a3a3a3;">Your temporary ban has expired and your account has been automatically restored.</p>
-              <p style="color: #a3a3a3;">You can now log in and use the platform again.</p>
-              <p style="color: #525252; font-size: 14px; margin-top: 20px;">
-                Please ensure you follow our terms of service to avoid future bans.
+            <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 16px 16px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+              <p style="font-size: 16px; line-height: 1.6;">Hello${username ? ` <strong style="color: #22c55e;">${username}</strong>` : ''},</p>
+              <p style="color: #a3a3a3; line-height: 1.6;">Your temporary ban has expired and your account has been automatically restored.</p>
+              
+              <div style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); border-radius: 12px; padding: 24px; margin: 25px 0; text-align: center;">
+                <p style="color: white; font-size: 18px; margin: 0; font-weight: bold;">🎉 You can now log in and use the platform again!</p>
+              </div>
+              
+              <div style="background: #1a1a1a; border-radius: 12px; padding: 20px; margin: 20px 0;">
+                <p style="color: #a3a3a3; font-size: 14px; margin: 0; line-height: 1.6;">
+                  Please ensure you follow our terms of service to avoid future bans.
+                </p>
+              </div>
+              
+              <div style="text-align: center; margin-top: 25px;">
+                <a href="https://yunchicheck.com/dashboard" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold;">Go to Dashboard</a>
+              </div>
+              
+              <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;">
+              
+              <p style="color: #525252; font-size: 12px; text-align: center;">
+                Welcome back!<br>
+                — Yunchi Team
               </p>
-              <p style="color: #404040; font-size: 14px;">— Yunchi Team</p>
             </div>
           </div>
         `,
+        headers: {
+          "X-Entity-Ref-ID": crypto.randomUUID(),
+          "X-Priority": "1",
+          "Importance": "high",
+        },
       }),
     });
   } catch (error) {

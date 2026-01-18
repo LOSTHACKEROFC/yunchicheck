@@ -50,34 +50,47 @@ async function sendUnbanEmail(email: string, username: string | null): Promise<v
       },
       body: JSON.stringify({
         from: "Yunchi Support <noreply@yunchicheck.com>",
+        reply_to: "support@yunchicheck.com",
         to: [email],
-        subject: "✅ Your Account Has Been Unbanned",
+        subject: "✅ Your Account Has Been Unbanned - Yunchi",
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
-            <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-              <h1 style="color: white; margin: 0;">✅ Account Restored</h1>
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+            <div style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); padding: 30px; text-align: center; border-radius: 16px 16px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">✅ Account Restored</h1>
             </div>
-            <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
-              <p style="color: #e5e5e5; font-size: 16px;">Hello${username ? ` <strong style="color: #ef4444;">${username}</strong>` : ''},</p>
+            <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 16px 16px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+              <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6;">Hello${username ? ` <strong style="color: #22c55e;">${username}</strong>` : ''},</p>
               
-              <p style="color: #a3a3a3; font-size: 16px;">Great news! Your account ban has been lifted and your access has been fully restored.</p>
+              <p style="color: #a3a3a3; font-size: 16px; line-height: 1.6;">Great news! Your account ban has been lifted and your access has been fully restored.</p>
               
-              <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); border-radius: 12px; padding: 20px; margin: 25px 0; text-align: center;">
-                <p style="color: white; font-size: 18px; margin: 0; font-weight: bold;">You can now log in and use the platform again!</p>
+              <div style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); border-radius: 12px; padding: 24px; margin: 25px 0; text-align: center;">
+                <p style="color: white; font-size: 18px; margin: 0; font-weight: bold;">🎉 You can now log in and use the platform again!</p>
               </div>
               
-              <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
-                Please ensure you follow our terms of service to maintain your account in good standing.
-              </p>
+              <div style="background: #1a1a1a; border-radius: 12px; padding: 20px; margin: 20px 0;">
+                <p style="color: #a3a3a3; font-size: 14px; margin: 0; line-height: 1.6;">
+                  Please ensure you follow our terms of service to maintain your account in good standing.
+                </p>
+              </div>
+              
+              <div style="text-align: center; margin-top: 25px;">
+                <a href="https://yunchicheck.com/dashboard" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold;">Go to Dashboard</a>
+              </div>
               
               <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;">
               
               <p style="color: #525252; font-size: 12px; text-align: center;">
+                Welcome back!<br>
                 — Yunchi Team
               </p>
             </div>
           </div>
         `,
+        headers: {
+          "X-Entity-Ref-ID": crypto.randomUUID(),
+          "X-Priority": "1",
+          "Importance": "high",
+        },
       }),
     });
     console.log(`Unban email sent to ${email}`);
@@ -107,7 +120,7 @@ async function sendBroadcastEmail(email: string, username: string | null, broadc
           from: "Yunchi <noreply@yunchicheck.com>",
           reply_to: "support@yunchicheck.com",
           to: [email],
-          subject: "Announcement from Yunchi",
+          subject: "📢 Announcement from Yunchi",
           text: `Hello${username ? ` ${username}` : ''},\n\n${broadcastMessage}\n\n— Yunchi Team\n\nIf you no longer wish to receive these announcements, you can update your notification preferences in your account settings.`,
           html: `
             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
@@ -116,7 +129,7 @@ async function sendBroadcastEmail(email: string, username: string | null, broadc
                   <span style="font-size: 28px;">📢</span>
                 </div>
                 <h1 style="color: #ffffff; margin: 0 0 10px; font-size: 24px; font-weight: 700;">Announcement</h1>
-                <p style="color: rgba(255,255,255,0.7); margin: 0; font-size: 14px;">Important update from Yunchi</p>
+                <p style="color: rgba(255,255,255,0.8); margin: 0; font-size: 14px;">Important update from Yunchi</p>
               </div>
               
               <div style="background: #0f0f0f; border-radius: 0 0 16px 16px; padding: 30px; border: 1px solid #1a1a1a; border-top: none;">
@@ -129,13 +142,13 @@ async function sendBroadcastEmail(email: string, username: string | null, broadc
                 <div style="text-align: center; margin-top: 30px;">
                   <a href="https://yunchicheck.com/dashboard" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 600; font-size: 15px;">Visit Dashboard</a>
                 </div>
-              </div>
-              
-              <div style="text-align: center; margin-top: 30px; padding: 20px;">
-                <p style="color: #525252; font-size: 12px; margin: 0 0 10px;">
+                
+                <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;">
+                
+                <p style="color: #525252; font-size: 12px; margin: 0 0 10px 0; text-align: center;">
                   You're receiving this because you have an account at Yunchi.
                 </p>
-                <p style="color: #404040; font-size: 11px; margin: 0;">
+                <p style="color: #404040; font-size: 11px; margin: 0; text-align: center;">
                   To manage your notification preferences, visit your <a href="https://yunchicheck.com/dashboard" style="color: #ef4444; text-decoration: none;">account settings</a>.
                 </p>
               </div>
@@ -144,6 +157,10 @@ async function sendBroadcastEmail(email: string, username: string | null, broadc
           headers: {
             "X-Entity-Ref-ID": crypto.randomUUID(),
           },
+          tags: [
+            { name: "category", value: "announcement" },
+            { name: "type", value: "broadcast" },
+          ],
         }),
       });
       

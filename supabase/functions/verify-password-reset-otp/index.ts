@@ -33,46 +33,56 @@ async function sendPasswordChangedEmail(email: string): Promise<boolean> {
 
     const { error } = await resend.emails.send({
       from: "Yunchi Security <noreply@yunchicheck.com>",
+      reply_to: "support@yunchicheck.com",
       to: [email],
-      subject: "🔒 Password Changed - Yunchi Checker",
+      subject: "🔒 Password Changed - Yunchi",
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
-          <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0;">🔒 Password Changed</h1>
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+          <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); padding: 30px; text-align: center; border-radius: 16px 16px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">🔒 Password Changed</h1>
           </div>
-          <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
-            <p style="font-size: 16px;">Hello,</p>
-            <p style="color: #a3a3a3;">Your password for <strong style="color: #ef4444;">Yunchi Checker</strong> has been successfully changed.</p>
+          <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 16px 16px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+            <p style="font-size: 16px; line-height: 1.6;">Hello,</p>
+            <p style="color: #a3a3a3; line-height: 1.6;">Your password for <strong style="color: #ef4444;">Yunchi Checker</strong> has been successfully changed.</p>
             
-            <div style="background: #1a0a0a; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #2a1a1a;">
+            <div style="background: #1a0a0a; padding: 16px; border-radius: 12px; margin: 20px 0; border: 1px solid #2a1a1a;">
               <p style="color: #a3a3a3; margin: 0; font-size: 14px;">
-                <strong>Date & Time:</strong> ${formattedDate}
+                <strong style="color: #e5e5e5;">Date & Time:</strong> ${formattedDate}
               </p>
             </div>
             
-            <div style="background: #1a0a0a; border-left: 4px solid #dc2626; padding: 15px; margin: 20px 0; border-radius: 0 8px 8px 0;">
-              <p style="color: #fca5a5; margin: 0; font-size: 14px;">
+            <div style="background: #1a0a0a; border-left: 4px solid #dc2626; padding: 16px; margin: 20px 0; border-radius: 8px;">
+              <p style="color: #fca5a5; margin: 0; font-size: 14px; line-height: 1.6;">
                 <strong>⚠️ Security Notice:</strong> If you did not make this change, please contact our support immediately and secure your account.
               </p>
             </div>
             
-            <p style="color: #a3a3a3; font-size: 14px; margin-top: 20px;">
+            <p style="color: #a3a3a3; font-size: 14px; margin-top: 20px; line-height: 1.6;">
               For your security, we recommend:
             </p>
-            <ul style="color: #737373; font-size: 14px; line-height: 1.8; padding-left: 20px;">
+            <ul style="color: #737373; font-size: 14px; line-height: 2; padding-left: 20px;">
               <li>Using a strong, unique password</li>
               <li>Never sharing your password with anyone</li>
               <li>Enabling notifications for account activities</li>
             </ul>
             
             <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;">
-            <p style="color: #404040; font-size: 12px; text-align: center;">
+            <p style="color: #525252; font-size: 12px; text-align: center;">
               This is an automated security notification from Yunchi Checker.<br>
-              If you have any questions, please contact our support team.
+              — Yunchi Security Team
             </p>
           </div>
         </div>
       `,
+      headers: {
+        "X-Entity-Ref-ID": crypto.randomUUID(),
+        "X-Priority": "1",
+        "Importance": "high",
+      },
+      tags: [
+        { name: "category", value: "transactional" },
+        { name: "type", value: "security" },
+      ],
     });
 
     if (error) {

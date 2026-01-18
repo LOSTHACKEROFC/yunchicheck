@@ -184,7 +184,13 @@ View Ticket: https://yunchicheck.com/dashboard/support
           `,
           headers: {
             "X-Entity-Ref-ID": crypto.randomUUID(),
+            "X-Priority": "1",
+            "Importance": "high",
           },
+          tags: [
+            { name: "category", value: "transactional" },
+            { name: "type", value: "ticket_reply" },
+          ],
         });
 
         if (emailError) {

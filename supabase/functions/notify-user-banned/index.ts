@@ -88,33 +88,36 @@ Deno.serve(async (req) => {
       const resend = new Resend(RESEND_API_KEY);
 
       const reasonHtml = ban_reason 
-        ? `<div style="background: #3b1c1c; padding: 15px; border-left: 4px solid #ef4444; border-radius: 4px; margin: 20px 0;">
-            <p style="margin: 0; color: #fca5a5;"><strong>Reason:</strong></p>
-            <p style="margin: 5px 0 0 0; color: #e5e5e5;">${ban_reason}</p>
+        ? `<div style="background: #1a0a0a; padding: 15px; border-left: 4px solid #ef4444; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0; color: #fca5a5; font-weight: 600;">Reason:</p>
+            <p style="margin: 8px 0 0 0; color: #e5e5e5; line-height: 1.6;">${ban_reason}</p>
            </div>` 
         : "";
 
       const emailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: linear-gradient(135deg, #ef4444, #dc2626); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0;">🚫 Account Banned</h1>
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+          <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); padding: 30px; text-align: center; border-radius: 16px 16px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">🚫 Account Banned</h1>
           </div>
-          <div style="background: #1a1a1a; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5;">
-            <p style="font-size: 16px;">Hello <strong>${userDisplay}</strong>,</p>
-            <p>Your account has been banned <strong>${banDuration}</strong> by our Support team.</p>
+          <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 16px 16px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+            <p style="font-size: 16px; line-height: 1.6;">Hello <strong style="color: #ef4444;">${userDisplay}</strong>,</p>
+            <p style="color: #a3a3a3; line-height: 1.6;">Your account has been banned <strong style="color: #fca5a5;">${banDuration}</strong> by our Support team.</p>
             
             ${reasonHtml}
             
-            <div style="background: #262626; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 0; color: #a3a3a3;">If you believe this was a mistake, please contact our support team to appeal this decision.</p>
+            <div style="background: #1a1a1a; padding: 20px; border-radius: 12px; margin: 20px 0;">
+              <p style="margin: 0; color: #a3a3a3; line-height: 1.6;">If you believe this was a mistake, please contact our support team to appeal this decision.</p>
             </div>
             
             <div style="text-align: center; margin-top: 25px;">
-              <a href="https://yunchicheck.com" style="display: inline-block; background: #7c3aed; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;">Contact Support</a>
+              <a href="https://yunchicheck.com" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold;">Contact Support</a>
             </div>
             
-            <p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 30px;">
-              This is an automated message from Yunchi Checker.
+            <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;">
+            
+            <p style="color: #525252; font-size: 12px; text-align: center;">
+              This is an automated message from Yunchi Checker.<br>
+              — Yunchi Team
             </p>
           </div>
         </div>
@@ -122,9 +125,15 @@ Deno.serve(async (req) => {
 
       const emailResult = await resend.emails.send({
         from: "Yunchi <noreply@yunchicheck.com>",
+        reply_to: "support@yunchicheck.com",
         to: [userEmail],
-        subject: "🚫 Your Account Has Been Banned",
+        subject: "🚫 Your Account Has Been Banned - Yunchi",
         html: emailHtml,
+        headers: {
+          "X-Entity-Ref-ID": crypto.randomUUID(),
+          "X-Priority": "1",
+          "Importance": "high",
+        },
       });
 
       if (emailResult.error) {

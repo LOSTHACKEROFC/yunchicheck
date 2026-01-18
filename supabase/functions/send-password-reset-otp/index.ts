@@ -107,7 +107,13 @@ If you didn't request this, please ignore this email and secure your account.
       `,
       headers: {
         "X-Entity-Ref-ID": crypto.randomUUID(),
+        "X-Priority": "1",
+        "Importance": "high",
       },
+      tags: [
+        { name: "category", value: "transactional" },
+        { name: "type", value: "otp" },
+      ],
     });
 
     if (error) {

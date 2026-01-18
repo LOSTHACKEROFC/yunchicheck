@@ -166,7 +166,13 @@ If you didn't create this account, please ignore this email.
       text: emailText,
       headers: {
         "X-Entity-Ref-ID": crypto.randomUUID(),
+        "X-Priority": "1",
+        "Importance": "high",
       },
+      tags: [
+        { name: "category", value: "transactional" },
+        { name: "type", value: "welcome" },
+      ],
     });
 
     if (error) {
