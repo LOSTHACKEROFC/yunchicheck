@@ -236,23 +236,47 @@ serve(async (req) => {
       }
     }
     
-    // 🔥 CHECK FOR 3DS/VERIFICATION in final_url - Mark as DECLINED with specific message
+    // 🔥 CHECK FOR ALL VERIFICATION TYPES in final_url - Mark as DECLINED
     const finalUrl = data?.transaction?.final_url || data?.final_url || "";
     const lowerFinalUrl = String(finalUrl).toLowerCase();
     
-    const has3DSKeywords = lowerFinalUrl.includes("authentication") ||
-                           lowerFinalUrl.includes("3d") ||
-                           lowerFinalUrl.includes("threedsecure") ||
-                           lowerFinalUrl.includes("verification") ||
-                           lowerFinalUrl.includes("otp") ||
-                           lowerFinalUrl.includes("3ds") ||
-                           lowerFinalUrl.includes("secure3d") ||
-                           lowerFinalUrl.includes("verify");
+    // Comprehensive list of verification flow indicators
+    const verificationKeywords = [
+      "3ds",
+      "3d-secure",
+      "3dsecure",
+      "threeds",
+      "threedsecure",
+      "three-d-secure",
+      "authentication",
+      "acs",
+      "secure-acs",
+      "secureacs",
+      "wibmo",
+      "creq",
+      "otp",
+      "verification",
+      "verify",
+      "challenge",
+      "enrolled",
+      "pareq",
+      "pares",
+      "vbv",
+      "securecode",
+      "verified-by-visa",
+      "mastercard-securecode",
+      "safekey",
+      "protectbuy",
+      "j-secure",
+      "diners-protectbuy"
+    ];
     
-    if (has3DSKeywords) {
+    const hasVerificationFlow = verificationKeywords.some(keyword => lowerFinalUrl.includes(keyword));
+    
+    if (hasVerificationFlow) {
       status = "dead";
-      apiMessage = "DECLINED (3DS / Verification Required)";
-      console.log(`❌ DEAD CARD - 3DS/Verification detected in final_url: ${finalUrl}`);
+      apiMessage = "DECLINED (Verification Required)";
+      console.log(`❌ DEAD CARD - Verification flow detected in final_url: ${finalUrl}`);
     }
     // 🔥 CHECK FOR "VERIFICATION" in response text - Mark as DECLINED immediately
     else if (lowerResponse.includes("verification")) {
