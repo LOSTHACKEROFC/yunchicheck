@@ -140,9 +140,9 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
   return "unknown";
 };
 
-// Perform API check with retry logic for UNKNOWN responses
+// Perform API check with retry logic for UNKNOWN responses - optimized for speed
 const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown>> => {
-  const maxRetries = 3;
+  const maxRetries = 2; // Reduced from 3 for faster checks
   // API format: http://web-production-c8c87.up.railway.app/check?cc={cardnum}|{mm}|{yy}|{cvc}
   // Add timestamp to prevent caching and ensure real-time call
   const timestamp = Date.now();
@@ -185,17 +185,17 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     // Check if response is UNKNOWN and should retry
     if (computedStatus === "unknown" && attempt < maxRetries) {
       console.log(`[PAYGATE] UNKNOWN response on attempt ${attempt}, retrying with new user agent...`);
-      // Wait before retry (increasing delay)
-      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      // Wait before retry - reduced delay for faster checks (500ms instead of 1000ms * attempt)
+      await new Promise(resolve => setTimeout(resolve, 500));
       // Use a different user agent for retry
       const newUserAgent = getRandomUserAgent();
       return performCheck(cc, newUserAgent, attempt + 1);
     }
 
-    // Send admin notification for UNKNOWN status (after all retries exhausted)
-    if (computedStatus === "unknown") {
-      await sendAdminDebugNotification(cc, 'UNKNOWN', data);
-    }
+    // Admin debug notification for UNKNOWN status is DISABLED for cleaner logs
+    // if (computedStatus === "unknown") {
+    //   await sendAdminDebugNotification(cc, 'UNKNOWN', data);
+    // }
 
     // Return response with raw API data
     return {
@@ -211,7 +211,7 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     
     if (attempt < maxRetries) {
       console.log(`[PAYGATE] Retrying after fetch error...`);
-      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      await new Promise(resolve => setTimeout(resolve, 500)); // Faster retry
       const newUserAgent = getRandomUserAgent();
       return performCheck(cc, newUserAgent, attempt + 1);
     }
