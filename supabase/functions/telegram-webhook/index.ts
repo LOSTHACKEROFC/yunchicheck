@@ -41,74 +41,14 @@ interface TelegramUpdate {
 async function sendUnbanEmail(email: string, username: string | null): Promise<void> {
   if (!RESEND_API_KEY) return;
 
-  try {
-    await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-      },
-      body: JSON.stringify({
-        from: "Yunchi Support <noreply@yunchicheck.com>",
-        reply_to: "support@yunchicheck.com",
-        to: [email],
-        subject: "✅ Your Account Has Been Unbanned - Yunchi",
-        html: `
-          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
-            <div style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); padding: 30px; text-align: center; border-radius: 16px 16px 0 0;">
-              <h1 style="color: white; margin: 0; font-size: 24px;">✅ Account Restored</h1>
-            </div>
-            <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 16px 16px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
-              <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6;">Hello${username ? ` <strong style="color: #22c55e;">${username}</strong>` : ''},</p>
-              
-              <p style="color: #a3a3a3; font-size: 16px; line-height: 1.6;">Great news! Your account ban has been lifted and your access has been fully restored.</p>
-              
-              <div style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); border-radius: 12px; padding: 24px; margin: 25px 0; text-align: center;">
-                <p style="color: white; font-size: 18px; margin: 0; font-weight: bold;">🎉 You can now log in and use the platform again!</p>
-              </div>
-              
-              <div style="background: #1a1a1a; border-radius: 12px; padding: 20px; margin: 20px 0;">
-                <p style="color: #a3a3a3; font-size: 14px; margin: 0; line-height: 1.6;">
-                  Please ensure you follow our terms of service to maintain your account in good standing.
-                </p>
-              </div>
-              
-              <div style="text-align: center; margin-top: 25px;">
-                <a href="https://yunchicheck.com/dashboard" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold;">Go to Dashboard</a>
-              </div>
-              
-              <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;">
-              
-              <p style="color: #525252; font-size: 12px; text-align: center;">
-                Welcome back!<br>
-                — Yunchi Team
-              </p>
-            </div>
-          </div>
-        `,
-        headers: {
-          "X-Entity-Ref-ID": crypto.randomUUID(),
-          "X-Priority": "1",
-          "Importance": "high",
-        },
-      }),
-    });
-    console.log(`Unban email sent to ${email}`);
-  } catch (error) {
-    console.error("Error sending unban email:", error);
-  }
-}
+  const senders = [
+    "Yunchi Support <noreply@yunchicheck.com>",
+    "Yunchi Support <onboarding@resend.dev>"
+  ];
 
-async function sendBroadcastEmail(email: string, username: string | null, broadcastMessage: string): Promise<boolean> {
-  if (!RESEND_API_KEY) {
-    console.log("No RESEND_API_KEY configured, skipping email");
-    return false;
-  }
-
-  // Retry up to 3 times for transient failures
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (const sender of senders) {
     try {
-      console.log(`Sending broadcast email to ${email} (attempt ${attempt})`);
+      console.log(`Sending unban email to ${email} from ${sender}`);
       
       const response = await fetch("https://api.resend.com/emails", {
         method: "POST",
@@ -117,86 +57,187 @@ async function sendBroadcastEmail(email: string, username: string | null, broadc
           Authorization: `Bearer ${RESEND_API_KEY}`,
         },
         body: JSON.stringify({
-          from: "Yunchi <noreply@yunchicheck.com>",
+          from: sender,
           reply_to: "support@yunchicheck.com",
           to: [email],
-          subject: "📢 Announcement from Yunchi",
-          text: `Hello${username ? ` ${username}` : ''},\n\n${broadcastMessage}\n\n— Yunchi Team\n\nIf you no longer wish to receive these announcements, you can update your notification preferences in your account settings.`,
+          subject: "✅ Your Account Has Been Unbanned - Yunchi",
           html: `
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
-              <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); border-radius: 16px 16px 0 0; padding: 40px 30px; text-align: center;">
-                <div style="background: rgba(0,0,0,0.3); width: 60px; height: 60px; border-radius: 12px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
-                  <span style="font-size: 28px;">📢</span>
-                </div>
-                <h1 style="color: #ffffff; margin: 0 0 10px; font-size: 24px; font-weight: 700;">Announcement</h1>
-                <p style="color: rgba(255,255,255,0.8); margin: 0; font-size: 14px;">Important update from Yunchi</p>
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+              <div style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); padding: 30px; text-align: center; border-radius: 16px 16px 0 0;">
+                <h1 style="color: white; margin: 0; font-size: 24px;">✅ Account Restored</h1>
               </div>
-              
-              <div style="background: #0f0f0f; border-radius: 0 0 16px 16px; padding: 30px; border: 1px solid #1a1a1a; border-top: none;">
-                <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">Hello${username ? ` <strong style="color: #ef4444;">${username}</strong>` : ''},</p>
+              <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 16px 16px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+                <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6;">Hello${username ? ` <strong style="color: #22c55e;">${username}</strong>` : ''},</p>
                 
-                <div style="background: #1a0a0a; border-left: 4px solid #dc2626; border-radius: 8px; padding: 20px; margin: 20px 0;">
-                  <p style="color: #e5e5e5; font-size: 16px; line-height: 1.7; margin: 0; white-space: pre-wrap;">${broadcastMessage}</p>
+                <p style="color: #a3a3a3; font-size: 16px; line-height: 1.6;">Great news! Your account ban has been lifted and your access has been fully restored.</p>
+                
+                <div style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); border-radius: 12px; padding: 24px; margin: 25px 0; text-align: center;">
+                  <p style="color: white; font-size: 18px; margin: 0; font-weight: bold;">🎉 You can now log in and use the platform again!</p>
                 </div>
                 
-                <div style="text-align: center; margin-top: 30px;">
-                  <a href="https://yunchicheck.com/dashboard" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 600; font-size: 15px;">Visit Dashboard</a>
+                <div style="background: #1a1a1a; border-radius: 12px; padding: 20px; margin: 20px 0;">
+                  <p style="color: #a3a3a3; font-size: 14px; margin: 0; line-height: 1.6;">
+                    Please ensure you follow our terms of service to maintain your account in good standing.
+                  </p>
+                </div>
+                
+                <div style="text-align: center; margin-top: 25px;">
+                  <a href="https://yunchicheck.com/dashboard" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold;">Go to Dashboard</a>
                 </div>
                 
                 <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;">
                 
-                <p style="color: #525252; font-size: 12px; margin: 0 0 10px 0; text-align: center;">
-                  You're receiving this because you have an account at Yunchi.
-                </p>
-                <p style="color: #404040; font-size: 11px; margin: 0; text-align: center;">
-                  To manage your notification preferences, visit your <a href="https://yunchicheck.com/dashboard" style="color: #ef4444; text-decoration: none;">account settings</a>.
+                <p style="color: #525252; font-size: 12px; text-align: center;">
+                  Welcome back!<br>
+                  — Yunchi Team
                 </p>
               </div>
             </div>
           `,
           headers: {
             "X-Entity-Ref-ID": crypto.randomUUID(),
+            "X-Priority": "1",
+            "Importance": "high",
           },
-          tags: [
-            { name: "category", value: "announcement" },
-            { name: "type", value: "broadcast" },
-          ],
         }),
       });
-      
-      const responseText = await response.text();
-      
+
       if (!response.ok) {
-        console.error(`Failed to send broadcast email to ${email} (attempt ${attempt}): ${response.status} - ${responseText}`);
+        const responseText = await response.text();
+        console.error(`Failed to send unban email from ${sender}: ${response.status} - ${responseText}`);
         
-        // Check if it's a rate limit error (429) - wait longer and retry
-        if (response.status === 429 && attempt < 3) {
-          console.log(`Rate limited, waiting before retry...`);
-          await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+        // If domain not verified, try fallback sender
+        if (response.status === 403 && sender.includes("yunchicheck.com")) {
+          console.log(`Domain not verified, trying fallback sender...`);
           continue;
         }
+        continue;
+      }
+      
+      console.log(`Unban email sent to ${email} from ${sender}`);
+      return; // Success, exit function
+    } catch (error) {
+      console.error(`Error sending unban email from ${sender}:`, error);
+      continue; // Try next sender
+    }
+  }
+  
+  console.error(`Failed to send unban email to ${email} with all senders`);
+}
+
+async function sendBroadcastEmail(email: string, username: string | null, broadcastMessage: string): Promise<boolean> {
+  if (!RESEND_API_KEY) {
+    console.log("No RESEND_API_KEY configured, skipping email");
+    return false;
+  }
+
+  const senders = [
+    "Yunchi <noreply@yunchicheck.com>",
+    "Yunchi <onboarding@resend.dev>"
+  ];
+
+  for (const sender of senders) {
+    // Retry up to 2 times per sender for transient failures
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        console.log(`Sending broadcast email to ${email} from ${sender} (attempt ${attempt})`);
         
-        // For other transient errors, retry
-        if (response.status >= 500 && attempt < 3) {
+        const response = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${RESEND_API_KEY}`,
+          },
+          body: JSON.stringify({
+            from: sender,
+            reply_to: "support@yunchicheck.com",
+            to: [email],
+            subject: "📢 Announcement from Yunchi",
+            text: `Hello${username ? ` ${username}` : ''},\n\n${broadcastMessage}\n\n— Yunchi Team\n\nIf you no longer wish to receive these announcements, you can update your notification preferences in your account settings.`,
+            html: `
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+                <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); border-radius: 16px 16px 0 0; padding: 40px 30px; text-align: center;">
+                  <div style="background: rgba(0,0,0,0.3); width: 60px; height: 60px; border-radius: 12px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
+                    <span style="font-size: 28px;">📢</span>
+                  </div>
+                  <h1 style="color: #ffffff; margin: 0 0 10px; font-size: 24px; font-weight: 700;">Announcement</h1>
+                  <p style="color: rgba(255,255,255,0.8); margin: 0; font-size: 14px;">Important update from Yunchi</p>
+                </div>
+                
+                <div style="background: #0f0f0f; border-radius: 0 0 16px 16px; padding: 30px; border: 1px solid #1a1a1a; border-top: none;">
+                  <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">Hello${username ? ` <strong style="color: #ef4444;">${username}</strong>` : ''},</p>
+                  
+                  <div style="background: #1a0a0a; border-left: 4px solid #dc2626; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                    <p style="color: #e5e5e5; font-size: 16px; line-height: 1.7; margin: 0; white-space: pre-wrap;">${broadcastMessage}</p>
+                  </div>
+                  
+                  <div style="text-align: center; margin-top: 30px;">
+                    <a href="https://yunchicheck.com/dashboard" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 600; font-size: 15px;">Visit Dashboard</a>
+                  </div>
+                  
+                  <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;">
+                  
+                  <p style="color: #525252; font-size: 12px; margin: 0 0 10px 0; text-align: center;">
+                    You're receiving this because you have an account at Yunchi.
+                  </p>
+                  <p style="color: #404040; font-size: 11px; margin: 0; text-align: center;">
+                    To manage your notification preferences, visit your <a href="https://yunchicheck.com/dashboard" style="color: #ef4444; text-decoration: none;">account settings</a>.
+                  </p>
+                </div>
+              </div>
+            `,
+            headers: {
+              "X-Entity-Ref-ID": crypto.randomUUID(),
+            },
+            tags: [
+              { name: "category", value: "announcement" },
+              { name: "type", value: "broadcast" },
+            ],
+          }),
+        });
+        
+        const responseText = await response.text();
+        
+        if (!response.ok) {
+          console.error(`Failed to send broadcast email to ${email} from ${sender} (attempt ${attempt}): ${response.status} - ${responseText}`);
+          
+          // If domain not verified (403), try fallback sender immediately
+          if (response.status === 403 && sender.includes("yunchicheck.com")) {
+            console.log(`Domain not verified, trying fallback sender...`);
+            break; // Break inner loop to try next sender
+          }
+          
+          // Check if it's a rate limit error (429) - wait longer and retry
+          if (response.status === 429 && attempt < 2) {
+            console.log(`Rate limited, waiting before retry...`);
+            await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+            continue;
+          }
+          
+          // For other transient errors, retry
+          if (response.status >= 500 && attempt < 2) {
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            continue;
+          }
+          
+          // Non-retryable error, try next sender
+          break;
+        }
+        
+        console.log(`Broadcast email sent successfully to ${email} from ${sender}`);
+        return true;
+      } catch (error) {
+        console.error(`Error sending broadcast email to ${email} from ${sender} (attempt ${attempt}):`, error);
+        
+        // Retry on network errors
+        if (attempt < 2) {
           await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
           continue;
         }
         
-        return false;
+        // Try next sender
+        break;
       }
-      
-      console.log(`Broadcast email sent successfully to ${email}`);
-      return true;
-    } catch (error) {
-      console.error(`Error sending broadcast email to ${email} (attempt ${attempt}):`, error);
-      
-      // Retry on network errors
-      if (attempt < 3) {
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-        continue;
-      }
-      
-      return false;
     }
   }
   
