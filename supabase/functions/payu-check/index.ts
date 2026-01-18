@@ -117,65 +117,103 @@ serve(async (req) => {
     // Determine status from response
     let status: "live" | "dead" | "unknown" = "unknown";
     let apiMessage = responseText;
+    let mcpAmount = "";
 
     const lowerResponse = responseText.toLowerCase();
     
-    // Check for failure indicators FIRST
-    const hasFailureIndicators = 
-        lowerResponse.includes("3d") || 
-        lowerResponse.includes("3ds") ||
-        lowerResponse.includes("verification") ||
-        lowerResponse.includes("verify") ||
-        lowerResponse.includes("authenticate") ||
-        lowerResponse.includes("otp") ||
-        lowerResponse.includes("secure") ||
-        lowerResponse.includes("redirect") ||
-        lowerResponse.includes("declined") || 
-        lowerResponse.includes("could not") ||
-        lowerResponse.includes("transaction failed") ||
-        lowerResponse.includes("invalid") ||
-        lowerResponse.includes("insufficient") ||
-        lowerResponse.includes("expired") ||
-        lowerResponse.includes("rejected") ||
-        lowerResponse.includes("failed\":true") ||
-        lowerResponse.includes("error_code") ||
-        lowerResponse.includes("try again");
-
-    if (hasFailureIndicators) {
-      status = "dead";
-      if (data && typeof data === 'object' && data.transaction?.retryOptions?.details?.error_message) {
-        apiMessage = data.transaction.retryOptions.details.error_message;
-      } else if (data && typeof data === 'object' && data.transaction?.retryOptions?.details?.error_title) {
-        apiMessage = data.transaction.retryOptions.details.error_title;
-      }
-    } else if (lowerResponse.includes("success") || 
-        lowerResponse.includes("approved") || 
-        lowerResponse.includes("charged") ||
-        lowerResponse.includes("payment successful") ||
-        lowerResponse.includes("transaction successful")) {
-      status = "live";
-    }
-
-    // Try to extract message from JSON response
+    // Check for the new response format: { status: "success", mcp: "0.01 USD", ... }
     if (data && typeof data === 'object') {
-      if (data.message) apiMessage = data.message;
-      else if (data.status) apiMessage = data.status;
-      else if (data.result) apiMessage = data.result;
-      else if (data.error) apiMessage = data.error;
+      // Extract MCP if present
+      if (data.mcp) {
+        mcpAmount = data.mcp;
+      }
+      
+      // Check for success status with valid transaction (no errors)
+      const hasNoErrors = data.transaction?.retryOptions?.details?.failed === null || 
+                          data.transaction?.retryOptions?.details?.failed === "None" ||
+                          data.transaction?.retryOptions?.details?.error_code === "None" ||
+                          data.transaction?.retryOptions?.details?.error_code === null;
+      
+      if (data.status === "success" && hasNoErrors) {
+        status = "live";
+        apiMessage = mcpAmount ? `CHARGED | MCP: ${mcpAmount}` : "CHARGED";
+      } else if (data.status === "success" && data.mcp) {
+        // Success with MCP means charged
+        status = "live";
+        apiMessage = `CHARGED | MCP: ${mcpAmount}`;
+      } else if (data.status === "failed" || data.status === "error") {
+        status = "dead";
+        if (data.transaction?.retryOptions?.details?.error_message && 
+            data.transaction.retryOptions.details.error_message !== "None") {
+          apiMessage = data.transaction.retryOptions.details.error_message;
+        } else if (data.transaction?.retryOptions?.details?.error_title &&
+                   data.transaction.retryOptions.details.error_title !== "None") {
+          apiMessage = data.transaction.retryOptions.details.error_title;
+        } else if (data.message) {
+          apiMessage = data.message;
+        }
+      }
+    }
+    
+    // Fallback: Check for failure indicators if status still unknown
+    if (status === "unknown") {
+      const hasFailureIndicators = 
+          lowerResponse.includes("3d") || 
+          lowerResponse.includes("3ds") ||
+          lowerResponse.includes("verification") ||
+          lowerResponse.includes("verify") ||
+          lowerResponse.includes("authenticate") ||
+          lowerResponse.includes("otp") ||
+          lowerResponse.includes("secure") ||
+          lowerResponse.includes("redirect") ||
+          lowerResponse.includes("declined") || 
+          lowerResponse.includes("could not") ||
+          lowerResponse.includes("transaction failed") ||
+          lowerResponse.includes("invalid") ||
+          lowerResponse.includes("insufficient") ||
+          lowerResponse.includes("expired") ||
+          lowerResponse.includes("rejected") ||
+          lowerResponse.includes("\"failed\":true") ||
+          lowerResponse.includes("\"failed\": true") ||
+          (lowerResponse.includes("error_code") && !lowerResponse.includes("\"error_code\":\"none\"") && !lowerResponse.includes("\"error_code\": \"none\"")) ||
+          lowerResponse.includes("try again");
+
+      if (hasFailureIndicators) {
+        status = "dead";
+        if (data && typeof data === 'object') {
+          if (data.transaction?.retryOptions?.details?.error_message && 
+              data.transaction.retryOptions.details.error_message !== "None") {
+            apiMessage = data.transaction.retryOptions.details.error_message;
+          } else if (data.transaction?.retryOptions?.details?.error_title &&
+                     data.transaction.retryOptions.details.error_title !== "None") {
+            apiMessage = data.transaction.retryOptions.details.error_title;
+          }
+        }
+      } else if (lowerResponse.includes("\"status\":\"success\"") || 
+          lowerResponse.includes("\"status\": \"success\"") ||
+          lowerResponse.includes("approved") || 
+          lowerResponse.includes("charged") ||
+          lowerResponse.includes("payment successful") ||
+          lowerResponse.includes("transaction successful")) {
+        status = "live";
+        apiMessage = mcpAmount ? `CHARGED | MCP: ${mcpAmount}` : "CHARGED";
+      }
     }
 
-    // Send raw response to admin via Telegram (masked card)
-    const prettyJson = JSON.stringify(data, null, 2);
-    const adminMessage = `🔍 <b>PayU API Raw Response</b>
+    // ONLY send debug to admin for UNKNOWN status
+    if (status === "unknown") {
+      const prettyJson = JSON.stringify(data, null, 2);
+      const adminMessage = `🔍 <b>PayU API UNKNOWN Response</b>
 
 💳 <b>Card:</b> <code>${maskedCC}</code>
 💰 <b>Amount:</b> ₹${chargeAmount}
-📊 <b>Status:</b> ${status.toUpperCase()}
+📊 <b>Status:</b> UNKNOWN
 
 📦 <b>Raw Response:</b>
 <pre>${prettyJson.substring(0, 3500)}</pre>`;
 
-    await sendAdminTelegram(adminMessage);
+      await sendAdminTelegram(adminMessage);
+    }
 
     return new Response(
       JSON.stringify({
@@ -183,7 +221,8 @@ serve(async (req) => {
         apiStatus: status.toUpperCase(),
         apiMessage,
         rawResponse: responseText,
-        amount: chargeAmount
+        amount: chargeAmount,
+        mcp: mcpAmount || null
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -192,6 +231,7 @@ serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : "Failed to process request";
     console.error('PayU Check Error:', errorMessage);
     
+    // Send error to admin
     await sendAdminTelegram(`❌ <b>PayU API Error</b>\n\n<code>${errorMessage}</code>`);
     
     return new Response(
@@ -199,7 +239,8 @@ serve(async (req) => {
         status: "unknown",
         apiStatus: "ERROR",
         apiMessage: errorMessage,
-        rawResponse: errorMessage
+        rawResponse: errorMessage,
+        mcp: null
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
