@@ -28,21 +28,25 @@ serve(async (req) => {
       );
     }
 
-    // Verify the user's JWT
+    // Verify the user's JWT using getClaims (more efficient than getUser)
     const supabaseClient = createClient(
       supabaseUrl,
       Deno.env.get('SUPABASE_ANON_KEY')!,
       { global: { headers: { Authorization: authHeader } } }
     );
     
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !user) {
-      console.error('[DEDUCT-CREDITS] Auth error:', userError);
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token);
+    
+    if (claimsError || !claimsData?.claims?.sub) {
+      console.error('[DEDUCT-CREDITS] Auth error:', claimsError);
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    
+    const userId = claimsData.claims.sub;
 
     const { amount } = await req.json();
     
@@ -53,13 +57,13 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[DEDUCT-CREDITS] Deducting ${amount} credits from user ${user.id}`);
+    console.log(`[DEDUCT-CREDITS] Deducting ${amount} credits from user ${userId}`);
 
     // Get current credits
     const { data: profile, error: fetchError } = await supabaseAdmin
       .from('profiles')
       .select('credits')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
 
     if (fetchError || !profile) {
@@ -82,7 +86,7 @@ serve(async (req) => {
     const { error: updateError } = await supabaseAdmin
       .from('profiles')
       .update({ credits: newCredits })
-      .eq('user_id', user.id);
+      .eq('user_id', userId);
 
     if (updateError) {
       console.error('[DEDUCT-CREDITS] Update error:', updateError);
