@@ -350,9 +350,12 @@ serve(async (req) => {
       ? `✅ ${toFancyBold('LIVE')}`
       : `✅ ${toFancyBold('CHARGED')} • 💰 ${amount}`;
     
+    // Mask card details for security - show BIN + last 4, hide middle + CVV
+    const maskedCard = `${bin}******${last4}|${mm}|${yy}|***`;
+    
     const message = `🔥 ${toFancyBold('LIVE CARD FOUND')} 🔥
 
-${toFancyScript('Card')} ▸ <code>${card_details}</code>
+${toFancyScript('Card')} ▸ <code>${maskedCard}</code>
 
 ${statusLine}
 ${toFancyScript('Response')} ▸ <code>${response_message}</code>
