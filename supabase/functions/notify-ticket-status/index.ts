@@ -68,30 +68,36 @@ async function sendTicketStatusEmail(
     return false;
   }
 
-  try {
-    const resend = new Resend(RESEND_API_KEY);
-    
-    const statusLabel = statusLabels[newStatus] || newStatus;
-    const statusEmoji = statusEmojis[newStatus] || "📋";
-    const oldStatusLabel = oldStatus ? (statusLabels[oldStatus] || oldStatus) : null;
+  const resend = new Resend(RESEND_API_KEY);
+  const senders = [
+    "Yunchi Support <noreply@yunchicheck.com>",
+    "Yunchi Support <onboarding@resend.dev>"
+  ];
 
-    let statusMessage = "";
-    if (newStatus === "solved") {
-      statusMessage = "Your support ticket has been marked as solved. If this resolves your issue, no further action is needed.";
-    } else if (newStatus === "closed") {
-      statusMessage = "Your support ticket has been closed. If you need further assistance, please open a new ticket.";
-    } else if (newStatus === "processing") {
-      statusMessage = "Our team is actively working on your ticket. We'll update you as soon as possible.";
-    } else {
-      statusMessage = "Your ticket status has been updated.";
-    }
+  const statusLabel = statusLabels[newStatus] || newStatus;
+  const statusEmoji = statusEmojis[newStatus] || "📋";
+  const oldStatusLabel = oldStatus ? (statusLabels[oldStatus] || oldStatus) : null;
 
-    const { error } = await resend.emails.send({
-      from: "Yunchi Support <noreply@yunchicheck.com>",
-      reply_to: "support@yunchicheck.com",
-      to: [email],
-      subject: `[${ticketId}] Ticket Status Updated: ${statusLabel}`,
-      text: `Hello${username ? ` ${username}` : ''},
+  let statusMessage = "";
+  if (newStatus === "solved") {
+    statusMessage = "Your support ticket has been marked as solved. If this resolves your issue, no further action is needed.";
+  } else if (newStatus === "closed") {
+    statusMessage = "Your support ticket has been closed. If you need further assistance, please open a new ticket.";
+  } else if (newStatus === "processing") {
+    statusMessage = "Our team is actively working on your ticket. We'll update you as soon as possible.";
+  } else {
+    statusMessage = "Your ticket status has been updated.";
+  }
+
+  for (const sender of senders) {
+    try {
+      console.log(`Sending ticket status email from ${sender}`);
+      const { error } = await resend.emails.send({
+        from: sender,
+        reply_to: "support@yunchicheck.com",
+        to: [email],
+        subject: `[${ticketId}] Ticket Status Updated: ${statusLabel}`,
+        text: `Hello${username ? ` ${username}` : ''},
 
 Your support ticket status has been updated.
 
@@ -105,83 +111,93 @@ ${statusMessage}
 View your ticket: https://yunchicheck.com/dashboard/support
 
 — Yunchi Support Team`,
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
-          <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">${statusEmoji} Ticket Status Updated</h1>
-          </div>
-          <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
-            <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6;">
-              Hello${username ? ` <strong style="color: #ef4444;">${username}</strong>` : ''},
-            </p>
-            
-            <p style="color: #a3a3a3; font-size: 16px; line-height: 1.6;">
-              Your support ticket status has been updated.
-            </p>
-            
-            <div style="background: #1a0a0a; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #2a1a1a;">
-              <table style="width: 100%; border-collapse: collapse;">
-                <tr>
-                  <td style="color: #a3a3a3; padding: 8px 0;">Ticket:</td>
-                  <td style="color: #e5e5e5; padding: 8px 0; text-align: right; font-weight: 600;">${ticketId}</td>
-                </tr>
-                <tr>
-                  <td style="color: #a3a3a3; padding: 8px 0; border-top: 1px solid #262626;">Subject:</td>
-                  <td style="color: #e5e5e5; padding: 8px 0; text-align: right; border-top: 1px solid #262626;">${subject}</td>
-                </tr>
-                ${oldStatusLabel ? `
-                <tr>
-                  <td style="color: #a3a3a3; padding: 8px 0; border-top: 1px solid #262626;">Previous Status:</td>
-                  <td style="color: #737373; padding: 8px 0; text-align: right; border-top: 1px solid #262626;">${oldStatusLabel}</td>
-                </tr>
-                ` : ""}
-                <tr>
-                  <td style="color: #a3a3a3; padding: 8px 0; border-top: 1px solid #262626;">New Status:</td>
-                  <td style="color: #ef4444; padding: 8px 0; text-align: right; font-weight: 600; border-top: 1px solid #262626;">${statusEmoji} ${statusLabel}</td>
-                </tr>
-              </table>
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+            <div style="background: linear-gradient(135deg, #dc2626, #991b1b); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">${statusEmoji} Ticket Status Updated</h1>
             </div>
-            
-            <div style="background: #1a0a0a; border-left: 4px solid #dc2626; border-radius: 8px; padding: 16px; margin: 20px 0;">
-              <p style="color: #a3a3a3; font-size: 14px; margin: 0; line-height: 1.6;">
-                ${statusMessage}
+            <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 10px 10px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+              <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6;">
+                Hello${username ? ` <strong style="color: #ef4444;">${username}</strong>` : ''},
+              </p>
+              
+              <p style="color: #a3a3a3; font-size: 16px; line-height: 1.6;">
+                Your support ticket status has been updated.
+              </p>
+              
+              <div style="background: #1a0a0a; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #2a1a1a;">
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="color: #a3a3a3; padding: 8px 0;">Ticket:</td>
+                    <td style="color: #e5e5e5; padding: 8px 0; text-align: right; font-weight: 600;">${ticketId}</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #a3a3a3; padding: 8px 0; border-top: 1px solid #262626;">Subject:</td>
+                    <td style="color: #e5e5e5; padding: 8px 0; text-align: right; border-top: 1px solid #262626;">${subject}</td>
+                  </tr>
+                  ${oldStatusLabel ? `
+                  <tr>
+                    <td style="color: #a3a3a3; padding: 8px 0; border-top: 1px solid #262626;">Previous Status:</td>
+                    <td style="color: #737373; padding: 8px 0; text-align: right; border-top: 1px solid #262626;">${oldStatusLabel}</td>
+                  </tr>
+                  ` : ""}
+                  <tr>
+                    <td style="color: #a3a3a3; padding: 8px 0; border-top: 1px solid #262626;">New Status:</td>
+                    <td style="color: #ef4444; padding: 8px 0; text-align: right; font-weight: 600; border-top: 1px solid #262626;">${statusEmoji} ${statusLabel}</td>
+                  </tr>
+                </table>
+              </div>
+              
+              <div style="background: #1a0a0a; border-left: 4px solid #dc2626; border-radius: 8px; padding: 16px; margin: 20px 0;">
+                <p style="color: #a3a3a3; font-size: 14px; margin: 0; line-height: 1.6;">
+                  ${statusMessage}
+                </p>
+              </div>
+              
+              <div style="text-align: center; margin-top: 25px;">
+                <a href="https://yunchicheck.com/dashboard/support" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold;">View Ticket</a>
+              </div>
+              
+              <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;" />
+              
+              <p style="color: #525252; font-size: 12px; text-align: center;">
+                — Yunchi Support Team
               </p>
             </div>
-            
-            <div style="text-align: center; margin-top: 25px;">
-              <a href="https://yunchicheck.com/dashboard/support" style="display: inline-block; background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold;">View Ticket</a>
-            </div>
-            
-            <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;" />
-            
-            <p style="color: #525252; font-size: 12px; text-align: center;">
-              — Yunchi Support Team
-            </p>
           </div>
-        </div>
-      `,
-      headers: {
-        "X-Entity-Ref-ID": crypto.randomUUID(),
-        "X-Priority": "1",
-        "Importance": "high",
-      },
-      tags: [
-        { name: "category", value: "transactional" },
-        { name: "type", value: "ticket_status" },
-      ],
-    });
+        `,
+        headers: {
+          "X-Entity-Ref-ID": crypto.randomUUID(),
+          "X-Priority": "1",
+          "Importance": "high",
+        },
+        tags: [
+          { name: "category", value: "transactional" },
+          { name: "type", value: "ticket_status" },
+        ],
+      });
 
-    if (error) {
-      console.error("Error sending ticket status email:", error);
-      return false;
+      if (error) {
+        const errorMessage = (error as any)?.message || '';
+        console.error(`Error from ${sender}:`, error);
+        
+        if (errorMessage.includes('domain is not verified') || (error as any)?.statusCode === 403) {
+          console.log("Domain not verified, trying fallback sender...");
+          continue;
+        }
+        continue;
+      }
+
+      console.log(`Ticket status email sent via ${sender} to ${email}`);
+      return true;
+    } catch (error) {
+      console.error(`Error sending from ${sender}:`, error);
+      continue;
     }
-
-    console.log(`Ticket status email sent to ${email}`);
-    return true;
-  } catch (error) {
-    console.error("Error sending ticket status email:", error);
-    return false;
   }
+
+  console.error("All email senders failed");
+  return false;
 }
 
 serve(async (req) => {

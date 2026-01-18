@@ -95,17 +95,22 @@ const handler = async (req: Request): Promise<Response> => {
     let emailSent = false;
     let telegramSent = false;
 
-    // Send welcome email
+    // Send welcome email with fallback
     if (RESEND_API_KEY) {
-      try {
-        const resend = new Resend(RESEND_API_KEY);
+      const resend = new Resend(RESEND_API_KEY);
+      const senders = [
+        "Yunchi <noreply@yunchicheck.com>",
+        "Yunchi <onboarding@resend.dev>"
+      ];
 
-        const { error: emailError } = await resend.emails.send({
-          from: "Yunchi <noreply@yunchicheck.com>",
-          reply_to: "support@yunchicheck.com",
-          to: [email],
-          subject: "Welcome to Yunchi - Your Account is Ready",
-          text: `Hello ${displayName}!
+      for (const sender of senders) {
+        try {
+          const { error: emailError } = await resend.emails.send({
+            from: sender,
+            reply_to: "support@yunchicheck.com",
+            to: [email],
+            subject: "Welcome to Yunchi - Your Account is Ready",
+            text: `Hello ${displayName}!
 
 Thank you for joining Yunchi Checker. We're excited to have you on board!
 
@@ -126,112 +131,128 @@ Go to your dashboard: https://yunchicheck.com/dashboard
 If you didn't create this account, please ignore this email.
 
 — Yunchi Team`,
-          html: `
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset="utf-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            </head>
-            <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
-              <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); border-radius: 16px 16px 0 0; padding: 40px 30px; text-align: center;">
-                <h1 style="color: #fff; margin: 0 0 10px 0; font-size: 28px;">🎉 Welcome to Yunchi!</h1>
-                <p style="color: rgba(255,255,255,0.7); margin: 0; font-size: 16px;">Your account has been created successfully</p>
-              </div>
-              
-              <div style="background: #0f0f0f; border-radius: 0 0 16px 16px; padding: 30px; border: 1px solid #1a1a1a; border-top: none;">
-                <p style="color: #e5e5e5; font-size: 18px; margin: 0 0 20px 0;">
-                  Hello <strong style="color: #ef4444;">${displayName}</strong>!
-                </p>
-                
-                <p style="color: #a3a3a3; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">
-                  Thank you for joining Yunchi Checker. We're excited to have you on board!
-                </p>
-                
-                <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); border-radius: 12px; padding: 25px; margin: 25px 0;">
-                  <h2 style="color: #fff; margin: 0 0 15px 0; font-size: 18px;">📋 Your Account Details</h2>
-                  <table style="width: 100%; color: #fff;">
-                    <tr>
-                      <td style="padding: 8px 0; opacity: 0.8;">Username:</td>
-                      <td style="padding: 8px 0; font-weight: bold;">${displayName}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 8px 0; opacity: 0.8;">Email:</td>
-                      <td style="padding: 8px 0; font-weight: bold;">${email}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 8px 0; opacity: 0.8;">Registered:</td>
-                      <td style="padding: 8px 0; font-weight: bold;">${formattedDate}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 8px 0; opacity: 0.8;">Starting Credits:</td>
-                      <td style="padding: 8px 0; font-weight: bold;">0 credits</td>
-                    </tr>
-                  </table>
+            html: `
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              </head>
+              <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+                <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); border-radius: 16px 16px 0 0; padding: 40px 30px; text-align: center;">
+                  <h1 style="color: #fff; margin: 0 0 10px 0; font-size: 28px;">🎉 Welcome to Yunchi!</h1>
+                  <p style="color: rgba(255,255,255,0.7); margin: 0; font-size: 16px;">Your account has been created successfully</p>
                 </div>
                 
-                <h2 style="color: #e5e5e5; font-size: 18px; margin: 30px 0 15px 0;">🚀 Getting Started</h2>
+                <div style="background: #0f0f0f; border-radius: 0 0 16px 16px; padding: 30px; border: 1px solid #1a1a1a; border-top: none;">
+                  <p style="color: #e5e5e5; font-size: 18px; margin: 0 0 20px 0;">
+                    Hello <strong style="color: #ef4444;">${displayName}</strong>!
+                  </p>
+                  
+                  <p style="color: #a3a3a3; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">
+                    Thank you for joining Yunchi Checker. We're excited to have you on board!
+                  </p>
+                  
+                  <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); border-radius: 12px; padding: 25px; margin: 25px 0;">
+                    <h2 style="color: #fff; margin: 0 0 15px 0; font-size: 18px;">📋 Your Account Details</h2>
+                    <table style="width: 100%; color: #fff;">
+                      <tr>
+                        <td style="padding: 8px 0; opacity: 0.8;">Username:</td>
+                        <td style="padding: 8px 0; font-weight: bold;">${displayName}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 8px 0; opacity: 0.8;">Email:</td>
+                        <td style="padding: 8px 0; font-weight: bold;">${email}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 8px 0; opacity: 0.8;">Registered:</td>
+                        <td style="padding: 8px 0; font-weight: bold;">${formattedDate}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 8px 0; opacity: 0.8;">Starting Credits:</td>
+                        <td style="padding: 8px 0; font-weight: bold;">0 credits</td>
+                      </tr>
+                    </table>
+                  </div>
+                  
+                  <h2 style="color: #e5e5e5; font-size: 18px; margin: 30px 0 15px 0;">🚀 Getting Started</h2>
+                  
+                  <div style="background: #1a0a0a; border-radius: 10px; padding: 20px; margin-bottom: 15px; border: 1px solid #2a1a1a;">
+                    <h3 style="color: #ef4444; margin: 0 0 10px 0; font-size: 16px;">1. Top Up Your Balance</h3>
+                    <p style="color: #737373; margin: 0; font-size: 14px; line-height: 1.5;">
+                      Add credits to your account via crypto payment. Visit the Balance page to get started.
+                    </p>
+                  </div>
+                  
+                  <div style="background: #1a0a0a; border-radius: 10px; padding: 20px; margin-bottom: 15px; border: 1px solid #2a1a1a;">
+                    <h3 style="color: #ef4444; margin: 0 0 10px 0; font-size: 16px;">2. Explore Available Gateways</h3>
+                    <p style="color: #737373; margin: 0; font-size: 14px; line-height: 1.5;">
+                      Check out our gateways page to see all available checking options and their credit costs.
+                    </p>
+                  </div>
+                  
+                  <div style="background: #1a0a0a; border-radius: 10px; padding: 20px; margin-bottom: 15px; border: 1px solid #2a1a1a;">
+                    <h3 style="color: #ef4444; margin: 0 0 10px 0; font-size: 16px;">3. Telegram Notifications Connected</h3>
+                    <p style="color: #737373; margin: 0; font-size: 14px; line-height: 1.5;">
+                      You're already connected to @YunchiSupportbot for real-time alerts!
+                    </p>
+                  </div>
+                  
+                  <div style="background: #1a0a0a; border-radius: 10px; padding: 20px; margin-bottom: 25px; border: 1px solid #2a1a1a;">
+                    <h3 style="color: #ef4444; margin: 0 0 10px 0; font-size: 16px;">4. Need Help?</h3>
+                    <p style="color: #737373; margin: 0; font-size: 14px; line-height: 1.5;">
+                      Visit our Support page to submit a ticket or reach out via Telegram for quick assistance.
+                    </p>
+                  </div>
+                  
+                  <div style="text-align: center; margin-top: 30px;">
+                    <a href="https://yunchicheck.com/dashboard" 
+                       style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: #fff; text-decoration: none; padding: 14px 35px; border-radius: 8px; font-weight: bold; font-size: 16px;">
+                      Go to Dashboard
+                    </a>
+                  </div>
+                </div>
                 
-                <div style="background: #1a0a0a; border-radius: 10px; padding: 20px; margin-bottom: 15px; border: 1px solid #2a1a1a;">
-                  <h3 style="color: #ef4444; margin: 0 0 10px 0; font-size: 16px;">1. Top Up Your Balance</h3>
-                  <p style="color: #737373; margin: 0; font-size: 14px; line-height: 1.5;">
-                    Add credits to your account via crypto payment. Visit the Balance page to get started.
+                <div style="text-align: center; margin-top: 25px; padding: 20px;">
+                  <p style="color: #525252; font-size: 12px; margin: 0 0 10px 0;">
+                    If you didn't create this account, please ignore this email.
+                  </p>
+                  <p style="color: #404040; font-size: 12px; margin: 0;">
+                    — Yunchi Team
                   </p>
                 </div>
-                
-                <div style="background: #1a0a0a; border-radius: 10px; padding: 20px; margin-bottom: 15px; border: 1px solid #2a1a1a;">
-                  <h3 style="color: #ef4444; margin: 0 0 10px 0; font-size: 16px;">2. Explore Available Gateways</h3>
-                  <p style="color: #737373; margin: 0; font-size: 14px; line-height: 1.5;">
-                    Check out our gateways page to see all available checking options and their credit costs.
-                  </p>
-                </div>
-                
-                <div style="background: #1a0a0a; border-radius: 10px; padding: 20px; margin-bottom: 15px; border: 1px solid #2a1a1a;">
-                  <h3 style="color: #ef4444; margin: 0 0 10px 0; font-size: 16px;">3. Telegram Notifications Connected</h3>
-                  <p style="color: #737373; margin: 0; font-size: 14px; line-height: 1.5;">
-                    You're already connected to @YunchiSupportbot for real-time alerts!
-                  </p>
-                </div>
-                
-                <div style="background: #1a0a0a; border-radius: 10px; padding: 20px; margin-bottom: 25px; border: 1px solid #2a1a1a;">
-                  <h3 style="color: #ef4444; margin: 0 0 10px 0; font-size: 16px;">4. Need Help?</h3>
-                  <p style="color: #737373; margin: 0; font-size: 14px; line-height: 1.5;">
-                    Visit our Support page to submit a ticket or reach out via Telegram for quick assistance.
-                  </p>
-                </div>
-                
-                <div style="text-align: center; margin-top: 30px;">
-                  <a href="https://yunchicheck.com/dashboard" 
-                     style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: #fff; text-decoration: none; padding: 14px 35px; border-radius: 8px; font-weight: bold; font-size: 16px;">
-                    Go to Dashboard
-                  </a>
-                </div>
-              </div>
-              
-              <div style="text-align: center; margin-top: 25px; padding: 20px;">
-                <p style="color: #525252; font-size: 12px; margin: 0 0 10px 0;">
-                  If you didn't create this account, please ignore this email.
-                </p>
-                <p style="color: #404040; font-size: 12px; margin: 0;">
-                  — Yunchi Team
-                </p>
-              </div>
-            </body>
-            </html>
-          `,
-          headers: {
-            "X-Entity-Ref-ID": crypto.randomUUID(),
-          },
-        });
+              </body>
+              </html>
+            `,
+            headers: {
+              "X-Entity-Ref-ID": crypto.randomUUID(),
+              "X-Priority": "1",
+              "Importance": "high",
+            },
+            tags: [
+              { name: "category", value: "transactional" },
+              { name: "type", value: "welcome" },
+            ],
+          });
 
-        if (emailError) {
-          console.error("Email error:", emailError);
-        } else {
+          if (emailError) {
+            const errorMessage = (emailError as any)?.message || '';
+            console.error(`Email error from ${sender}:`, emailError);
+            
+            if (errorMessage.includes('domain is not verified') || (emailError as any)?.statusCode === 403) {
+              console.log("Domain not verified, trying fallback sender...");
+              continue;
+            }
+            continue;
+          }
+
           emailSent = true;
-          console.log("Welcome email sent to:", email);
+          console.log(`Welcome email sent via ${sender} to:`, email);
+          break;
+        } catch (err) {
+          console.error(`Error sending from ${sender}:`, err);
+          continue;
         }
-      } catch (err) {
-        console.error("Error sending email:", err);
       }
     } else {
       console.log("RESEND_API_KEY not configured");

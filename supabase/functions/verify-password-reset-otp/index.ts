@@ -18,84 +18,101 @@ async function sendPasswordChangedEmail(email: string): Promise<boolean> {
     return false;
   }
 
-  try {
-    const resend = new Resend(RESEND_API_KEY);
-    const now = new Date();
-    const formattedDate = now.toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZoneName: 'short'
-    });
+  const resend = new Resend(RESEND_API_KEY);
+  const senders = [
+    "Yunchi Security <noreply@yunchicheck.com>",
+    "Yunchi Security <onboarding@resend.dev>"
+  ];
 
-    const { error } = await resend.emails.send({
-      from: "Yunchi Security <noreply@yunchicheck.com>",
-      reply_to: "support@yunchicheck.com",
-      to: [email],
-      subject: "🔒 Password Changed - Yunchi",
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
-          <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); padding: 30px; text-align: center; border-radius: 16px 16px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">🔒 Password Changed</h1>
-          </div>
-          <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 16px 16px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
-            <p style="font-size: 16px; line-height: 1.6;">Hello,</p>
-            <p style="color: #a3a3a3; line-height: 1.6;">Your password for <strong style="color: #ef4444;">Yunchi Checker</strong> has been successfully changed.</p>
-            
-            <div style="background: #1a0a0a; padding: 16px; border-radius: 12px; margin: 20px 0; border: 1px solid #2a1a1a;">
-              <p style="color: #a3a3a3; margin: 0; font-size: 14px;">
-                <strong style="color: #e5e5e5;">Date & Time:</strong> ${formattedDate}
+  const now = new Date();
+  const formattedDate = now.toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short'
+  });
+
+  for (const sender of senders) {
+    try {
+      console.log(`Sending password changed email from ${sender}`);
+      const { error } = await resend.emails.send({
+        from: sender,
+        reply_to: "support@yunchicheck.com",
+        to: [email],
+        subject: "🔒 Password Changed - Yunchi",
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+            <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); padding: 30px; text-align: center; border-radius: 16px 16px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">🔒 Password Changed</h1>
+            </div>
+            <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 16px 16px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+              <p style="font-size: 16px; line-height: 1.6;">Hello,</p>
+              <p style="color: #a3a3a3; line-height: 1.6;">Your password for <strong style="color: #ef4444;">Yunchi Checker</strong> has been successfully changed.</p>
+              
+              <div style="background: #1a0a0a; padding: 16px; border-radius: 12px; margin: 20px 0; border: 1px solid #2a1a1a;">
+                <p style="color: #a3a3a3; margin: 0; font-size: 14px;">
+                  <strong style="color: #e5e5e5;">Date & Time:</strong> ${formattedDate}
+                </p>
+              </div>
+              
+              <div style="background: #1a0a0a; border-left: 4px solid #dc2626; padding: 16px; margin: 20px 0; border-radius: 8px;">
+                <p style="color: #fca5a5; margin: 0; font-size: 14px; line-height: 1.6;">
+                  <strong>⚠️ Security Notice:</strong> If you did not make this change, please contact our support immediately and secure your account.
+                </p>
+              </div>
+              
+              <p style="color: #a3a3a3; font-size: 14px; margin-top: 20px; line-height: 1.6;">
+                For your security, we recommend:
+              </p>
+              <ul style="color: #737373; font-size: 14px; line-height: 2; padding-left: 20px;">
+                <li>Using a strong, unique password</li>
+                <li>Never sharing your password with anyone</li>
+                <li>Enabling notifications for account activities</li>
+              </ul>
+              
+              <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;">
+              <p style="color: #525252; font-size: 12px; text-align: center;">
+                This is an automated security notification from Yunchi Checker.<br>
+                — Yunchi Security Team
               </p>
             </div>
-            
-            <div style="background: #1a0a0a; border-left: 4px solid #dc2626; padding: 16px; margin: 20px 0; border-radius: 8px;">
-              <p style="color: #fca5a5; margin: 0; font-size: 14px; line-height: 1.6;">
-                <strong>⚠️ Security Notice:</strong> If you did not make this change, please contact our support immediately and secure your account.
-              </p>
-            </div>
-            
-            <p style="color: #a3a3a3; font-size: 14px; margin-top: 20px; line-height: 1.6;">
-              For your security, we recommend:
-            </p>
-            <ul style="color: #737373; font-size: 14px; line-height: 2; padding-left: 20px;">
-              <li>Using a strong, unique password</li>
-              <li>Never sharing your password with anyone</li>
-              <li>Enabling notifications for account activities</li>
-            </ul>
-            
-            <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;">
-            <p style="color: #525252; font-size: 12px; text-align: center;">
-              This is an automated security notification from Yunchi Checker.<br>
-              — Yunchi Security Team
-            </p>
           </div>
-        </div>
-      `,
-      headers: {
-        "X-Entity-Ref-ID": crypto.randomUUID(),
-        "X-Priority": "1",
-        "Importance": "high",
-      },
-      tags: [
-        { name: "category", value: "transactional" },
-        { name: "type", value: "security" },
-      ],
-    });
+        `,
+        headers: {
+          "X-Entity-Ref-ID": crypto.randomUUID(),
+          "X-Priority": "1",
+          "Importance": "high",
+        },
+        tags: [
+          { name: "category", value: "transactional" },
+          { name: "type", value: "security" },
+        ],
+      });
 
-    if (error) {
-      console.error("Error sending password changed email:", error);
-      return false;
+      if (error) {
+        const errorMessage = (error as any)?.message || '';
+        console.error(`Error from ${sender}:`, error);
+        
+        if (errorMessage.includes('domain is not verified') || (error as any)?.statusCode === 403) {
+          console.log("Domain not verified, trying fallback sender...");
+          continue;
+        }
+        continue;
+      }
+
+      console.log(`Password changed email sent successfully via ${sender} to:`, email);
+      return true;
+    } catch (error) {
+      console.error(`Error sending from ${sender}:`, error);
+      continue;
     }
-
-    console.log("Password changed email sent successfully to:", email);
-    return true;
-  } catch (error) {
-    console.error("Error sending password changed email:", error);
-    return false;
   }
+
+  console.error("All email senders failed");
+  return false;
 }
 
 async function sendPasswordChangedTelegram(chatId: string): Promise<boolean> {

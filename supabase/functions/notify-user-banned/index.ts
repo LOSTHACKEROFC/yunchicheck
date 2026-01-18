@@ -81,11 +81,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Send Email notification
+    // Send Email notification with fallback
     if (userEmail && RESEND_API_KEY) {
       console.log(`Sending email ban notification to: ${userEmail}`);
       
       const resend = new Resend(RESEND_API_KEY);
+      const senders = [
+        "Yunchi <noreply@yunchicheck.com>",
+        "Yunchi <onboarding@resend.dev>"
+      ];
 
       const reasonHtml = ban_reason 
         ? `<div style="background: #1a0a0a; padding: 15px; border-left: 4px solid #ef4444; border-radius: 8px; margin: 20px 0;">
@@ -123,23 +127,42 @@ Deno.serve(async (req) => {
         </div>
       `;
 
-      const emailResult = await resend.emails.send({
-        from: "Yunchi <noreply@yunchicheck.com>",
-        reply_to: "support@yunchicheck.com",
-        to: [userEmail],
-        subject: "🚫 Your Account Has Been Banned - Yunchi",
-        html: emailHtml,
-        headers: {
-          "X-Entity-Ref-ID": crypto.randomUUID(),
-          "X-Priority": "1",
-          "Importance": "high",
-        },
-      });
+      for (const sender of senders) {
+        try {
+          const emailResult = await resend.emails.send({
+            from: sender,
+            reply_to: "support@yunchicheck.com",
+            to: [userEmail],
+            subject: "🚫 Your Account Has Been Banned - Yunchi",
+            html: emailHtml,
+            headers: {
+              "X-Entity-Ref-ID": crypto.randomUUID(),
+              "X-Priority": "1",
+              "Importance": "high",
+            },
+            tags: [
+              { name: "category", value: "transactional" },
+              { name: "type", value: "ban_notification" },
+            ],
+          });
 
-      if (emailResult.error) {
-        console.error("Email error:", emailResult.error);
-      } else {
-        console.log("Email ban notification sent successfully");
+          if (emailResult.error) {
+            const errorMessage = (emailResult.error as any)?.message || '';
+            console.error(`Email error from ${sender}:`, emailResult.error);
+            
+            if (errorMessage.includes('domain is not verified') || (emailResult.error as any)?.statusCode === 403) {
+              console.log("Domain not verified, trying fallback sender...");
+              continue;
+            }
+            continue;
+          }
+
+          console.log(`Email ban notification sent via ${sender}`);
+          break;
+        } catch (err) {
+          console.error(`Error sending from ${sender}:`, err);
+          continue;
+        }
       }
     }
 
