@@ -205,6 +205,19 @@ const defaultGateways: Gateway[] = [
     iconColor: "text-lime-500"
   },
   { 
+    id: "stripe_charge",
+    name: "STRIPE CHARGE",
+    code: "StC",
+    type: "charge",
+    status: "online", 
+    cardTypes: "Visa/MC/Amex",
+    speed: "Fast",
+    successRate: "85%",
+    description: "$8.00 Charge • CVC required",
+    icon: Zap,
+    iconColor: "text-violet-500"
+  },
+  { 
     id: "paygate_charge",
     name: "PAYGATE", 
     type: "charge",
@@ -911,6 +924,96 @@ const Gateways = () => {
     };
   };
 
+  // STRIPE CHARGE API check ($8) via edge function with retry
+  const checkCardViaStripeCharge = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[STRIPE-CHARGE] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
+        
+        const { data, error } = await supabase.functions.invoke('stripe-charge-check', {
+          body: { cc }
+        });
+        
+        if (error) {
+          console.error('[STRIPE-CHARGE] Edge function error:', error);
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 500 + attempt * 200));
+            continue;
+          }
+          return {
+            status: "unknown",
+            apiStatus: "ERROR",
+            apiMessage: error.message || "Edge function error",
+            rawResponse: JSON.stringify(error)
+          };
+        }
+        
+        console.log('[STRIPE-CHARGE] API response:', data);
+        
+        // Extract real API response data
+        const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
+        const apiMessage = data?.apiMessage || data?.responseMessage || data?.message || 'No message';
+        const apiTotal = data?.apiTotal || '$8.00';
+        const rawResponse = data?.rawResponse || JSON.stringify(data);
+        
+        // Use computedStatus from edge function
+        const computedStatus = data?.computedStatus;
+        if (computedStatus === "live" || computedStatus === "dead") {
+          return { status: computedStatus, apiStatus, apiMessage, apiTotal, rawResponse };
+        }
+        
+        // Fallback status detection
+        const status = (data?.status as string)?.toUpperCase() || '';
+        if (status === 'APPROVED' || status === 'SUCCESS' || status === 'CHARGED' || status === 'LIVE') {
+          return { status: "live", apiStatus, apiMessage, apiTotal, rawResponse };
+        }
+        if (status === 'DECLINED' || status === 'DEAD' || status === 'FAILED') {
+          return { status: "dead", apiStatus, apiMessage, apiTotal, rawResponse };
+        }
+        
+        // Check message for decline indicators
+        const message = (data?.message as string)?.toLowerCase() || '';
+        if (message.includes('decline') || message.includes('insufficient') || message.includes('invalid') || message.includes('expired')) {
+          return { status: "dead", apiStatus, apiMessage, apiTotal, rawResponse };
+        }
+        if (message.includes('approved') || message.includes('success') || message.includes('charged')) {
+          return { status: "live", apiStatus, apiMessage, apiTotal, rawResponse };
+        }
+        
+        // Retry on rate limit or timeout
+        if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
+          console.log(`[STRIPE-CHARGE] Retryable error detected: ${message}`);
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 800 + attempt * 300));
+            continue;
+          }
+        }
+        
+        return { status: "unknown", apiStatus, apiMessage, apiTotal, rawResponse };
+      } catch (error) {
+        console.error('[STRIPE-CHARGE] API check error:', error);
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 500 + attempt * 200));
+          continue;
+        }
+        return {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: error instanceof Error ? error.message : "Unknown error",
+          rawResponse: String(error)
+        };
+      }
+    }
+    return {
+      status: "unknown",
+      apiStatus: "ERROR",
+      apiMessage: "Max retries exceeded",
+      rawResponse: "Max retries exceeded"
+    };
+  };
+
   // B3 API check (YUNCHI AUTH 3) via edge function with retry - returns status AND API response
   const checkCardViaB3 = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
@@ -1134,6 +1237,8 @@ const Gateways = () => {
         gatewayResponse = await checkCardViaB3(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "paygate_charge") {
         gatewayResponse = await checkCardViaPaygate(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+      } else if (selectedGateway.id === "stripe_charge") {
+        gatewayResponse = await checkCardViaStripeCharge(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "payu_charge") {
         gatewayResponse = await checkCardViaPayU(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv, payuAmount);
       }
@@ -1211,6 +1316,27 @@ const Gateways = () => {
               response_message: realResponseMessage,
               amount: gatewayResponse.apiTotal || "$14.00",
               gateway: "PAYGATE",
+              api_response: gatewayResponse.rawResponse
+            }
+          });
+        } catch (notifyError) {
+          console.log("Failed to send Telegram notification:", notifyError);
+        }
+      }
+
+      // Send Telegram notification for STRIPE CHARGE checks (CHARGED/DECLINED only, skip UNKNOWN)
+      if (selectedGateway.id === "stripe_charge" && gatewayResponse && checkStatus !== "unknown") {
+        try {
+          const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}${gatewayResponse.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`;
+          
+          await supabase.functions.invoke('notify-charged-card', {
+            body: {
+              user_id: userId,
+              card_details: fullCardString,
+              status: checkStatus === "live" ? "CHARGED" : "DECLINED",
+              response_message: realResponseMessage,
+              amount: gatewayResponse.apiTotal || "$8.00",
+              gateway: "Yunchi Stripe Charge",
               api_response: gatewayResponse.rawResponse
             }
           });
@@ -2994,9 +3120,11 @@ const Gateways = () => {
                           ? `₹${payuAmount} CHARGE` 
                           : selectedGateway?.id === "paygate_charge"
                             ? "$14 CHARGE"
-                            : selectedGateway?.type === "charge" 
-                              ? "$1 CHARGE" 
-                              : "$0 AUTH"}
+                            : selectedGateway?.id === "stripe_charge"
+                              ? "$8 CHARGE"
+                              : selectedGateway?.type === "charge" 
+                                ? "$1 CHARGE" 
+                                : "$0 AUTH"}
                       </span>
                     </div>
                     
