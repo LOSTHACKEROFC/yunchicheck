@@ -353,15 +353,16 @@ serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : "Failed to process request";
     console.error('PayU Check Error:', errorMessage);
     
+    // Return 200 with error status so UI handles it gracefully (no 500 errors)
     return new Response(
       JSON.stringify({
         status: "unknown",
         apiStatus: "ERROR",
-        apiMessage: errorMessage,
+        apiMessage: "Connection error - try again",
         rawResponse: errorMessage,
         mcp: null
       }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
