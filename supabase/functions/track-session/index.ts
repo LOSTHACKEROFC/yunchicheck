@@ -28,28 +28,23 @@ Deno.serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "");
     
-    // Use service role client to verify the token
+    // Use service role client for database operations
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Get user from the token
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+    // Verify token using getClaims (works with signing-keys system)
+    const { data: claimsData, error: claimsError } = await supabaseAdmin.auth.getClaims(token);
     
-    if (userError || !user) {
-      // Don't log expected auth errors (deleted users, expired tokens)
-      const isExpectedError = userError?.message?.includes("not found") || 
-                              userError?.message?.includes("expired") ||
-                              userError?.message?.includes("invalid");
-      if (!isExpectedError) {
-        console.error("Auth error:", userError?.message || "No user found");
-      }
+    if (claimsError || !claimsData?.claims?.sub) {
       return new Response(
-        JSON.stringify({ error: "Invalid token", code: "USER_NOT_FOUND" }),
+        JSON.stringify({ error: "Invalid token", code: "AUTH_FAILED" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const userId = claimsData.claims.sub as string;
 
     const { browser, os, device_info, session_token }: SessionData = await req.json();
 
@@ -62,7 +57,7 @@ Deno.serve(async (req) => {
     await supabaseAdmin
       .from("user_sessions")
       .update({ is_current: false })
-      .eq("user_id", user.id);
+      .eq("user_id", userId);
 
     // Check if session already exists
     const { data: existingSession } = await supabaseAdmin
@@ -89,7 +84,7 @@ Deno.serve(async (req) => {
       await supabaseAdmin
         .from("user_sessions")
         .insert({
-          user_id: user.id,
+          user_id: userId,
           session_token,
           browser,
           os,
@@ -106,7 +101,7 @@ Deno.serve(async (req) => {
     await supabaseAdmin
       .from("user_sessions")
       .delete()
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .lt("last_active", thirtyDaysAgo.toISOString());
 
     return new Response(
