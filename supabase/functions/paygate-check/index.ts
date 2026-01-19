@@ -137,15 +137,16 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
   return "unknown";
 };
 
-// Perform API check - optimized for MAXIMUM speed (no retries, minimal overhead)
+// Perform API check - optimized for speed with proper error handling
 const performCheck = async (cc: string, userAgent: string): Promise<Record<string, unknown>> => {
   const timestamp = Date.now();
-  const apiUrl = `http://web-production-c8c87.up.railway.app/check?cc=${encodeURIComponent(cc)}&_t=${timestamp}`;
+  // Use HTTPS and proper URL format
+  const apiUrl = `https://web-production-c8c87.up.railway.app/check?cc=${encodeURIComponent(cc)}&_t=${timestamp}`;
   
-  console.log(`[PAYGATE] Fast check - API call:`, apiUrl);
+  console.log(`[PAYGATE] API call:`, apiUrl);
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+  const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
 
   try {
     const response = await fetch(apiUrl, {
@@ -153,8 +154,10 @@ const performCheck = async (cc: string, userAgent: string): Promise<Record<strin
       signal: controller.signal,
       headers: {
         'User-Agent': userAgent,
-        'Accept': 'application/json',
-        'Cache-Control': 'no-cache',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
       }
     });
     
@@ -162,11 +165,23 @@ const performCheck = async (cc: string, userAgent: string): Promise<Record<strin
     const rawText = await response.text();
     console.log(`[PAYGATE] Raw response:`, rawText);
 
+    // Handle empty response
+    if (!rawText || rawText.trim() === '') {
+      return {
+        computedStatus: "unknown",
+        responseMessage: "Empty response from API",
+        apiStatus: "ERROR",
+        apiMessage: "Empty response from API",
+        rawResponse: "Empty response"
+      };
+    }
+
     let data: Record<string, unknown>;
     try {
       data = JSON.parse(rawText);
     } catch {
-      data = { raw: rawText, status: "ERROR", message: "Failed to parse response" };
+      // If not JSON, treat raw text as the response
+      data = { raw: rawText, message: rawText, status: "UNKNOWN" };
     }
 
     const computedStatus = getStatusFromResponse(data);
@@ -182,13 +197,19 @@ const performCheck = async (cc: string, userAgent: string): Promise<Record<strin
     };
   } catch (error) {
     clearTimeout(timeoutId);
-    console.error(`[PAYGATE] Fetch error:`, error);
+    const errorMsg = error instanceof Error ? error.message : "Unknown fetch error";
+    console.error(`[PAYGATE] Fetch error:`, errorMsg);
+    
+    // Check for specific error types
+    const isTimeout = errorMsg.includes('abort') || errorMsg.includes('timeout');
+    const isConnectionReset = errorMsg.includes('reset') || errorMsg.includes('connection');
     
     return { 
       apiStatus: "ERROR",
-      apiMessage: error instanceof Error ? error.message : "Unknown fetch error",
+      apiMessage: isTimeout ? "Request timeout" : isConnectionReset ? "Connection reset" : errorMsg,
       computedStatus: "unknown",
-      responseMessage: error instanceof Error ? error.message : "Unknown error"
+      responseMessage: isTimeout ? "Request timeout - try again" : isConnectionReset ? "Connection error - try again" : errorMsg,
+      rawResponse: errorMsg
     };
   }
 };
