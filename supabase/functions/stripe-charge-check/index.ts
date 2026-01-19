@@ -96,10 +96,11 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
     const errMsg = error instanceof Error ? error.message : 'Unknown error';
     const isTimeout = errMsg.includes('abort') || errMsg.includes('timeout') || errMsg.includes('canceled') || errMsg.includes('signal');
     console.error(`[STRIPE-CHARGE] Fetch error: ${errMsg}`);
+    // Return unknown for timeouts so frontend can retry
     return { 
-      status: 'dead', 
-      message: isTimeout ? 'Gateway timeout - try again' : `Connection error`, 
-      rawResponse: 'timeout' 
+      status: 'unknown', 
+      message: isTimeout ? 'Gateway timeout - retrying...' : `Connection error: ${errMsg}`, 
+      rawResponse: isTimeout ? 'TIMEOUT' : errMsg 
     };
   }
 };
@@ -169,6 +170,7 @@ serve(async (req) => {
         apiTotal: '$8.00',
         status: result.status,
         message: result.message,
+        rawResponse: result.rawResponse,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
