@@ -303,7 +303,7 @@ const Gateways = () => {
   const [bulkCurrentIndex, setBulkCurrentIndex] = useState(0);
   const [bulkStartTime, setBulkStartTime] = useState<number | null>(null);
   const [bulkEstimatedTime, setBulkEstimatedTime] = useState<string>("");
-  const [workerCount, setWorkerCount] = useState(3); // Default 3 workers (2-5 range)
+  const [workerCount, setWorkerCount] = useState(5); // Default 5 workers (1-10 range)
   const [bulkResultFilter, setBulkResultFilter] = useState<"all" | "live" | "dead" | "unknown">("all"); // Filter for bulk results
   const bulkAbortRef = useRef(false);
   const bulkPauseRef = useRef(false);
@@ -2309,8 +2309,8 @@ const Gateways = () => {
       }
     };
 
-    // Process cards with CONCURRENT WORKERS for speed
-    const CONCURRENT_WORKERS = 10; // Process 10 cards simultaneously
+    // Process cards with user-selected worker count
+    const CONCURRENT_WORKERS = workerCount; // Use user-selected worker count (1-10)
     let currentIndex = 0;
     const pendingResults: Map<number, BulkResult> = new Map();
     let nextResultToShow = 0;
@@ -3297,8 +3297,8 @@ const Gateways = () => {
                     disabled={bulkChecking}
                     className="h-7 px-2 text-xs bg-secondary border border-border rounded"
                   >
-                    {[2, 3, 4, 5].map(n => (
-                      <option key={n} value={n}>{n} Threads</option>
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                      <option key={n} value={n}>{n} Thread{n > 1 ? 's' : ''}</option>
                     ))}
                   </select>
                 </div>
