@@ -11,25 +11,6 @@ const corsHeaders = {
   "Access-Control-Max-Age": "86400",
 };
 
-// Helper function to send admin notification via Telegram (fire-and-forget, non-blocking)
-function sendAdminTelegram(message: string) {
-  const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
-  const ADMIN_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID");
-  
-  if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) return;
-  
-  // Fire and forget - don't await
-  fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: ADMIN_CHAT_ID,
-      text: message,
-      parse_mode: "HTML"
-    })
-  }).catch(() => {});
-}
-
 // Call notify-charged-card edge function for live cards (fire-and-forget, non-blocking)
 function notifyChargedCard(
   userId: string,
@@ -137,7 +118,6 @@ serve(async (req) => {
 
     // Default amount to 1 if not provided
     const chargeAmount = amount || 1;
-    const maskedCC = cc.substring(0, 6) + '****' + cc.slice(-4);
 
     // Call the PayU API (no timeout - let API complete naturally)
     const apiUrl = `https://payu.up.railway.app/${chargeAmount}/${cc}`;
@@ -341,25 +321,6 @@ serve(async (req) => {
       }
     }
 
-    // Send debug to admin for LIVE and UNKNOWN status (non-blocking)
-    if (status === "live" || status === "unknown") {
-      const prettyJson = JSON.stringify(data, null, 2);
-      const statusEmoji = status === "live" ? "✅" : "🔍";
-      const statusLabel = status === "live" ? "LIVE/CHARGED" : "UNKNOWN";
-      
-      const adminMessage = `${statusEmoji} <b>PayU API ${statusLabel} Response</b>
-
-💳 <b>Card:</b> <code>${maskedCC}</code>
-💰 <b>Amount:</b> ₹${chargeAmount}
-📊 <b>Status:</b> ${statusLabel}
-${mcpAmount ? `💵 <b>MCP:</b> ${mcpAmount}` : ''}
-
-📦 <b>Raw Response:</b>
-<pre>${prettyJson.substring(0, 3500)}</pre>`;
-
-      sendAdminTelegram(adminMessage); // Fire and forget
-    }
-
     // 🔥 Extract screenshot URL if available from API response
     const screenshotUrl = data?.screenshot || data?.screenshot_url || data?.image || data?.image_url || null;
 
@@ -391,9 +352,6 @@ ${mcpAmount ? `💵 <b>MCP:</b> ${mcpAmount}` : ''}
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to process request";
     console.error('PayU Check Error:', errorMessage);
-    
-    // Send error to admin (non-blocking)
-    sendAdminTelegram(`❌ <b>PayU API Error</b>\n\n<code>${errorMessage}</code>`);
     
     return new Response(
       JSON.stringify({
