@@ -2303,42 +2303,74 @@ const Gateways = () => {
       }
     };
 
-    // Process cards ONE BY ONE - send to API and wait for response before next card
-    for (let i = 0; i < validCards.length && !bulkAbortRef.current; i++) {
-      const result = await processCard(i);
-      
-      if (result) {
-        allResults.push(result);
-        processedCount++;
+    // Process cards with CONCURRENT WORKERS for maximum speed
+    const CONCURRENT_WORKERS = 6; // Process 6 cards simultaneously
+    let currentIndex = 0;
+    const pendingResults: Map<number, BulkResult> = new Map();
+    let nextResultToShow = 0;
+
+    const processNextCard = async (): Promise<void> => {
+      while (currentIndex < validCards.length && !bulkAbortRef.current) {
+        const myIndex = currentIndex++;
         
-        setBulkResults(prev => [...prev, result]);
-        setBulkCurrentIndex(processedCount);
-        setBulkProgress((processedCount / validCards.length) * 100);
-        
-        // Calculate estimated time remaining
-        const elapsed = Date.now() - startTime;
-        const avgTimePerCard = elapsed / processedCount;
-        const remainingCards = validCards.length - processedCount;
-        const remainingMs = avgTimePerCard * remainingCards;
-        
-        if (remainingCards > 0) {
-          const remainingSecs = Math.ceil(remainingMs / 1000);
-          if (remainingSecs >= 60) {
-            const mins = Math.floor(remainingSecs / 60);
-            const secs = remainingSecs % 60;
-            setBulkEstimatedTime(`~${mins}m ${secs}s remaining`);
-          } else {
-            setBulkEstimatedTime(`~${remainingSecs}s remaining`);
-          }
-        } else {
-          setBulkEstimatedTime("Finishing...");
+        // Wait if paused
+        while (bulkPauseRef.current && !bulkAbortRef.current) {
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
         
-        // Update remaining lines in textarea
-        const remainingLinesNow = originalLines.slice(processedCount);
-        setBulkInput(remainingLinesNow.join('\n'));
+        if (bulkAbortRef.current) return;
+        
+        const result = await processCard(myIndex);
+        
+        if (result) {
+          pendingResults.set(myIndex, result);
+          
+          // Show results in order as they complete
+          while (pendingResults.has(nextResultToShow)) {
+            const orderedResult = pendingResults.get(nextResultToShow)!;
+            pendingResults.delete(nextResultToShow);
+            
+            allResults.push(orderedResult);
+            processedCount++;
+            nextResultToShow++;
+            
+            setBulkResults(prev => [...prev, orderedResult]);
+            setBulkCurrentIndex(processedCount);
+            setBulkProgress((processedCount / validCards.length) * 100);
+            
+            // Calculate estimated time remaining
+            const elapsed = Date.now() - startTime;
+            const avgTimePerCard = elapsed / processedCount;
+            const remainingCards = validCards.length - processedCount;
+            const remainingMs = avgTimePerCard * remainingCards;
+            
+            if (remainingCards > 0) {
+              const remainingSecs = Math.ceil(remainingMs / 1000);
+              if (remainingSecs >= 60) {
+                const mins = Math.floor(remainingSecs / 60);
+                const secs = remainingSecs % 60;
+                setBulkEstimatedTime(`~${mins}m ${secs}s remaining`);
+              } else {
+                setBulkEstimatedTime(`~${remainingSecs}s remaining`);
+              }
+            } else {
+              setBulkEstimatedTime("Finishing...");
+            }
+            
+            // Update remaining lines in textarea
+            const remainingLinesNow = originalLines.slice(processedCount);
+            setBulkInput(remainingLinesNow.join('\n'));
+          }
+        }
       }
-    }
+    };
+
+    // Start concurrent workers
+    const workers = Array(Math.min(CONCURRENT_WORKERS, validCards.length))
+      .fill(null)
+      .map(() => processNextCard());
+    
+    await Promise.all(workers);
 
     if (bulkAbortRef.current) {
       toast.info("Bulk check stopped");
