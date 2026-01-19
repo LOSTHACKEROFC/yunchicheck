@@ -2310,7 +2310,7 @@ const Gateways = () => {
     };
 
     // Process cards with CONCURRENT WORKERS for maximum speed
-    const CONCURRENT_WORKERS = 15; // Process 15 cards simultaneously for ULTRA FAST checks
+    const CONCURRENT_WORKERS = 20; // Process 20 cards simultaneously for MAXIMUM SPEED
     let currentIndex = 0;
     const pendingResults: Map<number, BulkResult> = new Map();
     let nextResultToShow = 0;
