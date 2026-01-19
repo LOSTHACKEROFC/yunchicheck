@@ -10,15 +10,12 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-// API Configuration - use HTTPS
+// API Configuration
 const API_BASE_URL = "https://web-production-7ad4f.up.railway.app/api";
-const PROXY_IP = "138.197.124.55";
-const PROXY_PORT = "9150";
-const PROXY_TYPE = "sock5";
 
 // Direct API call - no retries, immediate response
 const callApi = async (cc: string): Promise<{ status: string; message: string; rawResponse: string }> => {
-  const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&proxy=${PROXY_IP}:${PROXY_PORT}&proxytype=${PROXY_TYPE}`;
+  const apiUrl = `${API_BASE_URL}?cc=${cc}`;
   
   console.log(`[STRIPE-CHARGE] Calling: ${apiUrl}`);
   
