@@ -116,13 +116,11 @@ const extractResponseMessage = (data: Record<string, unknown>): string => {
 
 // Determine status from API response based on full_response field
 const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" | "unknown" => {
-  console.log('[STRIPE-CHARGE] Analyzing response - full_response:', data?.full_response);
+  const rawResponse = JSON.stringify(data).toLowerCase();
+  const message = String(data?.message || '').toLowerCase();
+  const status = String(data?.status || '').toLowerCase();
   
-  // Check for error scenarios first
-  if (data?.error || data?.status === 'error') {
-    console.log('[STRIPE-CHARGE] Detected API error - marking as UNKNOWN');
-    return "unknown";
-  }
+  console.log('[STRIPE-CHARGE] Analyzing response - full_response:', data?.full_response, 'status:', status);
   
   // Primary logic: full_response = true means CHARGED (live), false means DECLINED (dead)
   if (typeof data?.full_response === 'boolean') {
@@ -143,6 +141,53 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
   }
   if (fullResponseStr === 'false') {
     console.log('[STRIPE-CHARGE] full_response="false" - DECLINED (DEAD)');
+    return "dead";
+  }
+  
+  // Check for success indicators
+  if (
+    status === 'success' ||
+    rawResponse.includes('"success"') ||
+    rawResponse.includes('charged') ||
+    rawResponse.includes('approved') ||
+    rawResponse.includes('successful')
+  ) {
+    console.log('[STRIPE-CHARGE] Detected success status - CHARGED (LIVE)');
+    return "live";
+  }
+  
+  // Check for decline indicators in message/response
+  if (
+    message.includes('card_declined') ||
+    message.includes('declined') ||
+    message.includes('insufficient') ||
+    message.includes('expired') ||
+    message.includes('invalid') ||
+    message.includes('do_not_honor') ||
+    message.includes('lost_card') ||
+    message.includes('stolen_card') ||
+    rawResponse.includes('card_declined') ||
+    rawResponse.includes('declined') ||
+    rawResponse.includes('do_not_honor')
+  ) {
+    console.log('[STRIPE-CHARGE] Detected decline in message - DECLINED (DEAD)');
+    return "dead";
+  }
+  
+  // Check for gateway/API errors (retry scenarios)
+  if (
+    rawResponse.includes('timeout') ||
+    rawResponse.includes('connection') ||
+    rawResponse.includes('network') ||
+    rawResponse.includes('unavailable')
+  ) {
+    console.log('[STRIPE-CHARGE] Detected gateway error - UNKNOWN');
+    return "unknown";
+  }
+  
+  // If status is "error" but has decline indicators, mark as dead
+  if (status === 'error' && (message.includes('card') || message.includes('decline'))) {
+    console.log('[STRIPE-CHARGE] Error with card decline - DECLINED (DEAD)');
     return "dead";
   }
   
