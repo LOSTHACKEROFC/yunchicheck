@@ -234,15 +234,11 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     const computedStatus = getStatusFromResponse(data);
     const responseMessage = extractResponseMessage(data);
     
-    // Build display message based on full_response
-    let apiMessage = '';
-    if (data?.full_response === true) {
-      apiMessage = 'CHARGED - $8.00';
-    } else if (data?.full_response === false) {
-      apiMessage = 'DECLINED';
-    } else {
-      apiMessage = data?.message as string || responseMessage || 'No response message';
-    }
+    // Get the real API message directly from the response
+    const realApiMessage = data?.message as string || responseMessage || 'No response message';
+    
+    // Build display message based on status
+    let apiMessage = realApiMessage;
 
     // Retry on UNKNOWN
     if (computedStatus === "unknown" && attempt < maxRetries) {
