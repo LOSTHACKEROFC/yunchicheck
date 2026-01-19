@@ -931,51 +931,78 @@ const Gateways = () => {
   };
 
   // STRIPE CHARGE API check ($8) via edge function - simple single call
-  const checkCardViaStripeCharge = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
+  // Stripe Charge $8 API check via edge function with retry
+  const checkCardViaStripeCharge = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 2): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
-    try {
-      console.log(`[STRIPE-CHARGE] Checking card:`, cc);
-      
-      const { data, error } = await supabase.functions.invoke('stripe-charge-check', {
-        body: { cc }
-      });
-      
-      if (error) {
-        console.error('[STRIPE-CHARGE] Edge function error:', error);
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[STRIPE-CHARGE] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
+        
+        const { data, error } = await supabase.functions.invoke('stripe-charge-check', {
+          body: { cc }
+        });
+        
+        if (error) {
+          console.error('[STRIPE-CHARGE] Edge function error:', error);
+          // Retry on connection errors
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 1000 + attempt * 500));
+            continue;
+          }
+          return {
+            status: "unknown",
+            apiStatus: "ERROR",
+            apiMessage: error.message || "Edge function error",
+            rawResponse: JSON.stringify(error)
+          };
+        }
+        
+        console.log('[STRIPE-CHARGE] Response:', data);
+        
+        // Extract response data
+        const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
+        const apiMessage = data?.message || data?.apiMessage || 'No message';
+        const apiTotal = data?.apiTotal || '$8.00';
+        const rawResponse = JSON.stringify(data);
+        
+        // Use computedStatus from edge function directly
+        const computedStatus = data?.computedStatus;
+        if (computedStatus === "live" || computedStatus === "dead") {
+          return { status: computedStatus, apiStatus, apiMessage, apiTotal, rawResponse };
+        }
+        
+        // Timeout/retry messages - try again
+        const message = (apiMessage as string)?.toLowerCase() || '';
+        if (message.includes('timeout') || message.includes('try again') || message.includes('connection')) {
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 1500 + attempt * 500));
+            continue;
+          }
+        }
+        
+        // Fallback: return unknown status
+        return { status: "unknown", apiStatus, apiMessage, apiTotal, rawResponse };
+      } catch (error) {
+        console.error('[STRIPE-CHARGE] Error:', error);
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 1000 + attempt * 500));
+          continue;
+        }
         return {
           status: "unknown",
           apiStatus: "ERROR",
-          apiMessage: error.message || "Edge function error",
-          rawResponse: JSON.stringify(error)
+          apiMessage: error instanceof Error ? error.message : "Unknown error",
+          rawResponse: String(error)
         };
       }
-      
-      console.log('[STRIPE-CHARGE] Response:', data);
-      
-      // Extract response data
-      const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
-      const apiMessage = data?.message || data?.apiMessage || 'No message';
-      const apiTotal = data?.apiTotal || '$8.00';
-      const rawResponse = JSON.stringify(data);
-      
-      // Use computedStatus from edge function directly
-      const computedStatus = data?.computedStatus;
-      if (computedStatus === "live" || computedStatus === "dead") {
-        return { status: computedStatus, apiStatus, apiMessage, apiTotal, rawResponse };
-      }
-      
-      // Fallback: return unknown status
-      return { status: "unknown", apiStatus, apiMessage, apiTotal, rawResponse };
-    } catch (error) {
-      console.error('[STRIPE-CHARGE] Error:', error);
-      return {
-        status: "unknown",
-        apiStatus: "ERROR",
-        apiMessage: error instanceof Error ? error.message : "Unknown error",
-        rawResponse: String(error)
-      };
     }
+    return {
+      status: "unknown",
+      apiStatus: "ERROR",
+      apiMessage: "Max retries exceeded",
+      rawResponse: "Max retries exceeded"
+    };
   };
 
   // B3 API check (YUNCHI AUTH 3) via edge function with retry - returns status AND API response
