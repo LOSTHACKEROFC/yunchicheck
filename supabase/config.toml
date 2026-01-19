@@ -104,3 +104,6 @@ verify_jwt = false
 
 [functions.import-urls]
 verify_jwt = false
+
+[functions.stripe-charge-check]
+verify_jwt = false
