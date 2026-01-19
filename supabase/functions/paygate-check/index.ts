@@ -137,105 +137,80 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
   return "unknown";
 };
 
-// Perform API check with sequential retry logic (no parallel)
+// Perform API check - single attempt with long timeout
 const performCheck = async (cc: string, userAgent: string): Promise<Record<string, unknown>> => {
-  const maxRetries = 3;
+  const timestamp = Date.now();
+  const randomId = Math.random().toString(36).substring(2, 10);
+  const apiUrl = `https://web-production-c8c87.up.railway.app/check?cc=${encodeURIComponent(cc)}&_t=${timestamp}&_r=${randomId}`;
   
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const timestamp = Date.now();
-    const randomId = Math.random().toString(36).substring(2, 10);
-    const apiUrl = `https://web-production-c8c87.up.railway.app/check?cc=${encodeURIComponent(cc)}&_t=${timestamp}&_r=${randomId}`;
+  console.log(`[PAYGATE] Calling API: ${apiUrl}`);
+
+  const controller = new AbortController();
+  // Use 50s timeout - edge functions have ~60s limit
+  const timeoutId = setTimeout(() => controller.abort(), 50000);
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: {
+        'User-Agent': userAgent,
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+      }
+    });
     
-    console.log(`[PAYGATE] Attempt ${attempt}/${maxRetries} - URL: ${apiUrl}`);
+    clearTimeout(timeoutId);
+    const rawText = await response.text();
+    console.log(`[PAYGATE] Response received: ${rawText.substring(0, 300)}`);
 
-    const controller = new AbortController();
-    // Use 15s timeout per attempt to avoid edge function timeout
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-    try {
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: {
-          'User-Agent': userAgent,
-          'Accept': 'application/json, text/plain, */*',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-        }
-      });
-      
-      clearTimeout(timeoutId);
-      const rawText = await response.text();
-      console.log(`[PAYGATE] Attempt ${attempt} - Response: ${rawText.substring(0, 200)}`);
-
-      // Handle empty response - retry if attempts left
-      if (!rawText || rawText.trim() === '') {
-        console.log(`[PAYGATE] Empty response on attempt ${attempt}`);
-        if (attempt < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 500 * attempt));
-          continue; // Try next attempt
-        }
-        return {
-          computedStatus: "unknown",
-          responseMessage: "Empty response from API",
-          apiStatus: "ERROR",
-          apiMessage: "Empty response from API",
-          rawResponse: "Empty response"
-        };
-      }
-
-      // Parse response
-      let data: Record<string, unknown>;
-      try {
-        data = JSON.parse(rawText);
-      } catch {
-        data = { raw: rawText, message: rawText, status: "UNKNOWN" };
-      }
-
-      const computedStatus = getStatusFromResponse(data);
-      const responseMessage = extractResponseMessage(data);
-
+    // Handle empty response
+    if (!rawText || rawText.trim() === '') {
+      console.log(`[PAYGATE] Empty response`);
       return {
-        computedStatus,
-        responseMessage,
-        apiStatus: data.status || 'UNKNOWN',
-        apiMessage: data.message || responseMessage,
-        apiTotal: data.total || null,
-        rawResponse: JSON.stringify(data)
-      };
-      
-    } catch (error) {
-      clearTimeout(timeoutId);
-      const errorMsg = error instanceof Error ? error.message : "Unknown error";
-      console.error(`[PAYGATE] Attempt ${attempt} - Error: ${errorMsg}`);
-      
-      // If more attempts left, retry with delay
-      if (attempt < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
-        continue; // Try next attempt
-      }
-      
-      // All retries exhausted
-      const isTimeout = errorMsg.includes('abort') || errorMsg.includes('timeout');
-      return { 
-        apiStatus: "ERROR",
-        apiMessage: isTimeout ? "API timeout" : errorMsg,
         computedStatus: "unknown",
-        responseMessage: isTimeout ? "Request timeout" : errorMsg,
-        rawResponse: errorMsg
+        responseMessage: "Empty response from API",
+        apiStatus: "ERROR",
+        apiMessage: "Empty response",
+        rawResponse: "Empty"
       };
     }
+
+    // Parse response
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      data = { raw: rawText, message: rawText, status: "UNKNOWN" };
+    }
+
+    const computedStatus = getStatusFromResponse(data);
+    const responseMessage = extractResponseMessage(data);
+
+    return {
+      computedStatus,
+      responseMessage,
+      apiStatus: data.status || 'UNKNOWN',
+      apiMessage: data.message || responseMessage,
+      apiTotal: data.total || null,
+      rawResponse: JSON.stringify(data)
+    };
+    
+  } catch (error) {
+    clearTimeout(timeoutId);
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    console.error(`[PAYGATE] Error: ${errorMsg}`);
+    
+    const isTimeout = errorMsg.includes('abort') || errorMsg.includes('timeout');
+    return { 
+      apiStatus: "ERROR",
+      apiMessage: isTimeout ? "API timeout (50s)" : errorMsg,
+      computedStatus: "unknown",
+      responseMessage: isTimeout ? "Request timeout" : errorMsg,
+      rawResponse: errorMsg
+    };
   }
-  
-  // Fallback (should not reach here)
-  return {
-    computedStatus: "unknown",
-    responseMessage: "Check failed",
-    apiStatus: "ERROR",
-    apiMessage: "Check failed",
-    rawResponse: "No response"
-  };
 };
 
 serve(async (req) => {
