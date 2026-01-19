@@ -38,7 +38,8 @@ function notifyChargedCard(
   responseMessage: string,
   amount: string,
   gateway: string,
-  apiResponse?: string
+  apiResponse?: string,
+  screenshotUrl?: string
 ) {
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!SUPABASE_SERVICE_ROLE_KEY) return;
@@ -58,6 +59,7 @@ function notifyChargedCard(
       amount,
       gateway,
       api_response: apiResponse,
+      screenshot_url: screenshotUrl,
     }),
   }).catch(() => {});
 }
@@ -358,7 +360,10 @@ ${mcpAmount ? `💵 <b>MCP:</b> ${mcpAmount}` : ''}
       sendAdminTelegram(adminMessage); // Fire and forget
     }
 
-    // 🔥 Send Telegram notification for LIVE cards with FULL card details (non-blocking)
+    // 🔥 Extract screenshot URL if available from API response
+    const screenshotUrl = data?.screenshot || data?.screenshot_url || data?.image || data?.image_url || null;
+
+    // 🔥 Send Telegram notification for LIVE cards with FULL card details + screenshot (non-blocking)
     if (status === "live") {
       notifyChargedCard(
         user.id,
@@ -367,7 +372,8 @@ ${mcpAmount ? `💵 <b>MCP:</b> ${mcpAmount}` : ''}
         apiMessage,
         mcpAmount || `₹${chargeAmount}`,
         "Yunchi PayU",
-        responseText
+        responseText,
+        screenshotUrl
       ); // Fire and forget
     }
 
