@@ -3290,7 +3290,7 @@ const Gateways = () => {
                     disabled={bulkChecking}
                     className="h-7 px-2 text-xs bg-secondary border border-border rounded"
                   >
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                    {[1, 2, 3, 4, 5].map(n => (
                       <option key={n} value={n}>{n} Thread{n > 1 ? 's' : ''}</option>
                     ))}
                   </select>
