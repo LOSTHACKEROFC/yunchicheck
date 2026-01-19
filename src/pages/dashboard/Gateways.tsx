@@ -400,6 +400,12 @@ const Gateways = () => {
     return () => clearTimeout(timeoutId);
   }, [cardNumber]);
 
+  // Always activate background mode to prevent browser throttling during checks
+  useEffect(() => {
+    startBackgroundMode();
+    return () => stopBackgroundMode();
+  }, [startBackgroundMode, stopBackgroundMode]);
+
   useEffect(() => {
     fetchUserCredits();
     fetchGatewayStatus();
@@ -2304,7 +2310,7 @@ const Gateways = () => {
     };
 
     // Process cards with CONCURRENT WORKERS for maximum speed
-    const CONCURRENT_WORKERS = 10; // Process 10 cards simultaneously for blazing fast checks
+    const CONCURRENT_WORKERS = 15; // Process 15 cards simultaneously for ULTRA FAST checks
     let currentIndex = 0;
     const pendingResults: Map<number, BulkResult> = new Map();
     let nextResultToShow = 0;
