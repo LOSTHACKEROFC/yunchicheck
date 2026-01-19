@@ -94,12 +94,12 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
   } catch (error) {
     clearTimeout(timeoutId);
     const errMsg = error instanceof Error ? error.message : 'Unknown error';
-    const isTimeout = errMsg.includes('abort') || errMsg.includes('timeout') || errMsg.includes('canceled');
+    const isTimeout = errMsg.includes('abort') || errMsg.includes('timeout') || errMsg.includes('canceled') || errMsg.includes('signal');
     console.error(`[STRIPE-CHARGE] Fetch error: ${errMsg}`);
     return { 
-      status: 'unknown', 
-      message: isTimeout ? 'API timeout - server may be busy' : `Connection error: ${errMsg}`, 
-      rawResponse: errMsg 
+      status: 'dead', 
+      message: isTimeout ? 'Gateway timeout - try again' : `Connection error`, 
+      rawResponse: 'timeout' 
     };
   }
 };
