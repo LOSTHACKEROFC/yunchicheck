@@ -3068,7 +3068,7 @@ const Gateways = () => {
                       ? "bg-red-500/10 border-red-500/30"
                       : "bg-yellow-500/10 border-yellow-500/30"
                 }`}>
-                  {/* Card with status badge */}
+                  {/* Card with status badge and brand logo */}
                   <div className="flex items-center gap-2 mb-3">
                     <span className={`px-2 py-0.5 rounded text-xs font-bold ${
                       result.status === "live" 
@@ -3079,7 +3079,8 @@ const Gateways = () => {
                     }`}>
                       {result.status === "live" ? "LIVE" : result.status === "dead" ? "DEAD" : "UNKNOWN"}
                     </span>
-                    <span className="font-mono text-sm text-foreground font-semibold">
+                    <CardBrandLogo brand={binInfo.brand} size="sm" />
+                    <span className="font-mono text-sm text-foreground font-semibold flex-1">
                       {result.displayCard || result.card || `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${cvv}`}
                     </span>
                     {result.card && (
