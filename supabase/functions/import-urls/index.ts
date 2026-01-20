@@ -14,7 +14,48 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    // Create service role client for database operations
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // SECURITY: Require admin authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.log("[IMPORT-URLS] No authorization header");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized - No authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    
+    // Validate user token
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    if (authError || !user) {
+      console.log("[IMPORT-URLS] Invalid token:", authError?.message);
+      return new Response(
+        JSON.stringify({ error: "Unauthorized - Invalid token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Check if user is an admin
+    const { data: roleData, error: roleError } = await supabaseAdmin
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('role', 'admin')
+      .maybeSingle();
+
+    if (roleError || !roleData) {
+      console.log("[IMPORT-URLS] User is not admin:", user.id);
+      return new Response(
+        JSON.stringify({ error: "Forbidden - Admin access required" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[IMPORT-URLS] Admin ${user.id} importing URLs`);
 
     // Parse the request body - expects array of URLs
     const { urls } = await req.json();
@@ -26,12 +67,23 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Rate limiting: max 5000 URLs per request
+    if (urls.length > 5000) {
+      return new Response(
+        JSON.stringify({ error: "Maximum 5000 URLs per request" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     console.log(`Processing ${urls.length} URLs for import...`);
 
-    // Clean and normalize URLs
+    // Clean and normalize URLs with validation
     const cleanedUrls = urls
-      .map((url: string) => url.trim())
-      .filter((url: string) => url.length > 0)
+      .map((url: string) => {
+        if (typeof url !== 'string') return '';
+        return url.trim();
+      })
+      .filter((url: string) => url.length > 0 && url.length < 2048) // URL length limit
       .filter((url: string) => url.startsWith("http://") || url.startsWith("https://"));
 
     // Remove duplicates
@@ -47,7 +99,7 @@ Deno.serve(async (req) => {
       const batch = uniqueUrls.slice(i, i + batchSize);
       const urlObjects = batch.map((url: string) => ({ url }));
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from("gateway_urls")
         .upsert(urlObjects, { onConflict: "url", ignoreDuplicates: true })
         .select();
@@ -62,7 +114,7 @@ Deno.serve(async (req) => {
     }
 
     // Get total count in database
-    const { count } = await supabase
+    const { count } = await supabaseAdmin
       .from("gateway_urls")
       .select("*", { count: "exact", head: true });
 
@@ -71,7 +123,8 @@ Deno.serve(async (req) => {
         success: true,
         message: `Imported ${inserted} URLs (${skipped} duplicates skipped)`,
         total_in_database: count,
-        processed: uniqueUrls.length
+        processed: uniqueUrls.length,
+        imported_by: user.id
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
