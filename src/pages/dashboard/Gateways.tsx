@@ -3081,19 +3081,18 @@ const Gateways = () => {
                     </span>
                     <CardBrandLogo brand={binInfo.brand} size="sm" />
                     <span className="font-mono text-sm text-foreground font-semibold flex-1">
-                      {result.displayCard || result.card || `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${cvv}`}
+                      {cardNumber.replace(/\s/g, '')}|{expMonth}|{expYear}|{cvv}
                     </span>
-                    {result.card && (
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(result.displayCard || result.card || '');
-                          toast.success("Copied card");
-                        }}
-                        className="p-1 hover:bg-secondary rounded"
-                      >
-                        <Copy className="h-3.5 w-3.5 text-muted-foreground" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => {
+                        const fullCard = `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${cvv}`;
+                        navigator.clipboard.writeText(fullCard);
+                        toast.success("Copied card");
+                      }}
+                      className="p-1 hover:bg-secondary rounded"
+                    >
+                      <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                    </button>
                   </div>
 
                   {/* Separator line */}
