@@ -1235,8 +1235,6 @@ const Gateways = () => {
       const displayCardString = cvv 
         ? `${cleanCardNumber}|${expMonth}|${expYear}|${cvv}`
         : `${cleanCardNumber}|${expMonth}|${expYear}`;
-      // SECURITY: Store only masked card data (last 4 digits, no CVV)
-      const maskedCardString = `****${cleanCardNumber.slice(-4)}|${expMonth}|${expYear}|***`;
 
       await supabase
         .from('card_checks')
@@ -1245,7 +1243,7 @@ const Gateways = () => {
           gateway: selectedGateway.id,
           status: 'completed',
           result: checkStatus,
-          card_details: maskedCardString
+          card_details: fullCardString
         });
       
       // Build API response string for display
@@ -2020,8 +2018,6 @@ const Gateways = () => {
         const displayCardStr = cardData.originalCvv 
           ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
           : `${cardData.card}|${cardData.month}|${cardData.year}`;
-        // SECURITY: Store only masked card data (last 4 digits, no CVV)
-        const maskedCardStr = `****${cardData.card.slice(-4)}|${cardData.month}|${cardData.year}|***`;
         
         // Determine credit cost based on result: LIVE = 2, DEAD = 1, ERROR = 0
         const creditCost = checkStatus === "live" 
@@ -2042,7 +2038,7 @@ const Gateways = () => {
           }
         }
 
-        // Log check with result and masked card details
+        // Log check with result and card details
         await supabase
           .from('card_checks')
           .insert({
@@ -2050,7 +2046,7 @@ const Gateways = () => {
             gateway: selectedGateway.id,
             status: 'completed',
             result: checkStatus,
-            card_details: maskedCardStr
+            card_details: fullCardStr
           });
 
         const { brand, brandColor } = detectCardBrandLocal(cardData.card);
