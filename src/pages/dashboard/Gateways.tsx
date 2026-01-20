@@ -3545,7 +3545,7 @@ const Gateways = () => {
                                 {r.status === "live" ? "LIVE" : r.status === "dead" ? "DEAD" : "UNKNOWN"}
                               </span>
                               <CardBrandLogo brand={brand} size="sm" />
-                              <span className="font-mono text-xs text-foreground font-bold italic flex-1 truncate">
+                              <span className="font-mono text-xs text-foreground font-bold italic flex-1 break-all">
                                 {r.fullCard}
                               </span>
                               <button
