@@ -2874,7 +2874,7 @@ const Gateways = () => {
                         const { brand } = detectCardBrandLocal(cardNum);
                         return <CardBrandLogo brand={brand} size="xs" />;
                       })()}
-                      <span className="text-[8px] font-mono text-muted-foreground truncate">
+                      <span className="text-[8px] font-mono text-foreground font-bold italic break-all">
                         {check.fullCard || '••••'}
                       </span>
                     </div>
