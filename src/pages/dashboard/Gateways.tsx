@@ -1229,12 +1229,11 @@ const Gateways = () => {
         }
         setUserCredits(deductResult.newCredits);
       }
-      const cleanCardNumber = cardNumber.replace(/\s/g, '');
-      const fullCardString = `${cleanCardNumber}|${expMonth}|${expYear}|${internalCvv}`;
+      const fullCardString = `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${internalCvv}`;
       // Display card as entered by user (without auto-added CVC)
       const displayCardString = cvv 
-        ? `${cleanCardNumber}|${expMonth}|${expYear}|${cvv}`
-        : `${cleanCardNumber}|${expMonth}|${expYear}`;
+        ? `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${cvv}`
+        : `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}`;
 
       await supabase
         .from('card_checks')
