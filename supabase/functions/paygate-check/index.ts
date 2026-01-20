@@ -364,10 +364,7 @@ serve(async (req) => {
     // Perform check with automatic retry for UNKNOWN responses
     const data = await performCheck(cc, userAgent);
 
-    // Send admin debug for UNKNOWN results (fire-and-forget)
-    if (data.computedStatus === "unknown") {
-      sendAdminDebug(cc, data.rawResponse as string || '', data.apiMessage as string || '');
-    }
+    // Admin debug for UNKNOWN results is disabled
 
     return new Response(
       JSON.stringify(data),
