@@ -248,6 +248,15 @@ async function sendBroadcastEmail(email: string, username: string | null, broadc
 // UTILITY HELPERS
 // ═══════════════════════════════════════════════════════════
 
+// Escape HTML special characters for Telegram HTML parse mode
+function escapeHtml(text: string | null | undefined): string {
+  if (!text) return "";
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function formatTimeAgo(date: Date): string {
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -2690,7 +2699,7 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
     recentDevices.forEach((d: any, i: number) => {
       const lastSeen = new Date(d.last_seen).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
       const isBlocked = blockedDevices.some((b: any) => b.fingerprint === d.fingerprint || b.ip_address === d.ip_address);
-      devicesInfo += `\n  ${i + 1}. ${d.ip_address || "Unknown IP"} ${isBlocked ? "🚫" : ""}\n      FP: <code>${d.fingerprint?.substring(0, 12) || "N/A"}...</code>\n      Last: ${lastSeen}`;
+      devicesInfo += `\n  ${i + 1}. ${escapeHtml(d.ip_address) || "Unknown IP"} ${isBlocked ? "🚫" : ""}\n      FP: <code>${escapeHtml(d.fingerprint?.substring(0, 12)) || "N/A"}...</code>\n      Last: ${lastSeen}`;
     });
   } else {
     devicesInfo = "\n<b>📱 Devices:</b> No device logs";
@@ -2712,8 +2721,8 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
     const recentSessions = sessions.slice(0, 2);
     recentSessions.forEach((s: any, i: number) => {
       const lastActive = new Date(s.last_active).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-      sessionsInfo += `\n  ${i + 1}. ${s.browser || "Unknown"} / ${s.os || "Unknown"}`;
-      sessionsInfo += `\n      IP: ${s.ip_address || "Unknown"}`;
+      sessionsInfo += `\n  ${i + 1}. ${escapeHtml(s.browser) || "Unknown"} / ${escapeHtml(s.os) || "Unknown"}`;
+      sessionsInfo += `\n      IP: ${escapeHtml(s.ip_address) || "Unknown"}`;
       sessionsInfo += `\n      Last: ${lastActive}`;
     });
   } else {
@@ -2734,7 +2743,7 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
     recentTopups.forEach((t: any, i: number) => {
       const date = new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
       const statusEmoji = t.status === "completed" ? "✅" : t.status === "pending" ? "⏳" : "❌";
-      topupInfo += `\n  ${i + 1}. ${statusEmoji} ${t.amount} credits (${t.payment_method})`;
+      topupInfo += `\n  ${i + 1}. ${statusEmoji} ${t.amount} credits (${escapeHtml(t.payment_method)})`;
       topupInfo += `\n      ${date}`;
     });
   } else {
@@ -2749,7 +2758,7 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
     recentChecks.forEach((c: any, i: number) => {
       const date = new Date(c.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
       const resultEmoji = c.result === "live" ? "✅" : c.result === "dead" ? "❌" : "⏳";
-      checksInfo += `\n  ${i + 1}. ${resultEmoji} ${c.gateway} - ${date}`;
+      checksInfo += `\n  ${i + 1}. ${resultEmoji} ${escapeHtml(c.gateway)} - ${date}`;
     });
   }
 
@@ -2778,7 +2787,7 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
   if (profile.is_banned) {
     banInfo = `
 <b>🚫 Ban Details</b>
-• Reason: ${profile.ban_reason || "Not specified"}
+• Reason: ${escapeHtml(profile.ban_reason) || "Not specified"}
 • Banned At: ${profile.banned_at ? new Date(profile.banned_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "Unknown"}
 • Until: ${profile.banned_until ? new Date(profile.banned_until).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "Permanent"}`;
   }
@@ -2786,7 +2795,7 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
   // Auth provider info
   let authInfo = "";
   if (authUserData) {
-    const provider = authUserData.app_metadata?.provider || "email";
+    const provider = escapeHtml(authUserData.app_metadata?.provider) || "email";
     const emailConfirmed = authUserData.email_confirmed_at ? "✅ Yes" : "❌ No";
     const lastSignIn = authUserData.last_sign_in_at 
       ? new Date(authUserData.last_sign_in_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
@@ -2802,14 +2811,14 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
 📋 <b>Complete User Info</b>
 
 <b>👤 Profile</b>
-• Username: ${profile.username || "Not set"}
-• Name: ${profile.name || "Not set"}
-• Email: ${userEmail || "Unknown"}
-• Role: ${userRoles}
+• Username: ${escapeHtml(profile.username) || "Not set"}
+• Name: ${escapeHtml(profile.name) || "Not set"}
+• Email: ${escapeHtml(userEmail) || "Unknown"}
+• Role: ${escapeHtml(userRoles)}
 
 <b>📱 Telegram</b>
-• Chat ID: <code>${profile.telegram_chat_id || "Not connected"}</code>
-• Username: ${profile.telegram_username ? `@${profile.telegram_username}` : "Not set"}
+• Chat ID: <code>${escapeHtml(profile.telegram_chat_id) || "Not connected"}</code>
+• Username: ${profile.telegram_username ? `@${escapeHtml(profile.telegram_username)}` : "Not set"}
 
 <b>💰 Account</b>
 • Credits: ${profile.credits || 0}
