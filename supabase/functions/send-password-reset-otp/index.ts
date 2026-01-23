@@ -144,11 +144,16 @@ const handler = async (req: Request): Promise<Response> => {
 
     const user = authData.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
     
+    // Add artificial delay to prevent timing-based email enumeration (200-400ms random)
+    const delay = 200 + Math.random() * 200;
+    
     if (!user) {
       // Don't reveal that the email doesn't exist for security
       console.log("User not found for email:", email);
+      // Wait the delay before responding
+      await new Promise(resolve => setTimeout(resolve, delay));
       return new Response(
-        JSON.stringify({ success: true, message: "If the email exists, an OTP has been sent" }),
+        JSON.stringify({ success: true, message: "If your email is registered, you will receive an OTP code." }),
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
@@ -221,14 +226,15 @@ If you didn't request this, please ignore this message and secure your account.`
       }
     }
 
+    // Wait the delay to normalize response time  
+    await new Promise(resolve => setTimeout(resolve, delay));
+
+    // Return unified response without exposing whether email exists or has Telegram
+    // This prevents email enumeration attacks
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: "OTP sent successfully",
-        hasTelegram: !!profile?.telegram_chat_id,
-        telegramSent,
-        emailSent: emailResult.success,
-        expiresAt: expiresAt.toISOString()
+        message: "If your email is registered, you will receive an OTP code."
       }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );

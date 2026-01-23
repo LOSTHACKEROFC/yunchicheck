@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
+import { timingSafeEqual } from "node:crypto";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -11,6 +12,16 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// Constant-time comparison function to prevent timing attacks
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  const aBuffer = new TextEncoder().encode(a);
+  const bBuffer = new TextEncoder().encode(b);
+  return timingSafeEqual(aBuffer, bBuffer);
+}
 
 async function sendPasswordChangedEmail(email: string): Promise<boolean> {
   if (!RESEND_API_KEY) {
@@ -194,16 +205,31 @@ const handler = async (req: Request): Promise<Response> => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Find the OTP record
-    const { data: otpRecord, error: otpError } = await supabase
+    // Find OTP records for this email (don't filter by otp_code to prevent timing attacks)
+    const { data: otpRecords, error: otpError } = await supabase
       .from("password_reset_otps")
       .select("*")
       .eq("email", email.toLowerCase())
-      .eq("otp_code", otp)
-      .eq("used", false)
-      .single();
+      .eq("used", false);
 
-    if (otpError || !otpRecord) {
+    if (otpError) {
+      console.error("Error fetching OTP records:", otpError);
+      return new Response(
+        JSON.stringify({ error: "Invalid OTP code" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Find matching OTP using constant-time comparison
+    let otpRecord = null;
+    for (const record of otpRecords || []) {
+      if (safeCompare(record.otp_code, otp)) {
+        otpRecord = record;
+        break;
+      }
+    }
+
+    if (!otpRecord) {
       console.log("OTP not found or already used for email:", email);
       return new Response(
         JSON.stringify({ error: "Invalid OTP code" }),
