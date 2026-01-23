@@ -635,10 +635,10 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
       }
 
       setResetOtpSent(true);
-      setHasTelegramForReset(response.data?.hasTelegram || false);
-      setResetOtpExpiry(new Date(response.data.expiresAt));
+      setHasTelegramForReset(false); // No longer exposed for security
+      setResetOtpExpiry(new Date(Date.now() + 2 * 60 * 1000)); // 2 minutes from now
       setResetTimeRemaining(2 * 60 * 1000); // 2 minutes
-      toast.success("OTP sent! Check your email" + (response.data?.hasTelegram ? " and Telegram" : ""));
+      toast.success("If your email is registered, you will receive an OTP code");
     } catch (error: unknown) {
       if (error instanceof Error) {
         toast.error(error.message);

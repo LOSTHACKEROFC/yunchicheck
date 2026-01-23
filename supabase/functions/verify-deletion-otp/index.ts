@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendEmail } from "../_shared/email-helper.ts";
+import { timingSafeEqual } from "node:crypto";
 
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 
@@ -8,6 +9,16 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// Constant-time comparison function to prevent timing attacks
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  const aBuffer = new TextEncoder().encode(a);
+  const bBuffer = new TextEncoder().encode(b);
+  return timingSafeEqual(aBuffer, bBuffer);
+}
 
 // Send farewell email after account deletion
 async function sendDeletionConfirmationEmail(email: string, username: string | null): Promise<boolean> {
@@ -163,15 +174,30 @@ serve(async (req) => {
     const userEmail = userData.user.email;
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Find the OTP record
-    const { data: otpRecord, error: otpError } = await adminClient
+    // Find OTP records for this user (don't filter by otp_hash to prevent timing attacks)
+    const { data: otpRecords, error: otpError } = await adminClient
       .from("deletion_otps")
       .select("*")
-      .eq("user_id", userId)
-      .eq("otp_hash", otp)
-      .single();
+      .eq("user_id", userId);
 
-    if (otpError || !otpRecord) {
+    if (otpError) {
+      console.error("Error fetching OTP records:", otpError);
+      return new Response(
+        JSON.stringify({ error: "Invalid verification code" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Find matching OTP using constant-time comparison
+    let otpRecord = null;
+    for (const record of otpRecords || []) {
+      if (safeCompare(record.otp_hash, otp)) {
+        otpRecord = record;
+        break;
+      }
+    }
+
+    if (!otpRecord) {
       return new Response(
         JSON.stringify({ error: "Invalid verification code" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
