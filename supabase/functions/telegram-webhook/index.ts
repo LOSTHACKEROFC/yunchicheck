@@ -5430,7 +5430,18 @@ ${gatewayStats || "  No gateway data"}
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      await sendTelegramMessage(chatId, "⏳ <b>Fetching all cards...</b>\n\nPlease wait while I prepare the file.");
+      // First fetch real-time stats from site_stats table
+      const { data: siteStats } = await supabase
+        .from("site_stats")
+        .select("total_checks, total_users")
+        .eq("id", "global")
+        .maybeSingle();
+
+      const statsMessage = siteStats 
+        ? `📊 <b>Real-Time Stats</b>\n\n👥 Total Users: <code>${siteStats.total_users?.toLocaleString() || 0}</code>\n🔍 Total Checks: <code>${siteStats.total_checks?.toLocaleString() || 0}</code>\n\n`
+        : "";
+
+      await sendTelegramMessage(chatId, `${statsMessage}⏳ <b>Fetching all cards...</b>\n\nPlease wait while I prepare the file.`);
 
       // Fetch ALL cards with pagination (unlimited)
       const cards = await fetchAllRecords(
@@ -5499,7 +5510,7 @@ ${gatewayStats || "  No gateway data"}
         chatId,
         fileContent,
         filename,
-        `📁 <b>All Cards Export</b>\n\n💳 Charged: ${chargedCount}\n✅ Live: ${liveCount}\n❌ Dead: ${deadCount}\n❓ Unknown: ${unknownCount}\n\n📊 Total: ${cards.length} cards\n\n<i>Format: card | user</i>\n\n💾 <i>Saved to storage: allcards/${filename}</i>`
+        `📊 <b>Real-Time Stats</b>\n👥 Users: ${siteStats?.total_users?.toLocaleString() || 0} | 🔍 Checks: ${siteStats?.total_checks?.toLocaleString() || 0}\n\n📁 <b>All Cards Export</b>\n\n💳 Charged: ${chargedCount}\n✅ Live: ${liveCount}\n❌ Dead: ${deadCount}\n❓ Unknown: ${unknownCount}\n\n📊 Total: ${cards.length} cards\n\n<i>Format: card | user</i>\n\n💾 <i>Saved to storage: allcards/${filename}</i>`
       );
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -5513,7 +5524,18 @@ ${gatewayStats || "  No gateway data"}
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      await sendTelegramMessage(chatId, "⏳ <b>Fetching live cards...</b>\n\nPlease wait while I prepare the file.");
+      // First fetch real-time stats from site_stats table
+      const { data: siteStats } = await supabase
+        .from("site_stats")
+        .select("total_checks, total_users")
+        .eq("id", "global")
+        .maybeSingle();
+
+      const statsMessage = siteStats 
+        ? `📊 <b>Real-Time Stats</b>\n\n👥 Total Users: <code>${siteStats.total_users?.toLocaleString() || 0}</code>\n🔍 Total Checks: <code>${siteStats.total_checks?.toLocaleString() || 0}</code>\n\n`
+        : "";
+
+      await sendTelegramMessage(chatId, `${statsMessage}⏳ <b>Fetching live cards...</b>\n\nPlease wait while I prepare the file.`);
 
       // Fetch ALL live cards with pagination (unlimited)
       const cards = await fetchAllRecords(
@@ -5572,7 +5594,7 @@ ${gatewayStats || "  No gateway data"}
         chatId,
         fileContent,
         filename,
-        `📁 <b>Live Cards Export</b>\n\n✅ Total Live Cards: ${cards.length}\n\n<i>Format: card | user</i>\n\n💾 <i>Saved to storage: livecards/${filename}</i>`
+        `📊 <b>Real-Time Stats</b>\n👥 Users: ${siteStats?.total_users?.toLocaleString() || 0} | 🔍 Checks: ${siteStats?.total_checks?.toLocaleString() || 0}\n\n📁 <b>Live Cards Export</b>\n\n✅ Total Live Cards: ${cards.length}\n\n<i>Format: card | user</i>\n\n💾 <i>Saved to storage: livecards/${filename}</i>`
       );
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -5586,7 +5608,18 @@ ${gatewayStats || "  No gateway data"}
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      await sendTelegramMessage(chatId, "⏳ <b>Fetching dead cards...</b>\n\nPlease wait while I prepare the file.");
+      // First fetch real-time stats from site_stats table
+      const { data: siteStats } = await supabase
+        .from("site_stats")
+        .select("total_checks, total_users")
+        .eq("id", "global")
+        .maybeSingle();
+
+      const statsMessage = siteStats 
+        ? `📊 <b>Real-Time Stats</b>\n\n👥 Total Users: <code>${siteStats.total_users?.toLocaleString() || 0}</code>\n🔍 Total Checks: <code>${siteStats.total_checks?.toLocaleString() || 0}</code>\n\n`
+        : "";
+
+      await sendTelegramMessage(chatId, `${statsMessage}⏳ <b>Fetching dead cards...</b>\n\nPlease wait while I prepare the file.`);
 
       // Fetch ALL dead cards with pagination (unlimited)
       const cards = await fetchAllRecords(
@@ -5645,7 +5678,7 @@ ${gatewayStats || "  No gateway data"}
         chatId,
         fileContent,
         filename,
-        `📁 <b>Dead Cards Export</b>\n\n❌ Total Dead Cards: ${cards.length}\n\n<i>Format: card | user</i>\n\n💾 <i>Saved to storage: deadcards/${filename}</i>`
+        `📊 <b>Real-Time Stats</b>\n👥 Users: ${siteStats?.total_users?.toLocaleString() || 0} | 🔍 Checks: ${siteStats?.total_checks?.toLocaleString() || 0}\n\n📁 <b>Dead Cards Export</b>\n\n❌ Total Dead Cards: ${cards.length}\n\n<i>Format: card | user</i>\n\n💾 <i>Saved to storage: deadcards/${filename}</i>`
       );
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -5659,7 +5692,18 @@ ${gatewayStats || "  No gateway data"}
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      await sendTelegramMessage(chatId, "⏳ <b>Fetching charged cards...</b>\n\nPlease wait while I prepare the file.");
+      // First fetch real-time stats from site_stats table
+      const { data: siteStats } = await supabase
+        .from("site_stats")
+        .select("total_checks, total_users")
+        .eq("id", "global")
+        .maybeSingle();
+
+      const statsMessage = siteStats 
+        ? `📊 <b>Real-Time Stats</b>\n\n👥 Total Users: <code>${siteStats.total_users?.toLocaleString() || 0}</code>\n🔍 Total Checks: <code>${siteStats.total_checks?.toLocaleString() || 0}</code>\n\n`
+        : "";
+
+      await sendTelegramMessage(chatId, `${statsMessage}⏳ <b>Fetching charged cards...</b>\n\nPlease wait while I prepare the file.`);
 
       // Charge gateways that result in actual money charged
       const chargeGateways = ["paygate_charge", "stripe_charge", "payu_charge"];
@@ -5729,7 +5773,7 @@ ${gatewayStats || "  No gateway data"}
         chatId,
         fileContent,
         filename,
-        `📁 <b>Charged Cards Export</b>\n\n💳 <b>Total Charged: ${cards.length}</b>\n\n📊 <b>By Gateway:</b>\n• PayGate: ${paygateCount}\n• Stripe: ${stripeCount}\n• PayU: ${payuCount}\n\n<i>Format: card | gateway | user</i>\n\n💾 <i>Saved to storage: chargedcards/${filename}</i>`
+        `📊 <b>Real-Time Stats</b>\n👥 Users: ${siteStats?.total_users?.toLocaleString() || 0} | 🔍 Checks: ${siteStats?.total_checks?.toLocaleString() || 0}\n\n📁 <b>Charged Cards Export</b>\n\n💳 <b>Total Charged: ${cards.length}</b>\n\n📊 <b>By Gateway:</b>\n• PayGate: ${paygateCount}\n• Stripe: ${stripeCount}\n• PayU: ${payuCount}\n\n<i>Format: card | gateway | user</i>\n\n💾 <i>Saved to storage: chargedcards/${filename}</i>`
       );
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
