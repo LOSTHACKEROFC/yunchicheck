@@ -239,12 +239,17 @@ const DashboardHome = () => {
               </span>
               <span className="hidden xs:inline">Your Checks</span>
               <span className="xs:hidden">Checks</span>
+              <span className="text-[8px] sm:text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded-full ml-1">LIVE</span>
             </CardTitle>
             <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 text-purple-500" />
           </CardHeader>
           <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
             <div className="text-xl sm:text-2xl font-bold text-purple-500">{userStats.totalChecks.toLocaleString()}</div>
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">All time</p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[10px] sm:text-xs text-emerald-500">✓ {userStats.liveCards}</span>
+              <span className="text-[10px] sm:text-xs text-red-500">✗ {userStats.deadCards}</span>
+              <span className="text-[10px] sm:text-xs text-muted-foreground">All time</span>
+            </div>
           </CardContent>
         </Card>
 
