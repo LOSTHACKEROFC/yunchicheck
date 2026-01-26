@@ -70,24 +70,24 @@ const DashboardHome = () => {
     };
 
     const fetchUserStats = async () => {
-      const { data } = await supabase
+      const { data, count } = await supabase
         .from("card_checks")
-        .select("result")
+        .select("result", { count: "exact" })
         .eq("user_id", userId);
       
       if (data) {
-        const liveCards = data.filter(c => c.result?.toLowerCase().includes('live') || c.result?.toLowerCase().includes('approved')).length;
+        const liveCards = data.filter(c => c.result?.toLowerCase().includes('live') || c.result?.toLowerCase().includes('approved') || c.result?.toLowerCase().includes('charged')).length;
         const deadCards = data.filter(c => c.result?.toLowerCase().includes('dead') || c.result?.toLowerCase().includes('declined')).length;
-        setUserStats({ totalChecks: data.length, liveCards, deadCards });
+        setUserStats({ totalChecks: count || data.length, liveCards, deadCards });
       }
     };
     
     fetchTodayStats();
     fetchUserStats();
 
-    // Subscribe to real-time updates for card_checks
+    // Subscribe to real-time updates for card_checks with unique channel
     const channel = supabase
-      .channel('today-checks-changes')
+      .channel(`user-checks-realtime-${userId}`)
       .on(
         'postgres_changes',
         {
@@ -96,9 +96,34 @@ const DashboardHome = () => {
           table: 'card_checks',
           filter: `user_id=eq.${userId}`
         },
-        () => {
-          fetchTodayStats();
-          fetchUserStats();
+        (payload) => {
+          // Immediately update counts based on new record
+          const newResult = (payload.new as any)?.result?.toLowerCase() || '';
+          setUserStats(prev => {
+            const isLive = newResult.includes('live') || newResult.includes('approved') || newResult.includes('charged');
+            const isDead = newResult.includes('dead') || newResult.includes('declined');
+            return {
+              totalChecks: prev.totalChecks + 1,
+              liveCards: isLive ? prev.liveCards + 1 : prev.liveCards,
+              deadCards: isDead ? prev.deadCards + 1 : prev.deadCards
+            };
+          });
+          
+          // Update today stats
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const createdAt = new Date((payload.new as any)?.created_at);
+          if (createdAt >= today) {
+            const newResult = (payload.new as any)?.result?.toLowerCase() || '';
+            const isLive = newResult.includes('live') || newResult.includes('approved');
+            const isDead = newResult.includes('dead') || newResult.includes('declined');
+            setTodayStats(prev => ({
+              total: prev.total + 1,
+              live: isLive ? prev.live + 1 : prev.live,
+              dead: isDead ? prev.dead + 1 : prev.dead,
+              unknown: (!isLive && !isDead) ? prev.unknown + 1 : prev.unknown
+            }));
+          }
         }
       )
       .on(
@@ -110,6 +135,7 @@ const DashboardHome = () => {
           filter: `user_id=eq.${userId}`
         },
         () => {
+          // Refetch on updates to ensure accuracy
           fetchTodayStats();
           fetchUserStats();
         }
