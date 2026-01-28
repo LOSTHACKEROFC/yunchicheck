@@ -316,16 +316,26 @@ serve(async (req) => {
     
     // Send raw API response to admin for Stripe Charge Woo gateway
     if (gateway.toLowerCase().includes('stripe_charge_woo') || gateway.toLowerCase().includes('stripe charge woo')) {
+      // Escape HTML entities in raw response to prevent Telegram parsing errors
+      const escapeHtml = (text: string) => {
+        return text
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      };
+      
+      const sanitizedRawResponse = escapeHtml(api_response || 'No raw response provided');
+      
       const adminDebugMessage = `🔧 <b>STRIPE CHARGE WOO DEBUG</b>
 
 <b>Card:</b> <code>${fullCardForAdmin}</code>
 <b>Status:</b> ${status}
-<b>Response:</b> ${response_message}
+<b>Response:</b> ${escapeHtml(response_message)}
 <b>Amount:</b> ${amount}
 <b>User:</b> ${profile?.username || user_id}
 
 <b>━━━ RAW API RESPONSE ━━━</b>
-<code>${api_response || 'No raw response provided'}</code>`;
+<code>${sanitizedRawResponse}</code>`;
 
       await sendTelegramMessage(ADMIN_TELEGRAM_CHAT_ID, adminDebugMessage);
       console.log("[NOTIFY-CHARGED] Sent Stripe Charge Woo debug to admin");
