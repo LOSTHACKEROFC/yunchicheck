@@ -213,7 +213,7 @@ const defaultGateways: Gateway[] = [
     cardTypes: "Visa/MC/Amex",
     speed: "Fast",
     successRate: "85%",
-    description: "$8.00 Charge • CVC required",
+    description: "$10.00 Charge • CVC required",
     icon: Zap,
     iconColor: "text-violet-500"
   },
