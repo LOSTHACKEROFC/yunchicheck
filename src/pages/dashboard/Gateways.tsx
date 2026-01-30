@@ -972,7 +972,7 @@ const Gateways = () => {
       // Extract response directly
       const apiStatus = data?.apiStatus || 'UNKNOWN';
       const apiMessage = data?.apiMessage || data?.message || 'No response';
-      const apiTotal = data?.apiTotal || '$8.00';
+      const apiTotal = data?.apiTotal || '$10.00';
       const rawResponse = data?.rawResponse || JSON.stringify(data);
       const computedStatus = data?.computedStatus;
       
@@ -1316,7 +1316,7 @@ const Gateways = () => {
               card_details: fullCardString,
               status: checkStatus === "live" ? "CHARGED" : "DECLINED",
               response_message: realResponseMessage,
-              amount: gatewayResponse.apiTotal || "$8.00",
+              amount: gatewayResponse.apiTotal || "$10.00",
               gateway: "Yunchi Stripe Charge",
               api_response: gatewayResponse.rawResponse
             }
@@ -2207,7 +2207,7 @@ const Gateways = () => {
                 card_details: fullCardStr,
                 status: checkStatus === "live" ? "CHARGED" : "DECLINED",
                 response_message: realResponseMessage,
-                amount: gatewayResponse.apiTotal || "$8.00",
+                amount: gatewayResponse.apiTotal || "$10.00",
                 gateway: "Yunchi Stripe Charge",
                 api_response: gatewayResponse.rawResponse
               }
@@ -3139,7 +3139,7 @@ const Gateways = () => {
                           : selectedGateway?.id === "paygate_charge"
                             ? "$14 CHARGE"
                             : selectedGateway?.id === "stripe_charge"
-                              ? "$8 CHARGE"
+                              ? "$10 CHARGE"
                               : selectedGateway?.type === "charge" 
                                 ? "$1 CHARGE" 
                                 : "$0 AUTH"}
@@ -3594,7 +3594,7 @@ const Gateways = () => {
                                 <span className="w-20 text-muted-foreground font-bold italic">AMOUNT</span>
                                 <span className="text-muted-foreground font-bold italic mr-1">:</span>
                                 <span className="text-foreground font-bold italic">
-                                  {selectedGateway?.type === "auth" ? "$0 AUTH" : selectedGateway?.id === "paygate_charge" ? "$14.00" : selectedGateway?.id === "payu_charge" ? `₹${payuAmount}` : selectedGateway?.id === "stripe_charge" ? "$8.00" : "$1.00"}
+                                  {selectedGateway?.type === "auth" ? "$0 AUTH" : selectedGateway?.id === "paygate_charge" ? "$14.00" : selectedGateway?.id === "payu_charge" ? `₹${payuAmount}` : selectedGateway?.id === "stripe_charge" ? "$10.00" : "$1.00"}
                                 </span>
                               </div>
                               
