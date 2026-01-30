@@ -214,7 +214,7 @@ serve(async (req) => {
         computedStatus: result.status,
         apiStatus: result.status === 'live' ? 'CHARGED' : result.status === 'dead' ? 'DECLINED' : 'UNKNOWN',
         apiMessage: result.message,
-        apiTotal: '$8.00',
+        apiTotal: '$10.00',
         status: result.status,
         message: result.message,
         rawResponse: result.rawResponse,
