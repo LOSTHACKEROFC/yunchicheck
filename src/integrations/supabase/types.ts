@@ -212,6 +212,69 @@ export type Database = {
         }
         Relationships: []
       }
+      gateways: {
+        Row: {
+          card_types: string
+          charge_amount: string | null
+          code: string | null
+          created_at: string
+          cvc_required: boolean
+          description: string
+          display_order: number
+          edge_function_name: string | null
+          icon_color: string
+          icon_name: string
+          id: string
+          is_active: boolean
+          name: string
+          speed: string
+          status: string
+          success_rate: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          card_types?: string
+          charge_amount?: string | null
+          code?: string | null
+          created_at?: string
+          cvc_required?: boolean
+          description: string
+          display_order?: number
+          edge_function_name?: string | null
+          icon_color?: string
+          icon_name?: string
+          id: string
+          is_active?: boolean
+          name: string
+          speed?: string
+          status?: string
+          success_rate?: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          card_types?: string
+          charge_amount?: string | null
+          code?: string | null
+          created_at?: string
+          cvc_required?: boolean
+          description?: string
+          display_order?: number
+          edge_function_name?: string | null
+          icon_color?: string
+          icon_name?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          speed?: string
+          status?: string
+          success_rate?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       health_check_sessions: {
         Row: {
           chat_id: string
@@ -395,6 +458,66 @@ export type Database = {
           user_id?: string
           user_telegram_chat_id?: string | null
           username?: string | null
+        }
+        Relationships: []
+      }
+      pending_gateway_additions: {
+        Row: {
+          admin_chat_id: string
+          card_types: string | null
+          charge_amount: string | null
+          created_at: string
+          cvc_required: boolean | null
+          description: string | null
+          edge_function_name: string | null
+          gateway_code: string | null
+          gateway_id: string | null
+          gateway_name: string | null
+          gateway_type: string | null
+          icon_color: string | null
+          icon_name: string | null
+          id: string
+          speed: string | null
+          step: string
+          success_rate: string | null
+        }
+        Insert: {
+          admin_chat_id: string
+          card_types?: string | null
+          charge_amount?: string | null
+          created_at?: string
+          cvc_required?: boolean | null
+          description?: string | null
+          edge_function_name?: string | null
+          gateway_code?: string | null
+          gateway_id?: string | null
+          gateway_name?: string | null
+          gateway_type?: string | null
+          icon_color?: string | null
+          icon_name?: string | null
+          id?: string
+          speed?: string | null
+          step?: string
+          success_rate?: string | null
+        }
+        Update: {
+          admin_chat_id?: string
+          card_types?: string | null
+          charge_amount?: string | null
+          created_at?: string
+          cvc_required?: boolean | null
+          description?: string | null
+          edge_function_name?: string | null
+          gateway_code?: string | null
+          gateway_id?: string | null
+          gateway_name?: string | null
+          gateway_type?: string | null
+          icon_color?: string | null
+          icon_name?: string | null
+          id?: string
+          speed?: string | null
+          step?: string
+          success_rate?: string | null
         }
         Relationships: []
       }

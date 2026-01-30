@@ -426,38 +426,89 @@ const Gateways = () => {
     fetchGatewayStatus();
   }, []);
 
-  // Fetch gateway status from database and subscribe to real-time updates
+  // Icon mapping from string to component
+  const iconMap: Record<string, LucideIcon> = {
+    Sparkles,
+    Zap,
+    Wallet,
+    Store,
+    CircleDollarSign,
+    ShoppingBag,
+    CreditCard,
+  };
+
+  // Fetch gateways from database and subscribe to real-time updates
   const fetchGatewayStatus = async () => {
     setLoadingGateways(true);
     try {
-      const { data: statusData, error } = await supabase
-        .from('gateway_status')
-        .select('id, status');
+      // First try to fetch from new gateways table
+      const { data: gatewaysData, error: gatewaysError } = await supabase
+        .from('gateways')
+        .select('*')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true });
 
-      if (error) throw error;
-
-      if (statusData && statusData.length > 0) {
-        // Merge database status with default gateway config
-        setGateways(defaultGateways.map(gateway => {
-          const dbStatus = statusData.find(s => s.id === gateway.id);
-          if (dbStatus) {
-            // Map 'unavailable' to 'maintenance' for UI display
-            const displayStatus = dbStatus.status === 'unavailable' ? 'maintenance' : dbStatus.status;
-            return { ...gateway, status: displayStatus as Gateway['status'] };
-          }
-          return gateway;
+      if (!gatewaysError && gatewaysData && gatewaysData.length > 0) {
+        // Convert database records to Gateway objects
+        const dbGateways: Gateway[] = gatewaysData.map((g: any) => ({
+          id: g.id,
+          name: g.name,
+          code: g.code || undefined,
+          type: g.type as "auth" | "preauth" | "charge",
+          status: (g.status === 'unavailable' ? 'maintenance' : g.status) as Gateway['status'],
+          cardTypes: g.card_types,
+          speed: g.speed,
+          successRate: g.success_rate,
+          description: g.description,
+          icon: iconMap[g.icon_name] || CreditCard,
+          iconColor: g.icon_color,
         }));
+        setGateways(dbGateways);
+      } else {
+        // Fallback to gateway_status table for backward compatibility
+        const { data: statusData, error } = await supabase
+          .from('gateway_status')
+          .select('id, status');
+
+        if (!error && statusData && statusData.length > 0) {
+          setGateways(defaultGateways.map(gateway => {
+            const dbStatus = statusData.find(s => s.id === gateway.id);
+            if (dbStatus) {
+              const displayStatus = dbStatus.status === 'unavailable' ? 'maintenance' : dbStatus.status;
+              return { ...gateway, status: displayStatus as Gateway['status'] };
+            }
+            return gateway;
+          }));
+        }
       }
     } catch (err) {
-      console.error('Failed to fetch gateway status:', err);
+      console.error('Failed to fetch gateways:', err);
     } finally {
       setLoadingGateways(false);
     }
   };
 
-  // Subscribe to real-time gateway status updates
+  // Subscribe to real-time gateway updates
   useEffect(() => {
-    const channel = supabase
+    // Subscribe to gateways table changes
+    const gatewaysChannel = supabase
+      .channel('gateways-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'gateways',
+        },
+        (payload) => {
+          // Refetch gateways on any change
+          fetchGatewayStatus();
+        }
+      )
+      .subscribe();
+
+    // Also subscribe to gateway_status for backward compatibility
+    const statusChannel = supabase
       .channel('gateway-status-updates')
       .on(
         'postgres_changes',
@@ -470,7 +521,6 @@ const Gateways = () => {
           const updated = payload.new as { id: string; status: string };
           setGateways(prev => prev.map(gateway => {
             if (gateway.id === updated.id) {
-              // Map 'unavailable' to 'maintenance' for UI display
               const displayStatus = updated.status === 'unavailable' ? 'maintenance' : updated.status;
               return { ...gateway, status: displayStatus as Gateway['status'] };
             }
@@ -481,7 +531,8 @@ const Gateways = () => {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(gatewaysChannel);
+      supabase.removeChannel(statusChannel);
     };
   }, []);
 

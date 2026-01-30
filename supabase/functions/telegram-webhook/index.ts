@@ -634,6 +634,9 @@ async function setBotCommands(): Promise<void> {
     { command: "userdevices", description: "View user's devices" },
     { command: "healthsites", description: "Health check gateway sites" },
     { command: "gate", description: "Set gateway availability" },
+    { command: "addgate", description: "Add new gateway" },
+    { command: "editgate", description: "Edit gateway config" },
+    { command: "delgate", description: "Delete a gateway" },
   ];
 
   try {
@@ -1012,6 +1015,9 @@ async function handleAdminCmd(chatId: string, supabase: any, messageId?: number)
 
 <b>🌐 Gateways</b>
 /gate - Set gateway availability
+/addgate - Add new gateway
+/editgate <code>[id]</code> - Edit gateway config
+/delgate <code>[id]</code> - Delete gateway
 /healthsites - Health check sites
 
 <b>👮 Moderation</b>
@@ -3169,6 +3175,499 @@ const handler = async (req: Request): Promise<Response> => {
           await editTelegramMessage(callbackChatId, messageId, gateMessage, { inline_keyboard: gatewayButtons });
         }
         await answerCallbackQuery(update.callback_query.id, "🌐 Gateway Control");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ─────────────────────────────────────────────────────────
+      // ADD GATEWAY CALLBACKS
+      // ─────────────────────────────────────────────────────────
+
+      // Cancel gateway addition
+      if (callbackData === "addgate_cancel") {
+        if (!isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can do this");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        await supabase
+          .from("pending_gateway_additions")
+          .delete()
+          .eq("admin_chat_id", callbackChatId);
+
+        if (messageId && callbackChatId) {
+          await editTelegramMessage(callbackChatId, messageId, "❌ <b>Gateway addition cancelled.</b>");
+        }
+        await answerCallbackQuery(update.callback_query.id, "Cancelled");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Gateway type selection
+      if (callbackData.startsWith("addgate_type_")) {
+        if (!isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can do this");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const gatewayType = callbackData.replace("addgate_type_", "");
+
+        // Update pending addition
+        await supabase
+          .from("pending_gateway_additions")
+          .update({ gateway_type: gatewayType, step: "card_types" })
+          .eq("admin_chat_id", callbackChatId);
+
+        if (messageId && callbackChatId) {
+          await editTelegramMessage(callbackChatId, messageId, `
+━━━━━━━━━━━━━━━━━━━━━━
+   ➕ <b>ADD NEW GATEWAY</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>Step 5/12: Card Types</b>
+━━━━━━━━━━━━━━━━━━━━━━
+Enter supported card types.
+
+<b>Example:</b> <code>Visa/MC/Amex</code>
+`, {
+            inline_keyboard: [
+              [{ text: "❌ Cancel", callback_data: "addgate_cancel" }]
+            ]
+          });
+        }
+        await answerCallbackQuery(update.callback_query.id, `Type: ${gatewayType}`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // CVC required selection
+      if (callbackData.startsWith("addgate_cvc_")) {
+        if (!isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can do this");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const cvcRequired = callbackData === "addgate_cvc_true";
+
+        // Get the pending addition
+        const { data: pendingAddition } = await supabase
+          .from("pending_gateway_additions")
+          .select("*")
+          .eq("admin_chat_id", callbackChatId)
+          .single();
+
+        if (!pendingAddition) {
+          await answerCallbackQuery(update.callback_query.id, "❌ No pending gateway found");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Get max display_order
+        const { data: maxOrderResult } = await supabase
+          .from("gateways")
+          .select("display_order")
+          .order("display_order", { ascending: false })
+          .limit(1)
+          .single();
+
+        const newDisplayOrder = (maxOrderResult?.display_order || 0) + 1;
+
+        // Insert the new gateway
+        const { error: insertError } = await supabase
+          .from("gateways")
+          .insert({
+            id: pendingAddition.gateway_id,
+            name: pendingAddition.gateway_name,
+            code: pendingAddition.gateway_code,
+            type: pendingAddition.gateway_type,
+            status: "online",
+            card_types: pendingAddition.card_types || "Visa/MC",
+            speed: pendingAddition.speed || "Medium",
+            success_rate: pendingAddition.success_rate || "90%",
+            description: pendingAddition.description || "",
+            icon_name: pendingAddition.icon_name || "CreditCard",
+            icon_color: pendingAddition.icon_color || "text-blue-500",
+            edge_function_name: pendingAddition.edge_function_name,
+            charge_amount: pendingAddition.charge_amount,
+            cvc_required: cvcRequired,
+            is_active: true,
+            display_order: newDisplayOrder
+          });
+
+        // Also add to gateway_status for backward compatibility
+        await supabase
+          .from("gateway_status")
+          .upsert({
+            id: pendingAddition.gateway_id,
+            name: pendingAddition.gateway_name,
+            status: "online"
+          }, { onConflict: "id" });
+
+        // Delete pending addition
+        await supabase
+          .from("pending_gateway_additions")
+          .delete()
+          .eq("admin_chat_id", callbackChatId);
+
+        if (insertError) {
+          if (messageId && callbackChatId) {
+            await editTelegramMessage(callbackChatId, messageId, `❌ <b>Failed to add gateway:</b>\n\n<code>${escapeHtml(insertError.message)}</code>`);
+          }
+          await answerCallbackQuery(update.callback_query.id, "❌ Error");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const successMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+   ✅ <b>GATEWAY ADDED!</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>ID:</b> <code>${escapeHtml(pendingAddition.gateway_id)}</code>
+<b>Name:</b> ${escapeHtml(pendingAddition.gateway_name)}
+<b>Type:</b> ${pendingAddition.gateway_type}
+<b>Card Types:</b> ${escapeHtml(pendingAddition.card_types || "Visa/MC")}
+<b>CVC Required:</b> ${cvcRequired ? "Yes" : "No"}
+
+━━━━━━━━━━━━━━━━━━━━━━
+<i>The gateway is now live on the website!</i>
+`;
+
+        if (messageId && callbackChatId) {
+          await editTelegramMessage(callbackChatId, messageId, successMessage, {
+            inline_keyboard: [
+              [{ text: "➕ Add Another", callback_data: "addgate_new" }],
+              [{ text: "🔙 Back to Menu", callback_data: "menu_back" }]
+            ]
+          });
+        }
+        await answerCallbackQuery(update.callback_query.id, "✅ Gateway added!");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Start new gateway addition
+      if (callbackData === "addgate_new") {
+        if (!isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can do this");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Clear any existing pending additions
+        await supabase
+          .from("pending_gateway_additions")
+          .delete()
+          .eq("admin_chat_id", callbackChatId);
+
+        // Create new pending addition
+        await supabase
+          .from("pending_gateway_additions")
+          .insert({
+            admin_chat_id: callbackChatId,
+            step: "id"
+          });
+
+        if (messageId && callbackChatId) {
+          await editTelegramMessage(callbackChatId, messageId, `
+━━━━━━━━━━━━━━━━━━━━━━
+   ➕ <b>ADD NEW GATEWAY</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+Let's add a new gateway to the platform!
+
+<b>Step 1/12: Gateway ID</b>
+━━━━━━━━━━━━━━━━━━━━━━
+Enter a unique ID for this gateway.
+Use lowercase letters, numbers, and
+underscores only.
+
+<b>Example:</b> <code>custom_auth</code>
+`, {
+            inline_keyboard: [
+              [{ text: "❌ Cancel", callback_data: "addgate_cancel" }]
+            ]
+          });
+        }
+        await answerCallbackQuery(update.callback_query.id, "Starting new gateway");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ─────────────────────────────────────────────────────────
+      // DELETE GATEWAY CALLBACKS
+      // ─────────────────────────────────────────────────────────
+
+      // Confirm delete
+      if (callbackData.startsWith("delgate_confirm_")) {
+        if (!isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can do this");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const gatewayId = callbackData.replace("delgate_confirm_", "");
+        
+        const { data: gateway } = await supabase
+          .from("gateways")
+          .select("id, name")
+          .eq("id", gatewayId)
+          .single();
+
+        if (!gateway) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Gateway not found");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (messageId && callbackChatId) {
+          await editTelegramMessage(callbackChatId, messageId, `
+⚠️ <b>Confirm Deletion</b>
+
+Are you sure you want to delete:
+<b>${escapeHtml(gateway.name)}</b> (${escapeHtml(gateway.id)})?
+
+This action cannot be undone.
+`, {
+            inline_keyboard: [
+              [
+                { text: "✅ Yes, Delete", callback_data: `delgate_exec_${gateway.id}` },
+                { text: "❌ Cancel", callback_data: "menu_back" }
+              ]
+            ]
+          });
+        }
+        await answerCallbackQuery(update.callback_query.id, "Confirm deletion?");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Execute delete
+      if (callbackData.startsWith("delgate_exec_")) {
+        if (!isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can do this");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const gatewayId = callbackData.replace("delgate_exec_", "");
+        
+        const { data: gateway } = await supabase
+          .from("gateways")
+          .select("id, name")
+          .eq("id", gatewayId)
+          .single();
+
+        if (!gateway) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Gateway not found");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Soft delete by setting is_active to false
+        await supabase
+          .from("gateways")
+          .update({ is_active: false })
+          .eq("id", gatewayId);
+
+        // Also update gateway_status
+        await supabase
+          .from("gateway_status")
+          .update({ status: "offline" })
+          .eq("id", gatewayId);
+
+        if (messageId && callbackChatId) {
+          await editTelegramMessage(callbackChatId, messageId, `
+✅ <b>Gateway Deleted</b>
+
+<b>${escapeHtml(gateway.name)}</b> has been removed.
+
+<i>The change is now live on the website.</i>
+`, {
+            inline_keyboard: [
+              [{ text: "🔙 Back to Menu", callback_data: "menu_back" }]
+            ]
+          });
+        }
+        await answerCallbackQuery(update.callback_query.id, "✅ Gateway deleted");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ─────────────────────────────────────────────────────────
+      // EDIT GATEWAY CALLBACKS
+      // ─────────────────────────────────────────────────────────
+
+      // Select gateway to edit
+      if (callbackData.startsWith("editgate_select_")) {
+        if (!isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can do this");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const gatewayId = callbackData.replace("editgate_select_", "");
+        
+        const { data: gateway } = await supabase
+          .from("gateways")
+          .select("*")
+          .eq("id", gatewayId)
+          .single();
+
+        if (!gateway) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Gateway not found");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const statusEmojis: Record<string, string> = {
+          online: "🟢",
+          offline: "🔴",
+          unavailable: "🟡"
+        };
+
+        const editMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+   ✏️ <b>EDIT GATEWAY</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>ID:</b> <code>${escapeHtml(gateway.id)}</code>
+<b>Name:</b> ${escapeHtml(gateway.name)}
+<b>Code:</b> ${gateway.code ? escapeHtml(gateway.code) : "N/A"}
+<b>Type:</b> ${gateway.type}
+<b>Status:</b> ${statusEmojis[gateway.status]} ${gateway.status}
+<b>Card Types:</b> ${escapeHtml(gateway.card_types)}
+<b>Speed:</b> ${escapeHtml(gateway.speed)}
+<b>Success Rate:</b> ${gateway.success_rate}
+<b>Description:</b> ${escapeHtml(gateway.description)}
+
+━━━━━━━━━━━━━━━━━━━━━━
+<i>Select a field to edit:</i>
+`;
+
+        const fieldButtons = [
+          [
+            { text: "📝 Name", callback_data: `editgate_field_${gateway.id}_name` },
+            { text: "🏷️ Code", callback_data: `editgate_field_${gateway.id}_code` }
+          ],
+          [
+            { text: "📋 Description", callback_data: `editgate_field_${gateway.id}_description` },
+            { text: "💳 Card Types", callback_data: `editgate_field_${gateway.id}_card_types` }
+          ],
+          [
+            { text: "⚡ Speed", callback_data: `editgate_field_${gateway.id}_speed` },
+            { text: "📊 Success Rate", callback_data: `editgate_field_${gateway.id}_success_rate` }
+          ],
+          [
+            { text: "💰 Charge Amount", callback_data: `editgate_field_${gateway.id}_charge_amount` },
+            { text: "🔢 CVC Required", callback_data: `editgate_toggle_${gateway.id}_cvc` }
+          ],
+          [{ text: "🔙 Back", callback_data: "menu_back" }]
+        ];
+
+        if (messageId && callbackChatId) {
+          await editTelegramMessage(callbackChatId, messageId, editMessage, { inline_keyboard: fieldButtons });
+        }
+        await answerCallbackQuery(update.callback_query.id, `Editing: ${gateway.name}`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Toggle CVC required
+      if (callbackData.startsWith("editgate_toggle_") && callbackData.endsWith("_cvc")) {
+        if (!isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can do this");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const gatewayId = callbackData.replace("editgate_toggle_", "").replace("_cvc", "");
+        
+        const { data: gateway } = await supabase
+          .from("gateways")
+          .select("id, name, cvc_required")
+          .eq("id", gatewayId)
+          .single();
+
+        if (!gateway) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Gateway not found");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const newValue = !gateway.cvc_required;
+
+        await supabase
+          .from("gateways")
+          .update({ cvc_required: newValue })
+          .eq("id", gatewayId);
+
+        if (messageId && callbackChatId) {
+          await editTelegramMessage(callbackChatId, messageId, `
+✅ <b>CVC Requirement Updated</b>
+
+<b>${escapeHtml(gateway.name)}</b>
+CVC Required: ${newValue ? "✅ Yes" : "❌ No"}
+
+<i>Change is now live!</i>
+`, {
+            inline_keyboard: [
+              [{ text: "🔙 Back to Gateway", callback_data: `editgate_select_${gateway.id}` }],
+              [{ text: "🔙 Back to Menu", callback_data: "menu_back" }]
+            ]
+          });
+        }
+        await answerCallbackQuery(update.callback_query.id, `CVC: ${newValue ? "Required" : "Optional"}`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Edit field prompt (store pending edit)
+      if (callbackData.startsWith("editgate_field_")) {
+        if (!isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can do this");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const parts = callbackData.replace("editgate_field_", "").split("_");
+        const field = parts.pop();
+        const gatewayId = parts.join("_");
+
+        const { data: gateway } = await supabase
+          .from("gateways")
+          .select("id, name")
+          .eq("id", gatewayId)
+          .single();
+
+        if (!gateway) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Gateway not found");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Store pending edit
+        await supabase
+          .from("pending_gateway_additions")
+          .delete()
+          .eq("admin_chat_id", callbackChatId);
+
+        await supabase
+          .from("pending_gateway_additions")
+          .insert({
+            admin_chat_id: callbackChatId,
+            step: `edit_${gatewayId}_${field}`,
+            gateway_id: gatewayId
+          });
+
+        const fieldLabels: Record<string, string> = {
+          name: "Display Name",
+          code: "Short Code",
+          description: "Description",
+          card_types: "Card Types",
+          speed: "Speed Rating",
+          success_rate: "Success Rate",
+          charge_amount: "Charge Amount",
+          icon_name: "Icon Name",
+          icon_color: "Icon Color",
+          edge_function_name: "Edge Function",
+          display_order: "Display Order"
+        };
+
+        if (messageId && callbackChatId) {
+          await editTelegramMessage(callbackChatId, messageId, `
+━━━━━━━━━━━━━━━━━━━━━━
+   ✏️ <b>EDIT: ${fieldLabels[field || ""] || field}</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+Editing <b>${escapeHtml(gateway.name)}</b>
+
+Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
+`, {
+            inline_keyboard: [
+              [{ text: "❌ Cancel", callback_data: `editgate_select_${gateway.id}` }]
+            ]
+          });
+        }
+        await answerCallbackQuery(update.callback_query.id, `Edit: ${fieldLabels[field || ""] || field}`);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -6396,6 +6895,443 @@ ${resultsDisplay || "Waiting for results..."}
 
       await sendTelegramMessage(chatId, gateMessage, { inline_keyboard: gatewayButtons });
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // ADD GATEWAY COMMAND (Admin Only)
+    // ─────────────────────────────────────────────────────────
+
+    // /addgate - Start multi-step gateway addition flow
+    if (text === "/addgate") {
+      const isAdminUser = await isAdminAsync(chatId, supabase);
+      if (!isAdminUser) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can use this command.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Clear any existing pending additions for this admin
+      await supabase
+        .from("pending_gateway_additions")
+        .delete()
+        .eq("admin_chat_id", chatId);
+
+      // Create new pending addition
+      await supabase
+        .from("pending_gateway_additions")
+        .insert({
+          admin_chat_id: chatId,
+          step: "id"
+        });
+
+      const startMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+   ➕ <b>ADD NEW GATEWAY</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+Let's add a new gateway to the platform!
+I'll guide you through the configuration.
+
+<b>Step 1/12: Gateway ID</b>
+━━━━━━━━━━━━━━━━━━━━━━
+Enter a unique ID for this gateway.
+Use lowercase letters, numbers, and
+underscores only.
+
+<b>Example:</b> <code>custom_auth</code> or <code>new_charge</code>
+
+━━━━━━━━━━━━━━━━━━━━━━
+<i>Reply with the gateway ID:</i>
+`;
+
+      await sendTelegramMessage(chatId, startMessage, {
+        inline_keyboard: [
+          [{ text: "❌ Cancel", callback_data: "addgate_cancel" }]
+        ]
+      });
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // DELETE GATEWAY COMMAND (Admin Only)
+    // ─────────────────────────────────────────────────────────
+
+    if (text?.startsWith("/delgate")) {
+      const isAdminUser = await isAdminAsync(chatId, supabase);
+      if (!isAdminUser) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can use this command.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const gatewayId = text.replace("/delgate", "").trim();
+      
+      if (!gatewayId) {
+        // Show list of gateways to delete
+        const { data: gateways } = await supabase
+          .from("gateways")
+          .select("id, name")
+          .eq("is_active", true)
+          .order("display_order", { ascending: true });
+
+        if (!gateways || gateways.length === 0) {
+          await sendTelegramMessage(chatId, "❌ No gateways found.");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        let listMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+   🗑️ <b>DELETE GATEWAY</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+Select a gateway to delete:
+`;
+
+        const deleteButtons: any[][] = [];
+        gateways.forEach((g: any) => {
+          deleteButtons.push([{
+            text: `🗑️ ${g.name} (${g.id})`,
+            callback_data: `delgate_confirm_${g.id}`
+          }]);
+        });
+        deleteButtons.push([{ text: "🔙 Cancel", callback_data: "menu_back" }]);
+
+        await sendTelegramMessage(chatId, listMessage, { inline_keyboard: deleteButtons });
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Direct delete by ID
+      const { data: gateway, error: fetchError } = await supabase
+        .from("gateways")
+        .select("id, name")
+        .eq("id", gatewayId)
+        .single();
+
+      if (fetchError || !gateway) {
+        await sendTelegramMessage(chatId, `❌ Gateway <code>${escapeHtml(gatewayId)}</code> not found.`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      await sendTelegramMessage(chatId, `
+⚠️ <b>Confirm Deletion</b>
+
+Are you sure you want to delete:
+<b>${escapeHtml(gateway.name)}</b> (${escapeHtml(gateway.id)})?
+
+This action cannot be undone.
+`, {
+        inline_keyboard: [
+          [
+            { text: "✅ Yes, Delete", callback_data: `delgate_exec_${gateway.id}` },
+            { text: "❌ Cancel", callback_data: "menu_back" }
+          ]
+        ]
+      });
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // EDIT GATEWAY COMMAND (Admin Only)
+    // ─────────────────────────────────────────────────────────
+
+    if (text?.startsWith("/editgate")) {
+      const isAdminUser = await isAdminAsync(chatId, supabase);
+      if (!isAdminUser) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can use this command.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const gatewayId = text.replace("/editgate", "").trim();
+      
+      if (!gatewayId) {
+        // Show list of gateways to edit
+        const { data: gateways } = await supabase
+          .from("gateways")
+          .select("id, name, status")
+          .eq("is_active", true)
+          .order("display_order", { ascending: true });
+
+        if (!gateways || gateways.length === 0) {
+          await sendTelegramMessage(chatId, "❌ No gateways found.");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const statusEmojis: Record<string, string> = {
+          online: "🟢",
+          offline: "🔴",
+          unavailable: "🟡"
+        };
+
+        let listMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+   ✏️ <b>EDIT GATEWAY</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+Select a gateway to edit:
+`;
+
+        const editButtons: any[][] = [];
+        gateways.forEach((g: any) => {
+          editButtons.push([{
+            text: `${statusEmojis[g.status] || "⚪"} ${g.name}`,
+            callback_data: `editgate_select_${g.id}`
+          }]);
+        });
+        editButtons.push([{ text: "🔙 Cancel", callback_data: "menu_back" }]);
+
+        await sendTelegramMessage(chatId, listMessage, { inline_keyboard: editButtons });
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Show edit options for specific gateway
+      const { data: gateway, error: fetchError } = await supabase
+        .from("gateways")
+        .select("*")
+        .eq("id", gatewayId)
+        .single();
+
+      if (fetchError || !gateway) {
+        await sendTelegramMessage(chatId, `❌ Gateway <code>${escapeHtml(gatewayId)}</code> not found.`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const statusEmojis: Record<string, string> = {
+        online: "🟢",
+        offline: "🔴",
+        unavailable: "🟡"
+      };
+
+      const editMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+   ✏️ <b>EDIT GATEWAY</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>ID:</b> <code>${escapeHtml(gateway.id)}</code>
+<b>Name:</b> ${escapeHtml(gateway.name)}
+<b>Code:</b> ${gateway.code ? escapeHtml(gateway.code) : "N/A"}
+<b>Type:</b> ${gateway.type}
+<b>Status:</b> ${statusEmojis[gateway.status]} ${gateway.status}
+<b>Card Types:</b> ${escapeHtml(gateway.card_types)}
+<b>Speed:</b> ${escapeHtml(gateway.speed)}
+<b>Success Rate:</b> ${gateway.success_rate}
+<b>Description:</b> ${escapeHtml(gateway.description)}
+<b>Icon:</b> ${gateway.icon_name} (${gateway.icon_color})
+<b>Edge Function:</b> ${gateway.edge_function_name || "N/A"}
+<b>Charge Amount:</b> ${gateway.charge_amount || "N/A"}
+<b>CVC Required:</b> ${gateway.cvc_required ? "Yes" : "No"}
+<b>Display Order:</b> ${gateway.display_order}
+
+━━━━━━━━━━━━━━━━━━━━━━
+<i>Select a field to edit:</i>
+`;
+
+      const fieldButtons = [
+        [
+          { text: "📝 Name", callback_data: `editgate_field_${gateway.id}_name` },
+          { text: "🏷️ Code", callback_data: `editgate_field_${gateway.id}_code` }
+        ],
+        [
+          { text: "📋 Description", callback_data: `editgate_field_${gateway.id}_description` },
+          { text: "💳 Card Types", callback_data: `editgate_field_${gateway.id}_card_types` }
+        ],
+        [
+          { text: "⚡ Speed", callback_data: `editgate_field_${gateway.id}_speed` },
+          { text: "📊 Success Rate", callback_data: `editgate_field_${gateway.id}_success_rate` }
+        ],
+        [
+          { text: "💰 Charge Amount", callback_data: `editgate_field_${gateway.id}_charge_amount` },
+          { text: "🔢 CVC Required", callback_data: `editgate_toggle_${gateway.id}_cvc` }
+        ],
+        [
+          { text: "🎨 Icon Name", callback_data: `editgate_field_${gateway.id}_icon_name` },
+          { text: "🎨 Icon Color", callback_data: `editgate_field_${gateway.id}_icon_color` }
+        ],
+        [
+          { text: "⚙️ Edge Function", callback_data: `editgate_field_${gateway.id}_edge_function_name` },
+          { text: "📊 Display Order", callback_data: `editgate_field_${gateway.id}_display_order` }
+        ],
+        [{ text: "🔙 Back", callback_data: "menu_back" }]
+      ];
+
+      await sendTelegramMessage(chatId, editMessage, { inline_keyboard: fieldButtons });
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // PENDING GATEWAY ADDITION - TEXT INPUT HANDLER
+    // ─────────────────────────────────────────────────────────
+
+    // Check for pending gateway additions (multi-step flow)
+    if (text && !text.startsWith("/")) {
+      const { data: pendingAddition } = await supabase
+        .from("pending_gateway_additions")
+        .select("*")
+        .eq("admin_chat_id", chatId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (pendingAddition) {
+        const step = pendingAddition.step;
+        const inputValue = text.trim();
+
+        // Step handlers
+        const stepConfig: Record<string, { nextStep: string; field: string; stepNum: number; nextPrompt: string }> = {
+          id: { nextStep: "name", field: "gateway_id", stepNum: 2, nextPrompt: "Enter the display name for this gateway.\n\n<b>Example:</b> <code>YUNCHI AUTH 4</code>" },
+          name: { nextStep: "code", field: "gateway_name", stepNum: 3, nextPrompt: "Enter a short code for this gateway (optional).\nPress /skip to skip.\n\n<b>Example:</b> <code>St4</code> or <code>B4</code>" },
+          code: { nextStep: "type", field: "gateway_code", stepNum: 4, nextPrompt: "Select the gateway type:" },
+          type: { nextStep: "card_types", field: "gateway_type", stepNum: 5, nextPrompt: "Enter supported card types.\n\n<b>Example:</b> <code>Visa/MC/Amex</code>" },
+          card_types: { nextStep: "speed", field: "card_types", stepNum: 6, nextPrompt: "Enter the speed rating.\n\n<b>Examples:</b> <code>⚡ Blazing</code>, <code>Fast</code>, <code>Medium</code>" },
+          speed: { nextStep: "success_rate", field: "speed", stepNum: 7, nextPrompt: "Enter the success rate.\n\n<b>Example:</b> <code>95%</code>" },
+          success_rate: { nextStep: "description", field: "success_rate", stepNum: 8, nextPrompt: "Enter the description.\n\n<b>Example:</b> <code>$0 Auth Check • CVC optional</code>" },
+          description: { nextStep: "icon_name", field: "description", stepNum: 9, nextPrompt: "Enter the icon name (Lucide icon).\n\n<b>Options:</b> <code>Zap</code>, <code>CreditCard</code>, <code>Wallet</code>, <code>Sparkles</code>, <code>Store</code>, <code>ShoppingBag</code>, <code>CircleDollarSign</code>" },
+          icon_name: { nextStep: "icon_color", field: "icon_name", stepNum: 10, nextPrompt: "Enter the icon color (Tailwind class).\n\n<b>Example:</b> <code>text-purple-500</code>, <code>text-blue-500</code>, <code>text-green-500</code>" },
+          icon_color: { nextStep: "edge_function", field: "icon_color", stepNum: 11, nextPrompt: "Enter the edge function name (optional).\nPress /skip to skip.\n\n<b>Example:</b> <code>stripe-auth-check</code>" },
+          edge_function: { nextStep: "charge_amount", field: "edge_function_name", stepNum: 12, nextPrompt: "Enter the charge amount (for charge gateways).\nPress /skip to skip.\n\n<b>Example:</b> <code>$10.00</code> or <code>custom</code>" },
+          charge_amount: { nextStep: "cvc_required", field: "charge_amount", stepNum: 13, nextPrompt: "Is CVC required?" },
+        };
+
+        const currentConfig = stepConfig[step];
+
+        if (step === "id") {
+          // Validate ID format
+          if (!/^[a-z0-9_]+$/.test(inputValue)) {
+            await sendTelegramMessage(chatId, "❌ Invalid ID format. Use only lowercase letters, numbers, and underscores.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // Check if ID already exists
+          const { data: existing } = await supabase
+            .from("gateways")
+            .select("id")
+            .eq("id", inputValue)
+            .single();
+
+          if (existing) {
+            await sendTelegramMessage(chatId, `❌ Gateway ID <code>${escapeHtml(inputValue)}</code> already exists. Choose a different ID.`);
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+        }
+
+        if (currentConfig) {
+          // Update the pending addition
+          const updateData: Record<string, any> = {
+            step: currentConfig.nextStep,
+            [currentConfig.field]: inputValue === "/skip" ? null : inputValue
+          };
+
+          await supabase
+            .from("pending_gateway_additions")
+            .update(updateData)
+            .eq("id", pendingAddition.id);
+
+          // Show next step prompt
+          if (currentConfig.nextStep === "type") {
+            // Show type selection buttons
+            await sendTelegramMessage(chatId, `
+━━━━━━━━━━━━━━━━━━━━━━
+   ➕ <b>ADD NEW GATEWAY</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>Step ${currentConfig.stepNum}/12: Gateway Type</b>
+━━━━━━━━━━━━━━━━━━━━━━
+${currentConfig.nextPrompt}
+`, {
+              inline_keyboard: [
+                [{ text: "🔐 Auth ($0)", callback_data: "addgate_type_auth" }],
+                [{ text: "💳 Charge", callback_data: "addgate_type_charge" }],
+                [{ text: "❌ Cancel", callback_data: "addgate_cancel" }]
+              ]
+            });
+          } else if (currentConfig.nextStep === "cvc_required") {
+            // Show CVC required selection
+            await sendTelegramMessage(chatId, `
+━━━━━━━━━━━━━━━━━━━━━━
+   ➕ <b>ADD NEW GATEWAY</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>Step 12/12: CVC Required?</b>
+━━━━━━━━━━━━━━━━━━━━━━
+Is CVC required for this gateway?
+`, {
+              inline_keyboard: [
+                [
+                  { text: "✅ Yes", callback_data: "addgate_cvc_true" },
+                  { text: "❌ No", callback_data: "addgate_cvc_false" }
+                ],
+                [{ text: "❌ Cancel", callback_data: "addgate_cancel" }]
+              ]
+            });
+          } else {
+            await sendTelegramMessage(chatId, `
+━━━━━━━━━━━━━━━━━━━━━━
+   ➕ <b>ADD NEW GATEWAY</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>Step ${currentConfig.stepNum}/12: ${currentConfig.nextStep.replace(/_/g, " ").toUpperCase()}</b>
+━━━━━━━━━━━━━━━━━━━━━━
+${currentConfig.nextPrompt}
+`, {
+              inline_keyboard: [
+                [{ text: "❌ Cancel", callback_data: "addgate_cancel" }]
+              ]
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Handle edit field input
+        if (step.startsWith("edit_")) {
+          const editParts = step.replace("edit_", "").split("_");
+          const field = editParts.pop();
+          const gatewayId = editParts.join("_");
+
+          if (field && gatewayId) {
+            // Update the gateway field
+            const { error: updateError } = await supabase
+              .from("gateways")
+              .update({ [field]: inputValue })
+              .eq("id", gatewayId);
+
+            // Delete the pending edit
+            await supabase
+              .from("pending_gateway_additions")
+              .delete()
+              .eq("id", pendingAddition.id);
+
+            if (updateError) {
+              await sendTelegramMessage(chatId, `❌ <b>Failed to update:</b>\n\n<code>${escapeHtml(updateError.message)}</code>`);
+              return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+
+            const fieldLabels: Record<string, string> = {
+              name: "Display Name",
+              code: "Short Code",
+              description: "Description",
+              card_types: "Card Types",
+              speed: "Speed Rating",
+              success_rate: "Success Rate",
+              charge_amount: "Charge Amount",
+              icon_name: "Icon Name",
+              icon_color: "Icon Color",
+              edge_function_name: "Edge Function",
+              display_order: "Display Order"
+            };
+
+            await sendTelegramMessage(chatId, `
+✅ <b>Gateway Updated!</b>
+
+<b>${fieldLabels[field] || field}:</b> ${escapeHtml(inputValue)}
+
+<i>Change is now live on the website!</i>
+`, {
+              inline_keyboard: [
+                [{ text: "✏️ Continue Editing", callback_data: `editgate_select_${gatewayId}` }],
+                [{ text: "🔙 Back to Menu", callback_data: "menu_back" }]
+              ]
+            });
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+        }
+      }
     }
 
     // ─────────────────────────────────────────────────────────
