@@ -3426,7 +3426,7 @@ const Gateways = () => {
                       disabled={parseCards(bulkInput).length === 0}
                     >
                       <Zap className="h-4 w-4 mr-2" />
-                      Check ({parseCards(bulkInput).length} cards, max {parseCards(bulkInput).length * CREDIT_COST_LIVE} credits)
+                      Check ({parseCards(bulkInput).length} cards)
                     </Button>
                   </>
                 ) : (
