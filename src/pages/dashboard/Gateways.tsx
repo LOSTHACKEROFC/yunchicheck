@@ -3239,15 +3239,12 @@ const Gateways = () => {
                   ) : (
                     <>
                       <Zap className="h-4 w-4 mr-2" />
-                      Check (1-2 Credits)
+                      Check
                     </>
                   )}
                 </Button>
               </div>
 
-              <p className="text-[10px] text-muted-foreground text-center">
-                Dead: {CREDIT_COST_DEAD} credit • Live: {CREDIT_COST_LIVE} credits • Errors: Free
-              </p>
             </CardContent>
           </Card>
         </TabsContent>
