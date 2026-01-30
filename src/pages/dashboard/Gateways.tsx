@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import confetti from "canvas-confetti";
@@ -316,6 +316,21 @@ const Gateways = () => {
   // Dynamic gateways state - merged from default config + database status
   const [gateways, setGateways] = useState<Gateway[]>(defaultGateways);
   const [loadingGateways, setLoadingGateways] = useState(true);
+
+  // Sort gateways by status: online first, maintenance second, offline last
+  const sortedGateways = useMemo(() => {
+    const statusPriority: Record<string, number> = {
+      online: 0,
+      maintenance: 1,
+      unavailable: 1,
+      offline: 2,
+    };
+    return [...gateways].sort((a, b) => {
+      const priorityA = statusPriority[a.status] ?? 2;
+      const priorityB = statusPriority[b.status] ?? 2;
+      return priorityA - priorityB;
+    });
+  }, [gateways]);
 
   const onlineCount = gateways.filter(g => g.status === "online").length;
   
@@ -2652,7 +2667,7 @@ const Gateways = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {gateways.map((gateway) => (
+          {sortedGateways.map((gateway) => (
             <Card 
               key={gateway.id} 
               onClick={() => gateway.status === "online" && setSelectedGateway(gateway)}
