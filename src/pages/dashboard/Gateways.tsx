@@ -1094,6 +1094,69 @@ const Gateways = () => {
     }
   };
 
+  // VBV Auth check (YUNCHI VBV AUTH) via edge function - returns PASSED/REJECTED
+  const checkCardViaVbv = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    try {
+      console.log(`[VBV-AUTH] Checking card:`, cc);
+      
+      const { data, error } = await supabase.functions.invoke('braintree-vbv-check', {
+        body: { cc }
+      });
+      
+      if (error) {
+        console.error('[VBV-AUTH] Error:', error);
+        return {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: error.message || "Connection error",
+          rawResponse: JSON.stringify(error)
+        };
+      }
+      
+      console.log('[VBV-AUTH] Response:', data);
+      
+      // Extract VBV-specific response data
+      const computedStatus = data?.computedStatus;
+      const threeDStatus = data?.threeDStatus || 'unknown';
+      const apiMessage = data?.apiMessage || `3DS: ${threeDStatus}`;
+      const rawResponse = JSON.stringify(data);
+      
+      // Map passed/rejected to live/dead for credit deduction logic
+      // But preserve the original status for display
+      if (computedStatus === "passed") {
+        return { 
+          status: "live", // For credit logic
+          apiStatus: "PASSED",
+          apiMessage: apiMessage,
+          rawResponse
+        };
+      } else if (computedStatus === "rejected") {
+        return { 
+          status: "dead", // For credit logic
+          apiStatus: "REJECTED",
+          apiMessage: apiMessage,
+          rawResponse
+        };
+      }
+      
+      return { 
+        status: "unknown",
+        apiStatus: "UNKNOWN",
+        apiMessage: apiMessage,
+        rawResponse
+      };
+    } catch (error) {
+      console.error('[VBV-AUTH] Exception:', error);
+      return {
+        status: "unknown",
+        apiStatus: "ERROR",
+        apiMessage: error instanceof Error ? error.message : "Unknown error",
+        rawResponse: String(error)
+      };
+    }
+  };
 
   // B3 API check (YUNCHI AUTH 3) via edge function with retry - returns status AND API response
   const checkCardViaB3 = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
@@ -1324,6 +1387,8 @@ const Gateways = () => {
         gatewayResponse = await checkCardViaPayU(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv, payuAmount);
       } else if (selectedGateway.id === "pwgate_charge") {
         gatewayResponse = await checkCardViaPwgate(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+      } else if (selectedGateway.id === "b3vbv_auth") {
+        gatewayResponse = await checkCardViaVbv(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       }
       
       const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -2129,6 +2194,8 @@ const Gateways = () => {
           gatewayResponse = await checkCardViaPayU(cardData.card, cardData.month, cardData.year, cardData.cvv, payuAmount);
         } else if (selectedGateway.id === "pwgate_charge") {
           gatewayResponse = await checkCardViaPwgate(cardData.card, cardData.month, cardData.year, cardData.cvv);
+        } else if (selectedGateway.id === "b3vbv_auth") {
+          gatewayResponse = await checkCardViaVbv(cardData.card, cardData.month, cardData.year, cardData.cvv);
         }
         
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
