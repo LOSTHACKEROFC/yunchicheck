@@ -110,6 +110,3 @@ verify_jwt = false
 
 [functions.pwgate-charge-check]
 verify_jwt = false
-
-[functions.braintree-auth-batch-check]
-verify_jwt = false
