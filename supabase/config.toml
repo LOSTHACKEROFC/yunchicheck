@@ -107,3 +107,6 @@ verify_jwt = false
 
 [functions.stripe-charge-check]
 verify_jwt = false
+
+[functions.pwgate-charge-check]
+verify_jwt = false
