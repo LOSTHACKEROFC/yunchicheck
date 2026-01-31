@@ -3297,7 +3297,7 @@ const Gateways = () => {
                             ? "text-red-500"
                             : "text-yellow-500"
                       }`}>
-                        {result.status === "live" ? "CHARGED" : result.status === "dead" ? "DECLINED" : "UNKNOWN"}
+                        {result.status === "live" ? (selectedGateway?.id === "b3vbv_auth" ? "PASSED" : "CHARGED") : result.status === "dead" ? "DECLINED" : "UNKNOWN"}
                       </span>
                     </div>
                     
@@ -3754,7 +3754,7 @@ const Gateways = () => {
                                 <span className={`font-bold italic ${
                                   r.status === "live" ? "text-green-500" : r.status === "dead" ? "text-red-500" : "text-yellow-500"
                                 }`}>
-                                  {r.status === "live" ? "CHARGED" : r.status === "dead" ? "DECLINED" : "UNKNOWN"}
+                                  {r.status === "live" ? (selectedGateway?.id === "b3vbv_auth" ? "PASSED" : "CHARGED") : r.status === "dead" ? "DECLINED" : "UNKNOWN"}
                                 </span>
                               </div>
                               
