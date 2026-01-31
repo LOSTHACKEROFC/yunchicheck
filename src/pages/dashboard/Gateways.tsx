@@ -162,9 +162,9 @@ const defaultGateways: Gateway[] = [
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Discover",
-    speed: "⚡ Blazing",
+    speed: "⚡⚡ Ultra",
     successRate: "96%",
-    description: "$0 Auth Check • CVC optional (auto-handled if missing/000)",
+    description: "$0 Auth Check • 10 Parallel Workers • CVC optional",
     icon: Wallet,
     iconColor: "text-blue-500"
   },
