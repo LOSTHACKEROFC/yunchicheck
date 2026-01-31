@@ -151,19 +151,9 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
 
     const { status: computedStatus, threeDStatus } = getStatusFromResponse(data);
     
-    // Build API message - always show the exact status from API
-    const threeDSecureInfo = data?.threeDSecureInfo as Record<string, unknown> | undefined;
-    let apiMessage = '';
-    
-    if (threeDSecureInfo) {
-      const shifted = threeDSecureInfo.liabilityShifted === true ? '✓' : '✗';
-      const possible = threeDSecureInfo.liabilityShiftPossible === true ? '✓' : '✗';
-      // Show the exact status value prominently
-      apiMessage = `status: ${threeDStatus} | Shifted: ${shifted} | Possible: ${possible}`;
-    } else {
-      // Show the exact status from getStatusFromResponse
-      apiMessage = `status: ${threeDStatus}`;
-    }
+    // Build API message - show exact status in quotes as requested
+    // Format: status: "<message>"
+    const apiMessage = `status: "${threeDStatus}"`;
 
     // Include raw response for admin debug
 
@@ -175,7 +165,7 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
       apiStatus: computedStatus.toUpperCase(),
       apiMessage,
       threeDStatus,
-      threeDSecureInfo: threeDSecureInfo || null,
+      threeDSecureInfo: (data?.threeDSecureInfo as Record<string, unknown>) || null,
       rawResponse
     };
   } catch (error) {
