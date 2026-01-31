@@ -78,27 +78,36 @@ const getStatusFromResponse = (data: Record<string, unknown>): { status: "passed
 
     // PRIORITY: Check paymentMethod.threeDSecureInfo FIRST - this has the actual status
     let threeDSecureInfo: Record<string, unknown> | undefined;
+    let extractedStatus: string | undefined;
     
+    // Try paymentMethod.threeDSecureInfo.status first
     if (data?.paymentMethod) {
       const paymentMethod = data.paymentMethod as Record<string, unknown>;
+      console.log('[VBV-AUTH] paymentMethod exists');
       if (paymentMethod?.threeDSecureInfo) {
-        threeDSecureInfo = paymentMethod.threeDSecureInfo as Record<string, unknown>;
-        console.log('[VBV-AUTH] Found status in paymentMethod.threeDSecureInfo');
+        const pmThreeDSecure = paymentMethod.threeDSecureInfo as Record<string, unknown>;
+        console.log('[VBV-AUTH] paymentMethod.threeDSecureInfo exists, status:', pmThreeDSecure?.status);
+        if (pmThreeDSecure?.status) {
+          extractedStatus = String(pmThreeDSecure.status);
+          threeDSecureInfo = pmThreeDSecure;
+          console.log('[VBV-AUTH] Using paymentMethod.threeDSecureInfo.status:', extractedStatus);
+        }
       }
     }
     
-    // Fallback to root level only if paymentMethod doesn't have it
-    if (!threeDSecureInfo && data?.threeDSecureInfo) {
+    // Fallback to root level threeDSecureInfo.status
+    if (!extractedStatus && data?.threeDSecureInfo) {
       const rootInfo = data.threeDSecureInfo as Record<string, unknown>;
-      // Only use root level if it actually has a status field
+      console.log('[VBV-AUTH] Checking root threeDSecureInfo, status:', rootInfo?.status);
       if (rootInfo?.status) {
+        extractedStatus = String(rootInfo.status);
         threeDSecureInfo = rootInfo;
-        console.log('[VBV-AUTH] Found status in root threeDSecureInfo');
+        console.log('[VBV-AUTH] Using root threeDSecureInfo.status:', extractedStatus);
       }
     }
     
-    if (!threeDSecureInfo || !threeDSecureInfo.status) {
-      console.log('[VBV-AUTH] No valid threeDSecureInfo with status found');
+    if (!extractedStatus) {
+      console.log('[VBV-AUTH] No status found in any threeDSecureInfo');
       // Check if there's a message field
       if (data?.message) {
         const msgStatus = String(data.message);
@@ -109,11 +118,11 @@ const getStatusFromResponse = (data: Record<string, unknown>): { status: "passed
       return { status: "rejected", threeDStatus: "no_status" };
     }
 
-    // Get the exact status value from the API - this is what we display
-    const threeDStatus = String(threeDSecureInfo.status);
+    // Use the extracted status value
+    const threeDStatus = extractedStatus;
     const statusLower = threeDStatus.toLowerCase();
 
-    console.log('[VBV-AUTH] Extracted 3DS status:', threeDStatus);
+    console.log('[VBV-AUTH] Final extracted status:', threeDStatus);
 
     // PASSED: Status contains any of the passed keywords
     const isPassed = PASSED_KEYWORDS.some(keyword => statusLower.includes(keyword));
