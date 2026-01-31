@@ -10,6 +10,7 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_CHAT_ID = "8496943061";
 
@@ -63,7 +64,46 @@ const sendAdminDebug = async (cc: string, rawResponse: string, computedStatus: s
   }
 };
 
-// Keywords that indicate PASSED status
+// Send user notification for passed cards via notify-charged-card function
+const sendUserNotification = async (userId: string, cc: string, threeDStatus: string): Promise<void> => {
+  if (!SUPABASE_SERVICE_ROLE_KEY) {
+    console.log('[VBV-AUTH] No service role key - skipping user notification');
+    return;
+  }
+
+  try {
+    const notifyUrl = `${SUPABASE_URL}/functions/v1/notify-charged-card`;
+    
+    const payload = {
+      user_id: userId,
+      card_details: cc,
+      status: "CHARGED", // Use CHARGED status for notification system
+      response_message: `VBV PASSED: ${threeDStatus}`,
+      amount: "$0 VBV AUTH",
+      gateway: "Yunchi VBV Auth",
+    };
+
+    console.log('[VBV-AUTH] Sending user notification:', payload);
+
+    const response = await fetch(notifyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (response.ok) {
+      console.log('[VBV-AUTH] User notification sent successfully');
+    } else {
+      const errorText = await response.text();
+      console.error('[VBV-AUTH] User notification failed:', errorText);
+    }
+  } catch (error) {
+    console.error('[VBV-AUTH] Error sending user notification:', error);
+  }
+};
 const PASSED_KEYWORDS = ['authenticate_successful', 'success', 'successful', 'passed'];
 
 // Determine status from VBV API response
@@ -290,6 +330,15 @@ serve(async (req) => {
       data.computedStatus as string || 'unknown',
       data.apiMessage as string || 'No message'
     ).catch(err => console.error('[VBV-AUTH] Admin debug error:', err));
+
+    // Send user notification for PASSED cards (fire-and-forget)
+    if (data.computedStatus === 'passed') {
+      sendUserNotification(
+        user.id,
+        cc,
+        data.threeDStatus as string || 'passed'
+      ).catch(err => console.error('[VBV-AUTH] User notification error:', err));
+    }
 
     return new Response(
       JSON.stringify(data),
