@@ -325,7 +325,17 @@ const Gateways = () => {
       unavailable: 1,
       offline: 2,
     };
+    const typePriority: Record<string, number> = {
+      auth: 0,
+      charge: 1,
+    };
     return [...gateways].sort((a, b) => {
+      // First sort by gateway type (auth gateways first)
+      const typeA = typePriority[a.type] ?? 1;
+      const typeB = typePriority[b.type] ?? 1;
+      if (typeA !== typeB) return typeA - typeB;
+      
+      // Then sort by status within each type
       const priorityA = statusPriority[a.status] ?? 2;
       const priorityB = statusPriority[b.status] ?? 2;
       return priorityA - priorityB;
