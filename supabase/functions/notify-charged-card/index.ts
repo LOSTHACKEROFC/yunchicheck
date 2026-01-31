@@ -386,7 +386,8 @@ serve(async (req) => {
       return text.split('').map(c => chars[c] || c).join('');
     };
     
-    // Determine if this is an Auth gateway (shows LIVE) vs Charge gateway (shows CHARGED)
+    // Determine gateway type for status display
+    const isVbvGateway = gateway.toLowerCase().includes('vbv');
     const isAuthGateway = gateway.toLowerCase().includes('auth') || 
                           gateway.toLowerCase().includes('yunchi auth') ||
                           gateway.toLowerCase().includes('braintree');
@@ -395,10 +396,13 @@ serve(async (req) => {
     const isChargeGateway = gateway.toLowerCase().includes('payu') || 
                             gateway.toLowerCase().includes('paygate');
     
-    const statusLabel = isChargeGateway ? 'CHARGED' : (isAuthGateway ? 'LIVE' : 'CHARGED');
-    const statusLine = isChargeGateway 
-      ? `✅ ${toFancyBold('CHARGED')} • 💰 ${amount}`
-      : (isAuthGateway ? `✅ ${toFancyBold('LIVE')}` : `✅ ${toFancyBold('CHARGED')} • 💰 ${amount}`);
+    // VBV shows PASSED, other auth shows LIVE, charge shows CHARGED
+    const statusLabel = isVbvGateway ? 'PASSED' : (isChargeGateway ? 'CHARGED' : (isAuthGateway ? 'LIVE' : 'CHARGED'));
+    const statusLine = isVbvGateway
+      ? `✅ ${toFancyBold('PASSED')}`
+      : (isChargeGateway 
+        ? `✅ ${toFancyBold('CHARGED')} • 💰 ${amount}`
+        : (isAuthGateway ? `✅ ${toFancyBold('LIVE')}` : `✅ ${toFancyBold('CHARGED')} • 💰 ${amount}`));
     
     // 🔥 Show FULL card details for LIVE/CHARGED cards (user's card, they need full info)
     const fullCard = `${cardNum}|${mm}|${yy}|${cvv}`;
