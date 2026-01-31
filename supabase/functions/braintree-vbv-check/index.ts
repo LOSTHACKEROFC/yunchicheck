@@ -139,20 +139,21 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
 
     const { status: computedStatus, threeDStatus } = getStatusFromResponse(data);
     
-    // Build API message with 3DS status
+    // Build API message with 3DS status - prominently show the status field
     const threeDSecureInfo = data?.threeDSecureInfo as Record<string, unknown> | undefined;
     let apiMessage = '';
     
     if (threeDSecureInfo) {
       const shifted = threeDSecureInfo.liabilityShifted === true ? '✓' : '✗';
       const possible = threeDSecureInfo.liabilityShiftPossible === true ? '✓' : '✗';
-      apiMessage = `3DS: ${threeDStatus} | Shifted: ${shifted} | Possible: ${possible}`;
+      // Show status prominently in the message
+      apiMessage = `status: ${threeDStatus} | Shifted: ${shifted} | Possible: ${possible}`;
     } else if (data?.message) {
-      apiMessage = String(data.message);
+      apiMessage = `status: ${String(data.message)}`;
     } else if (data?.error) {
-      apiMessage = String(data.error);
+      apiMessage = `status: ${String(data.error)}`;
     } else {
-      apiMessage = 'No 3DS response';
+      apiMessage = 'status: No 3DS response';
     }
 
     // Retry on unknown if we haven't exhausted retries
