@@ -22,39 +22,39 @@ const userAgents = [
 const getRandomUserAgent = () => userAgents[Math.floor(Math.random() * userAgents.length)];
 
 // Determine status from VBV API response
-const getStatusFromResponse = (data: Record<string, unknown>): "passed" | "rejected" | "unknown" => {
+const getStatusFromResponse = (data: Record<string, unknown>): { status: "passed" | "rejected" | "unknown", threeDStatus: string } => {
   try {
     const threeDSecureInfo = data?.threeDSecureInfo as Record<string, unknown> | undefined;
     
     if (!threeDSecureInfo) {
       console.log('[VBV-AUTH] No threeDSecureInfo in response');
-      return "rejected";
+      return { status: "rejected", threeDStatus: "missing" };
     }
 
     const liabilityShifted = threeDSecureInfo.liabilityShifted;
     const liabilityShiftPossible = threeDSecureInfo.liabilityShiftPossible;
-    const status = threeDSecureInfo.status;
+    const threeDStatus = String(threeDSecureInfo.status || 'unknown');
 
     console.log('[VBV-AUTH] 3DS Info:', {
       liabilityShifted,
       liabilityShiftPossible,
-      status
+      status: threeDStatus
     });
 
     // PASSED: All three conditions must be true
     if (
       liabilityShifted === true &&
       liabilityShiftPossible === true &&
-      status === "authenticate_successful"
+      threeDStatus === "authenticate_successful"
     ) {
-      return "passed";
+      return { status: "passed", threeDStatus };
     }
 
     // REJECTED: Any condition is false or missing
-    return "rejected";
+    return { status: "rejected", threeDStatus };
   } catch (error) {
     console.error('[VBV-AUTH] Error parsing response:', error);
-    return "unknown";
+    return { status: "unknown", threeDStatus: "error" };
   }
 };
 
@@ -95,20 +95,22 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
 
     console.log(`[VBV-AUTH] Attempt ${attempt} - Parsed response:`, JSON.stringify(data).substring(0, 500));
 
-    const computedStatus = getStatusFromResponse(data);
+    const { status: computedStatus, threeDStatus } = getStatusFromResponse(data);
     
-    // Extract message for display
+    // Build API message with 3DS status
     const threeDSecureInfo = data?.threeDSecureInfo as Record<string, unknown> | undefined;
     let apiMessage = '';
     
     if (threeDSecureInfo) {
-      apiMessage = `3DS Status: ${threeDSecureInfo.status || 'N/A'} | Liability Shifted: ${threeDSecureInfo.liabilityShifted || false} | Shift Possible: ${threeDSecureInfo.liabilityShiftPossible || false}`;
+      const shifted = threeDSecureInfo.liabilityShifted === true ? '✓' : '✗';
+      const possible = threeDSecureInfo.liabilityShiftPossible === true ? '✓' : '✗';
+      apiMessage = `3DS: ${threeDStatus} | Shifted: ${shifted} | Possible: ${possible}`;
     } else if (data?.message) {
       apiMessage = String(data.message);
     } else if (data?.error) {
       apiMessage = String(data.error);
     } else {
-      apiMessage = 'No detailed response';
+      apiMessage = 'No 3DS response';
     }
 
     // Retry on unknown if we haven't exhausted retries
@@ -123,6 +125,7 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
       computedStatus,
       apiStatus: computedStatus.toUpperCase(),
       apiMessage,
+      threeDStatus,
       threeDSecureInfo: threeDSecureInfo || null
     };
   } catch (error) {
@@ -141,7 +144,8 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     return { 
       apiStatus: "ERROR",
       apiMessage: isTimeout ? "API timeout (50s)" : errorMessage,
-      computedStatus: "unknown"
+      computedStatus: "unknown",
+      threeDStatus: "error"
     };
   }
 };
