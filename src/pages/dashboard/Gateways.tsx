@@ -1046,6 +1046,55 @@ const Gateways = () => {
   };
 
 
+  // PwGate API check via edge function - returns status AND API response
+  const checkCardViaPwgate = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    try {
+      console.log(`[PWGATE] Sending:`, cc);
+      
+      const { data, error } = await supabase.functions.invoke('pwgate-charge-check', {
+        body: { cc }
+      });
+      
+      if (error) {
+        console.error('[PWGATE] Error:', error);
+        return {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: error.message || "Connection error",
+          rawResponse: JSON.stringify(error)
+        };
+      }
+      
+      console.log('[PWGATE] Response:', data);
+      
+      // Extract response directly - display only plain text message
+      const apiStatus = data?.apiStatus || 'UNKNOWN';
+      const apiMessage = data?.apiMessage || data?.message || 'No response';
+      const apiTotal = data?.apiTotal || '$10.00';
+      const rawResponse = data?.rawResponse || JSON.stringify(data);
+      const computedStatus = data?.computedStatus;
+      
+      return { 
+        status: computedStatus === "live" ? "live" : computedStatus === "dead" ? "dead" : "unknown",
+        apiStatus, 
+        apiMessage, 
+        apiTotal, 
+        rawResponse 
+      };
+    } catch (error) {
+      console.error('[PWGATE] Exception:', error);
+      return {
+        status: "unknown",
+        apiStatus: "ERROR",
+        apiMessage: error instanceof Error ? error.message : "Unknown error",
+        rawResponse: String(error)
+      };
+    }
+  };
+
+
   // B3 API check (YUNCHI AUTH 3) via edge function with retry - returns status AND API response
   const checkCardViaB3 = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
@@ -1273,6 +1322,8 @@ const Gateways = () => {
         gatewayResponse = await checkCardViaStripeCharge(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "payu_charge") {
         gatewayResponse = await checkCardViaPayU(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv, payuAmount);
+      } else if (selectedGateway.id === "pwgate_charge") {
+        gatewayResponse = await checkCardViaPwgate(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       }
       
       const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -2076,6 +2127,8 @@ const Gateways = () => {
           gatewayResponse = await checkCardViaStripeCharge(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "payu_charge") {
           gatewayResponse = await checkCardViaPayU(cardData.card, cardData.month, cardData.year, cardData.cvv, payuAmount);
+        } else if (selectedGateway.id === "pwgate_charge") {
+          gatewayResponse = await checkCardViaPwgate(cardData.card, cardData.month, cardData.year, cardData.cvv);
         }
         
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
