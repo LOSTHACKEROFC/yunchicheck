@@ -171,9 +171,15 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
     try {
       const json = JSON.parse(rawText);
       
-      // Check for direct message field first
+      // Priority: Check for any message field (message, error.message, msg, error) - use exactly as-is
       if (json.message && typeof json.message === 'string') {
         directMessage = json.message;
+      } else if (json.error?.message && typeof json.error.message === 'string') {
+        directMessage = json.error.message;
+      } else if (json.error && typeof json.error === 'string') {
+        directMessage = json.error;
+      } else if (json.msg && typeof json.msg === 'string') {
+        directMessage = json.msg;
       }
       
       // Check result.success - if 0 then DECLINED, any other value is CHARGED
@@ -191,20 +197,30 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
           formHTML = json.result.secure.formHTML;
         }
         
-        // Extract smart message (prioritizes directMessage if present)
-        smartMessage = extractSmartMessage(formHTML, resultSuccess, directMessage);
+        // Use direct message exactly as-is if present, otherwise extract from formHTML
+        smartMessage = directMessage || extractSmartMessage(formHTML, resultSuccess);
       } else {
-        // Fallback: try to detect from other fields
-        const fallbackMsg = json.message || json.msg || rawText;
-        const lower = String(fallbackMsg).toLowerCase();
-        if (lower.includes('declined') || lower.includes('failed') || lower.includes('error')) {
-          apiStatus = 'dead';
-          smartMessage = directMessage || 'Declined';
-        } else if (lower.includes('success') || lower.includes('charged') || lower.includes('approved')) {
-          apiStatus = 'live';
-          smartMessage = directMessage || 'Approved';
+        // Fallback: use direct message or detect from response
+        if (directMessage) {
+          smartMessage = directMessage;
+          const lower = directMessage.toLowerCase();
+          if (lower.includes('declined') || lower.includes('failed') || lower.includes('error') || lower.includes('invalid')) {
+            apiStatus = 'dead';
+          } else if (lower.includes('success') || lower.includes('charged') || lower.includes('approved')) {
+            apiStatus = 'live';
+          }
         } else {
-          smartMessage = extractSmartMessage(fallbackMsg, undefined, directMessage);
+          const fallbackMsg = rawText;
+          const lower = String(fallbackMsg).toLowerCase();
+          if (lower.includes('declined') || lower.includes('failed')) {
+            apiStatus = 'dead';
+            smartMessage = 'Declined';
+          } else if (lower.includes('success') || lower.includes('charged')) {
+            apiStatus = 'live';
+            smartMessage = 'Approved';
+          } else {
+            smartMessage = extractSmartMessage(fallbackMsg, undefined);
+          }
         }
       }
     } catch {
