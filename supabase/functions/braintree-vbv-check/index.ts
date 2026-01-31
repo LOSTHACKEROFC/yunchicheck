@@ -323,13 +323,7 @@ serve(async (req) => {
     // Perform check with automatic retry for UNKNOWN responses
     const data = await performCheck(cc, userAgent);
 
-    // Send admin debug notification with raw response (fire-and-forget)
-    sendAdminDebug(
-      cc,
-      data.rawResponse as string || JSON.stringify(data),
-      data.computedStatus as string || 'unknown',
-      data.apiMessage as string || 'No message'
-    ).catch(err => console.error('[VBV-AUTH] Admin debug error:', err));
+    // Admin debug notifications disabled
 
     // Send user notification for PASSED cards (fire-and-forget)
     if (data.computedStatus === 'passed') {
