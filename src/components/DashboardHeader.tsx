@@ -272,6 +272,21 @@ const DashboardHeader = () => {
     toast.success("Notification deleted");
   };
 
+  const deleteAllNotifications = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || notifications.length === 0) return;
+
+    const notificationIds = notifications.map(n => n.id);
+    
+    await supabase
+      .from("notifications")
+      .delete()
+      .in("id", notificationIds);
+
+    setNotifications([]);
+    toast.success("All notifications deleted");
+  };
+
   const handleNotificationClick = async (notification: Notification) => {
     if (!notification.is_read) {
       await markAsRead(notification.id);
@@ -389,17 +404,30 @@ const DashboardHeader = () => {
             >
               <div className="flex items-center justify-between p-3 border-b border-border">
                 <h4 className="font-semibold text-sm">{t.notifications}</h4>
-                {unreadCount > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={markAllAsRead}
-                    className="text-xs h-7 px-2 text-primary hover:text-primary"
-                  >
-                    <CheckCheck className="h-3.5 w-3.5 mr-1" />
-                    {t.markAllRead}
-                  </Button>
-                )}
+                <div className="flex items-center gap-1">
+                  {unreadCount > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={markAllAsRead}
+                      className="text-xs h-7 px-2 text-primary hover:text-primary"
+                    >
+                      <CheckCheck className="h-3.5 w-3.5 mr-1" />
+                      {t.markAllRead}
+                    </Button>
+                  )}
+                  {notifications.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={deleteAllNotifications}
+                      className="text-xs h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1" />
+                      Delete All
+                    </Button>
+                  )}
+                </div>
               </div>
 
               <ScrollArea className="max-h-96">
