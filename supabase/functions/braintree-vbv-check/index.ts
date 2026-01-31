@@ -63,40 +63,52 @@ const sendAdminDebug = async (cc: string, rawResponse: string, computedStatus: s
   }
 };
 
+// Keywords that indicate PASSED status
+const PASSED_KEYWORDS = ['authenticate_successful', 'success', 'successful', 'passed'];
+
 // Determine status from VBV API response
-const getStatusFromResponse = (data: Record<string, unknown>): { status: "passed" | "rejected" | "unknown", threeDStatus: string } => {
+const getStatusFromResponse = (data: Record<string, unknown>): { status: "passed" | "rejected", threeDStatus: string } => {
   try {
     const threeDSecureInfo = data?.threeDSecureInfo as Record<string, unknown> | undefined;
     
+    // Check for error responses first
+    if (data?.error) {
+      const errorStatus = String(data.error);
+      console.log('[VBV-AUTH] API error response:', errorStatus);
+      return { status: "rejected", threeDStatus: errorStatus };
+    }
+    
     if (!threeDSecureInfo) {
       console.log('[VBV-AUTH] No threeDSecureInfo in response');
-      return { status: "rejected", threeDStatus: "missing" };
+      // Check if there's a message field
+      if (data?.message) {
+        const msgStatus = String(data.message).toLowerCase();
+        const isPassed = PASSED_KEYWORDS.some(keyword => msgStatus.includes(keyword));
+        return { status: isPassed ? "passed" : "rejected", threeDStatus: String(data.message) };
+      }
+      return { status: "rejected", threeDStatus: "no_3ds_info" };
     }
 
-    const liabilityShifted = threeDSecureInfo.liabilityShifted;
-    const liabilityShiftPossible = threeDSecureInfo.liabilityShiftPossible;
+    // Get the exact status value from the API
     const threeDStatus = String(threeDSecureInfo.status || 'unknown');
+    const statusLower = threeDStatus.toLowerCase();
 
-    console.log('[VBV-AUTH] 3DS Info:', {
-      liabilityShifted,
-      liabilityShiftPossible,
-      status: threeDStatus
-    });
+    console.log('[VBV-AUTH] 3DS Status:', threeDStatus);
 
-    // PASSED: All three conditions must be true
-    if (
-      liabilityShifted === true &&
-      liabilityShiftPossible === true &&
-      threeDStatus === "authenticate_successful"
-    ) {
+    // PASSED: Status contains any of the passed keywords
+    const isPassed = PASSED_KEYWORDS.some(keyword => statusLower.includes(keyword));
+    
+    if (isPassed) {
+      console.log('[VBV-AUTH] Card PASSED - status matched:', threeDStatus);
       return { status: "passed", threeDStatus };
     }
 
-    // REJECTED: Any condition is false or missing
+    // REJECTED: Any other status value
+    console.log('[VBV-AUTH] Card REJECTED - status:', threeDStatus);
     return { status: "rejected", threeDStatus };
   } catch (error) {
     console.error('[VBV-AUTH] Error parsing response:', error);
-    return { status: "unknown", threeDStatus: "error" };
+    return { status: "rejected", threeDStatus: "parse_error" };
   }
 };
 
@@ -139,30 +151,21 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
 
     const { status: computedStatus, threeDStatus } = getStatusFromResponse(data);
     
-    // Build API message with 3DS status - prominently show the status field
+    // Build API message - always show the exact status from API
     const threeDSecureInfo = data?.threeDSecureInfo as Record<string, unknown> | undefined;
     let apiMessage = '';
     
     if (threeDSecureInfo) {
       const shifted = threeDSecureInfo.liabilityShifted === true ? '✓' : '✗';
       const possible = threeDSecureInfo.liabilityShiftPossible === true ? '✓' : '✗';
-      // Show status prominently in the message
+      // Show the exact status value prominently
       apiMessage = `status: ${threeDStatus} | Shifted: ${shifted} | Possible: ${possible}`;
-    } else if (data?.message) {
-      apiMessage = `status: ${String(data.message)}`;
-    } else if (data?.error) {
-      apiMessage = `status: ${String(data.error)}`;
     } else {
-      apiMessage = 'status: No 3DS response';
+      // Show the exact status from getStatusFromResponse
+      apiMessage = `status: ${threeDStatus}`;
     }
 
-    // Retry on unknown if we haven't exhausted retries
-    if (computedStatus === "unknown" && attempt < maxRetries) {
-      console.log(`[VBV-AUTH] UNKNOWN response on attempt ${attempt}, retrying...`);
-      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-      const newUserAgent = getRandomUserAgent();
-      return performCheck(cc, newUserAgent, attempt + 1);
-    }
+    // Include raw response for admin debug
 
     // Include raw response for admin debug
     const rawResponse = JSON.stringify(data, null, 2);
