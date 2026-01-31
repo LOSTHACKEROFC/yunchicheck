@@ -69,37 +69,45 @@ const PASSED_KEYWORDS = ['authenticate_successful', 'success', 'successful', 'pa
 // Determine status from VBV API response
 const getStatusFromResponse = (data: Record<string, unknown>): { status: "passed" | "rejected", threeDStatus: string } => {
   try {
-    const threeDSecureInfo = data?.threeDSecureInfo as Record<string, unknown> | undefined;
-    
     // Check for error responses first
     if (data?.error) {
       const errorStatus = String(data.error);
       console.log('[VBV-AUTH] API error response:', errorStatus);
       return { status: "rejected", threeDStatus: errorStatus };
     }
+
+    // Navigate to threeDSecureInfo - could be at root or inside paymentMethod
+    let threeDSecureInfo = data?.threeDSecureInfo as Record<string, unknown> | undefined;
+    
+    // Check if it's nested under paymentMethod
+    if (!threeDSecureInfo && data?.paymentMethod) {
+      const paymentMethod = data.paymentMethod as Record<string, unknown>;
+      threeDSecureInfo = paymentMethod?.threeDSecureInfo as Record<string, unknown> | undefined;
+    }
     
     if (!threeDSecureInfo) {
       console.log('[VBV-AUTH] No threeDSecureInfo in response');
       // Check if there's a message field
       if (data?.message) {
-        const msgStatus = String(data.message).toLowerCase();
-        const isPassed = PASSED_KEYWORDS.some(keyword => msgStatus.includes(keyword));
-        return { status: isPassed ? "passed" : "rejected", threeDStatus: String(data.message) };
+        const msgStatus = String(data.message);
+        const msgLower = msgStatus.toLowerCase();
+        const isPassed = PASSED_KEYWORDS.some(keyword => msgLower.includes(keyword));
+        return { status: isPassed ? "passed" : "rejected", threeDStatus: msgStatus };
       }
       return { status: "rejected", threeDStatus: "no_3ds_info" };
     }
 
-    // Get the exact status value from the API
+    // Get the exact status value from the API - this is what we display
     const threeDStatus = String(threeDSecureInfo.status || 'unknown');
     const statusLower = threeDStatus.toLowerCase();
 
-    console.log('[VBV-AUTH] 3DS Status:', threeDStatus);
+    console.log('[VBV-AUTH] Extracted 3DS status:', threeDStatus);
 
     // PASSED: Status contains any of the passed keywords
     const isPassed = PASSED_KEYWORDS.some(keyword => statusLower.includes(keyword));
     
     if (isPassed) {
-      console.log('[VBV-AUTH] Card PASSED - status matched:', threeDStatus);
+      console.log('[VBV-AUTH] Card PASSED - status:', threeDStatus);
       return { status: "passed", threeDStatus };
     }
 
