@@ -142,6 +142,7 @@ export type Database = {
       }
       deletion_otps: {
         Row: {
+          attempt_count: number | null
           created_at: string
           email: string
           expires_at: string
@@ -151,6 +152,7 @@ export type Database = {
           verified: boolean
         }
         Insert: {
+          attempt_count?: number | null
           created_at?: string
           email: string
           expires_at: string
@@ -160,6 +162,7 @@ export type Database = {
           verified?: boolean
         }
         Update: {
+          attempt_count?: number | null
           created_at?: string
           email?: string
           expires_at?: string
@@ -391,6 +394,7 @@ export type Database = {
       }
       password_reset_otps: {
         Row: {
+          attempt_count: number | null
           created_at: string
           email: string
           expires_at: string
@@ -402,6 +406,7 @@ export type Database = {
           verified: boolean
         }
         Insert: {
+          attempt_count?: number | null
           created_at?: string
           email: string
           expires_at: string
@@ -413,6 +418,7 @@ export type Database = {
           verified?: boolean
         }
         Update: {
+          attempt_count?: number | null
           created_at?: string
           email?: string
           expires_at?: string
