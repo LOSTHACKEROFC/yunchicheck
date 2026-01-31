@@ -1246,47 +1246,6 @@ const Gateways = () => {
     };
   };
 
-  // Batch B3 API check (YUNCHI AUTH 3) - processes multiple cards in parallel on the server
-  const checkCardsBatchViaB3 = async (cards: Array<{ card: string; month: string; year: string; cvv: string }>): Promise<GatewayApiResponse[]> => {
-    const cardStrings = cards.map(c => `${c.card}|${c.month}|${c.year}|${c.cvv}`);
-    
-    try {
-      console.log(`[B3-BATCH] Sending batch of ${cardStrings.length} cards`);
-      
-      const { data, error } = await supabase.functions.invoke('braintree-auth-batch-check', {
-        body: { cards: cardStrings }
-      });
-      
-      if (error) {
-        console.error('[B3-BATCH] Edge function error:', error);
-        return cards.map(() => ({
-          status: "unknown" as const,
-          apiStatus: "ERROR",
-          apiMessage: error.message || "Batch check error",
-          rawResponse: JSON.stringify(error)
-        }));
-      }
-      
-      console.log('[B3-BATCH] Batch response received:', data?.results?.length, 'results');
-      
-      // Map results back to GatewayApiResponse format
-      return (data?.results || []).map((result: { computedStatus?: string; apiStatus?: string; apiMessage?: string; cc?: string }) => ({
-        status: (result.computedStatus === "live" ? "live" : result.computedStatus === "dead" ? "dead" : "unknown") as "live" | "dead" | "unknown",
-        apiStatus: result.apiStatus || "UNKNOWN",
-        apiMessage: result.apiMessage || "No message",
-        rawResponse: JSON.stringify(result)
-      }));
-    } catch (error) {
-      console.error('[B3-BATCH] Batch check error:', error);
-      return cards.map(() => ({
-        status: "unknown" as const,
-        apiStatus: "ERROR",
-        apiMessage: error instanceof Error ? error.message : "Unknown batch error",
-        rawResponse: String(error)
-      }));
-    }
-  };
-
   // Combined Auth API check (YUNCHI AUTH 2) - uses both Stripe + B3 APIs in parallel for single card
   const checkCardViaCombined = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 3): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
@@ -2508,142 +2467,30 @@ const Gateways = () => {
 
     // Process cards with 10 parallel workers (fixed, hidden from UI)
     const CONCURRENT_WORKERS = 10;
-    const BATCH_SIZE = 10; // Batch size for server-side parallel processing
     let currentIndex = 0;
     let completedCount = 0;
 
-    // Use batch processing for Yunchi Auth 3 (braintree_auth) gateway
-    if (selectedGateway.id === "braintree_auth") {
-      // Process cards in batches of 10 using server-side parallel processing
-      for (let batchStart = 0; batchStart < validCards.length && !bulkAbortRef.current; batchStart += BATCH_SIZE) {
+    const processNextCard = async (): Promise<void> => {
+      while (currentIndex < validCards.length && !bulkAbortRef.current) {
+        const myIndex = currentIndex++;
+        
         // Wait if paused
         while (bulkPauseRef.current && !bulkAbortRef.current) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
         
-        if (bulkAbortRef.current) break;
+        if (bulkAbortRef.current) return;
         
-        const batchEnd = Math.min(batchStart + BATCH_SIZE, validCards.length);
-        const batchCards = validCards.slice(batchStart, batchEnd);
+        const result = await processCard(myIndex);
         
-        console.log(`[BATCH] Processing batch ${batchStart / BATCH_SIZE + 1}: cards ${batchStart + 1}-${batchEnd}`);
-        
-        // Send batch to server for parallel processing
-        const batchResponses = await checkCardsBatchViaB3(batchCards);
-        
-        // Process each result from the batch
-        for (let i = 0; i < batchCards.length; i++) {
-          if (bulkAbortRef.current) break;
-          
-          const cardData = batchCards[i];
-          const gatewayResponse = batchResponses[i];
-          const globalIndex = batchStart + i;
-          
-          const checkStatus = gatewayResponse?.status || "unknown";
-          const fullCardStr = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
-          const displayCardStr = cardData.originalCvv 
-            ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
-            : `${cardData.card}|${cardData.month}|${cardData.year}`;
-          
-          // Determine credit cost based on result
-          const creditCost = checkStatus === "live" 
-            ? CREDIT_COST_LIVE 
-            : checkStatus === "dead" 
-              ? CREDIT_COST_DEAD 
-              : CREDIT_COST_ERROR;
-
-          // Deduct credits if not an error
-          if (creditCost > 0) {
-            const { data: deductResult, error: deductError } = await supabase.functions.invoke('deduct-credits', {
-              body: { amount: creditCost }
-            });
-            
-            if (!deductError && deductResult?.success) {
-              totalCreditsDeducted += creditCost;
-              setUserCredits(deductResult.newCredits);
-            }
-          }
-
-          // Log check
-          await supabase
-            .from('card_checks')
-            .insert({
-              user_id: userId,
-              gateway: selectedGateway.id,
-              status: 'completed',
-              result: checkStatus,
-              card_details: fullCardStr
-            });
-
-          const { brand, brandColor } = detectCardBrandLocal(cardData.card);
-          
-          const apiResponseDisplay = gatewayResponse 
-            ? `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`
-            : undefined;
-          
-          const bulkResult: BulkResult = {
-            status: checkStatus,
-            message: checkStatus === "live" ? "Valid" : checkStatus === "dead" ? "Declined" : "Unknown",
-            gateway: selectedGateway.name,
-            cardMasked: maskCard(cardData.card),
-            fullCard: fullCardStr,
-            displayCard: displayCardStr,
-            brand,
-            brandColor,
-            apiResponse: apiResponseDisplay,
-            rawResponse: gatewayResponse?.rawResponse
-          };
-
-          // Send Telegram notification for B3 LIVE results
-          if (checkStatus === "live") {
-            playLiveSoundIfEnabled();
-            
-            const bloodRedColors = ['#dc2626', '#ef4444', '#b91c1c', '#991b1b', '#7f1d1d', '#fca5a5'];
-            confetti({
-              particleCount: 60,
-              spread: 70,
-              origin: { x: 0.3 + Math.random() * 0.4, y: 0.6 },
-              colors: bloodRedColors,
-              gravity: 1,
-              scalar: 1.1
-            });
-
-            try {
-              const realResponseMessage = `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`;
-              await supabase.functions.invoke('notify-charged-card', {
-                body: {
-                  user_id: userId,
-                  card_details: fullCardStr,
-                  status: "CHARGED",
-                  response_message: realResponseMessage,
-                  amount: "$0 Auth",
-                  gateway: "YUNCHI AUTH 3",
-                  api_response: gatewayResponse.rawResponse
-                }
-              });
-            } catch (notifyError) {
-              console.log("Failed to send Telegram notification:", notifyError);
-            }
-          }
-
-          // Add to history
-          const newCheck: GatewayCheck = {
-            id: crypto.randomUUID(),
-            created_at: new Date().toISOString(),
-            gateway: selectedGateway.id,
-            status: 'completed',
-            result: checkStatus,
-            fullCard: bulkResult.fullCard,
-            displayCard: bulkResult.displayCard
-          };
-          setGatewayHistory(prev => [newCheck, ...prev].slice(0, 50));
-
-          // Update UI immediately with this result
-          allResults.push(bulkResult);
+        if (result) {
+          // IMMEDIATELY show result as it completes (no ordering delay)
+          allResults.push(result);
           completedCount++;
           processedCount++;
           
-          setBulkResults(prev => [...prev, bulkResult]);
+          // Update UI immediately with this result
+          setBulkResults(prev => [...prev, result]);
           setBulkCurrentIndex(completedCount);
           setBulkProgress((completedCount / validCards.length) * 100);
           
@@ -2666,69 +2513,19 @@ const Gateways = () => {
             setBulkEstimatedTime("Finishing...");
           }
           
+          // Update remaining lines in textarea (based on completed count)
           const remainingLinesNow = originalLines.slice(completedCount);
           setBulkInput(remainingLinesNow.join('\n'));
         }
       }
-    } else {
-      // Original worker-based processing for other gateways
-      const processNextCard = async (): Promise<void> => {
-        while (currentIndex < validCards.length && !bulkAbortRef.current) {
-          const myIndex = currentIndex++;
-          
-          // Wait if paused
-          while (bulkPauseRef.current && !bulkAbortRef.current) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
-          
-          if (bulkAbortRef.current) return;
-          
-          const result = await processCard(myIndex);
-          
-          if (result) {
-            // IMMEDIATELY show result as it completes (no ordering delay)
-            allResults.push(result);
-            completedCount++;
-            processedCount++;
-            
-            // Update UI immediately with this result
-            setBulkResults(prev => [...prev, result]);
-            setBulkCurrentIndex(completedCount);
-            setBulkProgress((completedCount / validCards.length) * 100);
-            
-            // Calculate estimated time remaining
-            const elapsed = Date.now() - startTime;
-            const avgTimePerCard = elapsed / completedCount;
-            const remainingCards = validCards.length - completedCount;
-            const remainingMs = avgTimePerCard * remainingCards;
-            
-            if (remainingCards > 0) {
-              const remainingSecs = Math.ceil(remainingMs / 1000);
-              if (remainingSecs >= 60) {
-                const mins = Math.floor(remainingSecs / 60);
-                const secs = remainingSecs % 60;
-                setBulkEstimatedTime(`~${mins}m ${secs}s remaining`);
-              } else {
-                setBulkEstimatedTime(`~${remainingSecs}s remaining`);
-              }
-            } else {
-              setBulkEstimatedTime("Finishing...");
-            }
-            
-            // Update remaining lines in textarea (based on completed count)
-            const remainingLinesNow = originalLines.slice(completedCount);
-            setBulkInput(remainingLinesNow.join('\n'));
-          }
-        }
-      };
+    };
 
-      // Start concurrent workers
-      const workers = Array(Math.min(CONCURRENT_WORKERS, validCards.length))
-        .fill(null)
-        .map(() => processNextCard());
-      
-      await Promise.all(workers);
-    }
+    // Start concurrent workers
+    const workers = Array(Math.min(CONCURRENT_WORKERS, validCards.length))
+      .fill(null)
+      .map(() => processNextCard());
+    
+    await Promise.all(workers);
 
     if (bulkAbortRef.current) {
       toast.info("Bulk check stopped");
