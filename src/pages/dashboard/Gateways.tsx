@@ -303,7 +303,7 @@ const Gateways = () => {
   const [bulkCurrentIndex, setBulkCurrentIndex] = useState(0);
   const [bulkStartTime, setBulkStartTime] = useState<number | null>(null);
   const [bulkEstimatedTime, setBulkEstimatedTime] = useState<string>("");
-  // Fixed at 10 parallel workers (hidden from UI)
+  const [workerCount, setWorkerCount] = useState(5); // UI display only (3-10 range), backend always uses 10
   const [bulkResultFilter, setBulkResultFilter] = useState<"all" | "live" | "dead" | "unknown">("all"); // Filter for bulk results
   const bulkAbortRef = useRef(false);
   const bulkPauseRef = useRef(false);
@@ -3357,7 +3357,20 @@ const Gateways = () => {
         <TabsContent value="bulk" className="mt-4 space-y-4">
           <Card className="bg-card border-border max-w-2xl">
             <CardContent className="p-4 sm:p-6 space-y-4">
-              <div className="flex items-center justify-end mb-3">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs">Workers:</Label>
+                  <select
+                    value={workerCount}
+                    onChange={(e) => setWorkerCount(Number(e.target.value))}
+                    disabled={bulkChecking}
+                    className="h-7 px-2 text-xs bg-secondary border border-border rounded"
+                  >
+                    {[3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                      <option key={n} value={n}>{n} Thread{n > 1 ? 's' : ''}</option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <input
                     type="file"
