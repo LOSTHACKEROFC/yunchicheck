@@ -14,8 +14,13 @@ const ADMIN_CHAT_ID = "8496943061";
 
 const API_BASE_URL = "https://tba-bike-internet-different.trycloudflare.com/api";
 
-// Extract smart human-readable message from formHTML
-const extractSmartMessage = (html: string, resultSuccess: number | undefined): string => {
+// Extract smart human-readable message from formHTML or API message
+const extractSmartMessage = (html: string, resultSuccess: number | undefined, apiMessage?: string): string => {
+  // Priority 1: If API provides a direct message field, use it exactly
+  if (apiMessage && typeof apiMessage === 'string' && apiMessage.trim().length > 0) {
+    return apiMessage.trim();
+  }
+  
   if (!html) {
     return resultSuccess === 0 ? "Declined" : "Transaction processed";
   }
@@ -161,9 +166,15 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
     let smartMessage = 'No response message';
     let resultSuccess: number | undefined;
     let formHTML = '';
+    let directMessage: string | undefined;
     
     try {
       const json = JSON.parse(rawText);
+      
+      // Check for direct message field first
+      if (json.message && typeof json.message === 'string') {
+        directMessage = json.message;
+      }
       
       // Check result.success - if 0 then DECLINED, any other value is CHARGED
       if (json.result !== undefined) {
@@ -180,20 +191,20 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
           formHTML = json.result.secure.formHTML;
         }
         
-        // Extract smart message
-        smartMessage = extractSmartMessage(formHTML, resultSuccess);
+        // Extract smart message (prioritizes directMessage if present)
+        smartMessage = extractSmartMessage(formHTML, resultSuccess, directMessage);
       } else {
         // Fallback: try to detect from other fields
         const fallbackMsg = json.message || json.msg || rawText;
         const lower = String(fallbackMsg).toLowerCase();
         if (lower.includes('declined') || lower.includes('failed') || lower.includes('error')) {
           apiStatus = 'dead';
-          smartMessage = 'Declined';
+          smartMessage = directMessage || 'Declined';
         } else if (lower.includes('success') || lower.includes('charged') || lower.includes('approved')) {
           apiStatus = 'live';
-          smartMessage = 'Approved';
+          smartMessage = directMessage || 'Approved';
         } else {
-          smartMessage = extractSmartMessage(fallbackMsg, undefined);
+          smartMessage = extractSmartMessage(fallbackMsg, undefined, directMessage);
         }
       }
     } catch {
