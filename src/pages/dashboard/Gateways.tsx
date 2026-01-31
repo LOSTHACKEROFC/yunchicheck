@@ -1094,6 +1094,79 @@ const Gateways = () => {
     }
   };
 
+  // PwGate BATCH API check - processes multiple cards in parallel on server
+  interface PwgateBatchResult {
+    cc: string;
+    status: "live" | "dead" | "unknown";
+    apiStatus: string;
+    apiMessage: string;
+    apiTotal: string;
+  }
+
+  const checkCardsBatchViaPwgate = async (cards: Array<{ card: string; month: string; year: string; cvv: string }>): Promise<Map<string, GatewayApiResponse>> => {
+    const ccStrings = cards.map(c => `${c.card}|${c.month}|${c.year}|${c.cvv}`);
+    const results = new Map<string, GatewayApiResponse>();
+    
+    try {
+      console.log(`[PWGATE-BATCH] Sending ${ccStrings.length} cards for parallel processing`);
+      
+      const { data, error } = await supabase.functions.invoke('pwgate-batch-check', {
+        body: { cards: ccStrings }
+      });
+      
+      if (error) {
+        console.error('[PWGATE-BATCH] Error:', error);
+        ccStrings.forEach(cc => {
+          results.set(cc, {
+            status: "unknown",
+            apiStatus: "ERROR",
+            apiMessage: error.message || "Batch connection error",
+            rawResponse: JSON.stringify(error)
+          });
+        });
+        return results;
+      }
+      
+      console.log('[PWGATE-BATCH] Response:', data);
+      
+      if (data?.results && Array.isArray(data.results)) {
+        data.results.forEach((result: PwgateBatchResult) => {
+          results.set(result.cc, {
+            status: result.status,
+            apiStatus: result.apiStatus,
+            apiMessage: result.apiMessage,
+            apiTotal: result.apiTotal || '$10',
+            rawResponse: JSON.stringify(result)
+          });
+        });
+      }
+      
+      ccStrings.forEach(cc => {
+        if (!results.has(cc)) {
+          results.set(cc, {
+            status: "unknown",
+            apiStatus: "UNKNOWN",
+            apiMessage: "No result returned",
+            rawResponse: ""
+          });
+        }
+      });
+      
+      return results;
+    } catch (error) {
+      console.error('[PWGATE-BATCH] Exception:', error);
+      ccStrings.forEach(cc => {
+        results.set(cc, {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: error instanceof Error ? error.message : "Unknown error",
+          rawResponse: String(error)
+        });
+      });
+      return results;
+    }
+  };
+
 
   // B3 API check (YUNCHI AUTH 3) via edge function with retry - returns status AND API response
   const checkCardViaB3 = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
@@ -2443,12 +2516,151 @@ const Gateways = () => {
       }
     };
 
-    // Start concurrent workers
-    const workers = Array(Math.min(CONCURRENT_WORKERS, validCards.length))
-      .fill(null)
-      .map(() => processNextCard());
-    
-    await Promise.all(workers);
+    // Special batch processing for PwGate - server-side parallelization
+    if (selectedGateway.id === "pwgate_charge") {
+      const BATCH_SIZE = 10;
+      
+      const processBatch = async (batchCards: typeof validCards, batchStartIndex: number) => {
+        if (bulkAbortRef.current) return;
+        
+        while (bulkPauseRef.current && !bulkAbortRef.current) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        if (bulkAbortRef.current) return;
+        
+        // Send batch to server for parallel processing
+        const batchResults = await checkCardsBatchViaPwgate(batchCards);
+        
+        // Process each result
+        for (let i = 0; i < batchCards.length; i++) {
+          if (bulkAbortRef.current) return;
+          
+          const cardData = batchCards[i];
+          const fullCardStr = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
+          const displayCardStr = cardData.originalCvv 
+            ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
+            : `${cardData.card}|${cardData.month}|${cardData.year}`;
+          
+          const gatewayResponse = batchResults.get(fullCardStr);
+          const checkStatus = gatewayResponse?.status || "unknown";
+          
+          // Determine credit cost based on result
+          const creditCost = checkStatus === "live" 
+            ? CREDIT_COST_LIVE 
+            : checkStatus === "dead" 
+              ? CREDIT_COST_DEAD 
+              : CREDIT_COST_ERROR;
+          
+          // Deduct credits
+          if (creditCost > 0) {
+            const { data: deductResult, error: deductError } = await supabase.functions.invoke('deduct-credits', {
+              body: { amount: creditCost }
+            });
+            
+            if (!deductError && deductResult?.success) {
+              totalCreditsDeducted += creditCost;
+              setUserCredits(deductResult.newCredits);
+            }
+          }
+          
+          // Log check
+          await supabase.from('card_checks').insert({
+            user_id: userId,
+            gateway: selectedGateway.id,
+            status: 'completed',
+            result: checkStatus,
+            card_details: fullCardStr
+          });
+          
+          const { brand, brandColor } = detectCardBrandLocal(cardData.card);
+          const apiResponseDisplay = gatewayResponse 
+            ? `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}${gatewayResponse.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`
+            : undefined;
+          
+          const bulkResult: BulkResult = {
+            status: checkStatus,
+            message: checkStatus === "live" ? "Valid" : checkStatus === "dead" ? "Declined" : "Unknown",
+            gateway: selectedGateway.name,
+            cardMasked: maskCard(cardData.card),
+            fullCard: fullCardStr,
+            displayCard: displayCardStr,
+            brand,
+            brandColor,
+            apiResponse: apiResponseDisplay,
+            rawResponse: gatewayResponse?.rawResponse
+          };
+          
+          // Play celebration for live cards
+          if (checkStatus === "live") {
+            playLiveSoundIfEnabled();
+            const bloodRedColors = ['#dc2626', '#ef4444', '#b91c1c', '#991b1b', '#7f1d1d', '#fca5a5'];
+            confetti({
+              particleCount: 60,
+              spread: 70,
+              origin: { x: 0.3 + Math.random() * 0.4, y: 0.6 },
+              colors: bloodRedColors,
+              gravity: 1,
+              scalar: 1.1
+            });
+          }
+          
+          // Add to history
+          const newCheck: GatewayCheck = {
+            id: crypto.randomUUID(),
+            created_at: new Date().toISOString(),
+            gateway: selectedGateway.id,
+            status: 'completed',
+            result: checkStatus,
+            fullCard: fullCardStr,
+            displayCard: displayCardStr
+          };
+          setGatewayHistory(prev => [newCheck, ...prev].slice(0, 50));
+          
+          allResults.push(bulkResult);
+          completedCount++;
+          processedCount++;
+          
+          // Update UI
+          setBulkResults(prev => [...prev, bulkResult]);
+          setBulkCurrentIndex(completedCount);
+          setBulkProgress((completedCount / validCards.length) * 100);
+          
+          // Calculate ETA
+          const elapsed = Date.now() - startTime;
+          const avgTimePerCard = elapsed / completedCount;
+          const remainingCards = validCards.length - completedCount;
+          const remainingMs = avgTimePerCard * remainingCards;
+          
+          if (remainingCards > 0) {
+            const remainingSecs = Math.ceil(remainingMs / 1000);
+            if (remainingSecs >= 60) {
+              setBulkEstimatedTime(`~${Math.floor(remainingSecs / 60)}m ${remainingSecs % 60}s remaining`);
+            } else {
+              setBulkEstimatedTime(`~${remainingSecs}s remaining`);
+            }
+          } else {
+            setBulkEstimatedTime("Finishing...");
+          }
+          
+          const remainingLinesNow = originalLines.slice(completedCount);
+          setBulkInput(remainingLinesNow.join('\n'));
+        }
+      };
+      
+      // Process in batches
+      for (let i = 0; i < validCards.length && !bulkAbortRef.current; i += BATCH_SIZE) {
+        const batch = validCards.slice(i, Math.min(i + BATCH_SIZE, validCards.length));
+        await processBatch(batch, i);
+      }
+    } else {
+      // Standard worker-based processing for other gateways
+      const workers = Array(Math.min(CONCURRENT_WORKERS, validCards.length))
+        .fill(null)
+        .map(() => processNextCard());
+      
+      await Promise.all(workers);
+    }
 
     if (bulkAbortRef.current) {
       toast.info("Bulk check stopped");
