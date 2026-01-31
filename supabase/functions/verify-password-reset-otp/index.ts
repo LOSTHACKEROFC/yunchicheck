@@ -222,15 +222,33 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Find matching OTP using constant-time comparison
     let otpRecord = null;
+    let matchedRecord = null;
     for (const record of otpRecords || []) {
+      // Check if max attempts exceeded (5 attempts max)
+      if ((record.attempt_count || 0) >= 5) {
+        // Delete exhausted OTP
+        await supabase
+          .from("password_reset_otps")
+          .delete()
+          .eq("id", record.id);
+        continue;
+      }
+      
       if (safeCompare(record.otp_code, otp)) {
-        otpRecord = record;
+        matchedRecord = record;
         break;
+      } else {
+        // Increment attempt counter on failed match
+        await supabase
+          .from("password_reset_otps")
+          .update({ attempt_count: (record.attempt_count || 0) + 1 })
+          .eq("id", record.id);
       }
     }
+    otpRecord = matchedRecord;
 
     if (!otpRecord) {
-      console.log("OTP not found or already used for email:", email);
+      console.log("OTP not found, already used, or max attempts exceeded for email:", email);
       return new Response(
         JSON.stringify({ error: "Invalid OTP code" }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }

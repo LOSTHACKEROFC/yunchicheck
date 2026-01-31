@@ -188,14 +188,32 @@ serve(async (req) => {
       );
     }
 
-    // Find matching OTP using constant-time comparison
+    // Find matching OTP using constant-time comparison with brute force protection
     let otpRecord = null;
+    let matchedRecord = null;
     for (const record of otpRecords || []) {
+      // Check if max attempts exceeded (5 attempts max)
+      if ((record.attempt_count || 0) >= 5) {
+        // Delete exhausted OTP
+        await adminClient
+          .from("deletion_otps")
+          .delete()
+          .eq("id", record.id);
+        continue;
+      }
+      
       if (safeCompare(record.otp_hash, otp)) {
-        otpRecord = record;
+        matchedRecord = record;
         break;
+      } else {
+        // Increment attempt counter on failed match
+        await adminClient
+          .from("deletion_otps")
+          .update({ attempt_count: (record.attempt_count || 0) + 1 })
+          .eq("id", record.id);
       }
     }
+    otpRecord = matchedRecord;
 
     if (!otpRecord) {
       return new Response(
