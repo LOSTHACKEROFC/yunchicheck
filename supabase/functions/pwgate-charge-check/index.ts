@@ -310,11 +310,11 @@ serve(async (req) => {
       JSON.stringify({
         computedStatus: result.status,
         apiStatus: result.status === 'live' ? 'CHARGED' : result.status === 'dead' ? 'DECLINED' : 'UNKNOWN',
-        apiMessage: result.message, // Smart human-readable message
-        apiTotal: '$10.00',
+        apiMessage: result.message,
+        apiTotal: '$10',
+        chargeAmount: '$10',
         status: result.status,
         message: result.message,
-        // rawResponse intentionally excluded from user response
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
