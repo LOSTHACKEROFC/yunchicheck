@@ -3823,7 +3823,7 @@ const Gateways = () => {
                                 <span className="w-20 text-muted-foreground font-bold italic">AMOUNT</span>
                                 <span className="text-muted-foreground font-bold italic mr-1">:</span>
                                 <span className="text-foreground font-bold italic">
-                                  {selectedGateway?.type === "auth" ? "$0 AUTH" : selectedGateway?.id === "paygate_charge" ? "$14.00" : selectedGateway?.id === "payu_charge" ? `₹${payuAmount}` : "$10.00"}
+                                  {selectedGateway?.type === "auth" ? "$0 AUTH" : selectedGateway?.id === "paygate_charge" ? "$14.00" : selectedGateway?.id === "payu_charge" ? `₹${payuAmount}` : selectedGateway?.id === "stripelow_charge" ? "£0.30" : "$10.00"}
                                 </span>
                               </div>
                               
