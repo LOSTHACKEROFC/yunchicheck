@@ -142,9 +142,9 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
         } else {
           apiMessage = 'Card declined';
         }
-      } else if (statusField === '3ds_complete') {
+      } else if (statusField === '3ds_complete' || statusField === 'requires_action') {
         apiStatus = 'dead';
-        apiMessage = '3ds Authentication Required';
+        apiMessage = '3DS Authentication Required';
       } else {
         // Any other status = charged
         apiStatus = 'charged';
