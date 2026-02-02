@@ -2495,6 +2495,37 @@ interface IPDetails {
   hosting?: boolean;
 }
 
+// Convert decimal degrees to DMS (Degrees, Minutes, Seconds) format
+function decimalToDMS(decimal: number, isLatitude: boolean): string {
+  const absolute = Math.abs(decimal);
+  const degrees = Math.floor(absolute);
+  const minutesFloat = (absolute - degrees) * 60;
+  const minutes = Math.floor(minutesFloat);
+  const seconds = ((minutesFloat - minutes) * 60).toFixed(2);
+  
+  const direction = isLatitude
+    ? (decimal >= 0 ? "N" : "S")
+    : (decimal >= 0 ? "E" : "W");
+  
+  return `${degrees}° ${minutes}′ ${seconds}″ ${direction}`;
+}
+
+// Format latitude with decimal and DMS
+function formatLatitude(lat: string | undefined): string {
+  if (!lat) return "N/A";
+  const num = parseFloat(lat);
+  if (isNaN(num)) return lat;
+  return `${lat} (${decimalToDMS(num, true)})`;
+}
+
+// Format longitude with decimal and DMS
+function formatLongitude(lon: string | undefined): string {
+  if (!lon) return "N/A";
+  const num = parseFloat(lon);
+  if (isNaN(num)) return lon;
+  return `${lon} (${decimalToDMS(num, false)})`;
+}
+
 async function fetchIPDetails(ip: string): Promise<IPDetails | null> {
   if (!ip || ip === "Unknown" || ip === "unknown") return null;
   
@@ -2726,9 +2757,9 @@ async function handleUserDevices(chatId: string, identifier: string, supabase: a
       deviceList += `\n   • <b>City:</b> ${escapeHtml(ipDetails.city || "N/A")}`;
       if (ipDetails.zip) deviceList += `\n   • <b>ZIP/Postal:</b> ${escapeHtml(ipDetails.zip)}`;
       if (ipDetails.timezone) deviceList += `\n   • <b>Timezone:</b> ${escapeHtml(ipDetails.timezone)}`;
-      deviceList += `\n   • <b>Latitude:</b> ${escapeHtml(ipDetails.latitude || "N/A")}`;
-      deviceList += `\n   • <b>Longitude:</b> ${escapeHtml(ipDetails.longitude || "N/A")}`;
-      
+      deviceList += `\n   • <b>Latitude:</b> ${escapeHtml(formatLatitude(ipDetails.latitude))}`;
+      deviceList += `\n   • <b>Longitude:</b> ${escapeHtml(formatLongitude(ipDetails.longitude))}`;
+
       // Add Google Maps link if coordinates available
       if (ipDetails.latitude && ipDetails.longitude) {
         deviceList += `\n   • 🗺️ <a href="https://www.google.com/maps?q=${ipDetails.latitude},${ipDetails.longitude}">View on Google Maps</a>`;
