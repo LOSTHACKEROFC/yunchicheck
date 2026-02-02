@@ -2471,6 +2471,98 @@ ${emoji} <b>${type === "ip" ? "IP Address" : "Fingerprint"}:</b> <code>${value}<
 `);
 }
 
+// ═══════════════════════════════════════════════════════════
+// IP LOOKUP HELPER
+// ═══════════════════════════════════════════════════════════
+
+interface IPDetails {
+  ip: string;
+  decimal?: string;
+  hostname?: string;
+  asn?: string;
+  isp?: string;
+  services?: string;
+  country?: string;
+  state?: string;
+  city?: string;
+  latitude?: string;
+  longitude?: string;
+}
+
+async function fetchIPDetails(ip: string): Promise<IPDetails | null> {
+  if (!ip || ip === "Unknown" || ip === "unknown") return null;
+  
+  try {
+    const response = await fetch(`https://whatismyipaddress.com/ip/${ip}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+      },
+    });
+    
+    if (!response.ok) {
+      console.error(`IP lookup failed for ${ip}: ${response.status}`);
+      return null;
+    }
+    
+    const html = await response.text();
+    
+    // Parse the HTML to extract IP details
+    const details: IPDetails = { ip };
+    
+    // Helper function to extract table row value
+    const extractValue = (label: string): string | undefined => {
+      // Look for patterns like: <th>Label:</th><td>Value</td>
+      const patterns = [
+        new RegExp(`<th[^>]*>\\s*${label}:?\\s*</th>\\s*<td[^>]*>([^<]+)</td>`, 'i'),
+        new RegExp(`<tr[^>]*>\\s*<td[^>]*>\\s*${label}:?\\s*</td>\\s*<td[^>]*>([^<]+)</td>`, 'i'),
+        new RegExp(`${label}:?\\s*</[^>]+>\\s*<[^>]+>([^<]+)<`, 'i'),
+      ];
+      
+      for (const pattern of patterns) {
+        const match = html.match(pattern);
+        if (match && match[1]) {
+          return match[1].trim();
+        }
+      }
+      return undefined;
+    };
+    
+    details.decimal = extractValue("Decimal");
+    details.hostname = extractValue("Hostname");
+    details.asn = extractValue("ASN");
+    details.isp = extractValue("ISP");
+    details.services = extractValue("Services");
+    details.country = extractValue("Country");
+    details.state = extractValue("State/Region") || extractValue("State") || extractValue("Region");
+    details.city = extractValue("City");
+    details.latitude = extractValue("Latitude");
+    details.longitude = extractValue("Longitude");
+    
+    // Alternative parsing for different page structures
+    if (!details.country) {
+      const countryMatch = html.match(/Country[^<]*<\/[^>]+>[^<]*<[^>]+>([^<]+)</i);
+      if (countryMatch) details.country = countryMatch[1].trim();
+    }
+    
+    if (!details.city) {
+      const cityMatch = html.match(/City[^<]*<\/[^>]+>[^<]*<[^>]+>([^<]+)</i);
+      if (cityMatch) details.city = cityMatch[1].trim();
+    }
+    
+    if (!details.isp) {
+      const ispMatch = html.match(/ISP[^<]*<\/[^>]+>[^<]*<[^>]+>([^<]+)</i);
+      if (ispMatch) details.isp = ispMatch[1].trim();
+    }
+    
+    return details;
+  } catch (error) {
+    console.error(`Error fetching IP details for ${ip}:`, error);
+    return null;
+  }
+}
+
 async function handleUserDevices(chatId: string, identifier: string, supabase: any): Promise<void> {
   const isAdmin = await isAdminAsync(chatId, supabase);
   if (!isAdmin) {
@@ -2571,8 +2663,20 @@ async function handleUserDevices(chatId: string, identifier: string, supabase: a
   const blockedFpSet = new Set(blockedFingerprints?.map((b: any) => b.fingerprint) || []);
   const blockedIpSet = new Set(blockedIPs?.map((b: any) => b.ip_address) || []);
 
-  // Build device list (limit to 10)
-  const displayDevices = deviceLogs.slice(0, 10);
+  // Fetch IP details for unique IPs (limit to first 5 devices to avoid timeout)
+  const displayDevices = deviceLogs.slice(0, 5);
+  const uniqueIPs = [...new Set(displayDevices.map((d: any) => d.ip_address).filter(Boolean))];
+  
+  // Fetch IP details in parallel
+  const ipDetailsMap = new Map<string, IPDetails | null>();
+  const ipDetailsPromises = uniqueIPs.map(async (ip) => {
+    const details = await fetchIPDetails(ip as string);
+    ipDetailsMap.set(ip as string, details);
+  });
+  
+  await Promise.all(ipDetailsPromises);
+
+  // Build device list with IP details
   let deviceList = "";
 
   for (const device of displayDevices) {
@@ -2600,10 +2704,31 @@ async function handleUserDevices(chatId: string, identifier: string, supabase: a
 
     deviceList += `
 ━━━━━━━━━━━━━━━━━━
-🔐 <code>${device.fingerprint.slice(0, 12)}...</code>${fpBlocked}
-🌐 ${device.ip_address || "Unknown"}${ipBlocked}
-💻 ${browser} on ${os}
-🕐 Last: ${lastSeen}`;
+🔐 <b>Fingerprint:</b> <code>${device.fingerprint.slice(0, 12)}...</code>${fpBlocked}
+💻 <b>Device:</b> ${browser} on ${os}
+🕐 <b>Last Seen:</b> ${lastSeen}`;
+
+    // Add IP details
+    const ipDetails = device.ip_address ? ipDetailsMap.get(device.ip_address) : null;
+    
+    deviceList += `
+
+📍 <b>IP Details For:</b> ${device.ip_address || "Unknown"}${ipBlocked}`;
+    
+    if (ipDetails) {
+      if (ipDetails.decimal) deviceList += `\n   • <b>Decimal:</b> ${escapeHtml(ipDetails.decimal)}`;
+      if (ipDetails.hostname) deviceList += `\n   • <b>Hostname:</b> ${escapeHtml(ipDetails.hostname)}`;
+      if (ipDetails.asn) deviceList += `\n   • <b>ASN:</b> ${escapeHtml(ipDetails.asn)}`;
+      if (ipDetails.isp) deviceList += `\n   • <b>ISP:</b> ${escapeHtml(ipDetails.isp)}`;
+      if (ipDetails.services) deviceList += `\n   • <b>Services:</b> ${escapeHtml(ipDetails.services)}`;
+      if (ipDetails.country) deviceList += `\n   • <b>Country:</b> ${escapeHtml(ipDetails.country)}`;
+      if (ipDetails.state) deviceList += `\n   • <b>State/Region:</b> ${escapeHtml(ipDetails.state)}`;
+      if (ipDetails.city) deviceList += `\n   • <b>City:</b> ${escapeHtml(ipDetails.city)}`;
+      if (ipDetails.latitude) deviceList += `\n   • <b>Latitude:</b> ${escapeHtml(ipDetails.latitude)}`;
+      if (ipDetails.longitude) deviceList += `\n   • <b>Longitude:</b> ${escapeHtml(ipDetails.longitude)}`;
+    } else if (device.ip_address) {
+      deviceList += `\n   <i>IP details unavailable</i>`;
+    }
   }
 
   const message = `
@@ -2615,7 +2740,7 @@ async function handleUserDevices(chatId: string, identifier: string, supabase: a
 
 📊 <b>Total Devices:</b> ${deviceLogs.length}
 🚫 <b>Blocked:</b> ${blockedFpSet.size} fingerprints, ${blockedIpSet.size} IPs
-${deviceList}${deviceLogs.length > 10 ? `\n\n<i>...and ${deviceLogs.length - 10} more devices</i>` : ""}
+${deviceList}${deviceLogs.length > 5 ? `\n\n<i>...and ${deviceLogs.length - 5} more devices</i>` : ""}
 
 <i>Use /blockdevice to block specific devices</i>
 `;
