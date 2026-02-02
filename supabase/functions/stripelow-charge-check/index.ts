@@ -10,7 +10,7 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-const API_BASE_URL = "http://3-production-c130.up.railway.app/api";
+const API_BASE_URL = "https://3-production-c130.up.railway.app/api";
 
 // Notify charged card (fire-and-forget)
 const notifyChargedCard = (
@@ -74,8 +74,13 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
     try {
       const json = JSON.parse(rawText);
       
-      // Extract message - prioritize message field, then msg, then error
-      if (json.message && typeof json.message === 'string') {
+      // Extract message - handle nested error structure from API
+      // API format: {"success":false,"error":{"error":{"code":"card_declined","message":"..."}}}
+      if (json.error?.error?.message) {
+        apiMessage = json.error.error.message;
+      } else if (json.error?.message) {
+        apiMessage = json.error.message;
+      } else if (json.message && typeof json.message === 'string') {
         apiMessage = json.message;
       } else if (json.msg && typeof json.msg === 'string') {
         apiMessage = json.msg;
@@ -84,29 +89,32 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
       }
       
       // Determine status based on response
-      const statusField = String(json.status || '').toLowerCase();
       const successField = json.success;
+      const statusField = String(json.status || '').toLowerCase();
+      const errorCode = json.error?.error?.code || json.error?.code || '';
       
-      // Check for declined status
-      if (statusField === 'declined' || statusField === 'failed' || statusField === 'error') {
+      // Check success field first (most reliable)
+      if (successField === false) {
+        apiStatus = 'dead';
+      } else if (successField === true) {
+        apiStatus = 'live';
+      }
+      // Check error codes
+      else if (errorCode === 'card_declined' || errorCode.includes('declined') || errorCode.includes('error')) {
         apiStatus = 'dead';
       }
-      // Check for success/true indicators
-      else if (
-        successField === true || 
-        successField === 'true' ||
-        statusField === 'success' || 
-        statusField === 'charged' || 
-        statusField === 'approved'
-      ) {
+      // Check status field
+      else if (statusField === 'declined' || statusField === 'failed' || statusField === 'error') {
+        apiStatus = 'dead';
+      } else if (statusField === 'success' || statusField === 'charged' || statusField === 'approved') {
         apiStatus = 'live';
       }
       // Fallback: check message content
       else {
         const lowerMessage = apiMessage.toLowerCase();
         if (lowerMessage.includes('declined') || lowerMessage.includes('failed') || 
-            lowerMessage.includes('error') || lowerMessage.includes('invalid') ||
-            lowerMessage.includes('expired') || lowerMessage.includes('insufficient')) {
+            lowerMessage.includes('invalid') || lowerMessage.includes('expired') || 
+            lowerMessage.includes('insufficient') || lowerMessage.includes('card_error')) {
           apiStatus = 'dead';
         } else if (lowerMessage.includes('success') || lowerMessage.includes('charged') || 
                    lowerMessage.includes('approved')) {
