@@ -130,10 +130,8 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
       const statusField = String(json.result?.status || json.status || '').toLowerCase();
       
       // Determine status based on API response
-      if (statusField === 'declined') {
+      if (statusField === 'declined' || statusField === '3ds_complete') {
         apiStatus = 'dead';
-      } else if (statusField === '3ds_complete') {
-        apiStatus = '3ds';
       } else {
         // Any other status = charged
         apiStatus = 'charged';
@@ -257,8 +255,7 @@ serve(async (req) => {
     // Map status to API response format
     const statusMap: Record<string, string> = {
       'charged': 'CHARGED',
-      'dead': 'DEAD',
-      '3ds': '3DS'
+      'dead': 'DEAD'
     };
     
     // Build response - only include rawResponse for admins
