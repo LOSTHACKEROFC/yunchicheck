@@ -5638,6 +5638,7 @@ Use /admincmd for staff panel
 │ /admincmd - Admin panel
 │ /ticket [id] - Manage ticket
 │ /topups - Pending topups
+│ /topup [user] - User topup
 │ /addfund [email] [amt]
 └─────────────────────
 
@@ -5775,6 +5776,7 @@ Use /admincmd for staff panel
 /admincmd - Admin panel
 /ticket [id] - Manage ticket
 /topups - Pending topups
+/topup [user] - User topup
 /addfund [email] [amount]
 /banuser [user]
 /unbanuser [user]
