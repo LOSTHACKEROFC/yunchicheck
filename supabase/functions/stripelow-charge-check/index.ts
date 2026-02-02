@@ -131,7 +131,7 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
       
       // Determine status based on API response
       if (statusField === 'declined') {
-        apiStatus = 'declined';
+        apiStatus = 'dead';
       } else if (statusField === '3ds_complete') {
         apiStatus = '3ds';
       } else {
@@ -257,7 +257,7 @@ serve(async (req) => {
     // Map status to API response format
     const statusMap: Record<string, string> = {
       'charged': 'CHARGED',
-      'declined': 'DECLINED',
+      'dead': 'DEAD',
       '3ds': '3DS'
     };
     
