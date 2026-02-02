@@ -2493,68 +2493,41 @@ async function fetchIPDetails(ip: string): Promise<IPDetails | null> {
   if (!ip || ip === "Unknown" || ip === "unknown") return null;
   
   try {
-    const response = await fetch(`https://whatismyipaddress.com/ip/${ip}`, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-      },
-    });
+    // Use ip-api.com for reliable JSON response (free, no auth required)
+    const response = await fetch(`http://ip-api.com/json/${ip}?fields=status,message,country,regionName,city,lat,lon,isp,org,as,reverse,query`);
     
     if (!response.ok) {
       console.error(`IP lookup failed for ${ip}: ${response.status}`);
       return null;
     }
     
-    const html = await response.text();
+    const data = await response.json();
     
-    // Parse the HTML to extract IP details
-    const details: IPDetails = { ip };
+    if (data.status === "fail") {
+      console.error(`IP lookup failed for ${ip}: ${data.message}`);
+      return null;
+    }
     
-    // Helper function to extract table row value
-    const extractValue = (label: string): string | undefined => {
-      // Look for patterns like: <th>Label:</th><td>Value</td>
-      const patterns = [
-        new RegExp(`<th[^>]*>\\s*${label}:?\\s*</th>\\s*<td[^>]*>([^<]+)</td>`, 'i'),
-        new RegExp(`<tr[^>]*>\\s*<td[^>]*>\\s*${label}:?\\s*</td>\\s*<td[^>]*>([^<]+)</td>`, 'i'),
-        new RegExp(`${label}:?\\s*</[^>]+>\\s*<[^>]+>([^<]+)<`, 'i'),
-      ];
-      
-      for (const pattern of patterns) {
-        const match = html.match(pattern);
-        if (match && match[1]) {
-          return match[1].trim();
-        }
-      }
-      return undefined;
+    // Convert IP to decimal
+    const ipParts = ip.split('.').map(Number);
+    let decimal: string | undefined;
+    if (ipParts.length === 4 && ipParts.every(p => !isNaN(p) && p >= 0 && p <= 255)) {
+      decimal = ((ipParts[0] * 16777216) + (ipParts[1] * 65536) + (ipParts[2] * 256) + ipParts[3]).toString();
+    }
+    
+    const details: IPDetails = {
+      ip: data.query || ip,
+      decimal,
+      hostname: data.reverse || undefined,
+      asn: data.as || undefined,
+      isp: data.isp || undefined,
+      services: data.org || undefined,
+      country: data.country || undefined,
+      state: data.regionName || undefined,
+      city: data.city || undefined,
+      latitude: data.lat?.toString() || undefined,
+      longitude: data.lon?.toString() || undefined,
     };
-    
-    details.decimal = extractValue("Decimal");
-    details.hostname = extractValue("Hostname");
-    details.asn = extractValue("ASN");
-    details.isp = extractValue("ISP");
-    details.services = extractValue("Services");
-    details.country = extractValue("Country");
-    details.state = extractValue("State/Region") || extractValue("State") || extractValue("Region");
-    details.city = extractValue("City");
-    details.latitude = extractValue("Latitude");
-    details.longitude = extractValue("Longitude");
-    
-    // Alternative parsing for different page structures
-    if (!details.country) {
-      const countryMatch = html.match(/Country[^<]*<\/[^>]+>[^<]*<[^>]+>([^<]+)</i);
-      if (countryMatch) details.country = countryMatch[1].trim();
-    }
-    
-    if (!details.city) {
-      const cityMatch = html.match(/City[^<]*<\/[^>]+>[^<]*<[^>]+>([^<]+)</i);
-      if (cityMatch) details.city = cityMatch[1].trim();
-    }
-    
-    if (!details.isp) {
-      const ispMatch = html.match(/ISP[^<]*<\/[^>]+>[^<]*<[^>]+>([^<]+)</i);
-      if (ispMatch) details.isp = ispMatch[1].trim();
-    }
     
     return details;
   } catch (error) {
