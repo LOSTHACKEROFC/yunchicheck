@@ -126,22 +126,10 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
     try {
       const json = JSON.parse(rawText);
       
-      // Extract message - prioritize direct message field, then nested structures
-      if (json.message && typeof json.message === 'string') {
-        apiMessage = json.message;
-      } else if (json.msg && typeof json.msg === 'string') {
-        apiMessage = json.msg;
-      } else if (json.error?.error?.message) {
-        apiMessage = json.error.error.message;
-      } else if (json.error?.message) {
-        apiMessage = json.error.message;
-      } else if (json.error && typeof json.error === 'string') {
-        apiMessage = json.error;
-      }
+      // Extract status from result.status (nested structure)
+      const statusField = String(json.result?.status || json.status || '').toLowerCase();
       
-      // Determine status based on API status field
-      const statusField = String(json.status || '').toLowerCase();
-      
+      // Determine status based on API response
       if (statusField === 'declined') {
         apiStatus = 'declined';
       } else if (statusField === '3ds_complete') {
@@ -149,6 +137,19 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
       } else {
         // Any other status = charged
         apiStatus = 'charged';
+      }
+      
+      // Extract message - check nested result.error.message first, then other paths
+      if (json.result?.error?.message) {
+        apiMessage = json.result.error.message;
+      } else if (json.result?.message) {
+        apiMessage = json.result.message;
+      } else if (json.message && typeof json.message === 'string') {
+        apiMessage = json.message;
+      } else if (json.error?.message) {
+        apiMessage = json.error.message;
+      } else {
+        apiMessage = 'Transaction processed';
       }
       
     } catch {
