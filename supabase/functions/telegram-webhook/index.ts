@@ -607,6 +607,7 @@ async function setBotCommands(): Promise<void> {
     { command: "admincmd", description: "Admin panel" },
     { command: "ticket", description: "Manage ticket" },
     { command: "topups", description: "Pending topups" },
+    { command: "topup", description: "User's pending topup" },
     { command: "rejectall", description: "Reject all pending topups" },
     { command: "addfund", description: "Add/deduct credits" },
     { command: "banuser", description: "Ban user" },
@@ -4101,6 +4102,72 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // Topup reject with "Other" reason - ask for custom reason
+      if (callbackData.startsWith("topup_reject_reason_other_")) {
+        if (!callbackChatId || !isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const transactionId = callbackData.replace("topup_reject_reason_other_", "");
+
+        // Fetch transaction details
+        const { data: transaction } = await supabase
+          .from("topup_transactions")
+          .select("*")
+          .eq("id", transactionId)
+          .maybeSingle();
+
+        if (!transaction) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Transaction not found");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("username")
+          .eq("user_id", transaction.user_id)
+          .maybeSingle();
+
+        // Store pending rejection with custom reason flag using pending_bans table (reusing for simplicity)
+        await supabase.from("pending_bans").upsert({
+          user_id: transaction.user_id,
+          admin_chat_id: callbackChatId,
+          username: profile?.username,
+          step: `topup_reject_custom_${transactionId}`,
+          ban_reason: null
+        }, { onConflict: "admin_chat_id" });
+
+        const credits = Number(transaction.amount);
+
+        // Update message to ask for custom reason
+        if (messageId && callbackChatId) {
+          const askReasonCaption = `
+📝 <b>ENTER REJECTION REASON</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>Transaction:</b> <code>${transactionId.slice(0, 8)}...</code>
+<b>User:</b> ${escapeHtml(profile?.username || "Unknown")}
+<b>Amount:</b> ${credits} credits
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>Reply to this message with the custom rejection reason.</b>
+
+<i>Type your reason and send it, or press Cancel.</i>
+`;
+          await editMessageCaption(callbackChatId, messageId, askReasonCaption, {
+            inline_keyboard: [
+              [{ text: "◀️ Cancel", callback_data: `topup_reject_cancel_${transactionId}` }]
+            ]
+          });
+        }
+        await answerCallbackQuery(update.callback_query.id, "Enter rejection reason");
+
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       // Topup reject with reason - process the rejection
       if (callbackData.startsWith("topup_reject_reason_")) {
         if (!callbackChatId || !isCallbackAdmin) {
@@ -4119,7 +4186,6 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
           amount: "Amount mismatch - payment amount does not match requested credits",
           notreceived: "Payment not received - no matching transaction found in our records",
           duplicate: "Duplicate submission - this payment has already been processed",
-          other: "Rejected by admin",
         };
 
         const rejectionReason = reasonMessages[reasonCode] || "Rejected by admin";
@@ -4185,10 +4251,76 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
           await editMessageCaption(callbackChatId, messageId, rejectedCaption, null);
         }
 
-        // Notify user with rejection reason
+        // Notify user with rejection reason via Telegram
         if (profile?.telegram_chat_id) {
-          await sendTelegramMessage(profile.telegram_chat_id, `❌ <b>Topup Rejected</b>\n\n<b>Reason:</b> ${rejectionReason}\n\nPlease submit a new request with valid payment proof.`);
+          await sendTelegramMessage(profile.telegram_chat_id, `❌ <b>Topup Rejected</b>\n\n<b>Amount:</b> ${credits} credits\n<b>Reason:</b> ${rejectionReason}\n\nPlease submit a new request with valid payment proof.`);
         }
+
+        // Create website notification for the user
+        await supabase.from("notifications").insert({
+          user_id: transaction.user_id,
+          type: "topup_rejected",
+          title: "Top-up Request Rejected",
+          message: `Your top-up request for ${credits} credits was rejected. Reason: ${rejectionReason}`,
+          metadata: { transaction_id: transactionId, rejection_reason: rejectionReason }
+        });
+
+        // Send email notification
+        if (userEmail && userEmail !== "Unknown" && RESEND_API_KEY) {
+          const emailHtml = `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+              <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); padding: 30px; text-align: center; border-radius: 16px 16px 0 0;">
+                <h1 style="color: white; margin: 0; font-size: 24px;">❌ Top-up Rejected</h1>
+              </div>
+              <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 16px 16px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+                <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6;">Hello${username && username !== "Unknown" ? ` <strong style="color: #ef4444;">${username}</strong>` : ''},</p>
+                
+                <p style="color: #a3a3a3; font-size: 16px; line-height: 1.6;">Unfortunately, your top-up request has been rejected.</p>
+                
+                <div style="background: #1a0a0a; border-left: 4px solid #dc2626; border-radius: 8px; padding: 20px; margin: 25px 0;">
+                  <p style="color: #a3a3a3; margin: 5px 0;"><strong style="color: #e5e5e5;">Amount:</strong> ${credits} credits</p>
+                  <p style="color: #a3a3a3; margin: 5px 0;"><strong style="color: #e5e5e5;">Payment Method:</strong> ${paymentMethod}</p>
+                  <p style="color: #a3a3a3; margin: 5px 0;"><strong style="color: #e5e5e5;">Rejection Reason:</strong></p>
+                  <p style="color: #ef4444; font-size: 15px; margin: 10px 0 0 0;">${rejectionReason}</p>
+                </div>
+                
+                <p style="color: #a3a3a3; font-size: 14px; line-height: 1.6;">Please review the rejection reason and submit a new request with valid payment proof if needed.</p>
+                
+                <div style="text-align: center; margin-top: 25px;">
+                  <a href="https://yunchicheck.com/dashboard/topup" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold;">Submit New Request</a>
+                </div>
+                
+                <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;">
+                
+                <p style="color: #525252; font-size: 12px; text-align: center;">
+                  If you believe this is an error, please contact support.<br>
+                  — Yunchi Team
+                </p>
+              </div>
+            </div>
+          `;
+
+          try {
+            await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${RESEND_API_KEY}`,
+              },
+              body: JSON.stringify({
+                from: "Yunchi <noreply@yunchicheck.com>",
+                reply_to: "support@yunchicheck.com",
+                to: [userEmail],
+                subject: "❌ Your Top-up Request Was Rejected",
+                html: emailHtml,
+                headers: { "X-Entity-Ref-ID": crypto.randomUUID() },
+              }),
+            });
+          } catch (emailError) {
+            console.error("Failed to send rejection email:", emailError);
+          }
+        }
+
         await answerCallbackQuery(update.callback_query.id, "❌ Rejected");
 
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -6384,7 +6516,140 @@ ${gatewayStats || "  No gateway data"}
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // /ticket (staff can view)
+    // /topup [email/username] - Fetch user's pending topup
+    if (text.startsWith("/topup ") || text === "/topup") {
+      const isAdminUser = await isAdminAsync(chatId, supabase);
+      if (!isAdminUser) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can use this command.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const identifier = text.replace("/topup", "").trim();
+      
+      if (!identifier) {
+        await sendTelegramMessage(chatId, `
+❌ <b>Usage:</b> /topup <code>[email/username]</code>
+
+<b>Examples:</b>
+• /topup user@example.com
+• /topup JohnDoe
+`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Find user by email or username
+      let profile = null;
+      let userEmail = null;
+
+      const { data: authData } = await supabase.auth.admin.listUsers();
+      const authUsers = authData?.users || [];
+
+      // Try by email
+      const authUser = authUsers.find((u: any) => u.email?.toLowerCase() === identifier.toLowerCase());
+      if (authUser) {
+        userEmail = authUser.email;
+        const { data: p } = await supabase.from("profiles").select("*").eq("user_id", authUser.id).maybeSingle();
+        profile = p;
+      }
+
+      // Try by username
+      if (!profile) {
+        const { data: p } = await supabase.from("profiles").select("*").ilike("username", identifier).maybeSingle();
+        if (p) {
+          profile = p;
+          const matchedAuth = authUsers.find((u: any) => u.id === p.user_id);
+          userEmail = matchedAuth?.email || null;
+        }
+      }
+
+      if (!profile) {
+        await sendTelegramMessage(chatId, `❌ User not found: <code>${escapeHtml(identifier)}</code>`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Fetch pending topups for this user
+      const { data: pendingTopups } = await supabase
+        .from("topup_transactions")
+        .select("*")
+        .eq("user_id", profile.user_id)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+
+      if (!pendingTopups || pendingTopups.length === 0) {
+        await sendTelegramMessage(chatId, `
+👤 <b>${escapeHtml(profile.username || "User")}</b>
+📧 ${escapeHtml(userEmail || "Unknown")}
+
+✅ No pending top-up requests for this user.
+`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Show pending topups with accept/reject buttons
+      for (const topup of pendingTopups) {
+        const credits = Number(topup.amount);
+        const paymentMethod = (topup.payment_method || "unknown").toUpperCase();
+        const date = new Date(topup.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        const time = new Date(topup.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+
+        const message = `
+💰 <b>Pending Top-up Request</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>👤 User:</b> ${escapeHtml(profile.username || "Unknown")}
+<b>📧 Email:</b> ${escapeHtml(userEmail || "Unknown")}
+
+<b>Transaction ID:</b>
+<code>${topup.id}</code>
+
+<b>💵 Amount:</b> ${credits} credits
+<b>💳 Method:</b> ${paymentMethod}
+<b>📅 Submitted:</b> ${date} ${time}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<i>Choose an action below:</i>
+`;
+
+        const keyboard = {
+          inline_keyboard: [
+            [
+              { text: "✅ Accept", callback_data: `topup_accept_${topup.id}` },
+              { text: "❌ Reject", callback_data: `topup_reject_${topup.id}` },
+            ],
+          ],
+        };
+
+        // If there's a proof image, send as photo, otherwise send as text
+        if (topup.proof_image_url) {
+          try {
+            const body: Record<string, unknown> = {
+              chat_id: chatId,
+              photo: topup.proof_image_url,
+              caption: message,
+              parse_mode: "HTML",
+              reply_markup: keyboard,
+            };
+
+            await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            });
+          } catch (e) {
+            // Fallback to text if photo fails
+            await sendTelegramMessage(chatId, message + `\n📷 <a href="${topup.proof_image_url}">View Proof</a>`, keyboard);
+          }
+        } else {
+          await sendTelegramMessage(chatId, message, keyboard);
+        }
+      }
+
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+
     if (text.startsWith("/ticket")) {
       const hasAccess = await isStaffAsync(chatId, supabase);
       if (!hasAccess) {
@@ -7153,6 +7418,151 @@ Select a gateway to edit:
 
       await sendTelegramMessage(chatId, editMessage, { inline_keyboard: fieldButtons });
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // PENDING TOPUP REJECTION - CUSTOM REASON HANDLER
+    // ─────────────────────────────────────────────────────────
+
+    if (text && !text.startsWith("/")) {
+      // Check for pending topup rejection with custom reason
+      const { data: pendingRejection } = await supabase
+        .from("pending_bans")
+        .select("*")
+        .eq("admin_chat_id", chatId)
+        .like("step", "topup_reject_custom_%")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (pendingRejection) {
+        const transactionId = pendingRejection.step.replace("topup_reject_custom_", "");
+        const customReason = text.trim();
+
+        // Clean up pending state
+        await supabase.from("pending_bans").delete().eq("id", pendingRejection.id);
+
+        // Fetch transaction
+        const { data: transaction } = await supabase
+          .from("topup_transactions")
+          .select("*")
+          .eq("id", transactionId)
+          .maybeSingle();
+
+        if (!transaction) {
+          await sendTelegramMessage(chatId, "❌ Transaction not found or already processed.");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Update transaction with custom rejection reason
+        await supabase.from("topup_transactions").update({ 
+          status: "failed", 
+          rejection_reason: customReason 
+        }).eq("id", transactionId);
+
+        // Fetch user profile
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("username, telegram_chat_id")
+          .eq("user_id", transaction.user_id)
+          .maybeSingle();
+
+        const { data: authData } = await supabase.auth.admin.listUsers();
+        const userAuth = authData?.users?.find((u: any) => u.id === transaction.user_id);
+        const userEmail = userAuth?.email || "Unknown";
+
+        const credits = Number(transaction.amount);
+        const username = profile?.username || "Unknown";
+        const paymentMethod = transaction.payment_method?.toUpperCase() || "Unknown";
+        const timestamp = new Date().toLocaleString("en-US", { 
+          month: "short", day: "numeric", year: "numeric", 
+          hour: "2-digit", minute: "2-digit" 
+        });
+
+        // Notify user via Telegram
+        if (profile?.telegram_chat_id) {
+          await sendTelegramMessage(profile.telegram_chat_id, `❌ <b>Topup Rejected</b>\n\n<b>Amount:</b> ${credits} credits\n<b>Reason:</b> ${customReason}\n\nPlease submit a new request with valid payment proof.`);
+        }
+
+        // Create website notification
+        await supabase.from("notifications").insert({
+          user_id: transaction.user_id,
+          type: "topup_rejected",
+          title: "Top-up Request Rejected",
+          message: `Your top-up request for ${credits} credits was rejected. Reason: ${customReason}`,
+          metadata: { transaction_id: transactionId, rejection_reason: customReason }
+        });
+
+        // Send email notification
+        if (userEmail && userEmail !== "Unknown" && RESEND_API_KEY) {
+          const emailHtml = `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+              <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); padding: 30px; text-align: center; border-radius: 16px 16px 0 0;">
+                <h1 style="color: white; margin: 0; font-size: 24px;">❌ Top-up Rejected</h1>
+              </div>
+              <div style="background: #0f0f0f; padding: 30px; border-radius: 0 0 16px 16px; color: #e5e5e5; border: 1px solid #1a1a1a; border-top: none;">
+                <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6;">Hello${username && username !== "Unknown" ? ` <strong style="color: #ef4444;">${escapeHtml(username)}</strong>` : ''},</p>
+                
+                <p style="color: #a3a3a3; font-size: 16px; line-height: 1.6;">Unfortunately, your top-up request has been rejected.</p>
+                
+                <div style="background: #1a0a0a; border-left: 4px solid #dc2626; border-radius: 8px; padding: 20px; margin: 25px 0;">
+                  <p style="color: #a3a3a3; margin: 5px 0;"><strong style="color: #e5e5e5;">Amount:</strong> ${credits} credits</p>
+                  <p style="color: #a3a3a3; margin: 5px 0;"><strong style="color: #e5e5e5;">Payment Method:</strong> ${paymentMethod}</p>
+                  <p style="color: #a3a3a3; margin: 5px 0;"><strong style="color: #e5e5e5;">Rejection Reason:</strong></p>
+                  <p style="color: #ef4444; font-size: 15px; margin: 10px 0 0 0;">${escapeHtml(customReason)}</p>
+                </div>
+                
+                <p style="color: #a3a3a3; font-size: 14px; line-height: 1.6;">Please review the rejection reason and submit a new request with valid payment proof if needed.</p>
+                
+                <div style="text-align: center; margin-top: 25px;">
+                  <a href="https://yunchicheck.com/dashboard/topup" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold;">Submit New Request</a>
+                </div>
+                
+                <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;">
+                
+                <p style="color: #525252; font-size: 12px; text-align: center;">
+                  If you believe this is an error, please contact support.<br>
+                  — Yunchi Team
+                </p>
+              </div>
+            </div>
+          `;
+
+          try {
+            await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${RESEND_API_KEY}`,
+              },
+              body: JSON.stringify({
+                from: "Yunchi <noreply@yunchicheck.com>",
+                reply_to: "support@yunchicheck.com",
+                to: [userEmail],
+                subject: "❌ Your Top-up Request Was Rejected",
+                html: emailHtml,
+                headers: { "X-Entity-Ref-ID": crypto.randomUUID() },
+              }),
+            });
+          } catch (emailError) {
+            console.error("Failed to send rejection email:", emailError);
+          }
+        }
+
+        // Send confirmation to admin
+        await sendTelegramMessage(chatId, `
+✅ <b>Topup Rejected</b>
+
+<b>User:</b> ${escapeHtml(username)}
+<b>Amount:</b> ${credits} credits
+<b>Reason:</b> ${escapeHtml(customReason)}
+<b>Time:</b> ${timestamp}
+
+📧 User notified via Telegram, Website & Email
+`);
+
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
     }
 
     // ─────────────────────────────────────────────────────────
