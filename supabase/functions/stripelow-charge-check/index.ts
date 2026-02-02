@@ -257,7 +257,7 @@ serve(async (req) => {
         cc,
         'CHARGED',
         result.message,
-        '$0.30',
+        '£0.30',
         'StripeLow'
       );
     }
@@ -273,8 +273,8 @@ serve(async (req) => {
       computedStatus: result.status,
       apiStatus: statusMap[result.status] || 'UNKNOWN',
       apiMessage: result.message,
-      apiTotal: '$0.30',
-      chargeAmount: '$0.30',
+      apiTotal: '£0.30',
+      chargeAmount: '£0.30',
       status: result.status,
       message: result.message,
     };
