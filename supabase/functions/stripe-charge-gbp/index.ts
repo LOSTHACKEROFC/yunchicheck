@@ -68,7 +68,7 @@ const userAgents = [
 
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
-// Direct API call - returns exact response
+// Direct API call - returns exact response with proper detection
 const callApi = async (cc: string): Promise<{ status: string; message: string; rawResponse: string }> => {
   const apiUrl = `${API_BASE_URL}?cc=${cc}`;
   const userAgent = getRandomItem(userAgents);
@@ -98,42 +98,72 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
     }
     
     let apiStatus = 'unknown';
-    let apiMessage = rawText;
+    let apiMessage = 'No response message';
     
     try {
       const json = JSON.parse(rawText);
       
-      // Extract the message exactly as returned by API
-      apiMessage = json.message || json.msg || json.error || rawText;
+      // Deep extract the human-readable message from nested structures
+      // API returns: { success: false, error: { error: { message: "..." } } }
+      if (json.error?.error?.message) {
+        apiMessage = json.error.error.message;
+      } else if (json.error?.message) {
+        apiMessage = json.error.message;
+      } else if (json.message && typeof json.message === 'string') {
+        apiMessage = json.message;
+      } else if (json.msg && typeof json.msg === 'string') {
+        apiMessage = json.msg;
+      } else if (json.result?.message) {
+        apiMessage = json.result.message;
+      }
       
-      // Check for declined status
-      if (json.status === 'declined' || json.status === 'DECLINED') {
+      // Detect status from response structure
+      // DECLINED: Check for success: false, error object, or declined status
+      if (json.success === false || json.error || 
+          json.status === 'declined' || json.status === 'DECLINED' || json.status === 'failed') {
         apiStatus = 'dead';
       }
-      // Check for success/charged status
+      // CHARGED: Check for success indicators
       else if (json.success === true || json.full_response === true || 
-               json.status === 'CHARGED' || json.status === 'success' || json.status === 'charged') {
+               json.status === 'CHARGED' || json.status === 'success' || json.status === 'charged' ||
+               json.status === 'succeeded') {
         apiStatus = 'live';
       }
-      // Fallback keyword detection
+      // Fallback: keyword detection on message
       else {
         const lower = String(apiMessage).toLowerCase();
-        if (lower.includes('declined') || lower.includes('your card was declined') || 
-            lower.includes('card_declined') || lower.includes('do_not_honor') ||
-            lower.includes('insufficient') || lower.includes('expired') ||
-            lower.includes('invalid') || lower.includes('fraud')) {
+        if (lower.includes('declined') || lower.includes('card_declined') || 
+            lower.includes('do_not_honor') || lower.includes('insufficient') || 
+            lower.includes('expired') || lower.includes('invalid') || 
+            lower.includes('fraud') || lower.includes('stolen') ||
+            lower.includes('lost') || lower.includes('restricted') ||
+            lower.includes('pickup') || lower.includes('not permitted') ||
+            lower.includes('security violation') || lower.includes('exceeds')) {
           apiStatus = 'dead';
-        } else if (lower.includes('success') || lower.includes('charged') || lower.includes('approved')) {
+        } else if (lower.includes('success') || lower.includes('charged') || 
+                   lower.includes('approved') || lower.includes('succeeded') ||
+                   lower.includes('completed') || lower.includes('paid')) {
           apiStatus = 'live';
         }
       }
+      
+      // Also check error codes for declined
+      if (json.error?.error?.code === 'card_declined' || json.error?.code === 'card_declined' ||
+          json.error?.error?.type === 'card_error' || json.error?.type === 'card_error') {
+        apiStatus = 'dead';
+      }
+      
     } catch {
       // Text response - keyword detection
       const lower = rawText.toLowerCase();
-      if (lower.includes('declined') || lower.includes('error')) {
+      if (lower.includes('declined') || lower.includes('error') || lower.includes('failed')) {
         apiStatus = 'dead';
-      } else if (lower.includes('charged') || lower.includes('success')) {
+        apiMessage = 'Card declined';
+      } else if (lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
         apiStatus = 'live';
+        apiMessage = 'Charged successfully';
+      } else {
+        apiMessage = rawText.substring(0, 200);
       }
     }
     
