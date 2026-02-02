@@ -1104,6 +1104,53 @@ const Gateways = () => {
     }
   };
 
+  // StripeLow Charge API check via edge function
+  const checkCardViaStripeLow = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    try {
+      console.log(`[STRIPELOW] Sending:`, cc);
+      
+      const { data, error } = await supabase.functions.invoke('stripelow-charge-check', {
+        body: { cc }
+      });
+      
+      if (error) {
+        console.error('[STRIPELOW] Error:', error);
+        return {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: error.message || "Connection error",
+          rawResponse: JSON.stringify(error)
+        };
+      }
+      
+      console.log('[STRIPELOW] Response:', data);
+      
+      const apiStatus = data?.apiStatus || 'UNKNOWN';
+      const apiMessage = data?.apiMessage || data?.message || 'No response';
+      const apiTotal = data?.apiTotal || data?.chargeAmount || '$0.30';
+      const rawResponse = data?.rawResponse || JSON.stringify(data);
+      const computedStatus = data?.computedStatus;
+      
+      return { 
+        status: computedStatus === "live" ? "live" : computedStatus === "dead" ? "dead" : "unknown",
+        apiStatus, 
+        apiMessage, 
+        apiTotal, 
+        rawResponse 
+      };
+    } catch (error) {
+      console.error('[STRIPELOW] Exception:', error);
+      return {
+        status: "unknown",
+        apiStatus: "ERROR",
+        apiMessage: error instanceof Error ? error.message : "Unknown error",
+        rawResponse: String(error)
+      };
+    }
+  };
+
   // VBV Auth check (YUNCHI VBV AUTH) via edge function - returns PASSED/REJECTED
   const checkCardViaVbv = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
@@ -1397,6 +1444,8 @@ const Gateways = () => {
         gatewayResponse = await checkCardViaPayU(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv, payuAmount);
       } else if (selectedGateway.id === "pwgate_charge") {
         gatewayResponse = await checkCardViaPwgate(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+      } else if (selectedGateway.id === "stripelow_charge") {
+        gatewayResponse = await checkCardViaStripeLow(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "b3vbv_auth") {
         gatewayResponse = await checkCardViaVbv(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       }
@@ -2204,6 +2253,8 @@ const Gateways = () => {
           gatewayResponse = await checkCardViaPayU(cardData.card, cardData.month, cardData.year, cardData.cvv, payuAmount);
         } else if (selectedGateway.id === "pwgate_charge") {
           gatewayResponse = await checkCardViaPwgate(cardData.card, cardData.month, cardData.year, cardData.cvv);
+        } else if (selectedGateway.id === "stripelow_charge") {
+          gatewayResponse = await checkCardViaStripeLow(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "b3vbv_auth") {
           gatewayResponse = await checkCardViaVbv(cardData.card, cardData.month, cardData.year, cardData.cvv);
         }
