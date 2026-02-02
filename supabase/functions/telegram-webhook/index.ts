@@ -2483,10 +2483,16 @@ interface IPDetails {
   isp?: string;
   services?: string;
   country?: string;
+  countryCode?: string;
   state?: string;
   city?: string;
+  zip?: string;
   latitude?: string;
   longitude?: string;
+  timezone?: string;
+  proxy?: boolean;
+  mobile?: boolean;
+  hosting?: boolean;
 }
 
 async function fetchIPDetails(ip: string): Promise<IPDetails | null> {
@@ -2494,7 +2500,8 @@ async function fetchIPDetails(ip: string): Promise<IPDetails | null> {
   
   try {
     // Use ip-api.com for reliable JSON response (free, no auth required)
-    const response = await fetch(`http://ip-api.com/json/${ip}?fields=status,message,country,regionName,city,lat,lon,isp,org,as,reverse,query`);
+    // Request all available fields for comprehensive info
+    const response = await fetch(`http://ip-api.com/json/${ip}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,reverse,query,proxy,mobile,hosting`);
     
     if (!response.ok) {
       console.error(`IP lookup failed for ${ip}: ${response.status}`);
@@ -2523,10 +2530,16 @@ async function fetchIPDetails(ip: string): Promise<IPDetails | null> {
       isp: data.isp || undefined,
       services: data.org || undefined,
       country: data.country || undefined,
+      countryCode: data.countryCode || undefined,
       state: data.regionName || undefined,
       city: data.city || undefined,
+      zip: data.zip || undefined,
       latitude: data.lat?.toString() || undefined,
       longitude: data.lon?.toString() || undefined,
+      timezone: data.timezone || undefined,
+      proxy: data.proxy || false,
+      mobile: data.mobile || false,
+      hosting: data.hosting || false,
     };
     
     return details;
@@ -2677,7 +2690,7 @@ async function handleUserDevices(chatId: string, identifier: string, supabase: a
 
     deviceList += `
 ━━━━━━━━━━━━━━━━━━
-🔐 <b>Fingerprint:</b> <code>${device.fingerprint.slice(0, 12)}...</code>${fpBlocked}
+🔐 <b>Fingerprint:</b> <code>${device.fingerprint}</code>${fpBlocked}
 💻 <b>Device:</b> ${browser} on ${os}
 🕐 <b>Last Seen:</b> ${lastSeen}`;
 
@@ -2686,19 +2699,40 @@ async function handleUserDevices(chatId: string, identifier: string, supabase: a
     
     deviceList += `
 
-📍 <b>IP Details For:</b> ${device.ip_address || "Unknown"}${ipBlocked}`;
+📍 <b>IP Details For:</b> <code>${device.ip_address || "Unknown"}</code>${ipBlocked}`;
     
     if (ipDetails) {
-      if (ipDetails.decimal) deviceList += `\n   • <b>Decimal:</b> ${escapeHtml(ipDetails.decimal)}`;
-      if (ipDetails.hostname) deviceList += `\n   • <b>Hostname:</b> ${escapeHtml(ipDetails.hostname)}`;
-      if (ipDetails.asn) deviceList += `\n   • <b>ASN:</b> ${escapeHtml(ipDetails.asn)}`;
-      if (ipDetails.isp) deviceList += `\n   • <b>ISP:</b> ${escapeHtml(ipDetails.isp)}`;
-      if (ipDetails.services) deviceList += `\n   • <b>Services:</b> ${escapeHtml(ipDetails.services)}`;
-      if (ipDetails.country) deviceList += `\n   • <b>Country:</b> ${escapeHtml(ipDetails.country)}`;
-      if (ipDetails.state) deviceList += `\n   • <b>State/Region:</b> ${escapeHtml(ipDetails.state)}`;
-      if (ipDetails.city) deviceList += `\n   • <b>City:</b> ${escapeHtml(ipDetails.city)}`;
-      if (ipDetails.latitude) deviceList += `\n   • <b>Latitude:</b> ${escapeHtml(ipDetails.latitude)}`;
-      if (ipDetails.longitude) deviceList += `\n   • <b>Longitude:</b> ${escapeHtml(ipDetails.longitude)}`;
+      deviceList += `\n   • <b>Decimal:</b> ${escapeHtml(ipDetails.decimal || "N/A")}`;
+      deviceList += `\n   • <b>Hostname:</b> ${escapeHtml(ipDetails.hostname || "N/A")}`;
+      deviceList += `\n   • <b>ASN:</b> ${escapeHtml(ipDetails.asn || "N/A")}`;
+      deviceList += `\n   • <b>ISP:</b> ${escapeHtml(ipDetails.isp || "N/A")}`;
+      deviceList += `\n   • <b>Organization:</b> ${escapeHtml(ipDetails.services || "N/A")}`;
+      
+      // Connection type flags
+      const flags: string[] = [];
+      if (ipDetails.proxy) flags.push("🔒 Proxy/VPN");
+      if (ipDetails.mobile) flags.push("📱 Mobile");
+      if (ipDetails.hosting) flags.push("🖥️ Hosting/DC");
+      if (flags.length > 0) {
+        deviceList += `\n   • <b>Services:</b> ${flags.join(", ")}`;
+      } else {
+        deviceList += `\n   • <b>Services:</b> None detected`;
+      }
+      
+      // Location section
+      deviceList += `\n\n   🌍 <b>Location:</b>`;
+      deviceList += `\n   • <b>Country:</b> ${escapeHtml(ipDetails.country || "N/A")}${ipDetails.countryCode ? ` (${escapeHtml(ipDetails.countryCode)})` : ""}`;
+      deviceList += `\n   • <b>State/Region:</b> ${escapeHtml(ipDetails.state || "N/A")}`;
+      deviceList += `\n   • <b>City:</b> ${escapeHtml(ipDetails.city || "N/A")}`;
+      if (ipDetails.zip) deviceList += `\n   • <b>ZIP/Postal:</b> ${escapeHtml(ipDetails.zip)}`;
+      if (ipDetails.timezone) deviceList += `\n   • <b>Timezone:</b> ${escapeHtml(ipDetails.timezone)}`;
+      deviceList += `\n   • <b>Latitude:</b> ${escapeHtml(ipDetails.latitude || "N/A")}`;
+      deviceList += `\n   • <b>Longitude:</b> ${escapeHtml(ipDetails.longitude || "N/A")}`;
+      
+      // Add Google Maps link if coordinates available
+      if (ipDetails.latitude && ipDetails.longitude) {
+        deviceList += `\n   • 🗺️ <a href="https://www.google.com/maps?q=${ipDetails.latitude},${ipDetails.longitude}">View on Google Maps</a>`;
+      }
     } else if (device.ip_address) {
       deviceList += `\n   <i>IP details unavailable</i>`;
     }
