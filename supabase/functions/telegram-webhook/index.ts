@@ -2879,8 +2879,8 @@ async function handleUserInfo(chatId: string, identifier: string, supabase: any)
 • Role: ${escapeHtml(userRoles)}
 
 <b>📱 Telegram</b>
-• Chat ID: <code>${escapeHtml(profile.telegram_chat_id) || "Not connected"}</code>
-• Username: ${profile.telegram_username ? `@${escapeHtml(profile.telegram_username)}` : "Not set"}
+• Chat ID: ${profile.telegram_chat_id ? `<a href="tg://user?id=${escapeHtml(profile.telegram_chat_id)}">${escapeHtml(profile.telegram_chat_id)}</a>` : "Not connected"}
+• Username: ${profile.telegram_username ? `<a href="https://t.me/${escapeHtml(profile.telegram_username)}">@${escapeHtml(profile.telegram_username)}</a>` : "Not set"}
 
 <b>💰 Account</b>
 • Credits: ${profile.credits || 0}
