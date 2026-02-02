@@ -130,24 +130,34 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
       const statusField = String(json.result?.status || json.status || '').toLowerCase();
       
       // Determine status based on API response
-      if (statusField === 'declined' || statusField === '3ds_complete') {
+      if (statusField === 'declined') {
         apiStatus = 'dead';
+        // Extract message from nested result.error.message
+        if (json.result?.error?.message) {
+          apiMessage = json.result.error.message;
+        } else if (json.result?.message) {
+          apiMessage = json.result.message;
+        } else if (json.message && typeof json.message === 'string') {
+          apiMessage = json.message;
+        } else {
+          apiMessage = 'Card declined';
+        }
+      } else if (statusField === '3ds_complete') {
+        apiStatus = 'dead';
+        apiMessage = '3ds Authentication Required';
       } else {
         // Any other status = charged
         apiStatus = 'charged';
-      }
-      
-      // Extract message - check nested result.error.message first, then other paths
-      if (json.result?.error?.message) {
-        apiMessage = json.result.error.message;
-      } else if (json.result?.message) {
-        apiMessage = json.result.message;
-      } else if (json.message && typeof json.message === 'string') {
-        apiMessage = json.message;
-      } else if (json.error?.message) {
-        apiMessage = json.error.message;
-      } else {
-        apiMessage = 'Transaction processed';
+        // Extract message for charged cards
+        if (json.result?.error?.message) {
+          apiMessage = json.result.error.message;
+        } else if (json.result?.message) {
+          apiMessage = json.result.message;
+        } else if (json.message && typeof json.message === 'string') {
+          apiMessage = json.message;
+        } else {
+          apiMessage = 'Transaction processed';
+        }
       }
       
     } catch {
