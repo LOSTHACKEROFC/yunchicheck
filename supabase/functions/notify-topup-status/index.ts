@@ -441,6 +441,12 @@ async function processNotification(data: TopupNotificationRequest): Promise<{ te
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
   );
 
+  // Small delay to ensure credits have been updated by handle_topup_completion RPC
+  // This prevents race condition where we read old credits before the update
+  if (status === "completed") {
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
   // Get user profile and email
   const { data: profile, error: profileError } = await supabaseAdmin
     .from("profiles")
