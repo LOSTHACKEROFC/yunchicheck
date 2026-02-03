@@ -120,49 +120,66 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
       return { status: 'unknown', message: 'Empty response from gateway', rawResponse: '' };
     }
     
-    let apiStatus = 'charged'; // Default to charged
+    let apiStatus = 'unknown'; // Default to unknown
     let apiMessage = 'Transaction processed';
     
     try {
       const json = JSON.parse(rawText);
       
+      // Check for connection errors first (success: false with error string)
+      if (json.success === false && json.error && typeof json.error === 'string') {
+        // Connection refused, timeout, etc. = UNKNOWN
+        return { status: 'unknown', message: json.error.substring(0, 200), rawResponse: rawText };
+      }
+      
       // Extract status from result.status (nested structure)
       const statusField = String(json.result?.status || json.status || '').toLowerCase();
+      const successField = json.success;
+      
+      // Extract message from various locations
+      if (json.result?.error?.message) {
+        apiMessage = json.result.error.message;
+      } else if (json.result?.message) {
+        apiMessage = json.result.message;
+      } else if (json.message && typeof json.message === 'string') {
+        apiMessage = json.message;
+      } else if (json.error && typeof json.error === 'string') {
+        apiMessage = json.error;
+      }
       
       // Determine status based on API response
-      if (statusField === 'declined') {
+      if (successField === false) {
+        // Explicit success: false = DEAD
         apiStatus = 'dead';
-        // Extract message from nested result.error.message
-        if (json.result?.error?.message) {
-          apiMessage = json.result.error.message;
-        } else if (json.result?.message) {
-          apiMessage = json.result.message;
-        } else if (json.message && typeof json.message === 'string') {
-          apiMessage = json.message;
-        } else {
+        if (!apiMessage || apiMessage === 'Transaction processed') {
+          apiMessage = 'Card declined';
+        }
+      } else if (statusField === 'declined' || statusField === 'failed' || statusField === 'error') {
+        apiStatus = 'dead';
+        if (!apiMessage || apiMessage === 'Transaction processed') {
           apiMessage = 'Card declined';
         }
       } else if (statusField === '3ds_complete' || statusField === 'requires_action') {
         apiStatus = 'dead';
         apiMessage = '3DS Authentication Required';
-      } else {
-        // Any other status = charged
+      } else if (successField === true || statusField === 'success' || statusField === 'charged' || statusField === 'approved') {
+        // Explicit success = CHARGED
         apiStatus = 'charged';
-        // Extract message for charged cards
-        if (json.result?.error?.message) {
-          apiMessage = json.result.error.message;
-        } else if (json.result?.message) {
-          apiMessage = json.result.message;
-        } else if (json.message && typeof json.message === 'string') {
-          apiMessage = json.message;
-        } else {
-          apiMessage = 'Transaction processed';
+        if (!apiMessage || apiMessage === 'Transaction processed') {
+          apiMessage = 'Card charged successfully';
+        }
+      } else {
+        // No clear indicator = UNKNOWN
+        apiStatus = 'unknown';
+        if (!apiMessage || apiMessage === 'Transaction processed') {
+          apiMessage = 'Unable to determine card status';
         }
       }
       
     } catch {
-      // Non-JSON response - default to charged, use raw text as message
+      // Non-JSON response = UNKNOWN
       apiMessage = rawText.substring(0, 200);
+      apiStatus = 'unknown';
     }
     
     return { status: apiStatus, message: apiMessage, rawResponse: rawText };
