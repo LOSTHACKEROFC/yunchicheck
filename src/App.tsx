@@ -19,6 +19,7 @@ import Topup from "./pages/dashboard/Topup";
 import Support from "./pages/dashboard/Support";
 import AdminTopups from "./pages/dashboard/AdminTopups";
 import AdminBlockedDevices from "./pages/dashboard/AdminBlockedDevices";
+import AdminPanel from "./pages/dashboard/AdminPanel";
 import TopupUser from "./pages/dashboard/TopupUser";
 import CreditUsage from "./pages/dashboard/CreditUsage";
 import BuyCredits from "./pages/dashboard/BuyCredits";
@@ -72,6 +73,7 @@ function AppContent() {
         <Route path="support" element={<Support />} />
         <Route path="admin/topups" element={<AdminTopups />} />
         <Route path="admin/blocked" element={<AdminBlockedDevices />} />
+        <Route path="admin/panel" element={<AdminPanel />} />
         <Route path="topupuser" element={<TopupUser />} />
         <Route path="import-urls" element={<ImportUrls />} />
       </Route>

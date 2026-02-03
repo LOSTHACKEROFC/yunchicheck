@@ -25,7 +25,9 @@ import {
   Shield,
   ShieldOff,
   History,
-  ShoppingCart
+  ShoppingCart,
+  LayoutDashboard,
+  DollarSign
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -43,6 +45,8 @@ const menuItems = [
 ];
 
 const adminItems = [
+  { title: "Admin Panel", url: "/dashboard/admin/panel", icon: LayoutDashboard },
+  { title: "Pending Topups", url: "/dashboard/topupuser", icon: DollarSign },
   { title: "Manage Topups", url: "/dashboard/admin/topups", icon: Shield },
   { title: "Blocked Devices", url: "/dashboard/admin/blocked", icon: ShieldOff },
 ];
@@ -143,7 +147,8 @@ const DashboardSidebar = () => {
         {isAdmin && (
           <SidebarGroup>
             <SidebarGroupContent>
-              <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <Shield className="h-3 w-3" />
                 Admin
               </div>
               <SidebarMenu>
@@ -157,7 +162,7 @@ const DashboardSidebar = () => {
                         to={item.url}
                         onClick={handleMenuClick}
                         className="flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-secondary"
-                        activeClassName="bg-primary/20 text-primary border-l-2 border-primary"
+                        activeClassName="bg-yellow-500/20 text-yellow-400 border-l-2 border-yellow-500"
                       >
                         <item.icon className="h-5 w-5 text-yellow-500" />
                         <span className="text-yellow-500">{item.title}</span>
