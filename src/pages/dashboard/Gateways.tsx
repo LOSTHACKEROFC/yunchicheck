@@ -245,7 +245,7 @@ const defaultGateways: Gateway[] = [
 ];
 
 // Credit costs: LIVE = 2 credits, DEAD = 1 credit, ERROR/UNKNOWN = 0 credits
-// Killer Auth: flat 5 credits per check (regardless of outcome)
+// Killer Auth: KILLED = 5 credits, ERROR/UNKNOWN = FREE
 const CREDIT_COST_LIVE = 2;
 const CREDIT_COST_DEAD = 1;
 const CREDIT_COST_ERROR = 0;
@@ -3101,7 +3101,11 @@ const Gateways = () => {
             <div className="flex items-center gap-2">
               <Coins className="h-4 w-4 text-primary" />
               <span className="text-muted-foreground">Cost:</span>
-              <span className="font-medium">Dead: {CREDIT_COST_DEAD}, Live: {CREDIT_COST_LIVE}, Error: Free</span>
+              {selectedGateway?.id === 'killer_auth' ? (
+                <span className="font-medium">Killed: {CREDIT_COST_KILLER}, Error: Free</span>
+              ) : (
+                <span className="font-medium">Dead: {CREDIT_COST_DEAD}, Live: {CREDIT_COST_LIVE}, Error: Free</span>
+              )}
             </div>
           </div>
         </CardContent>
