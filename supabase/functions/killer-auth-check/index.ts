@@ -81,8 +81,7 @@ const getStatusFromResponse = (data: Record<string, unknown>): "killed" | "unkno
 // Perform API check with retry logic for UNKNOWN responses
 const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown> & { computedStatus: "killed" | "unknown" }> => {
   const maxRetries = 3;
-  // Using a placeholder API URL - this should be replaced with the actual Killer Auth API
-  const apiUrl = `http://killer-auth-api.example.com/api?cc=${cc}`;
+  const apiUrl = `https://killer-2-gates-pyjk.vercel.app/ko/cc=${cc}?key=anmokupvttt`;
   
   console.log(`[KILLER-AUTH] Attempt ${attempt}/${maxRetries} - Calling API:`, apiUrl);
 
