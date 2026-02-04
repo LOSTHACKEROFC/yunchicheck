@@ -260,6 +260,7 @@ interface CheckResult {
   apiResponse?: string; // Real API response message for PAYGATE
   usedApi?: string; // For combined gateway - which API (stripe/b3) returned the result
   rawResponse?: string; // Full raw API response for debugging
+  timeTaken?: number; // Time taken in seconds (for Killer Auth)
 }
 
 interface BulkResult extends CheckResult {
@@ -1495,7 +1496,10 @@ const Gateways = () => {
       } else if (selectedGateway.id === "b3vbv_auth") {
         gatewayResponse = await checkCardViaVbv(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "killer_auth") {
+        const startTime = performance.now();
         gatewayResponse = await checkCardViaKiller(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+        const endTime = performance.now();
+        (gatewayResponse as any).timeTaken = ((endTime - startTime) / 1000).toFixed(2);
       }
       
       const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -1561,7 +1565,8 @@ const Gateways = () => {
         displayCard: displayCardString,
         apiResponse: apiResponseDisplay,
         usedApi: gatewayResponse?.usedGateway,
-        rawResponse: gatewayResponse?.rawResponse
+        rawResponse: gatewayResponse?.rawResponse,
+        timeTaken: (gatewayResponse as any)?.timeTaken ? parseFloat((gatewayResponse as any).timeTaken) : undefined
       };
 
       setResult(checkResult);
@@ -3426,6 +3431,17 @@ const Gateways = () => {
                               : "UNKNOWN"}
                       </span>
                     </div>
+
+                    {/* Time Taken - Only for Killer Auth killed cards */}
+                    {result.status === "killed" && result.timeTaken !== undefined && (
+                      <div className="flex">
+                        <span className="w-24 text-muted-foreground font-bold italic">TIME</span>
+                        <span className="text-muted-foreground font-bold italic mr-2">:</span>
+                        <span className="text-green-500 font-bold italic">
+                          {result.timeTaken}s
+                        </span>
+                      </div>
+                    )}
                     
                     <div className="flex">
                       <span className="w-24 text-muted-foreground font-bold italic">AMOUNT</span>
@@ -3531,12 +3547,12 @@ const Gateways = () => {
                   {checking ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Checking...
+                      {selectedGateway?.id === "killer_auth" ? "Killing..." : "Checking..."}
                     </>
                   ) : (
                     <>
                       <Zap className="h-4 w-4 mr-2" />
-                      Check
+                      {selectedGateway?.id === "killer_auth" ? "Kill" : "Check"}
                     </>
                   )}
                 </Button>
