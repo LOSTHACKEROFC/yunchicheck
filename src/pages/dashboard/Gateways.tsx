@@ -3150,17 +3150,19 @@ const Gateways = () => {
         </CardContent>
       </Card>
 
-      {/* Card Check Tabs */}
+      {/* Card Check Tabs - Killer Auth only supports single check */}
       <Tabs defaultValue="single" className="w-full">
-        <TabsList className="w-full grid grid-cols-2 max-w-md">
+        <TabsList className={`w-full max-w-md ${selectedGateway?.id === 'killer_auth' ? 'grid-cols-1' : 'grid grid-cols-2'}`}>
           <TabsTrigger value="single" className="text-xs sm:text-sm">
             <CreditCard className="h-3 w-3 mr-1" />
             Single Check
           </TabsTrigger>
-          <TabsTrigger value="bulk" className="text-xs sm:text-sm">
-            <Layers className="h-3 w-3 mr-1" />
-            Bulk Check
-          </TabsTrigger>
+          {selectedGateway?.id !== 'killer_auth' && (
+            <TabsTrigger value="bulk" className="text-xs sm:text-sm">
+              <Layers className="h-3 w-3 mr-1" />
+              Bulk Check
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Single Card Check */}
