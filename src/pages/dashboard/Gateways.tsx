@@ -3503,8 +3503,8 @@ const Gateways = () => {
                       </span>
                     </div>
                     
-                    {/* Raw API Response - Expandable */}
-                    {result.rawResponse && (
+                    {/* Raw API Response - Expandable (hidden for Killer Auth) */}
+                    {result.rawResponse && selectedGateway?.id !== "killer_auth" && (
                       <div className="mt-3 pt-3 border-t border-dashed border-muted-foreground/30">
                         <details className="group">
                           <summary className="cursor-pointer flex items-center gap-2 text-muted-foreground font-bold italic text-[11px] hover:text-foreground transition-colors">
