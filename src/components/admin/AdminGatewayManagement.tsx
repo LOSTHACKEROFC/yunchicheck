@@ -108,10 +108,20 @@ const AdminGatewayManagement = () => {
               statsMap[gateway] = { total_checks: 0, live_count: 0, dead_count: 0 };
             }
             statsMap[gateway].total_checks++;
-            if (check.result?.toLowerCase().includes('live') || check.result?.toLowerCase().includes('approved')) {
-              statsMap[gateway].live_count++;
-            } else if (check.result?.toLowerCase().includes('dead') || check.result?.toLowerCase().includes('declined')) {
-              statsMap[gateway].dead_count++;
+            const resultLower = check.result?.toLowerCase() || '';
+            // For Killer Auth, 'killed' = success, 'unknown' = failure
+            if (gateway === 'killer_auth') {
+              if (resultLower.includes('killed')) {
+                statsMap[gateway].live_count++;
+              } else if (resultLower.includes('unknown')) {
+                statsMap[gateway].dead_count++;
+              }
+            } else {
+              if (resultLower.includes('live') || resultLower.includes('approved')) {
+                statsMap[gateway].live_count++;
+              } else if (resultLower.includes('dead') || resultLower.includes('declined')) {
+                statsMap[gateway].dead_count++;
+              }
             }
           });
           setGatewayStats(statsMap);
