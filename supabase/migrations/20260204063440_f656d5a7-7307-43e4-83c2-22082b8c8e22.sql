@@ -1,0 +1,36 @@
+-- Add Killer Auth gateway to gateways table
+INSERT INTO public.gateways (
+  id,
+  name,
+  code,
+  type,
+  status,
+  is_active,
+  card_types,
+  speed,
+  success_rate,
+  description,
+  icon_name,
+  icon_color,
+  edge_function_name,
+  charge_amount,
+  cvc_required,
+  display_order
+) VALUES (
+  'killer_auth',
+  'Killer Auth',
+  'killer_auth',
+  'auth',
+  'online',
+  true,
+  'Visa, Mastercard',
+  'Fast',
+  '85%',
+  'Killer Auth gateway - Single card check only',
+  'Zap',
+  'text-purple-500',
+  'killer-auth-check',
+  NULL,
+  false,
+  15
+);
