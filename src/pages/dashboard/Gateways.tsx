@@ -1505,11 +1505,12 @@ const Gateways = () => {
       const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
 
       // Determine credit cost based on result
-      // Killer Auth: flat 5 credits per check
+      // Killer Auth: KILLED = 5 credits, UNKNOWN/ERROR = FREE
       // Others: LIVE = 2, DEAD = 1, ERROR = 0
       let creditCost: number;
       if (selectedGateway.id === "killer_auth") {
-        creditCost = CREDIT_COST_KILLER;
+        // Only charge 5 credits for successful kills, errors are free
+        creditCost = checkStatus === "killed" ? CREDIT_COST_KILLER : CREDIT_COST_ERROR;
       } else {
         creditCost = checkStatus === "live" 
           ? CREDIT_COST_LIVE 
