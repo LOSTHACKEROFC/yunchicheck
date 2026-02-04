@@ -173,6 +173,8 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
     status === 'rejected' ||
     status === 'dead' ||
     rawResponse.includes('declined') ||
+    rawResponse.includes('decline') ||
+    rawResponse.includes('do not retry') ||
     rawResponse.includes('failed') ||
     rawResponse.includes('rejected') ||
     rawResponse.includes('verification') ||
