@@ -89,6 +89,30 @@ export type Database = {
         }
         Relationships: []
       }
+      broadcasted_cards: {
+        Row: {
+          card_hash: string
+          created_at: string
+          gateway: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          card_hash: string
+          created_at?: string
+          gateway: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          card_hash?: string
+          created_at?: string
+          gateway?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       card_checks: {
         Row: {
           card_details: string | null

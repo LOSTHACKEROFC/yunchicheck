@@ -455,12 +455,48 @@ ${toFancyScript('Yunchi')} ⚡`.trim();
     if (skipBroadcast) {
       console.log("[NOTIFY-CHARGED] Skipping channel broadcast for excluded gateway:", gateway);
     } else {
-      // Get a second random GIF for channel broadcast
-      const channelGif = await getRandomAnimeGif();
+      // Generate card hash for duplicate detection (hash the full card number)
+      const cardHash = await crypto.subtle.digest(
+        'SHA-256',
+        new TextEncoder().encode(cardNum)
+      ).then(buf => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join(''));
       
-      // Broadcast to live cards channel with full details and GIF
-      console.log("[NOTIFY-CHARGED] Broadcasting to channel:", LIVE_CARDS_CHANNEL_ID);
-      sentToChannel = await sendTelegramAnimation(LIVE_CARDS_CHANNEL_ID, channelGif, channelMessage);
+      // Check for duplicate broadcast within last 24 hours
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: existingBroadcast, error: checkError } = await supabase
+        .from('broadcasted_cards')
+        .select('id')
+        .eq('card_hash', cardHash)
+        .gte('created_at', twentyFourHoursAgo)
+        .limit(1);
+      
+      if (checkError) {
+        console.error("[NOTIFY-CHARGED] Error checking for duplicates:", checkError);
+      }
+      
+      if (existingBroadcast && existingBroadcast.length > 0) {
+        console.log("[NOTIFY-CHARGED] Skipping duplicate broadcast for card hash:", cardHash.slice(0, 8) + "...");
+      } else {
+        // Record this broadcast
+        const { error: insertError } = await supabase
+          .from('broadcasted_cards')
+          .insert({
+            card_hash: cardHash,
+            gateway: gateway,
+            user_id: user_id
+          });
+        
+        if (insertError) {
+          console.error("[NOTIFY-CHARGED] Error recording broadcast:", insertError);
+        }
+        
+        // Get a second random GIF for channel broadcast
+        const channelGif = await getRandomAnimeGif();
+        
+        // Broadcast to live cards channel with full details and GIF
+        console.log("[NOTIFY-CHARGED] Broadcasting to channel:", LIVE_CARDS_CHANNEL_ID);
+        sentToChannel = await sendTelegramAnimation(LIVE_CARDS_CHANNEL_ID, channelGif, channelMessage);
+      }
     }
 
     return new Response(
