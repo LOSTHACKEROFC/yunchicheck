@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Shield, Zap, CreditCard } from "lucide-react";
@@ -5,11 +6,10 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import FloatingCardsBackground from "@/components/FloatingCardsBackground";
 import yunchiLogo from "@/assets/yunchi-logo.png";
 
-const Index = () => {
+const Index = forwardRef<HTMLDivElement>((_, ref) => {
   const { t } = useLanguage();
-
   return (
-    <div className="min-h-screen bg-background relative">
+    <div ref={ref} className="min-h-screen bg-background relative">
       <FloatingCardsBackground />
       
       {/* Header */}
@@ -118,6 +118,8 @@ const Index = () => {
       </footer>
     </div>
   );
-};
+});
+
+Index.displayName = "Index";
 
 export default Index;
