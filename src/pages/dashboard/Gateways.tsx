@@ -251,20 +251,6 @@ const CREDIT_COST_DEAD = 1;
 const CREDIT_COST_ERROR = 0;
 const CREDIT_COST_KILLER = 5;
 
-// Helper function to get display status based on gateway type
-const getDisplayStatus = (status: string, gatewayId: string | undefined, gatewayType: string | undefined): string => {
-  if (status === "killed") return "KILLED";
-  if (status === "dead") return "DECLINED";
-  if (status === "unknown") return "UNKNOWN";
-  if (status === "live") {
-    if (gatewayId === "killer_auth") return "KILLED";
-    if (gatewayId === "b3vbv_auth") return "PASSED";
-    if (gatewayType === "charge") return "CHARGED";
-    return "LIVE";
-  }
-  return "UNKNOWN";
-};
-
 interface CheckResult {
   status: "live" | "dead" | "unknown" | "killed";
   message: string;
@@ -3441,7 +3427,13 @@ const Gateways = () => {
                             ? "text-red-500"
                             : "text-yellow-500"
                       }`}>
-{getDisplayStatus(result.status, selectedGateway?.id, selectedGateway?.type)}
+                        {result.status === "killed" 
+                          ? "KILLED" 
+                          : result.status === "live" 
+                            ? (selectedGateway?.id === "b3vbv_auth" ? "PASSED" : "CHARGED") 
+                            : result.status === "dead" 
+                              ? "DECLINED" 
+                              : "UNKNOWN"}
                       </span>
                     </div>
 
@@ -3909,7 +3901,7 @@ const Gateways = () => {
                                 <span className={`font-bold italic ${
                                   r.status === "live" ? "text-green-500" : r.status === "dead" ? "text-red-500" : "text-yellow-500"
                                 }`}>
-                                  {getDisplayStatus(r.status, selectedGateway?.id, selectedGateway?.type)}
+                                  {r.status === "live" ? (selectedGateway?.id === "b3vbv_auth" ? "PASSED" : "CHARGED") : r.status === "dead" ? "DECLINED" : "UNKNOWN"}
                                 </span>
                               </div>
                               
