@@ -2915,6 +2915,43 @@ const Gateways = () => {
     }
   };
 
+  // Helper function to get the correct status display label based on gateway
+  const getStatusDisplayLabel = (status: "live" | "dead" | "unknown" | "killed", gatewayId?: string, gatewayType?: string): string => {
+    // Killer Auth - show KILLED
+    if (gatewayId === "killer_auth") {
+      if (status === "live" || status === "killed") return "KILLED";
+      if (status === "dead") return "DECLINED";
+      return "UNKNOWN";
+    }
+    
+    // Yunchi VBV Auth - show PASSED/REJECTED
+    if (gatewayId === "b3vbv_auth") {
+      if (status === "live") return "PASSED";
+      if (status === "dead") return "REJECTED";
+      return "UNKNOWN";
+    }
+    
+    // Auth gateways (Yunchi Auth 1, 2, 3) - show LIVE/DEAD
+    if (gatewayType === "auth") {
+      if (status === "live") return "LIVE";
+      if (status === "dead") return "DEAD";
+      return "UNKNOWN";
+    }
+    
+    // Charge gateways - show CHARGED/DECLINED
+    if (gatewayType === "charge") {
+      if (status === "live") return "CHARGED";
+      if (status === "dead") return "DECLINED";
+      return "UNKNOWN";
+    }
+    
+    // Default fallback
+    if (status === "live") return "LIVE";
+    if (status === "dead") return "DEAD";
+    if (status === "killed") return "KILLED";
+    return "UNKNOWN";
+  };
+
   const liveCount = bulkResults.filter(r => r.status === "live").length;
   const deadCount = bulkResults.filter(r => r.status === "dead").length;
   const unknownCount = bulkResults.filter(r => r.status === "unknown").length;
@@ -3394,7 +3431,7 @@ const Gateways = () => {
                           ? "bg-red-500 text-white"
                           : "bg-yellow-500 text-black"
                     }`}>
-                      {result.status === "killed" ? "KILLED" : result.status === "live" ? "LIVE" : result.status === "dead" ? "DEAD" : "UNKNOWN"}
+                      {getStatusDisplayLabel(result.status, selectedGateway?.id, selectedGateway?.type)}
                     </span>
                     <CardBrandLogo brand={binInfo.brand} size="sm" />
                     <span className="font-mono text-sm text-foreground font-semibold flex-1">
@@ -3427,13 +3464,7 @@ const Gateways = () => {
                             ? "text-red-500"
                             : "text-yellow-500"
                       }`}>
-                        {result.status === "killed" 
-                          ? "KILLED" 
-                          : result.status === "live" 
-                            ? (selectedGateway?.id === "b3vbv_auth" ? "PASSED" : "CHARGED") 
-                            : result.status === "dead" 
-                              ? "DECLINED" 
-                              : "UNKNOWN"}
+                        {getStatusDisplayLabel(result.status, selectedGateway?.id, selectedGateway?.type)}
                       </span>
                     </div>
 
@@ -3873,7 +3904,7 @@ const Gateways = () => {
                                     ? "bg-red-500/20 text-red-500"
                                     : "bg-yellow-500/20 text-yellow-500"
                               }`}>
-                                {r.status === "live" ? "LIVE" : r.status === "dead" ? "DEAD" : "UNKNOWN"}
+                                {getStatusDisplayLabel(r.status, selectedGateway?.id, selectedGateway?.type)}
                               </span>
                               <CardBrandLogo brand={brand} size="sm" />
                               <span className="font-mono text-xs text-foreground font-bold italic flex-1 break-all">
@@ -3901,7 +3932,7 @@ const Gateways = () => {
                                 <span className={`font-bold italic ${
                                   r.status === "live" ? "text-green-500" : r.status === "dead" ? "text-red-500" : "text-yellow-500"
                                 }`}>
-                                  {r.status === "live" ? (selectedGateway?.id === "b3vbv_auth" ? "PASSED" : "CHARGED") : r.status === "dead" ? "DECLINED" : "UNKNOWN"}
+                                  {getStatusDisplayLabel(r.status, selectedGateway?.id, selectedGateway?.type)}
                                 </span>
                               </div>
                               
