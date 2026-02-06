@@ -63,6 +63,40 @@ const handler = async (req: Request): Promise<Response> => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // COOLDOWN CHECK: Get user's profile to check last change time
+    const { data: userProfile, error: profileError } = await supabase
+      .from("profiles")
+      .select("telegram_changed_at")
+      .eq("user_id", user_id)
+      .single();
+
+    if (profileError) {
+      console.error("Error fetching user profile:", profileError);
+      return new Response(
+        JSON.stringify({ success: false, error: "Failed to fetch user profile" }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Check 48-hour cooldown
+    if (userProfile?.telegram_changed_at) {
+      const lastChange = new Date(userProfile.telegram_changed_at);
+      const now = new Date();
+      const hoursSinceChange = (now.getTime() - lastChange.getTime()) / (1000 * 60 * 60);
+      
+      if (hoursSinceChange < 48) {
+        const hoursRemaining = Math.ceil(48 - hoursSinceChange);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: `Cooldown active. You can change your Telegram ID again in ${hoursRemaining} hour${hoursRemaining !== 1 ? 's' : ''}.`,
+            cooldownRemaining: hoursRemaining
+          }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+    }
+
     // Check if this Telegram ID is already linked to another account
     const { data: existingProfile, error: existingError } = await supabase
       .from("profiles")
@@ -125,12 +159,13 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Verification is valid - update the user's profile with new Telegram ID
+    // Verification is valid - update the user's profile with new Telegram ID and set cooldown timestamp
     const { error: updateError } = await supabase
       .from("profiles")
       .update({
         telegram_chat_id: new_telegram_chat_id,
         telegram_username: null, // Will be updated by the bot on next interaction
+        telegram_changed_at: new Date().toISOString(), // Set cooldown timestamp
         updated_at: new Date().toISOString(),
       })
       .eq("user_id", user_id);

@@ -43,6 +43,7 @@ const Profile = () => {
   const [showUnlinkDialog, setShowUnlinkDialog] = useState(false);
   const [showChangeTelegramModal, setShowChangeTelegramModal] = useState(false);
   const [unlinking, setUnlinking] = useState(false);
+  const [telegramChangedAt, setTelegramChangedAt] = useState<string | null>(null);
   
   // Store original values for cancel functionality
   const [originalValues, setOriginalValues] = useState({
@@ -93,7 +94,7 @@ const Profile = () => {
         setCreatedAt(new Date(user.created_at).toLocaleDateString());
         const { data } = await supabase
           .from("profiles")
-          .select("username, name, telegram_chat_id, telegram_username, credits")
+          .select("username, name, telegram_chat_id, telegram_username, credits, telegram_changed_at")
           .eq("user_id", user.id)
           .maybeSingle();
         
@@ -110,6 +111,7 @@ const Profile = () => {
         setTelegramUsername(profileData.telegramUsername);
         setOriginalValues(profileData);
         setCredits(data?.credits || 0);
+        setTelegramChangedAt(data?.telegram_changed_at || null);
         
         chatIdRef = data?.telegram_chat_id || "";
         
@@ -520,6 +522,7 @@ const Profile = () => {
         onOpenChange={setShowChangeTelegramModal}
         currentTelegramId={telegramChatId}
         onSuccess={handleTelegramChangeSuccess}
+        telegramChangedAt={telegramChangedAt}
       />
     </div>
   );
