@@ -55,8 +55,12 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
   const message = (data?.message as string)?.toLowerCase() || '';
   const status = (data?.status as string)?.toUpperCase() || '';
   const result = (data?.result as string)?.toLowerCase() || '';
+  const success = data?.success;
   
-  // LIVE responses - B3 API patterns
+  // LIVE responses - B3 API patterns - check success field first
+  if (success === true) {
+    return "live";
+  }
   if (status === 'APPROVED' || status === 'SUCCESS' || status === 'LIVE' || status === 'CHARGED') {
     return "live";
   }
@@ -70,11 +74,14 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
     return "live";
   }
   
-  // DEAD responses
+  // DEAD responses - check success field and ERROR status
+  if (success === false) {
+    return "dead";
+  }
   if (status === 'DECLINED' || status === 'DEAD' || status === 'FAILED' || status === 'ERROR') {
     return "dead";
   }
-  if (result === 'declined' || result === 'dead' || result === 'failed') {
+  if (result === 'declined' || result === 'dead' || result === 'failed' || result === 'error') {
     return "dead";
   }
   if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined")) {
@@ -84,6 +91,9 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
     return "dead";
   }
   if (message.includes("not authorized") || message.includes("processor declined")) {
+    return "dead";
+  }
+  if (message.includes("incorrect") || message.includes("error") || message.includes("failed")) {
     return "dead";
   }
   
