@@ -93,11 +93,11 @@ const notifyChargedCard = (
   }).catch((err) => console.error("[STRIPELOW] notify-charged-card error:", err));
 };
 
-// Call the API
+// Call the API and wait for response
 const callApi = async (cc: string): Promise<{ status: string; message: string; rawResponse: string }> => {
   const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(cc)}`;
   
-  console.log(`[STRIPELOW] Calling: ${apiUrl}`);
+  console.log(`[STRIPELOW] Calling API: ${apiUrl}`);
   
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 55000);
@@ -108,33 +108,30 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
       headers: { 
         'Accept': 'application/json, text/plain, */*',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Cache-Control': 'no-cache',
       },
       signal: controller.signal,
     });
     
     clearTimeout(timeoutId);
     const rawText = await response.text();
-    console.log(`[STRIPELOW] Raw response: ${rawText}`);
+    console.log(`[STRIPELOW] Raw API response: ${rawText}`);
     
     if (!rawText || rawText.trim() === '') {
       return { status: 'unknown', message: 'Empty response from gateway', rawResponse: '' };
     }
     
-    let apiStatus = 'unknown'; // Default to unknown
+    let apiStatus = 'unknown';
     let apiMessage = 'Transaction processed';
     
     try {
       const json = JSON.parse(rawText);
+      console.log(`[STRIPELOW] Parsed JSON:`, JSON.stringify(json));
       
-      // Check for connection errors first (success: false with error string)
-      if (json.success === false && json.error && typeof json.error === 'string') {
-        // Connection refused, timeout, etc. = UNKNOWN
-        return { status: 'unknown', message: json.error.substring(0, 200), rawResponse: rawText };
-      }
-      
-      // Extract status from result.status (nested structure)
-      const statusField = String(json.result?.status || json.status || '').toLowerCase();
+      // Extract all possible status indicators
       const successField = json.success;
+      const statusField = String(json.result?.status || json.status || '').toLowerCase();
+      const resultField = String(json.result || '').toLowerCase();
       
       // Extract message from various locations
       if (json.result?.error?.message) {
@@ -147,39 +144,72 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
         apiMessage = json.error;
       }
       
-      // Determine status based on API response
-      if (successField === false) {
-        // Explicit success: false = DEAD
-        apiStatus = 'dead';
-        if (!apiMessage || apiMessage === 'Transaction processed') {
-          apiMessage = 'Card declined';
-        }
-      } else if (statusField === 'declined' || statusField === 'failed' || statusField === 'error') {
-        apiStatus = 'dead';
-        if (!apiMessage || apiMessage === 'Transaction processed') {
-          apiMessage = 'Card declined';
-        }
-      } else if (statusField === '3ds_complete' || statusField === 'requires_action') {
-        apiStatus = 'dead';
-        apiMessage = '3DS Authentication Required';
-      } else if (successField === true || statusField === 'success' || statusField === 'charged' || statusField === 'approved') {
-        // Explicit success = CHARGED
+      const messageLower = apiMessage.toLowerCase();
+      
+      // CHARGED detection - check success field first
+      if (successField === true) {
         apiStatus = 'charged';
-        if (!apiMessage || apiMessage === 'Transaction processed') {
+        if (apiMessage === 'Transaction processed') {
           apiMessage = 'Card charged successfully';
         }
-      } else {
-        // No clear indicator = UNKNOWN
+      } else if (statusField === 'success' || statusField === 'charged' || statusField === 'approved' || statusField === 'succeeded') {
+        apiStatus = 'charged';
+        if (apiMessage === 'Transaction processed') {
+          apiMessage = 'Card charged successfully';
+        }
+      } else if (messageLower.includes('charged') || messageLower.includes('succeeded') || messageLower.includes('payment successful')) {
+        apiStatus = 'charged';
+      }
+      // DEAD detection - explicit failure
+      else if (successField === false) {
+        apiStatus = 'dead';
+        if (apiMessage === 'Transaction processed') {
+          apiMessage = 'Card declined';
+        }
+      } else if (statusField === 'declined' || statusField === 'failed' || statusField === 'error' || statusField === 'dead') {
+        apiStatus = 'dead';
+        if (apiMessage === 'Transaction processed') {
+          apiMessage = 'Card declined';
+        }
+      } else if (statusField === '3ds_complete' || statusField === 'requires_action' || statusField === '3ds_required') {
+        apiStatus = 'dead';
+        apiMessage = '3DS Authentication Required';
+      } else if (messageLower.includes('declined') || messageLower.includes('insufficient') || messageLower.includes('do not honor')) {
+        apiStatus = 'dead';
+      } else if (messageLower.includes('invalid') || messageLower.includes('expired') || messageLower.includes('incorrect')) {
+        apiStatus = 'dead';
+      } else if (messageLower.includes('failed') || messageLower.includes('error') || messageLower.includes('denied')) {
+        apiStatus = 'dead';
+      }
+      // Connection/API errors = UNKNOWN
+      else if (json.error && typeof json.error === 'string' && (json.error.includes('ECONNREFUSED') || json.error.includes('timeout'))) {
         apiStatus = 'unknown';
-        if (!apiMessage || apiMessage === 'Transaction processed') {
+        apiMessage = 'Gateway connection error';
+      }
+      // No clear indicator = UNKNOWN
+      else {
+        apiStatus = 'unknown';
+        if (apiMessage === 'Transaction processed') {
           apiMessage = 'Unable to determine card status';
         }
       }
       
-    } catch {
-      // Non-JSON response = UNKNOWN
-      apiMessage = rawText.substring(0, 200);
-      apiStatus = 'unknown';
+      console.log(`[STRIPELOW] Final status: ${apiStatus}, message: ${apiMessage}`);
+      
+    } catch (parseError) {
+      console.error(`[STRIPELOW] JSON parse error:`, parseError);
+      // Non-JSON response - try to extract meaning from raw text
+      const rawLower = rawText.toLowerCase();
+      if (rawLower.includes('charged') || rawLower.includes('success')) {
+        apiStatus = 'charged';
+        apiMessage = 'Card charged';
+      } else if (rawLower.includes('declined') || rawLower.includes('failed') || rawLower.includes('error')) {
+        apiStatus = 'dead';
+        apiMessage = rawText.substring(0, 200);
+      } else {
+        apiStatus = 'unknown';
+        apiMessage = rawText.substring(0, 200);
+      }
     }
     
     return { status: apiStatus, message: apiMessage, rawResponse: rawText };
@@ -187,7 +217,7 @@ const callApi = async (cc: string): Promise<{ status: string; message: string; r
   } catch (error) {
     clearTimeout(timeoutId);
     const errMsg = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[STRIPELOW] Error: ${errMsg}`);
+    console.error(`[STRIPELOW] Fetch error: ${errMsg}`);
     return { status: 'unknown', message: 'Request timeout or connection error', rawResponse: errMsg };
   }
 };
