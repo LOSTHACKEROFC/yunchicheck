@@ -786,34 +786,55 @@ const Gateways = () => {
           return { status: computedStatus, apiStatus, apiMessage, rawResponse };
         }
         
-        // Fallback: Check message for status indicators
-        const message = (data?.message as string)?.toLowerCase() || '';
-        
-        // LIVE: "Payment method added successfully" OR "Card added successfully"
-        if (message.includes("payment method added successfully") || message.includes("card added successfully")) {
+        // Fallback: Check success field from API response
+        if (data?.success === true) {
           return { status: "live", apiStatus, apiMessage, rawResponse };
-        } else if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined")) {
+        }
+        if (data?.success === false) {
           return { status: "dead", apiStatus, apiMessage, rawResponse };
-        } else if (message.includes("no such paymentmethod")) {
-          // "No such PaymentMethod" error - ALWAYS retry with longer delay
+        }
+        
+        // Fallback: Check status field
+        const statusUpper = (data?.status as string)?.toUpperCase() || '';
+        if (statusUpper === 'SUCCESS' || statusUpper === 'APPROVED' || statusUpper === 'LIVE') {
+          return { status: "live", apiStatus, apiMessage, rawResponse };
+        }
+        if (statusUpper === 'ERROR' || statusUpper === 'DECLINED' || statusUpper === 'DEAD' || statusUpper === 'FAILED') {
+          return { status: "dead", apiStatus, apiMessage, rawResponse };
+        }
+        
+        // Fallback: Check message for status indicators
+        const message = (data?.message as string)?.toLowerCase() || (apiMessage as string)?.toLowerCase() || '';
+        
+        // LIVE indicators
+        if (message.includes("payment method added successfully") || message.includes("card added successfully") || message.includes("succeeded")) {
+          return { status: "live", apiStatus, apiMessage, rawResponse };
+        }
+        // DEAD indicators
+        if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined") ||
+            message.includes("invalid") || message.includes("expired") || message.includes("do not honor") ||
+            message.includes("incorrect") || message.includes("failed")) {
+          return { status: "dead", apiStatus, apiMessage, rawResponse };
+        }
+        
+        // Retryable errors
+        if (message.includes("no such paymentmethod")) {
           console.log(`[STRIPE-AUTH] PaymentMethod error - retrying (attempt ${attempt + 1}/${maxRetries + 1})`);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 1000 + attempt * 500));
             continue;
           }
-          return { status: "unknown", apiStatus, apiMessage, rawResponse };
-        } else if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
-          // Other retryable errors
+        }
+        if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
           console.log(`[STRIPE-AUTH] Retryable error detected: ${message}`);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 800 + attempt * 300));
             continue;
           }
-          return { status: "unknown", apiStatus, apiMessage, rawResponse };
-        } else {
-          // Any other response is treated as unknown (no retry)
-          return { status: "unknown", apiStatus, apiMessage, rawResponse };
         }
+        
+        // Any other response is unknown
+        return { status: "unknown", apiStatus, apiMessage, rawResponse };
       } catch (error) {
         console.error('[STRIPE-AUTH] API check error:', error);
         if (attempt < maxRetries) {
@@ -1301,23 +1322,42 @@ const Gateways = () => {
           return { status: computedStatus, apiStatus, apiMessage, rawResponse };
         }
         
+        // Fallback: Check success field from API response
+        if (data?.success === true) {
+          return { status: "live", apiStatus, apiMessage, rawResponse };
+        }
+        if (data?.success === false) {
+          return { status: "dead", apiStatus, apiMessage, rawResponse };
+        }
+        
+        // Fallback: Check status field
+        const statusUpper = (data?.status as string)?.toUpperCase() || '';
+        if (statusUpper === 'SUCCESS' || statusUpper === 'APPROVED' || statusUpper === 'LIVE') {
+          return { status: "live", apiStatus, apiMessage, rawResponse };
+        }
+        if (statusUpper === 'ERROR' || statusUpper === 'DECLINED' || statusUpper === 'DEAD' || statusUpper === 'FAILED') {
+          return { status: "dead", apiStatus, apiMessage, rawResponse };
+        }
+        
         // Fallback: Check message for status indicators
-        const message = (data?.message as string)?.toLowerCase() || '';
+        const message = (data?.message as string)?.toLowerCase() || (apiMessage as string)?.toLowerCase() || '';
         
         if (message.includes("approved") || message.includes("success") || message.includes("authorized")) {
           return { status: "live", apiStatus, apiMessage, rawResponse };
-        } else if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined")) {
+        }
+        if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined") ||
+            message.includes("invalid") || message.includes("expired") || message.includes("failed")) {
           return { status: "dead", apiStatus, apiMessage, rawResponse };
-        } else if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
+        }
+        if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
           console.log(`[B3-AUTH] Retryable error detected: ${message}`);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 800 + attempt * 300));
             continue;
           }
-          return { status: "unknown", apiStatus, apiMessage, rawResponse };
-        } else {
-          return { status: "unknown", apiStatus, apiMessage, rawResponse };
         }
+        
+        return { status: "unknown", apiStatus, apiMessage, rawResponse };
       } catch (error) {
         console.error('[B3-AUTH] API check error:', error);
         if (attempt < maxRetries) {
@@ -1372,7 +1412,7 @@ const Gateways = () => {
         const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
         const apiMessage = data?.apiMessage || data?.message || 'No message';
         const rawResponse = JSON.stringify(data);
-        const usedGateway = data?.usedGateway as string | undefined; // Which API returned the result
+        const usedGateway = data?.usedGateway as string | undefined;
         
         // Use computedStatus from edge function if available
         const computedStatus = data?.computedStatus;
@@ -1380,24 +1420,43 @@ const Gateways = () => {
           return { status: computedStatus, apiStatus, apiMessage, rawResponse, usedGateway };
         }
         
+        // Fallback: Check success field from API response
+        if (data?.success === true) {
+          return { status: "live", apiStatus, apiMessage, rawResponse, usedGateway };
+        }
+        if (data?.success === false) {
+          return { status: "dead", apiStatus, apiMessage, rawResponse, usedGateway };
+        }
+        
+        // Fallback: Check status field
+        const statusUpper = (data?.status as string)?.toUpperCase() || '';
+        if (statusUpper === 'SUCCESS' || statusUpper === 'APPROVED' || statusUpper === 'LIVE') {
+          return { status: "live", apiStatus, apiMessage, rawResponse, usedGateway };
+        }
+        if (statusUpper === 'ERROR' || statusUpper === 'DECLINED' || statusUpper === 'DEAD' || statusUpper === 'FAILED') {
+          return { status: "dead", apiStatus, apiMessage, rawResponse, usedGateway };
+        }
+        
         // Fallback: Check message for status indicators
-        const message = (data?.message as string)?.toLowerCase() || '';
+        const message = (data?.message as string)?.toLowerCase() || (apiMessage as string)?.toLowerCase() || '';
         
         if (message.includes("approved") || message.includes("success") || message.includes("authorized") ||
             message.includes("payment method added successfully") || message.includes("card added successfully")) {
           return { status: "live", apiStatus, apiMessage, rawResponse, usedGateway };
-        } else if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined")) {
+        }
+        if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined") ||
+            message.includes("invalid") || message.includes("expired") || message.includes("failed")) {
           return { status: "dead", apiStatus, apiMessage, rawResponse, usedGateway };
-        } else if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
+        }
+        if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
           console.log(`[COMBINED-AUTH] Retryable error detected: ${message}`);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 800 + attempt * 300));
             continue;
           }
-          return { status: "unknown", apiStatus, apiMessage, rawResponse, usedGateway };
-        } else {
-          return { status: "unknown", apiStatus, apiMessage, rawResponse, usedGateway };
         }
+        
+        return { status: "unknown", apiStatus, apiMessage, rawResponse, usedGateway };
       } catch (error) {
         console.error('[COMBINED-AUTH] API check error:', error);
         if (attempt < maxRetries) {
