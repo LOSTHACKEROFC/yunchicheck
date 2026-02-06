@@ -54,8 +54,12 @@ const getRandomUserAgent = () => userAgents[Math.floor(Math.random() * userAgent
 const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" | "unknown" => {
   const message = (data?.message as string)?.toLowerCase() || '';
   const status = (data?.status as string)?.toUpperCase() || '';
+  const success = data?.success;
   
-  // LIVE responses
+  // LIVE responses - check success field first
+  if (success === true) {
+    return "live";
+  }
   if (message.includes("payment method added successfully") || message.includes("card added successfully")) {
     return "live";
   }
@@ -63,14 +67,20 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
     return "live";
   }
   
-  // DEAD responses
+  // DEAD responses - check success field and ERROR status
+  if (success === false) {
+    return "dead";
+  }
+  if (status === 'ERROR' || status === 'DECLINED' || status === 'DEAD' || status === 'FAILED') {
+    return "dead";
+  }
   if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined")) {
     return "dead";
   }
   if (message.includes("invalid") || message.includes("expired") || message.includes("do not honor")) {
     return "dead";
   }
-  if (status === 'DECLINED' || status === 'DEAD' || status === 'FAILED') {
+  if (message.includes("incorrect") || message.includes("error") || message.includes("failed")) {
     return "dead";
   }
   
