@@ -18,6 +18,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import SessionManagement from "@/components/SessionManagement";
+import ChangeTelegramModal from "@/components/ChangeTelegramModal";
 
 interface TelegramProfile {
   first_name?: string;
@@ -40,6 +41,7 @@ const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [showUnlinkDialog, setShowUnlinkDialog] = useState(false);
+  const [showChangeTelegramModal, setShowChangeTelegramModal] = useState(false);
   const [unlinking, setUnlinking] = useState(false);
   
   // Store original values for cancel functionality
@@ -213,6 +215,16 @@ const Profile = () => {
     }
   };
 
+  const handleTelegramChangeSuccess = (newChatId: string) => {
+    setTelegramChatId(newChatId);
+    setTelegramUsername("");
+    setTelegramProfile(null);
+    // Fetch new telegram profile after a delay
+    setTimeout(() => {
+      fetchTelegramProfile(newChatId);
+    }, 1000);
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -373,6 +385,15 @@ const Profile = () => {
                     placeholder="Linked during registration"
                     disabled
                   />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setShowChangeTelegramModal(true)}
+                    className="shrink-0"
+                    title="Change Telegram ID"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
                   {telegramChatId && (
                     <Button
                       variant="outline"
@@ -386,7 +407,7 @@ const Profile = () => {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Telegram details are automatically detected and cannot be edited manually.
+                  Click the edit button to link a new Telegram account with OTP verification.
                 </p>
               </div>
             </div>
@@ -492,6 +513,14 @@ const Profile = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Change Telegram ID Modal */}
+      <ChangeTelegramModal
+        open={showChangeTelegramModal}
+        onOpenChange={setShowChangeTelegramModal}
+        currentTelegramId={telegramChatId}
+        onSuccess={handleTelegramChangeSuccess}
+      />
     </div>
   );
 };
