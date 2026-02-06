@@ -6130,23 +6130,8 @@ Top up at yunchicheck.com/dashboard/topup
           result: "killed"
         });
 
-        // Broadcast to public channel (fire-and-forget)
-        fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          },
-          body: JSON.stringify({
-            user_id: profile.user_id,
-            card_details: maskedCard,
-            status: "KILLED",
-            response_message: "KILLED SUCCESSFULLY",
-            amount: "5 credits",
-            gateway: "Killer Auth",
-          }),
-        }).catch(err => console.error("[KILL BOT] Broadcast error:", err));
-
+        // NO broadcast to channel and NO GIF notification for /kill command
+        // Just send a simple text result to user
         await sendTelegramMessage(chatId, `
 🟢 <b>KILLED SUCCESSFULLY</b> 🔥
 
