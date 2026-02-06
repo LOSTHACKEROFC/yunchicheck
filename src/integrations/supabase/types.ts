@@ -591,6 +591,7 @@ export type Database = {
           id: string
           is_banned: boolean
           name: string | null
+          telegram_changed_at: string | null
           telegram_chat_id: string | null
           telegram_username: string | null
           updated_at: string
@@ -606,6 +607,7 @@ export type Database = {
           id?: string
           is_banned?: boolean
           name?: string | null
+          telegram_changed_at?: string | null
           telegram_chat_id?: string | null
           telegram_username?: string | null
           updated_at?: string
@@ -621,6 +623,7 @@ export type Database = {
           id?: string
           is_banned?: boolean
           name?: string | null
+          telegram_changed_at?: string | null
           telegram_chat_id?: string | null
           telegram_username?: string | null
           updated_at?: string

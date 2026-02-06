@@ -16,22 +16,24 @@ import {
   InputOTPSlot,
 } from "@/components/ui/input-otp";
 import { toast } from "sonner";
-import { MessageCircle, Loader2, CheckCircle, AlertCircle, ExternalLink } from "lucide-react";
+import { MessageCircle, Loader2, CheckCircle, AlertCircle, ExternalLink, Clock } from "lucide-react";
 
 interface ChangeTelegramModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   currentTelegramId: string;
   onSuccess: (newChatId: string) => void;
+  telegramChangedAt: string | null;
 }
 
-type Step = "enter_id" | "verify" | "success";
+type Step = "enter_id" | "verify" | "success" | "cooldown";
 
 const ChangeTelegramModal = ({
   open,
   onOpenChange,
   currentTelegramId,
   onSuccess,
+  telegramChangedAt,
 }: ChangeTelegramModalProps) => {
   const [step, setStep] = useState<Step>("enter_id");
   const [newTelegramId, setNewTelegramId] = useState("");
@@ -43,6 +45,24 @@ const ChangeTelegramModal = ({
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
   const [countdown, setCountdown] = useState(0);
   const [checkingVerification, setCheckingVerification] = useState(false);
+  const [cooldownHoursRemaining, setCooldownHoursRemaining] = useState<number | null>(null);
+
+  // Calculate cooldown on mount and when telegramChangedAt changes
+  useEffect(() => {
+    if (telegramChangedAt) {
+      const lastChange = new Date(telegramChangedAt);
+      const now = new Date();
+      const hoursSinceChange = (now.getTime() - lastChange.getTime()) / (1000 * 60 * 60);
+      
+      if (hoursSinceChange < 48) {
+        setCooldownHoursRemaining(Math.ceil(48 - hoursSinceChange));
+      } else {
+        setCooldownHoursRemaining(null);
+      }
+    } else {
+      setCooldownHoursRemaining(null);
+    }
+  }, [telegramChangedAt, open]);
 
   // Reset state when modal closes
   useEffect(() => {
@@ -263,17 +283,43 @@ const ChangeTelegramModal = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MessageCircle className="h-5 w-5 text-primary" />
-            {step === "success" ? "Success!" : "Change Telegram ID"}
+            {cooldownHoursRemaining ? "Cooldown Active" : step === "success" ? "Success!" : "Change Telegram ID"}
           </DialogTitle>
           <DialogDescription>
-            {step === "enter_id" && "Enter your new Telegram Chat ID to link it to your account."}
-            {step === "verify" && "Verify ownership by entering the code sent to your new Telegram."}
-            {step === "success" && "Your Telegram ID has been updated successfully."}
+            {cooldownHoursRemaining && "You recently changed your Telegram ID. Please wait for the cooldown to end."}
+            {!cooldownHoursRemaining && step === "enter_id" && "Enter your new Telegram Chat ID to link it to your account."}
+            {!cooldownHoursRemaining && step === "verify" && "Verify ownership by entering the code sent to your new Telegram."}
+            {!cooldownHoursRemaining && step === "success" && "Your Telegram ID has been updated successfully."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          {step === "enter_id" && (
+          {cooldownHoursRemaining && (
+            <div className="text-center py-6">
+              <div className="w-16 h-16 mx-auto bg-muted rounded-full flex items-center justify-center mb-4">
+                <Clock className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">Cooldown Period Active</h3>
+              <p className="text-muted-foreground mb-4">
+                You can change your Telegram ID again in:
+              </p>
+              <p className="text-3xl font-bold text-primary">
+                {cooldownHoursRemaining} hour{cooldownHoursRemaining !== 1 ? 's' : ''}
+              </p>
+              <p className="text-xs text-muted-foreground mt-4">
+                For security reasons, Telegram ID changes are limited to once every 48 hours.
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                className="mt-6"
+              >
+                Close
+              </Button>
+            </div>
+          )}
+
+          {!cooldownHoursRemaining && step === "enter_id" && (
             <>
               <div className="space-y-2">
                 <Label htmlFor="newTelegramId">New Telegram Chat ID</Label>
@@ -345,7 +391,7 @@ const ChangeTelegramModal = ({
             </>
           )}
 
-          {step === "verify" && (
+          {!cooldownHoursRemaining && step === "verify" && (
             <>
               <div className="text-center space-y-4">
                 <div className="bg-primary/10 rounded-lg p-4">
@@ -430,7 +476,7 @@ const ChangeTelegramModal = ({
             </>
           )}
 
-          {step === "success" && (
+          {!cooldownHoursRemaining && step === "success" && (
             <div className="text-center py-4">
               <div className="w-16 h-16 mx-auto bg-emerald-500/20 rounded-full flex items-center justify-center mb-4">
                 <CheckCircle className="h-8 w-8 text-emerald-500" />
