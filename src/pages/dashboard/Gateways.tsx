@@ -2182,10 +2182,16 @@ const Gateways = () => {
       toast.warning(`${skippedCount} card(s) skipped - CVC is required for charge gateways`);
     }
 
-    // Need at least 2 credits per card (for potential LIVE results)
-    if (userCredits < validCards.length * CREDIT_COST_LIVE) {
-      toast.error(`Insufficient credits. Need ${validCards.length * CREDIT_COST_LIVE} credits for ${validCards.length} cards (max cost if all LIVE).`);
+    // Each card costs 1 credit upfront; only process as many as user can afford
+    if (userCredits < 1) {
+      toast.error("Insufficient credits. You need at least 1 credit to check cards.");
       return;
+    }
+
+    // Limit cards to what the user can afford (1 credit per card minimum)
+    const affordableCards = validCards.slice(0, userCredits);
+    if (affordableCards.length < validCards.length) {
+      toast.warning(`You can only afford ${affordableCards.length} of ${validCards.length} cards with your current balance (${userCredits} credits).`);
     }
 
     if (!userId) {
@@ -2200,7 +2206,7 @@ const Gateways = () => {
     setBulkPaused(false);
     setBulkResults([]);
     setBulkProgress(0);
-    setBulkTotal(validCards.length);
+    setBulkTotal(affordableCards.length);
     setBulkCurrentIndex(0);
     setBulkStartTime(Date.now());
     setBulkEstimatedTime("Calculating...");
@@ -2210,7 +2216,8 @@ const Gateways = () => {
     // Enable background mode to prevent browser throttling when minimized
     startBackgroundMode();
 
-    // Track credits to deduct after each check (no upfront deduction)
+    // Track remaining credits to stop when exhausted
+    let remainingCredits = userCredits;
     let totalCreditsDeducted = 0;
 
     const startTime = Date.now();
@@ -2227,7 +2234,30 @@ const Gateways = () => {
 
       if (bulkAbortRef.current) return null;
 
-      const cardData = validCards[cardIndex];
+      // Check if we still have credits (stop if exhausted)
+      if (remainingCredits < 1) {
+        bulkAbortRef.current = true;
+        toast.warning("Credits exhausted — remaining cards skipped.");
+        return null;
+      }
+
+      // Deduct 1 credit upfront before checking
+      const { data: upfrontDeduct, error: upfrontError } = await supabase.functions.invoke('deduct-credits', {
+        body: { amount: 1 }
+      });
+      
+      if (upfrontError || !upfrontDeduct?.success) {
+        // Credit deduction failed — likely out of credits
+        bulkAbortRef.current = true;
+        toast.warning("Credits exhausted — remaining cards skipped.");
+        return null;
+      }
+      
+      remainingCredits = upfrontDeduct.newCredits;
+      totalCreditsDeducted += 1;
+      setUserCredits(upfrontDeduct.newCredits);
+
+      const cardData = affordableCards[cardIndex];
 
       try {
         // Use real API for YUNCHI AUTH gateways and PAYGATE, simulation for others
@@ -2262,22 +2292,16 @@ const Gateways = () => {
           ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
           : `${cardData.card}|${cardData.month}|${cardData.year}`;
         
-        // Determine credit cost based on result: LIVE = 2, DEAD = 1, ERROR = 0
-        const creditCost = checkStatus === "live" 
-          ? CREDIT_COST_LIVE 
-          : checkStatus === "dead" 
-            ? CREDIT_COST_DEAD 
-            : CREDIT_COST_ERROR;
-
-        // Deduct credits if not an error - use edge function to bypass RLS
-        if (creditCost > 0) {
-          const { data: deductResult, error: deductError } = await supabase.functions.invoke('deduct-credits', {
-            body: { amount: creditCost }
+        // Deduct 1 extra credit for LIVE/CHARGED results (1 already deducted upfront)
+        if (checkStatus === "live" || checkStatus === "killed") {
+          const { data: extraDeduct, error: extraError } = await supabase.functions.invoke('deduct-credits', {
+            body: { amount: 1 }
           });
           
-          if (!deductError && deductResult?.success) {
-            totalCreditsDeducted += creditCost;
-            setUserCredits(deductResult.newCredits);
+          if (!extraError && extraDeduct?.success) {
+            remainingCredits = extraDeduct.newCredits;
+            totalCreditsDeducted += 1;
+            setUserCredits(extraDeduct.newCredits);
           }
         }
 
@@ -2392,7 +2416,7 @@ const Gateways = () => {
     let completedCount = 0;
 
     const processNextCard = async (): Promise<void> => {
-      while (currentIndex < validCards.length && !bulkAbortRef.current) {
+      while (currentIndex < affordableCards.length && !bulkAbortRef.current) {
         const myIndex = currentIndex++;
         
         // Wait if paused
@@ -2413,12 +2437,12 @@ const Gateways = () => {
           // Update UI immediately with this result
           setBulkResults(prev => [...prev, result]);
           setBulkCurrentIndex(completedCount);
-          setBulkProgress((completedCount / validCards.length) * 100);
+          setBulkProgress((completedCount / affordableCards.length) * 100);
           
           // Calculate estimated time remaining
           const elapsed = Date.now() - startTime;
           const avgTimePerCard = elapsed / completedCount;
-          const remainingCards = validCards.length - completedCount;
+          const remainingCards = affordableCards.length - completedCount;
           const remainingMs = avgTimePerCard * remainingCards;
           
           if (remainingCards > 0) {
@@ -2442,7 +2466,7 @@ const Gateways = () => {
     };
 
     // Start concurrent workers
-    const workers = Array(Math.min(CONCURRENT_WORKERS, validCards.length))
+    const workers = Array(Math.min(CONCURRENT_WORKERS, affordableCards.length))
       .fill(null)
       .map(() => processNextCard());
     
