@@ -131,16 +131,27 @@ serve(async (req) => {
       clearTimeout(timeout);
 
       responseText = await apiResponse.text();
-      console.log(`[RIZZUP] Raw response: ${responseText.slice(0, 300)}`);
+      console.log(`[RIZZUP] Raw response: ${responseText.slice(0, 500)}`);
+
+      // Try to parse JSON response for detailed message
+      let parsedMessage = "";
+      try {
+        const jsonData = JSON.parse(responseText);
+        // Extract error message or success message from JSON
+        parsedMessage = jsonData.error || jsonData.message || jsonData.success || jsonData.result || "";
+      } catch {
+        // Not JSON, use raw text
+        parsedMessage = responseText.trim();
+      }
 
       // Determine status based on response content
       if (responseText.includes("Payment Failed")) {
         computedStatus = "dead";
-        apiMessage = "Payment Failed";
+        apiMessage = parsedMessage || "Payment Failed";
       } else if (responseText.trim().length > 0) {
         // Any non-empty response that doesn't contain "Payment Failed" = CHARGED
         computedStatus = "live";
-        apiMessage = "Charged $5.00";
+        apiMessage = parsedMessage || "Charged $5.00";
       }
     } catch (fetchError) {
       clearTimeout(timeout);
