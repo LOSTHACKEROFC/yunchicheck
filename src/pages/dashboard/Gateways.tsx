@@ -1479,6 +1479,53 @@ const Gateways = () => {
     };
   };
 
+  // RizzUp Charge API check via edge function - $5 charge
+  const checkCardViaRizzup = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    try {
+      console.log(`[RIZZUP] Sending:`, cc);
+      
+      const { data, error } = await supabase.functions.invoke('rizzup-charge-check', {
+        body: { cc }
+      });
+      
+      if (error) {
+        console.error('[RIZZUP] Error:', error);
+        return {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: error.message || "Connection error",
+          rawResponse: JSON.stringify(error)
+        };
+      }
+      
+      console.log('[RIZZUP] Response:', data);
+      
+      const apiStatus = data?.apiStatus || 'UNKNOWN';
+      const apiMessage = data?.apiMessage || data?.message || 'No response';
+      const apiTotal = data?.apiTotal || '$5.00';
+      const rawResponse = data?.rawResponse || JSON.stringify(data);
+      const computedStatus = data?.computedStatus;
+      
+      return { 
+        status: computedStatus === "live" ? "live" : computedStatus === "dead" ? "dead" : "unknown",
+        apiStatus, 
+        apiMessage, 
+        apiTotal, 
+        rawResponse 
+      };
+    } catch (error) {
+      console.error('[RIZZUP] Exception:', error);
+      return {
+        status: "unknown",
+        apiStatus: "ERROR",
+        apiMessage: error instanceof Error ? error.message : "Unknown error",
+        rawResponse: String(error)
+      };
+    }
+  };
+
   // Parallel distributed check for bulk mode - sends card to specific API (stripe or b3)
   const checkCardViaDistributed = async (cardNumber: string, month: string, year: string, cvv: string, targetApi: 'stripe' | 'b3', maxRetries = 5): Promise<GatewayApiResponse> => {
     if (targetApi === 'stripe') {
@@ -1559,6 +1606,8 @@ const Gateways = () => {
         gatewayResponse = await checkCardViaKiller(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
         const endTime = performance.now();
         (gatewayResponse as any).timeTaken = ((endTime - startTime) / 1000).toFixed(2);
+      } else if (selectedGateway.id === "rizzup_charge") {
+        gatewayResponse = await checkCardViaRizzup(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       }
       
       const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -2283,6 +2332,8 @@ const Gateways = () => {
           gatewayResponse = await checkCardViaStripeLow(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "b3vbv_auth") {
           gatewayResponse = await checkCardViaVbv(cardData.card, cardData.month, cardData.year, cardData.cvv);
+        } else if (selectedGateway.id === "rizzup_charge") {
+          gatewayResponse = await checkCardViaRizzup(cardData.card, cardData.month, cardData.year, cardData.cvv);
         }
         
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
