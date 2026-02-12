@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import confetti from "canvas-confetti";
@@ -310,6 +310,11 @@ const Gateways = () => {
   const [bulkResultFilter, setBulkResultFilter] = useState<"all" | "live" | "dead" | "unknown">("all"); // Filter for bulk results
   const bulkAbortRef = useRef(false);
   const bulkPauseRef = useRef(false);
+
+  // Performance: batch UI updates to avoid re-rendering on every card
+  const pendingResultsRef = useRef<BulkResult[]>([]);
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bulkStatsRef = useRef({ completed: 0, total: 0, startTime: 0 });
 
   // Gateway history state
   const [gatewayHistory, setGatewayHistory] = useState<GatewayCheck[]>([]);
@@ -2261,6 +2266,8 @@ const Gateways = () => {
     setBulkEstimatedTime("Calculating...");
     bulkAbortRef.current = false;
     bulkPauseRef.current = false;
+    pendingResultsRef.current = [];
+    bulkStatsRef.current = { completed: 0, total: affordableCards.length, startTime: Date.now() };
     
     // Enable background mode to prevent browser throttling when minimized
     startBackgroundMode();
@@ -2272,6 +2279,43 @@ const Gateways = () => {
     const startTime = Date.now();
     let processedCount = 0;
     const allResults: BulkResult[] = [];
+
+    // Throttled flush: batch pending results into state every 150ms
+    const flushPendingResults = () => {
+      if (pendingResultsRef.current.length === 0) return;
+      const batch = pendingResultsRef.current.splice(0);
+      const stats = bulkStatsRef.current;
+      
+      setBulkResults(prev => [...prev, ...batch]);
+      setBulkCurrentIndex(stats.completed);
+      setBulkProgress((stats.completed / stats.total) * 100);
+      
+      // Calculate ETA
+      const elapsed = Date.now() - stats.startTime;
+      const avgTimePerCard = elapsed / stats.completed;
+      const remainingCards = stats.total - stats.completed;
+      const remainingMs = avgTimePerCard * remainingCards;
+      
+      if (remainingCards > 0) {
+        const remainingSecs = Math.ceil(remainingMs / 1000);
+        if (remainingSecs >= 60) {
+          const mins = Math.floor(remainingSecs / 60);
+          const secs = remainingSecs % 60;
+          setBulkEstimatedTime(`~${mins}m ${secs}s remaining`);
+        } else {
+          setBulkEstimatedTime(`~${remainingSecs}s remaining`);
+        }
+      } else {
+        setBulkEstimatedTime("Finishing...");
+      }
+      
+      // Update remaining lines in textarea
+      const remainingLinesNow = originalLines.slice(stats.completed);
+      setBulkInput(remainingLinesNow.join('\n'));
+    };
+
+    // Start periodic flush timer
+    const flushInterval = setInterval(flushPendingResults, 150);
 
     // Worker function to process a single card
     const processCard = async (cardIndex: number): Promise<BulkResult | null> => {
@@ -2516,38 +2560,13 @@ const Gateways = () => {
         const result = await processCard(myIndex);
         
         if (result) {
-          // IMMEDIATELY show result as it completes (no ordering delay)
           allResults.push(result);
           completedCount++;
           processedCount++;
           
-          // Update UI immediately with this result
-          setBulkResults(prev => [...prev, result]);
-          setBulkCurrentIndex(completedCount);
-          setBulkProgress((completedCount / affordableCards.length) * 100);
-          
-          // Calculate estimated time remaining
-          const elapsed = Date.now() - startTime;
-          const avgTimePerCard = elapsed / completedCount;
-          const remainingCards = affordableCards.length - completedCount;
-          const remainingMs = avgTimePerCard * remainingCards;
-          
-          if (remainingCards > 0) {
-            const remainingSecs = Math.ceil(remainingMs / 1000);
-            if (remainingSecs >= 60) {
-              const mins = Math.floor(remainingSecs / 60);
-              const secs = remainingSecs % 60;
-              setBulkEstimatedTime(`~${mins}m ${secs}s remaining`);
-            } else {
-              setBulkEstimatedTime(`~${remainingSecs}s remaining`);
-            }
-          } else {
-            setBulkEstimatedTime("Finishing...");
-          }
-          
-          // Update remaining lines in textarea (based on completed count)
-          const remainingLinesNow = originalLines.slice(completedCount);
-          setBulkInput(remainingLinesNow.join('\n'));
+          // Push to pending batch instead of immediate setState
+          pendingResultsRef.current.push(result);
+          bulkStatsRef.current.completed = completedCount;
         }
       }
     };
@@ -2559,9 +2578,12 @@ const Gateways = () => {
     
     await Promise.all(workers);
 
+    // Final flush to ensure all remaining results are shown
+    clearInterval(flushInterval);
+    flushPendingResults();
+
     if (bulkAbortRef.current) {
       toast.info("Bulk check stopped");
-      // No refund needed since we charge per result
     }
 
     // Disable background mode when bulk check completes
@@ -2870,9 +2892,13 @@ const Gateways = () => {
     return "UNKNOWN";
   };
 
-  const liveCount = bulkResults.filter(r => r.status === "live").length;
-  const deadCount = bulkResults.filter(r => r.status === "dead").length;
-  const unknownCount = bulkResults.filter(r => r.status === "unknown").length;
+  const liveCount = useMemo(() => bulkResults.filter(r => r.status === "live").length, [bulkResults]);
+  const deadCount = useMemo(() => bulkResults.filter(r => r.status === "dead").length, [bulkResults]);
+  const unknownCount = useMemo(() => bulkResults.filter(r => r.status === "unknown").length, [bulkResults]);
+  const filteredBulkResults = useMemo(() => 
+    bulkResults.filter(r => bulkResultFilter === "all" || r.status === bulkResultFilter),
+    [bulkResults, bulkResultFilter]
+  );
 
   // If no gateway selected, show gateway list
   if (!selectedGateway) {
@@ -3622,10 +3648,10 @@ const Gateways = () => {
                       <ShieldCheck className="h-4 w-4 sm:h-5 sm:w-5 text-green-500 animate-pulse" />
                       <span className="text-xs sm:text-sm text-muted-foreground">Live:</span>
                       <span 
-                        key={bulkResults.filter(r => r.status === 'live').length}
+                        key={liveCount}
                         className="text-xl sm:text-2xl font-bold text-green-500 animate-scale-in tabular-nums"
                       >
-                        {bulkResults.filter(r => r.status === 'live').length}
+                        {liveCount}
                       </span>
                     </div>
                     <div className="hidden sm:block h-8 w-px bg-border" />
@@ -3633,7 +3659,7 @@ const Gateways = () => {
                       <ShieldX className="h-4 w-4 sm:h-5 sm:w-5 text-red-500" />
                       <span className="text-xs sm:text-sm text-muted-foreground">Dead:</span>
                       <span className="text-base sm:text-lg font-semibold text-red-500 tabular-nums">
-                        {bulkResults.filter(r => r.status === 'dead').length}
+                        {deadCount}
                       </span>
                     </div>
                     <div className="hidden sm:block h-8 w-px bg-border" />
@@ -3642,8 +3668,6 @@ const Gateways = () => {
                       <Activity className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                       <span className="text-xs sm:text-sm text-muted-foreground">Rate:</span>
                       {(() => {
-                        const liveCount = bulkResults.filter(r => r.status === 'live').length;
-                        const deadCount = bulkResults.filter(r => r.status === 'dead').length;
                         const totalValid = liveCount + deadCount;
                         const rate = totalValid > 0 ? Math.round((liveCount / totalValid) * 100) : 0;
                         const rateColor = rate >= 70 ? 'text-green-500' : rate >= 40 ? 'text-yellow-500' : 'text-red-500';
@@ -3795,8 +3819,7 @@ const Gateways = () => {
               <CardContent className="p-4 pt-2 space-y-3">
                 <ScrollArea className="h-[350px] sm:h-[450px] rounded border border-border">
                   <div className="p-3 space-y-3">
-                    {bulkResults
-                      .filter(r => bulkResultFilter === "all" || r.status === bulkResultFilter)
+                    {filteredBulkResults
                       .map((r, i) => {
                         // Get BIN info for display
                         const cardNum = r.fullCard?.split('|')[0] || '';
@@ -3805,7 +3828,7 @@ const Gateways = () => {
                         return (
                           <div 
                             key={i} 
-                            className={`p-3 rounded-lg border ${
+                            className={`p-3 rounded-lg border animate-fade-in-fast ${
                               r.status === "live" 
                                 ? "bg-green-500/5 border-green-500/30" 
                                 : r.status === "dead"
