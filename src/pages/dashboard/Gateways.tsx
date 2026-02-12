@@ -2290,15 +2290,44 @@ const Gateways = () => {
         return null;
       }
 
-      // Deduct 1 credit upfront before checking
-      const { data: upfrontDeduct, error: upfrontError } = await supabase.functions.invoke('deduct-credits', {
-        body: { amount: 1 }
-      });
+      // Deduct 1 credit upfront before checking — retry up to 3 times on network errors
+      let upfrontDeduct: any = null;
+      let upfrontSuccess = false;
+      for (let deductAttempt = 0; deductAttempt < 3; deductAttempt++) {
+        try {
+          const { data, error } = await supabase.functions.invoke('deduct-credits', {
+            body: { amount: 1 }
+          });
+          if (!error && data?.success) {
+            upfrontDeduct = data;
+            upfrontSuccess = true;
+            break;
+          }
+          // If server says insufficient credits, don't retry
+          if (data?.error?.includes?.('insufficient') || data?.newCredits === 0) {
+            break;
+          }
+          // Network/transient error — wait and retry
+          if (deductAttempt < 2) {
+            await new Promise(r => setTimeout(r, 500 + deductAttempt * 300));
+          }
+        } catch (e) {
+          console.error('[BULK] Credit deduction attempt failed:', e);
+          if (deductAttempt < 2) {
+            await new Promise(r => setTimeout(r, 500 + deductAttempt * 300));
+          }
+        }
+      }
       
-      if (upfrontError || !upfrontDeduct?.success) {
-        // Credit deduction failed — likely out of credits
-        bulkAbortRef.current = true;
-        toast.warning("Credits exhausted — remaining cards skipped.");
+      if (!upfrontSuccess || !upfrontDeduct) {
+        // Only abort if we're truly out of credits, otherwise skip this card
+        if (remainingCredits <= 1) {
+          bulkAbortRef.current = true;
+          toast.warning("Credits exhausted — remaining cards skipped.");
+          return null;
+        }
+        // Transient error — skip this card but continue processing others
+        console.warn('[BULK] Skipping card due to credit deduction error, continuing...');
         return null;
       }
       
@@ -2343,16 +2372,23 @@ const Gateways = () => {
           ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
           : `${cardData.card}|${cardData.month}|${cardData.year}`;
         
-        // Deduct 1 extra credit for LIVE/CHARGED results (1 already deducted upfront)
+        // Deduct 1 extra credit for LIVE/CHARGED results (1 already deducted upfront) — with retry
         if (checkStatus === "live" || checkStatus === "killed") {
-          const { data: extraDeduct, error: extraError } = await supabase.functions.invoke('deduct-credits', {
-            body: { amount: 1 }
-          });
-          
-          if (!extraError && extraDeduct?.success) {
-            remainingCredits = extraDeduct.newCredits;
-            totalCreditsDeducted += 1;
-            setUserCredits(extraDeduct.newCredits);
+          for (let extraAttempt = 0; extraAttempt < 3; extraAttempt++) {
+            try {
+              const { data: extraDeduct, error: extraError } = await supabase.functions.invoke('deduct-credits', {
+                body: { amount: 1 }
+              });
+              if (!extraError && extraDeduct?.success) {
+                remainingCredits = extraDeduct.newCredits;
+                totalCreditsDeducted += 1;
+                setUserCredits(extraDeduct.newCredits);
+                break;
+              }
+              if (extraAttempt < 2) await new Promise(r => setTimeout(r, 500));
+            } catch (e) {
+              if (extraAttempt < 2) await new Promise(r => setTimeout(r, 500));
+            }
           }
         }
 
