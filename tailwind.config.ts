@@ -98,6 +98,7 @@ export default {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "fade-in": "fade-in 0.8s ease-out forwards",
+        "fade-in-fast": "fade-in 0.2s ease-out forwards",
         "slide-in-left": "slide-in-left 0.8s ease-out forwards",
         "slide-in-right": "slide-in-right 0.8s ease-out forwards",
         "float": "float 3s ease-in-out infinite",
