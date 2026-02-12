@@ -1978,32 +1978,28 @@ async function handleBroadcast(chatId: string, message: string, supabase: any): 
     return;
   }
 
-  // Fetch ALL profiles using pagination helper to bypass 1000-row limit
-  const profiles = await fetchAllRecords(supabase, "profiles", "user_id, telegram_chat_id, username");
+  const { data: profiles } = await supabase.from("profiles").select("user_id, telegram_chat_id, username");
   if (!profiles?.length) {
     await sendTelegramMessage(chatId, "ℹ️ No users to broadcast to");
     return;
   }
 
-  // Get ALL user emails from auth.users with pagination
+  // Get user emails from auth.users
+  const { data: authUsers } = await supabase.auth.admin.listUsers({ perPage: 1000 });
   const userEmailMap: Record<string, string> = {};
-  let authPage = 1;
-  let hasMoreAuth = true;
-  while (hasMoreAuth) {
-    const { data: authUsers } = await supabase.auth.admin.listUsers({ page: authPage, perPage: 1000 });
-    if (authUsers?.users?.length) {
-      for (const user of authUsers.users) {
-        if (user.email) userEmailMap[user.id] = user.email;
+  if (authUsers?.users) {
+    for (const user of authUsers.users) {
+      if (user.email) {
+        userEmailMap[user.id] = user.email;
       }
-      hasMoreAuth = authUsers.users.length === 1000;
-      authPage++;
-    } else {
-      hasMoreAuth = false;
     }
   }
 
   // Get email preferences for all users
-  const emailPreferences = await fetchAllRecords(supabase, "notification_preferences", "user_id, email_announcements");
+  const { data: emailPreferences } = await supabase
+    .from("notification_preferences")
+    .select("user_id, email_announcements");
+  
   const emailOptOutMap: Record<string, boolean> = {};
   if (emailPreferences) {
     for (const pref of emailPreferences) {
@@ -2011,67 +2007,49 @@ async function handleBroadcast(chatId: string, message: string, supabase: any): 
     }
   }
 
-  let telegramSent = 0, telegramFailed = 0, webSent = 0, emailSent = 0, emailSkipped = 0;
-  const totalTelegram = profiles.filter((p: any) => p.telegram_chat_id).length;
+  let telegramSent = 0, webSent = 0, emailSent = 0, emailSkipped = 0;
   const usersWithEmail = profiles.filter((p: any) => userEmailMap[p.user_id]);
   const totalWithEmail = usersWithEmail.length;
 
-  await sendTelegramMessage(chatId, `📡 Broadcasting to <b>${profiles.length}</b> users (${totalTelegram} on Telegram, ${totalWithEmail} with email)...`);
+  await sendTelegramMessage(chatId, `📡 Broadcasting to ${profiles.length} users...`);
 
-  // Process in batches to avoid timeouts and rate limits
-  const TELEGRAM_BATCH_SIZE = 25;
-  const TELEGRAM_BATCH_DELAY = 1500; // 1.5s between batches
+  for (const p of profiles) {
+    // Send Telegram notification
+    if (p.telegram_chat_id) {
+      const sent = await sendTelegramMessage(p.telegram_chat_id, `📢 <b>Announcement</b>\n\n${message}`);
+      if (sent) telegramSent++;
+    }
 
-  for (let i = 0; i < profiles.length; i += TELEGRAM_BATCH_SIZE) {
-    const batch = profiles.slice(i, i + TELEGRAM_BATCH_SIZE);
-
-    // Send Telegram messages in parallel within each batch
-    const telegramPromises = batch
-      .filter((p: any) => p.telegram_chat_id)
-      .map((p: any) =>
-        sendTelegramMessage(p.telegram_chat_id, `📢 <b>Announcement</b>\n\n${message}`)
-          .then(sent => { if (sent) telegramSent++; else telegramFailed++; })
-          .catch(() => { telegramFailed++; })
-      );
-
-    // Insert web notifications in bulk
-    const webNotifications = batch.map((p: any) => ({
+    // Send web notification
+    await supabase.from("notifications").insert({
       user_id: p.user_id,
       type: "announcement",
       title: "Announcement",
-      message: message,
-    }));
+      message: message
+    });
+    webSent++;
 
-    await Promise.all([
-      ...telegramPromises,
-      supabase.from("notifications").insert(webNotifications).then(() => { webSent += batch.length; }),
-    ]);
-
-    // Delay between batches to respect Telegram rate limits (30 msg/sec)
-    if (i + TELEGRAM_BATCH_SIZE < profiles.length) {
-      await new Promise(resolve => setTimeout(resolve, TELEGRAM_BATCH_DELAY));
-    }
-  }
-
-  // Send emails sequentially with delays (Resend rate limit: ~2/sec)
-  for (const p of profiles) {
+    // Send email notification (only if user hasn't opted out)
+    // Add delay to avoid Resend rate limiting (2 requests/second max)
     const userEmail = userEmailMap[p.user_id];
-    if (!userEmail) continue;
-
-    if (emailOptOutMap[p.user_id]) {
-      emailSkipped++;
-      continue;
+    if (userEmail) {
+      // Check if user has opted out of email announcements
+      if (emailOptOutMap[p.user_id]) {
+        emailSkipped++;
+        console.log(`Skipping email for ${p.user_id} - opted out`);
+      } else {
+        // Wait 600ms between emails to stay under rate limit
+        await new Promise(resolve => setTimeout(resolve, 600));
+        const emailSuccess = await sendBroadcastEmail(userEmail, p.username, message);
+        if (emailSuccess) emailSent++;
+      }
     }
-
-    await new Promise(resolve => setTimeout(resolve, 600));
-    const emailSuccess = await sendBroadcastEmail(userEmail, p.username, message);
-    if (emailSuccess) emailSent++;
   }
 
   await sendTelegramMessage(chatId, `
 ✅ <b>Broadcast Complete</b>
 
-📱 Telegram: ${telegramSent}/${totalTelegram}${telegramFailed > 0 ? ` (${telegramFailed} failed)` : ""}
+📱 Telegram: ${telegramSent}/${profiles.filter((p: any) => p.telegram_chat_id).length}
 🌐 Web: ${webSent}/${profiles.length}
 📧 Email: ${emailSent}/${totalWithEmail}${emailSkipped > 0 ? ` (${emailSkipped} opted out)` : ""}
 `);
