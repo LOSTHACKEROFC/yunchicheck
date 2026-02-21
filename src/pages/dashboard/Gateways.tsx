@@ -1484,6 +1484,53 @@ const Gateways = () => {
     };
   };
 
+  // PayPal Charge API check via edge function - $1 charge
+  const checkCardViaPaypal = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    try {
+      console.log(`[PAYPAL] Sending:`, cc);
+      
+      const { data, error } = await supabase.functions.invoke('paypal-charge-check', {
+        body: { cc }
+      });
+      
+      if (error) {
+        console.error('[PAYPAL] Error:', error);
+        return {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: error.message || "Connection error",
+          rawResponse: JSON.stringify(error)
+        };
+      }
+      
+      console.log('[PAYPAL] Response:', data);
+      
+      const apiStatus = data?.apiStatus || 'UNKNOWN';
+      const apiMessage = data?.apiMessage || data?.message || 'No response';
+      const apiTotal = data?.apiTotal || '$1.00';
+      const rawResponse = data?.rawResponse || JSON.stringify(data);
+      const computedStatus = data?.computedStatus;
+      
+      return { 
+        status: computedStatus === "live" ? "live" : computedStatus === "dead" ? "dead" : "unknown",
+        apiStatus, 
+        apiMessage, 
+        apiTotal, 
+        rawResponse 
+      };
+    } catch (error) {
+      console.error('[PAYPAL] Exception:', error);
+      return {
+        status: "unknown",
+        apiStatus: "ERROR",
+        apiMessage: error instanceof Error ? error.message : "Unknown error",
+        rawResponse: String(error)
+      };
+    }
+  };
+
   // RizzUp Charge API check via edge function - $5 charge
   const checkCardViaRizzup = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
@@ -1613,6 +1660,8 @@ const Gateways = () => {
         (gatewayResponse as any).timeTaken = ((endTime - startTime) / 1000).toFixed(2);
       } else if (selectedGateway.id === "rizzup_charge") {
         gatewayResponse = await checkCardViaRizzup(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+      } else if (selectedGateway.id === "paypal_charge") {
+        gatewayResponse = await checkCardViaPaypal(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       }
       
       const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -2407,6 +2456,8 @@ const Gateways = () => {
           gatewayResponse = await checkCardViaVbv(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "rizzup_charge") {
           gatewayResponse = await checkCardViaRizzup(cardData.card, cardData.month, cardData.year, cardData.cvv);
+        } else if (selectedGateway.id === "paypal_charge") {
+          gatewayResponse = await checkCardViaPaypal(cardData.card, cardData.month, cardData.year, cardData.cvv);
         }
         
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -3881,7 +3932,7 @@ const Gateways = () => {
                                 <span className="w-20 text-muted-foreground font-bold italic">AMOUNT</span>
                                 <span className="text-muted-foreground font-bold italic mr-1">:</span>
                                 <span className="text-foreground font-bold italic">
-                                  {selectedGateway?.type === "auth" ? "$0 AUTH" : selectedGateway?.id === "paygate_charge" ? "$14.00" : selectedGateway?.id === "payu_charge" ? `₹${payuAmount}` : selectedGateway?.id === "stripelow_charge" ? "£0.30" : selectedGateway?.id === "rizzup_charge" ? "$5.00" : "$10.00"}
+                                  {selectedGateway?.type === "auth" ? "$0 AUTH" : selectedGateway?.id === "paygate_charge" ? "$14.00" : selectedGateway?.id === "payu_charge" ? `₹${payuAmount}` : selectedGateway?.id === "stripelow_charge" ? "£0.30" : selectedGateway?.id === "rizzup_charge" ? "$5.00" : selectedGateway?.id === "paypal_charge" ? "$1.00" : "$10.00"}
                                 </span>
                               </div>
                               
