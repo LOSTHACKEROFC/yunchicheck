@@ -1,4 +1,5 @@
 import React, { memo } from "react";
+import { CardBrandLogo } from "@/components/CardBrandLogo";
 
 type CardBrand = "visa" | "mastercard" | "amex" | "discover" | "default";
 
@@ -16,9 +17,11 @@ const MiniCreditCard = memo(({
   delay: number; duration: number; startX: number; startY: number;
   size: "small" | "medium" | "large"; brand: CardBrand;
 }) => {
-  const sizeMap = { small: "w-14 h-9", medium: "w-18 h-11", large: "w-22 h-14" };
+  const sizeMap = { small: "w-16 h-10", medium: "w-20 h-13", large: "w-24 h-16" };
+  const logoSize = size === "small" ? "xs" : size === "medium" ? "sm" : "md";
   const { hsl, border } = brandColors[brand];
   const glowDuration = duration * 0.5 + 1.5;
+  const brandName = brand === "default" ? "visa" : brand;
 
   return (
     <div
@@ -32,53 +35,57 @@ const MiniCreditCard = memo(({
       }}
     >
       <div 
-        className={`${sizeMap[size]} rounded-lg flex flex-col justify-between p-1.5 relative`}
+        className={`${sizeMap[size]} rounded-lg flex flex-col justify-between p-2 relative overflow-hidden`}
         style={{
-          background: `linear-gradient(135deg, hsla(${hsl}, 0.3), hsla(${hsl}, 0.08), hsla(${hsl}, 0.2))`,
-          border: `1.5px solid hsla(${border}, 0.6)`,
+          background: `linear-gradient(145deg, hsla(${hsl}, 0.25), hsla(0, 0%, 10%, 0.8), hsla(${hsl}, 0.15))`,
+          border: `1.5px solid hsla(${border}, 0.5)`,
           boxShadow: `
             0 0 12px hsla(${hsl}, 0.5),
             0 0 30px hsla(${hsl}, 0.3),
             0 0 60px hsla(${hsl}, 0.15),
             0 0 90px hsla(${hsl}, 0.08),
-            inset 0 0 20px hsla(${hsl}, 0.15),
+            inset 0 0 20px hsla(${hsl}, 0.12),
             inset 0 1px 0 hsla(${hsl}, 0.3)
           `,
         }}
       >
-        {/* Neon edge highlight */}
+        {/* Glossy reflection */}
         <div 
           className="absolute inset-0 rounded-lg pointer-events-none"
           style={{
-            background: `linear-gradient(135deg, hsla(${hsl}, 0.25) 0%, transparent 35%, transparent 65%, hsla(${hsl}, 0.15) 100%)`,
+            background: `linear-gradient(160deg, hsla(0, 0%, 100%, 0.08) 0%, transparent 40%, transparent 100%)`,
           }}
         />
+        
+        {/* Top row: chip + brand logo */}
         <div className="flex items-start justify-between relative z-10">
           <div 
-            className="w-3.5 h-2.5 rounded-sm"
+            className="w-4 h-3 rounded-sm"
             style={{ 
               background: `linear-gradient(135deg, hsla(45, 90%, 65%, 0.7), hsla(45, 90%, 45%, 0.5))`,
-              boxShadow: `0 0 6px hsla(45, 90%, 55%, 0.5)`
+              boxShadow: `0 0 6px hsla(45, 90%, 55%, 0.4)`
             }} 
           />
-          <div 
-            className="w-3 h-3 rounded-full" 
-            style={{ 
-              background: `radial-gradient(circle, hsla(${hsl}, 0.9), hsla(${hsl}, 0.4))`,
-              boxShadow: `0 0 8px hsla(${hsl}, 0.7), 0 0 16px hsla(${hsl}, 0.3)`
-            }} 
-          />
+          <div style={{ opacity: 0.85 }}>
+            <CardBrandLogo brand={brandName} size={logoSize} />
+          </div>
         </div>
-        <div className="flex gap-1 mt-auto relative z-10">
-          {[0,1,2,3].map(i => (
-            <div 
-              key={i} 
-              className="w-2.5 h-[2px] rounded-full" 
-              style={{
-                background: `hsla(${hsl}, 0.6)`,
-                boxShadow: `0 0 4px hsla(${hsl}, 0.4)`
-              }}
-            />
+
+        {/* Card number dots */}
+        <div className="flex gap-1.5 relative z-10 mt-auto">
+          {[0,1,2,3].map(g => (
+            <div key={g} className="flex gap-[2px]">
+              {[0,1,2,3].map(d => (
+                <div 
+                  key={d} 
+                  className="w-[3px] h-[3px] rounded-full" 
+                  style={{
+                    background: `hsla(0, 0%, 100%, 0.35)`,
+                    boxShadow: `0 0 2px hsla(${hsl}, 0.3)`
+                  }}
+                />
+              ))}
+            </div>
           ))}
         </div>
       </div>
@@ -91,13 +98,13 @@ MiniCreditCard.displayName = "MiniCreditCard";
 const cards = [
   { delay: 0, duration: 12, startX: 5, startY: 10, size: "medium" as const, brand: "visa" as const },
   { delay: 1.5, duration: 14, startX: 85, startY: 15, size: "large" as const, brand: "mastercard" as const },
-  { delay: 3, duration: 10, startX: 15, startY: 75, size: "small" as const, brand: "default" as const },
+  { delay: 3, duration: 10, startX: 15, startY: 75, size: "small" as const, brand: "amex" as const },
   { delay: 2, duration: 13, startX: 80, startY: 70, size: "medium" as const, brand: "amex" as const },
   { delay: 4, duration: 15, startX: 45, startY: 5, size: "large" as const, brand: "visa" as const },
   { delay: 1, duration: 11, startX: 25, startY: 90, size: "small" as const, brand: "mastercard" as const },
   { delay: 3.5, duration: 13, startX: 70, startY: 85, size: "medium" as const, brand: "discover" as const },
-  { delay: 0.5, duration: 12, startX: 10, startY: 40, size: "small" as const, brand: "default" as const },
-  { delay: 5, duration: 14, startX: 55, startY: 30, size: "small" as const, brand: "amex" as const },
+  { delay: 0.5, duration: 12, startX: 10, startY: 40, size: "large" as const, brand: "mastercard" as const },
+  { delay: 5, duration: 14, startX: 55, startY: 30, size: "small" as const, brand: "visa" as const },
   { delay: 2.5, duration: 11, startX: 35, startY: 55, size: "medium" as const, brand: "discover" as const },
 ];
 
