@@ -3060,6 +3060,41 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // GET request = setup webhook + register commands
+  if (req.method === "GET") {
+    const webhookUrl = `${SUPABASE_URL}/functions/v1/telegram-webhook`;
+    
+    // Delete existing webhook first
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteWebhook`);
+    
+    // Set new webhook
+    const setResult = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        url: webhookUrl,
+        allowed_updates: ["message", "callback_query"],
+        drop_pending_updates: true,
+      }),
+    });
+    const setData = await setResult.json();
+    
+    // Register commands
+    await setBotCommands();
+    
+    // Get webhook info
+    const infoResult = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo`);
+    const infoData = await infoResult.json();
+    
+    return new Response(JSON.stringify({ 
+      webhook_set: setData, 
+      webhook_info: infoData,
+      commands_registered: true 
+    }), { 
+      headers: { ...corsHeaders, "Content-Type": "application/json" } 
+    });
+  }
+
   try {
     const update: TelegramUpdate = await req.json();
     console.log("Update:", JSON.stringify(update));
