@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sendEmail } from "../_shared/email-helper.ts";
 
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID");
@@ -126,122 +127,56 @@ async function sendUnbanEmail(email: string, username: string | null): Promise<v
 }
 
 async function sendBroadcastEmail(email: string, username: string | null, broadcastMessage: string): Promise<boolean> {
-  if (!RESEND_API_KEY) {
-    console.log("No RESEND_API_KEY configured, skipping email");
+  const result = await sendEmail({
+    to: email,
+    subject: "📢 Announcement from Yunchi",
+    text: `Hello${username ? ` ${username}` : ''},\n\n${broadcastMessage}\n\n— Yunchi Team\n\nIf you no longer wish to receive these announcements, you can update your notification preferences in your account settings.`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
+        <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); border-radius: 16px 16px 0 0; padding: 40px 30px; text-align: center;">
+          <div style="background: rgba(0,0,0,0.3); width: 60px; height: 60px; border-radius: 12px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
+            <span style="font-size: 28px;">📢</span>
+          </div>
+          <h1 style="color: #ffffff; margin: 0 0 10px; font-size: 24px; font-weight: 700;">Announcement</h1>
+          <p style="color: rgba(255,255,255,0.8); margin: 0; font-size: 14px;">Important update from Yunchi</p>
+        </div>
+        
+        <div style="background: #0f0f0f; border-radius: 0 0 16px 16px; padding: 30px; border: 1px solid #1a1a1a; border-top: none;">
+          <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">Hello${username ? ` <strong style="color: #ef4444;">${username}</strong>` : ''},</p>
+          
+          <div style="background: #1a0a0a; border-left: 4px solid #dc2626; border-radius: 8px; padding: 20px; margin: 20px 0;">
+            <p style="color: #e5e5e5; font-size: 16px; line-height: 1.7; margin: 0; white-space: pre-wrap;">${broadcastMessage}</p>
+          </div>
+          
+          <div style="text-align: center; margin-top: 30px;">
+            <a href="https://yunchicheck.com/dashboard" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 600; font-size: 15px;">Visit Dashboard</a>
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;">
+          
+          <p style="color: #525252; font-size: 12px; margin: 0 0 10px 0; text-align: center;">
+            You're receiving this because you have an account at Yunchi.
+          </p>
+          <p style="color: #404040; font-size: 11px; margin: 0; text-align: center;">
+            To manage your notification preferences, visit your <a href="https://yunchicheck.com/dashboard" style="color: #ef4444; text-decoration: none;">account settings</a>.
+          </p>
+        </div>
+      </div>
+    `,
+    tags: [
+      { name: "category", value: "announcement" },
+      { name: "type", value: "broadcast" },
+    ],
+    highPriority: false,
+  });
+
+  if (result.success) {
+    console.log(`Broadcast email sent successfully to ${email}`);
+    return true;
+  } else {
+    console.error(`Failed to send broadcast email to ${email}: ${result.error}`);
     return false;
   }
-
-  const senders = [
-    "Yunchi <noreply@yunchicheck.com>",
-    "Yunchi <onboarding@resend.dev>"
-  ];
-
-  for (const sender of senders) {
-    // Retry up to 2 times per sender for transient failures
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        console.log(`Sending broadcast email to ${email} from ${sender} (attempt ${attempt})`);
-        
-        const response = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${RESEND_API_KEY}`,
-          },
-          body: JSON.stringify({
-            from: sender,
-            reply_to: "support@yunchicheck.com",
-            to: [email],
-            subject: "📢 Announcement from Yunchi",
-            text: `Hello${username ? ` ${username}` : ''},\n\n${broadcastMessage}\n\n— Yunchi Team\n\nIf you no longer wish to receive these announcements, you can update your notification preferences in your account settings.`,
-            html: `
-              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
-                <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); border-radius: 16px 16px 0 0; padding: 40px 30px; text-align: center;">
-                  <div style="background: rgba(0,0,0,0.3); width: 60px; height: 60px; border-radius: 12px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
-                    <span style="font-size: 28px;">📢</span>
-                  </div>
-                  <h1 style="color: #ffffff; margin: 0 0 10px; font-size: 24px; font-weight: 700;">Announcement</h1>
-                  <p style="color: rgba(255,255,255,0.8); margin: 0; font-size: 14px;">Important update from Yunchi</p>
-                </div>
-                
-                <div style="background: #0f0f0f; border-radius: 0 0 16px 16px; padding: 30px; border: 1px solid #1a1a1a; border-top: none;">
-                  <p style="color: #e5e5e5; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">Hello${username ? ` <strong style="color: #ef4444;">${username}</strong>` : ''},</p>
-                  
-                  <div style="background: #1a0a0a; border-left: 4px solid #dc2626; border-radius: 8px; padding: 20px; margin: 20px 0;">
-                    <p style="color: #e5e5e5; font-size: 16px; line-height: 1.7; margin: 0; white-space: pre-wrap;">${broadcastMessage}</p>
-                  </div>
-                  
-                  <div style="text-align: center; margin-top: 30px;">
-                    <a href="https://yunchicheck.com/dashboard" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 600; font-size: 15px;">Visit Dashboard</a>
-                  </div>
-                  
-                  <hr style="border: none; border-top: 1px solid #262626; margin: 30px 0;">
-                  
-                  <p style="color: #525252; font-size: 12px; margin: 0 0 10px 0; text-align: center;">
-                    You're receiving this because you have an account at Yunchi.
-                  </p>
-                  <p style="color: #404040; font-size: 11px; margin: 0; text-align: center;">
-                    To manage your notification preferences, visit your <a href="https://yunchicheck.com/dashboard" style="color: #ef4444; text-decoration: none;">account settings</a>.
-                  </p>
-                </div>
-              </div>
-            `,
-            headers: {
-              "X-Entity-Ref-ID": crypto.randomUUID(),
-            },
-            tags: [
-              { name: "category", value: "announcement" },
-              { name: "type", value: "broadcast" },
-            ],
-          }),
-        });
-        
-        const responseText = await response.text();
-        
-        if (!response.ok) {
-          console.error(`Failed to send broadcast email to ${email} from ${sender} (attempt ${attempt}): ${response.status} - ${responseText}`);
-          
-          // If domain not verified (403), try fallback sender immediately
-          if (response.status === 403 && sender.includes("yunchicheck.com")) {
-            console.log(`Domain not verified, trying fallback sender...`);
-            break; // Break inner loop to try next sender
-          }
-          
-          // Check if it's a rate limit error (429) - wait longer and retry
-          if (response.status === 429 && attempt < 2) {
-            console.log(`Rate limited, waiting before retry...`);
-            await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
-            continue;
-          }
-          
-          // For other transient errors, retry
-          if (response.status >= 500 && attempt < 2) {
-            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-            continue;
-          }
-          
-          // Non-retryable error, try next sender
-          break;
-        }
-        
-        console.log(`Broadcast email sent successfully to ${email} from ${sender}`);
-        return true;
-      } catch (error) {
-        console.error(`Error sending broadcast email to ${email} from ${sender} (attempt ${attempt}):`, error);
-        
-        // Retry on network errors
-        if (attempt < 2) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-          continue;
-        }
-        
-        // Try next sender
-        break;
-      }
-    }
-  }
-  
-  return false;
 }
 
 // ═══════════════════════════════════════════════════════════
