@@ -2,12 +2,12 @@ import React, { memo } from "react";
 
 type CardBrand = "visa" | "mastercard" | "amex" | "discover" | "default";
 
-const brandColors: Record<CardBrand, string> = {
-  default: "0, 70%, 50%",
-  visa: "220, 80%, 55%",
-  mastercard: "30, 90%, 55%",
-  amex: "180, 70%, 50%",
-  discover: "35, 85%, 55%",
+const brandColors: Record<CardBrand, { hsl: string; border: string }> = {
+  default: { hsl: "0, 70%, 50%", border: "0, 85%, 45%" },
+  visa: { hsl: "220, 80%, 55%", border: "220, 90%, 50%" },
+  mastercard: { hsl: "30, 90%, 55%", border: "25, 95%, 50%" },
+  amex: { hsl: "180, 70%, 50%", border: "180, 80%, 45%" },
+  discover: { hsl: "35, 85%, 55%", border: "35, 90%, 50%" },
 };
 
 const MiniCreditCard = memo(({ 
@@ -17,7 +17,8 @@ const MiniCreditCard = memo(({
   size: "small" | "medium" | "large"; brand: CardBrand;
 }) => {
   const sizeMap = { small: "w-12 h-8", medium: "w-16 h-10", large: "w-20 h-12" };
-  const hsl = brandColors[brand];
+  const { hsl, border } = brandColors[brand];
+  const glowDuration = duration * 0.6 + 2;
 
   return (
     <div
@@ -25,25 +26,57 @@ const MiniCreditCard = memo(({
       style={{
         left: `${startX}%`,
         top: `${startY}%`,
-        animation: `float-card ${duration}s ease-in-out infinite`,
+        animation: `float-card ${duration}s ease-in-out infinite, neon-glow-${brand} ${glowDuration}s ease-in-out infinite`,
         animationDelay: `${delay}s`,
         contain: "layout style paint",
       }}
     >
       <div 
-        className={`${sizeMap[size]} rounded-lg border border-white/10 flex flex-col justify-between p-1.5`}
+        className={`${sizeMap[size]} rounded-lg flex flex-col justify-between p-1.5 relative`}
         style={{
-          background: `linear-gradient(135deg, hsla(${hsl}, 0.15), hsla(${hsl}, 0.05))`,
-          boxShadow: `0 0 12px hsla(${hsl}, 0.3)`,
+          background: `linear-gradient(135deg, hsla(${hsl}, 0.2), hsla(${hsl}, 0.05), hsla(${hsl}, 0.12))`,
+          border: `1px solid hsla(${border}, 0.4)`,
+          boxShadow: `
+            0 0 8px hsla(${hsl}, 0.3),
+            0 0 20px hsla(${hsl}, 0.15),
+            0 0 40px hsla(${hsl}, 0.08),
+            inset 0 0 12px hsla(${hsl}, 0.1)
+          `,
         }}
       >
-        <div className="flex items-start justify-between">
-          <div className="w-3 h-2.5 rounded-sm bg-yellow-500/40" />
-          <div className="w-2.5 h-2.5 rounded-full" style={{ background: `hsla(${hsl}, 0.5)` }} />
+        {/* Neon edge highlight */}
+        <div 
+          className="absolute inset-0 rounded-lg pointer-events-none"
+          style={{
+            background: `linear-gradient(135deg, hsla(${hsl}, 0.15) 0%, transparent 40%, transparent 60%, hsla(${hsl}, 0.1) 100%)`,
+          }}
+        />
+        <div className="flex items-start justify-between relative z-10">
+          <div 
+            className="w-3 h-2.5 rounded-sm"
+            style={{ 
+              background: `linear-gradient(135deg, hsla(45, 80%, 60%, 0.6), hsla(45, 80%, 40%, 0.4))`,
+              boxShadow: `0 0 4px hsla(45, 80%, 50%, 0.3)`
+            }} 
+          />
+          <div 
+            className="w-2.5 h-2.5 rounded-full" 
+            style={{ 
+              background: `hsla(${hsl}, 0.6)`,
+              boxShadow: `0 0 6px hsla(${hsl}, 0.5)`
+            }} 
+          />
         </div>
-        <div className="flex gap-1 mt-auto">
+        <div className="flex gap-1 mt-auto relative z-10">
           {[0,1,2,3].map(i => (
-            <div key={i} className="w-2 h-[2px] rounded-full bg-white/20" />
+            <div 
+              key={i} 
+              className="w-2 h-[2px] rounded-full" 
+              style={{
+                background: `hsla(${hsl}, 0.4)`,
+                boxShadow: `0 0 3px hsla(${hsl}, 0.2)`
+              }}
+            />
           ))}
         </div>
       </div>
@@ -70,8 +103,30 @@ const FloatingCardsBackground = memo(() => (
   <div className="fixed inset-0 overflow-hidden pointer-events-none z-0" style={{ contain: "strict" }}>
     <style>{`
       @keyframes float-card {
-        0%, 100% { transform: translateY(0) rotate(-2deg) translateZ(0); opacity: 0.2; }
-        50% { transform: translateY(-20px) rotate(2deg) translateZ(0); opacity: 0.35; }
+        0%, 100% { transform: translateY(0) rotate(-2deg) translateZ(0); opacity: 0.25; }
+        25% { transform: translateY(-18px) rotate(2deg) translateZ(0); opacity: 0.4; }
+        50% { transform: translateY(-8px) rotate(-1deg) translateZ(0); opacity: 0.3; }
+        75% { transform: translateY(-22px) rotate(3deg) translateZ(0); opacity: 0.45; }
+      }
+      @keyframes neon-glow-default {
+        0%, 100% { filter: brightness(1) drop-shadow(0 0 6px hsla(0, 70%, 50%, 0.3)); }
+        50% { filter: brightness(1.4) drop-shadow(0 0 16px hsla(0, 70%, 50%, 0.6)); }
+      }
+      @keyframes neon-glow-visa {
+        0%, 100% { filter: brightness(1) drop-shadow(0 0 6px hsla(220, 80%, 55%, 0.3)); }
+        50% { filter: brightness(1.4) drop-shadow(0 0 16px hsla(220, 80%, 55%, 0.6)); }
+      }
+      @keyframes neon-glow-mastercard {
+        0%, 100% { filter: brightness(1) drop-shadow(0 0 6px hsla(30, 90%, 55%, 0.3)); }
+        50% { filter: brightness(1.4) drop-shadow(0 0 16px hsla(30, 90%, 55%, 0.6)); }
+      }
+      @keyframes neon-glow-amex {
+        0%, 100% { filter: brightness(1) drop-shadow(0 0 6px hsla(180, 70%, 50%, 0.3)); }
+        50% { filter: brightness(1.4) drop-shadow(0 0 16px hsla(180, 70%, 50%, 0.6)); }
+      }
+      @keyframes neon-glow-discover {
+        0%, 100% { filter: brightness(1) drop-shadow(0 0 6px hsla(35, 85%, 55%, 0.3)); }
+        50% { filter: brightness(1.4) drop-shadow(0 0 16px hsla(35, 85%, 55%, 0.6)); }
       }
     `}</style>
     {cards.map((card, i) => <MiniCreditCard key={i} {...card} />)}
