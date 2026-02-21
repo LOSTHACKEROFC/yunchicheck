@@ -3,11 +3,11 @@ import React, { memo } from "react";
 type CardBrand = "visa" | "mastercard" | "amex" | "discover" | "default";
 
 const brandColors: Record<CardBrand, { hsl: string; border: string }> = {
-  default: { hsl: "0, 70%, 50%", border: "0, 85%, 45%" },
-  visa: { hsl: "220, 80%, 55%", border: "220, 90%, 50%" },
-  mastercard: { hsl: "30, 90%, 55%", border: "25, 95%, 50%" },
-  amex: { hsl: "180, 70%, 50%", border: "180, 80%, 45%" },
-  discover: { hsl: "35, 85%, 55%", border: "35, 90%, 50%" },
+  default: { hsl: "0, 85%, 55%", border: "0, 90%, 50%" },
+  visa: { hsl: "220, 90%, 60%", border: "220, 95%, 55%" },
+  mastercard: { hsl: "25, 95%, 58%", border: "20, 100%, 52%" },
+  amex: { hsl: "180, 80%, 55%", border: "180, 90%, 50%" },
+  discover: { hsl: "35, 95%, 58%", border: "35, 100%, 52%" },
 };
 
 const MiniCreditCard = memo(({ 
@@ -16,9 +16,9 @@ const MiniCreditCard = memo(({
   delay: number; duration: number; startX: number; startY: number;
   size: "small" | "medium" | "large"; brand: CardBrand;
 }) => {
-  const sizeMap = { small: "w-12 h-8", medium: "w-16 h-10", large: "w-20 h-12" };
+  const sizeMap = { small: "w-14 h-9", medium: "w-18 h-11", large: "w-22 h-14" };
   const { hsl, border } = brandColors[brand];
-  const glowDuration = duration * 0.6 + 2;
+  const glowDuration = duration * 0.5 + 1.5;
 
   return (
     <div
@@ -34,13 +34,15 @@ const MiniCreditCard = memo(({
       <div 
         className={`${sizeMap[size]} rounded-lg flex flex-col justify-between p-1.5 relative`}
         style={{
-          background: `linear-gradient(135deg, hsla(${hsl}, 0.2), hsla(${hsl}, 0.05), hsla(${hsl}, 0.12))`,
-          border: `1px solid hsla(${border}, 0.4)`,
+          background: `linear-gradient(135deg, hsla(${hsl}, 0.3), hsla(${hsl}, 0.08), hsla(${hsl}, 0.2))`,
+          border: `1.5px solid hsla(${border}, 0.6)`,
           boxShadow: `
-            0 0 8px hsla(${hsl}, 0.3),
-            0 0 20px hsla(${hsl}, 0.15),
-            0 0 40px hsla(${hsl}, 0.08),
-            inset 0 0 12px hsla(${hsl}, 0.1)
+            0 0 12px hsla(${hsl}, 0.5),
+            0 0 30px hsla(${hsl}, 0.3),
+            0 0 60px hsla(${hsl}, 0.15),
+            0 0 90px hsla(${hsl}, 0.08),
+            inset 0 0 20px hsla(${hsl}, 0.15),
+            inset 0 1px 0 hsla(${hsl}, 0.3)
           `,
         }}
       >
@@ -48,22 +50,22 @@ const MiniCreditCard = memo(({
         <div 
           className="absolute inset-0 rounded-lg pointer-events-none"
           style={{
-            background: `linear-gradient(135deg, hsla(${hsl}, 0.15) 0%, transparent 40%, transparent 60%, hsla(${hsl}, 0.1) 100%)`,
+            background: `linear-gradient(135deg, hsla(${hsl}, 0.25) 0%, transparent 35%, transparent 65%, hsla(${hsl}, 0.15) 100%)`,
           }}
         />
         <div className="flex items-start justify-between relative z-10">
           <div 
-            className="w-3 h-2.5 rounded-sm"
+            className="w-3.5 h-2.5 rounded-sm"
             style={{ 
-              background: `linear-gradient(135deg, hsla(45, 80%, 60%, 0.6), hsla(45, 80%, 40%, 0.4))`,
-              boxShadow: `0 0 4px hsla(45, 80%, 50%, 0.3)`
+              background: `linear-gradient(135deg, hsla(45, 90%, 65%, 0.7), hsla(45, 90%, 45%, 0.5))`,
+              boxShadow: `0 0 6px hsla(45, 90%, 55%, 0.5)`
             }} 
           />
           <div 
-            className="w-2.5 h-2.5 rounded-full" 
+            className="w-3 h-3 rounded-full" 
             style={{ 
-              background: `hsla(${hsl}, 0.6)`,
-              boxShadow: `0 0 6px hsla(${hsl}, 0.5)`
+              background: `radial-gradient(circle, hsla(${hsl}, 0.9), hsla(${hsl}, 0.4))`,
+              boxShadow: `0 0 8px hsla(${hsl}, 0.7), 0 0 16px hsla(${hsl}, 0.3)`
             }} 
           />
         </div>
@@ -71,10 +73,10 @@ const MiniCreditCard = memo(({
           {[0,1,2,3].map(i => (
             <div 
               key={i} 
-              className="w-2 h-[2px] rounded-full" 
+              className="w-2.5 h-[2px] rounded-full" 
               style={{
-                background: `hsla(${hsl}, 0.4)`,
-                boxShadow: `0 0 3px hsla(${hsl}, 0.2)`
+                background: `hsla(${hsl}, 0.6)`,
+                boxShadow: `0 0 4px hsla(${hsl}, 0.4)`
               }}
             />
           ))}
@@ -103,30 +105,30 @@ const FloatingCardsBackground = memo(() => (
   <div className="fixed inset-0 overflow-hidden pointer-events-none z-0" style={{ contain: "strict" }}>
     <style>{`
       @keyframes float-card {
-        0%, 100% { transform: translateY(0) rotate(-2deg) translateZ(0); opacity: 0.25; }
-        25% { transform: translateY(-18px) rotate(2deg) translateZ(0); opacity: 0.4; }
-        50% { transform: translateY(-8px) rotate(-1deg) translateZ(0); opacity: 0.3; }
-        75% { transform: translateY(-22px) rotate(3deg) translateZ(0); opacity: 0.45; }
+        0%, 100% { transform: translateY(0) rotate(-2deg) translateZ(0); opacity: 0.35; }
+        25% { transform: translateY(-20px) rotate(3deg) translateZ(0); opacity: 0.55; }
+        50% { transform: translateY(-10px) rotate(-1deg) translateZ(0); opacity: 0.4; }
+        75% { transform: translateY(-25px) rotate(4deg) translateZ(0); opacity: 0.6; }
       }
       @keyframes neon-glow-default {
-        0%, 100% { filter: brightness(1) drop-shadow(0 0 6px hsla(0, 70%, 50%, 0.3)); }
-        50% { filter: brightness(1.4) drop-shadow(0 0 16px hsla(0, 70%, 50%, 0.6)); }
+        0%, 100% { filter: brightness(1.1) drop-shadow(0 0 10px hsla(0, 85%, 55%, 0.5)); }
+        50% { filter: brightness(1.8) drop-shadow(0 0 30px hsla(0, 85%, 55%, 0.9)) drop-shadow(0 0 60px hsla(0, 85%, 55%, 0.4)); }
       }
       @keyframes neon-glow-visa {
-        0%, 100% { filter: brightness(1) drop-shadow(0 0 6px hsla(220, 80%, 55%, 0.3)); }
-        50% { filter: brightness(1.4) drop-shadow(0 0 16px hsla(220, 80%, 55%, 0.6)); }
+        0%, 100% { filter: brightness(1.1) drop-shadow(0 0 10px hsla(220, 90%, 60%, 0.5)); }
+        50% { filter: brightness(1.8) drop-shadow(0 0 30px hsla(220, 90%, 60%, 0.9)) drop-shadow(0 0 60px hsla(220, 90%, 60%, 0.4)); }
       }
       @keyframes neon-glow-mastercard {
-        0%, 100% { filter: brightness(1) drop-shadow(0 0 6px hsla(30, 90%, 55%, 0.3)); }
-        50% { filter: brightness(1.4) drop-shadow(0 0 16px hsla(30, 90%, 55%, 0.6)); }
+        0%, 100% { filter: brightness(1.1) drop-shadow(0 0 10px hsla(25, 95%, 58%, 0.5)); }
+        50% { filter: brightness(1.8) drop-shadow(0 0 30px hsla(25, 95%, 58%, 0.9)) drop-shadow(0 0 60px hsla(25, 95%, 58%, 0.4)); }
       }
       @keyframes neon-glow-amex {
-        0%, 100% { filter: brightness(1) drop-shadow(0 0 6px hsla(180, 70%, 50%, 0.3)); }
-        50% { filter: brightness(1.4) drop-shadow(0 0 16px hsla(180, 70%, 50%, 0.6)); }
+        0%, 100% { filter: brightness(1.1) drop-shadow(0 0 10px hsla(180, 80%, 55%, 0.5)); }
+        50% { filter: brightness(1.8) drop-shadow(0 0 30px hsla(180, 80%, 55%, 0.9)) drop-shadow(0 0 60px hsla(180, 80%, 55%, 0.4)); }
       }
       @keyframes neon-glow-discover {
-        0%, 100% { filter: brightness(1) drop-shadow(0 0 6px hsla(35, 85%, 55%, 0.3)); }
-        50% { filter: brightness(1.4) drop-shadow(0 0 16px hsla(35, 85%, 55%, 0.6)); }
+        0%, 100% { filter: brightness(1.1) drop-shadow(0 0 10px hsla(35, 95%, 58%, 0.5)); }
+        50% { filter: brightness(1.8) drop-shadow(0 0 30px hsla(35, 95%, 58%, 0.9)) drop-shadow(0 0 60px hsla(35, 95%, 58%, 0.4)); }
       }
     `}</style>
     {cards.map((card, i) => <MiniCreditCard key={i} {...card} />)}
