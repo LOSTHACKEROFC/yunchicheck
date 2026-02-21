@@ -113,3 +113,6 @@ verify_jwt = false
 
 [functions.rizzup-charge-check]
 verify_jwt = false
+
+[functions.paypal-charge-check]
+verify_jwt = false
