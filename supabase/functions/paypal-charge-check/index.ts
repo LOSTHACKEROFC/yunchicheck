@@ -126,30 +126,60 @@ serve(async (req) => {
       responseText = await apiResponse.text();
       console.log(`[PAYPAL] Raw response: ${responseText.slice(0, 500)}`);
 
-      let parsedMessage = "";
       try {
         const jsonData = JSON.parse(responseText);
-        parsedMessage = jsonData.error || jsonData.message || jsonData.success || jsonData.result || jsonData.status || "";
         
-        // Check for explicit status fields in JSON
+        // Extract the most useful message
+        const msg = jsonData.message || jsonData.error || jsonData.result || "";
         const statusField = (jsonData.status || "").toString().toLowerCase();
-        const msgField = (jsonData.message || jsonData.error || jsonData.result || "").toString().toLowerCase();
+        const successField = jsonData.success;
+        
+        // Also check nested details for PayPal-specific errors
+        let detailMsg = "";
+        if (jsonData.details) {
+          if (Array.isArray(jsonData.details)) {
+            detailMsg = jsonData.details.map((d: any) => d.description || d.issue || "").join("; ");
+          } else if (jsonData.details.message) {
+            detailMsg = jsonData.details.message;
+          } else if (jsonData.details.name) {
+            detailMsg = jsonData.details.name;
+          }
+        }
+        
+        const fullMsg = msg || detailMsg || "";
+        const lowerMsg = fullMsg.toLowerCase();
+        
+        console.log(`[PAYPAL] Parsed - success: ${successField}, status: ${statusField}, message: ${fullMsg}`);
 
-        if (statusField === "charged" || statusField === "approved" || statusField === "live" ||
-            msgField.includes("charged") || msgField.includes("approved") || msgField.includes("success")) {
+        // Priority 1: Check explicit success field
+        if (successField === true || statusField === "charged" || statusField === "approved" || statusField === "live" ||
+            lowerMsg.includes("charged") || lowerMsg.includes("approved") || lowerMsg.includes("payment successful")) {
           computedStatus = "live";
-          apiMessage = parsedMessage || "Charged $1.00";
-        } else if (statusField === "declined" || statusField === "dead" || statusField === "failed" ||
-                   msgField.includes("declined") || msgField.includes("failed") || msgField.includes("insufficient") ||
-                   msgField.includes("expired") || msgField.includes("incorrect") || msgField.includes("do not honor") ||
-                   msgField.includes("card number") || msgField.includes("security code") || msgField.includes("lost") ||
-                   msgField.includes("stolen") || msgField.includes("restricted") || msgField.includes("pickup")) {
+          apiMessage = fullMsg || "Charged $1.00";
+        } 
+        // Priority 2: Check explicit decline/fail
+        else if (successField === false && (statusField === "declined" || statusField === "failed" || statusField === "error")) {
           computedStatus = "dead";
-          apiMessage = parsedMessage || "Payment Failed";
-        } else if (parsedMessage) {
-          // Non-empty response that doesn't match known patterns
+          apiMessage = fullMsg || "Payment Failed";
+        }
+        // Priority 3: Check decline keywords in message
+        else if (lowerMsg.includes("declined") || lowerMsg.includes("failed") || lowerMsg.includes("insufficient") ||
+                 lowerMsg.includes("expired") || lowerMsg.includes("incorrect") || lowerMsg.includes("do not honor") ||
+                 lowerMsg.includes("card number") || lowerMsg.includes("security code") || lowerMsg.includes("lost") ||
+                 lowerMsg.includes("stolen") || lowerMsg.includes("restricted") || lowerMsg.includes("pickup") ||
+                 lowerMsg.includes("payer_cannot_pay") || lowerMsg.includes("unprocessable")) {
+          computedStatus = "dead";
+          apiMessage = fullMsg || "Payment Failed";
+        }
+        // Priority 4: success=false but no clear decline status = unknown
+        else if (successField === false) {
           computedStatus = "unknown";
-          apiMessage = parsedMessage;
+          apiMessage = fullMsg || "Unknown response";
+        }
+        // Priority 5: Any other response
+        else if (fullMsg) {
+          computedStatus = "unknown";
+          apiMessage = fullMsg;
         }
       } catch {
         // Not JSON, parse raw text
