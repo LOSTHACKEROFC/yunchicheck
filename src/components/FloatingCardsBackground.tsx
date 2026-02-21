@@ -1,15 +1,12 @@
 import React, { memo } from "react";
 
-type CardBrand = "visa" | "mastercard" | "amex" | "discover" | "jcb" | "unionpay" | "maestro";
+type CardBrand = "visa" | "mastercard" | "amex" | "discover";
 
 const brandColors: Record<CardBrand, { hsl: string; border: string; bg: string }> = {
   visa: { hsl: "220, 90%, 60%", border: "220, 80%, 45%", bg: "linear-gradient(145deg, #1a1f71 0%, #0d1347 50%, #1a1f71 100%)" },
   mastercard: { hsl: "25, 95%, 58%", border: "0, 70%, 40%", bg: "linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)" },
   amex: { hsl: "210, 80%, 55%", border: "210, 70%, 40%", bg: "linear-gradient(145deg, #006fcf 0%, #004a8f 50%, #003a70 100%)" },
   discover: { hsl: "25, 90%, 55%", border: "25, 80%, 42%", bg: "linear-gradient(145deg, #2d2d2d 0%, #1a1a1a 50%, #333 100%)" },
-  jcb: { hsl: "210, 70%, 45%", border: "210, 60%, 35%", bg: "linear-gradient(145deg, #0e4c96 0%, #e21836 50%, #00a94f 100%)" },
-  unionpay: { hsl: "215, 60%, 30%", border: "215, 50%, 25%", bg: "linear-gradient(145deg, #1a3668 0%, #e21836 50%, #1a3668 100%)" },
-  maestro: { hsl: "260, 40%, 55%", border: "340, 70%, 45%", bg: "linear-gradient(145deg, #1a1a2e 0%, #2d1b4e 50%, #1a1a2e 100%)" },
 };
 
 // Visa SVG logo
@@ -41,43 +38,11 @@ const DiscoverLogo = memo(({ w, h }: { w: number; h: number }) => (
     <path d="M4 0H8C10.8 0 12.5 2 12.5 4.5C12.5 7.5 10.2 9 7.6 9H4V0ZM6 2V7H7.4C9 7 10.4 6 10.4 4.5C10.4 3 9.2 2 7.6 2H6Z" fill="white"/>
     <rect x="14" y="0" width="2" height="9" fill="white"/>
     <path d="M19 5.8C19 6.8 19.8 7.2 21 7.6C22.6 8 24 8.6 24 10.6C24 12.8 22.2 14 20 14C18.4 14 17 13.4 16 12.4L17.2 11C17.8 11.8 18.8 12.2 19.8 12.2C20.8 12.2 21.6 11.8 21.6 10.8C21.6 9.8 20.6 9.4 19.6 9C18.2 8.4 17 7.8 17 6C17 4 18.6 3 20.4 3C21.8 3 23 3.6 23.6 4.2L22.4 5.6C21.8 5 21.2 4.8 20.4 4.8C19.6 4.8 19 5.2 19 5.8Z" fill="white"/>
+    <path d="M32 8.5C32 11.6 29.8 14 27 14C24.2 14 22 11.6 22 8.5C22 5.4 24.2 3 27 3C28 3 28.8 3.4 29.4 3.8" fill="none" stroke="white" strokeWidth="2"/>
     <circle cx="35" cy="8.5" r="5.5" fill="#F47216"/>
     <path d="M41.5 0L38 9H40.2L40.8 7.2H44.2L44.8 9H47L43.5 0H41.5ZM42.5 2.4L43.6 5.6H41.4L42.5 2.4Z" fill="white"/>
     <path d="M48 0V9H53V7H50V5.2H52.8V3.2H50V2H53V0H48Z" fill="white"/>
     <path d="M55 0V9H57V5.6L60.4 9H63L59 5L62.6 0H60.2L57 4.2V0H55Z" fill="white" />
-  </svg>
-));
-
-// JCB SVG logo
-const JCBLogo = memo(({ w, h }: { w: number; h: number }) => (
-  <svg width={w} height={h} viewBox="0 0 50 20" fill="none">
-    <rect x="2" y="1" width="12" height="18" rx="3" fill="#0E4C96"/>
-    <rect x="16" y="1" width="12" height="18" rx="3" fill="#E21836"/>
-    <rect x="30" y="1" width="12" height="18" rx="3" fill="#00A94F"/>
-    <text x="5" y="14" fontSize="9" fontWeight="bold" fill="white" fontFamily="Arial">J</text>
-    <text x="19" y="14" fontSize="9" fontWeight="bold" fill="white" fontFamily="Arial">C</text>
-    <text x="33" y="14" fontSize="9" fontWeight="bold" fill="white" fontFamily="Arial">B</text>
-  </svg>
-));
-
-// UnionPay SVG logo
-const UnionPayLogo = memo(({ w, h }: { w: number; h: number }) => (
-  <svg width={w} height={h} viewBox="0 0 60 20" fill="none">
-    <g transform="skewX(-10)">
-      <rect x="10" y="1" width="14" height="18" rx="2" fill="#E21836"/>
-      <rect x="24" y="1" width="14" height="18" rx="2" fill="#00447C"/>
-      <rect x="38" y="1" width="14" height="18" rx="2" fill="#007B84"/>
-    </g>
-    <text x="14" y="14" fontSize="7" fontWeight="bold" fill="white" fontFamily="Arial">银联</text>
-  </svg>
-));
-
-// Maestro SVG logo
-const MaestroLogo = memo(({ w, h }: { w: number; h: number }) => (
-  <svg width={w} height={h} viewBox="0 0 52 32" fill="none">
-    <circle cx="18" cy="16" r="14" fill="#6C6BBD"/>
-    <circle cx="34" cy="16" r="14" fill="#E01E5A"/>
-    <path d="M26 5.4C29 7.7 31 11.6 31 16C31 20.4 29 24.3 26 26.6C23 24.3 21 20.4 21 16C21 11.6 23 7.7 26 5.4Z" fill="#6F6BBE"/>
   </svg>
 ));
 
@@ -86,9 +51,6 @@ const BrandLogos: Record<CardBrand, React.FC<{ w: number; h: number }>> = {
   mastercard: MastercardLogo,
   amex: AmexLogo,
   discover: DiscoverLogo,
-  jcb: JCBLogo,
-  unionpay: UnionPayLogo,
-  maestro: MaestroLogo,
 };
 
 const MiniCreditCard = memo(({ 
@@ -201,16 +163,13 @@ const cards: Array<{ delay: number; duration: number; startX: number; startY: nu
   { delay: 0, duration: 12, startX: 4, startY: 8, size: "medium", brand: "visa" },
   { delay: 1.5, duration: 14, startX: 84, startY: 12, size: "large", brand: "mastercard" },
   { delay: 3, duration: 10, startX: 14, startY: 72, size: "small", brand: "amex" },
-  { delay: 2, duration: 13, startX: 78, startY: 68, size: "medium", brand: "jcb" },
+  { delay: 2, duration: 13, startX: 78, startY: 68, size: "medium", brand: "amex" },
   { delay: 4, duration: 15, startX: 44, startY: 4, size: "large", brand: "visa" },
-  { delay: 1, duration: 11, startX: 24, startY: 88, size: "small", brand: "maestro" },
+  { delay: 1, duration: 11, startX: 24, startY: 88, size: "small", brand: "mastercard" },
   { delay: 3.5, duration: 13, startX: 68, startY: 84, size: "medium", brand: "discover" },
-  { delay: 0.5, duration: 12, startX: 8, startY: 38, size: "large", brand: "unionpay" },
+  { delay: 0.5, duration: 12, startX: 8, startY: 38, size: "large", brand: "mastercard" },
   { delay: 5, duration: 14, startX: 54, startY: 28, size: "small", brand: "visa" },
-  { delay: 2.5, duration: 11, startX: 34, startY: 54, size: "medium", brand: "mastercard" },
-  { delay: 1.8, duration: 13, startX: 92, startY: 44, size: "small", brand: "jcb" },
-  { delay: 4.5, duration: 12, startX: 50, startY: 76, size: "medium", brand: "unionpay" },
-  { delay: 3.2, duration: 14, startX: 18, startY: 28, size: "small", brand: "maestro" },
+  { delay: 2.5, duration: 11, startX: 34, startY: 54, size: "medium", brand: "discover" },
 ];
 
 const FloatingCardsBackground = memo(() => (
@@ -237,18 +196,6 @@ const FloatingCardsBackground = memo(() => (
       @keyframes neon-glow-discover {
         0%, 100% { filter: brightness(1.05) drop-shadow(0 0 8px hsla(25, 90%, 55%, 0.4)); }
         50% { filter: brightness(1.6) drop-shadow(0 0 24px hsla(25, 90%, 55%, 0.8)) drop-shadow(0 0 50px hsla(25, 90%, 55%, 0.35)); }
-      }
-      @keyframes neon-glow-jcb {
-        0%, 100% { filter: brightness(1.05) drop-shadow(0 0 8px hsla(210, 70%, 45%, 0.4)); }
-        50% { filter: brightness(1.6) drop-shadow(0 0 24px hsla(210, 70%, 45%, 0.8)) drop-shadow(0 0 50px hsla(210, 70%, 45%, 0.35)); }
-      }
-      @keyframes neon-glow-unionpay {
-        0%, 100% { filter: brightness(1.05) drop-shadow(0 0 8px hsla(215, 60%, 30%, 0.4)); }
-        50% { filter: brightness(1.6) drop-shadow(0 0 24px hsla(215, 60%, 30%, 0.8)) drop-shadow(0 0 50px hsla(215, 60%, 30%, 0.35)); }
-      }
-      @keyframes neon-glow-maestro {
-        0%, 100% { filter: brightness(1.05) drop-shadow(0 0 8px hsla(260, 40%, 55%, 0.4)); }
-        50% { filter: brightness(1.6) drop-shadow(0 0 24px hsla(260, 40%, 55%, 0.8)) drop-shadow(0 0 50px hsla(260, 40%, 55%, 0.35)); }
       }
     `}</style>
     {cards.map((card, i) => <MiniCreditCard key={i} {...card} />)}
