@@ -2998,82 +2998,107 @@ const Gateways = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {sortedGateways.map((gateway) => (
-            <Card 
-              key={gateway.id} 
-              onClick={() => gateway.status === "online" && setSelectedGateway(gateway)}
-              className={`bg-card border-border transition-all cursor-pointer ${
-                gateway.status !== "online" ? "opacity-50 cursor-not-allowed" : "hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5"
-              }`}
-            >
-              <CardHeader className="pb-2 p-4">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-bold flex items-center gap-2">
-                    <div className={`p-1.5 rounded-md bg-background/50 ${gateway.iconColor}`}>
-                      <gateway.icon className="h-4 w-4" />
-                    </div>
-                    {gateway.name}
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    {gateway.status === "online" ? (
-                      <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-[10px]">
-                        ONLINE
-                      </Badge>
-                    ) : gateway.status === "maintenance" ? (
-                      <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30 text-[10px]">
-                        MAINTENANCE
-                      </Badge>
-                    ) : (
-                      <Badge className="bg-red-500/20 text-red-500 border-red-500/30 text-[10px]">
-                        OFFLINE
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-4 pt-0 space-y-3">
-                <div className="flex flex-wrap gap-1.5">
-                  {gateway.code && (
-                    <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] font-mono font-bold">
-                      {gateway.code}
-                    </Badge>
-                  )}
-                  <Badge className={`text-[10px] ${getTypeBadgeClass(gateway.type)}`}>
-                    {getTypeLabel(gateway.type)}
-                  </Badge>
-                  <Badge variant="outline" className="text-[10px]">
-                    {gateway.cardTypes}
-                  </Badge>
-                </div>
-                
-                <p className="text-xs text-muted-foreground">{gateway.description}</p>
+        <Tabs defaultValue="auth" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-4">
+            <TabsTrigger value="auth" className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              Auth Gates
+              <Badge variant="outline" className="ml-1 text-[10px] px-1.5 py-0">
+                {sortedGateways.filter(g => g.type === "auth" || g.type === "preauth").length}
+              </Badge>
+            </TabsTrigger>
+            <TabsTrigger value="charge" className="flex items-center gap-2">
+              <CircleDollarSign className="h-4 w-4" />
+              Charge Gates
+              <Badge variant="outline" className="ml-1 text-[10px] px-1.5 py-0">
+                {sortedGateways.filter(g => g.type === "charge").length}
+              </Badge>
+            </TabsTrigger>
+          </TabsList>
 
-                <div className="flex items-center justify-between text-xs pt-2 border-t border-border/50">
-                  <div className="flex items-center gap-1">
-                    <Zap className="h-3 w-3 text-primary" />
-                    <span>{gateway.speed}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <CheckCircle className="h-3 w-3 text-green-500" />
-                    <span className="text-green-500">{gateway.successRate}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Coins className="h-3 w-3 text-primary" />
-                    <span>1-2 Credits</span>
-                  </div>
-                </div>
+          {["auth", "charge"].map((tabType) => (
+            <TabsContent key={tabType} value={tabType}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {sortedGateways
+                  .filter(g => tabType === "auth" ? (g.type === "auth" || g.type === "preauth") : g.type === "charge")
+                  .map((gateway) => (
+                  <Card 
+                    key={gateway.id} 
+                    onClick={() => gateway.status === "online" && setSelectedGateway(gateway)}
+                    className={`bg-card border-border transition-all cursor-pointer ${
+                      gateway.status !== "online" ? "opacity-50 cursor-not-allowed" : "hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5"
+                    }`}
+                  >
+                    <CardHeader className="pb-2 p-4">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base font-bold flex items-center gap-2">
+                          <div className={`p-1.5 rounded-md bg-background/50 ${gateway.iconColor}`}>
+                            <gateway.icon className="h-4 w-4" />
+                          </div>
+                          {gateway.name}
+                        </CardTitle>
+                        <div className="flex items-center gap-2">
+                          {gateway.status === "online" ? (
+                            <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-[10px]">
+                              ONLINE
+                            </Badge>
+                          ) : gateway.status === "maintenance" ? (
+                            <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30 text-[10px]">
+                              MAINTENANCE
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-red-500/20 text-red-500 border-red-500/30 text-[10px]">
+                              OFFLINE
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0 space-y-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {gateway.code && (
+                          <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] font-mono font-bold">
+                            {gateway.code}
+                          </Badge>
+                        )}
+                        <Badge className={`text-[10px] ${getTypeBadgeClass(gateway.type)}`}>
+                          {getTypeLabel(gateway.type)}
+                        </Badge>
+                        <Badge variant="outline" className="text-[10px]">
+                          {gateway.cardTypes}
+                        </Badge>
+                      </div>
+                      
+                      <p className="text-xs text-muted-foreground">{gateway.description}</p>
 
-                {gateway.status === "online" && (
-                  <Button className="w-full mt-2" size="sm">
-                    <span>Open Gateway</span>
-                    <ChevronRight className="h-4 w-4 ml-1" />
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
+                      <div className="flex items-center justify-between text-xs pt-2 border-t border-border/50">
+                        <div className="flex items-center gap-1">
+                          <Zap className="h-3 w-3 text-primary" />
+                          <span>{gateway.speed}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <CheckCircle className="h-3 w-3 text-green-500" />
+                          <span className="text-green-500">{gateway.successRate}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Coins className="h-3 w-3 text-primary" />
+                          <span>1-2 Credits</span>
+                        </div>
+                      </div>
+
+                      {gateway.status === "online" && (
+                        <Button className="w-full mt-2" size="sm">
+                          <span>Open Gateway</span>
+                          <ChevronRight className="h-4 w-4 ml-1" />
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </TabsContent>
           ))}
-        </div>
+        </Tabs>
       </div>
     );
   }
