@@ -566,6 +566,16 @@ const DashboardHeader = () => {
                 {selectedAnnouncement?.message}
               </p>
             </div>
+            {selectedAnnouncement?.metadata?.link_url && (
+              <a
+                href={selectedAnnouncement.metadata.link_url as string}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-colors"
+              >
+                🔗 {(selectedAnnouncement.metadata.link_label as string) || "Open Link"}
+              </a>
+            )}
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>— Yunchi Team</span>
               {selectedAnnouncement?.created_at && (

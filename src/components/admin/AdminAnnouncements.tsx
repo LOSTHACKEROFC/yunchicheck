@@ -138,6 +138,33 @@ const AdminAnnouncements = () => {
         }
       }
 
+      // Also send to Telegram for all users with telegram_chat_id
+      const { data: telegramUsers } = await supabase
+        .from('profiles')
+        .select('telegram_chat_id')
+        .not('telegram_chat_id', 'is', null);
+
+      if (telegramUsers && telegramUsers.length > 0) {
+        const telegramLink = linkUrl.trim() || null;
+        const telegramLinkLabel = linkLabel.trim() || "Open Link";
+        
+        // Send via edge function in batches
+        const tgBatchSize = 25;
+        for (let i = 0; i < telegramUsers.length; i += tgBatchSize) {
+          const batch = telegramUsers.slice(i, i + tgBatchSize);
+          await supabase.functions.invoke('send-announcement-telegram', {
+            body: {
+              chat_ids: batch.map(u => u.telegram_chat_id),
+              title: title.trim(),
+              message: message.trim(),
+              announcement_type: type,
+              link_url: telegramLink,
+              link_label: telegramLinkLabel,
+            }
+          });
+        }
+      }
+
       toast.success(`Announcement sent to ${users.length} users!`);
       setTitle("");
       setMessage("");
