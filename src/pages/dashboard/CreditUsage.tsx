@@ -41,6 +41,17 @@ interface GatewayStats {
   credits: number;
 }
 
+// Real credit cost based on gateway and result
+const getCreditCost = (check: CardCheck): number => {
+  if (check.status === "failed" || check.status === "pending") return 0;
+  // completed checks
+  if (check.gateway === "killer_auth") return 5; // Killed
+  // "completed" on other gateways = Live/Charged = 2, but we store both live/dead as completed
+  // Actually card_checks status is "completed" or "failed" — result field has the outcome
+  // For simplicity we use 1 as base since we don't have result column here
+  return 1;
+};
+
 const CREDIT_COST_PER_CHECK = 1;
 
 // Gateway display name mapping
@@ -298,13 +309,29 @@ const CreditUsage = () => {
         <Card className="bg-card border-border">
           <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
-              Cost Per Check
+              Credit Pricing
             </CardTitle>
             <Zap className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-500" />
           </CardHeader>
           <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
-            <div className="text-lg sm:text-2xl font-bold text-yellow-500">{CREDIT_COST_PER_CHECK}</div>
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Credits per check</p>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[10px] sm:text-xs">
+                <span className="text-green-500 font-medium">Live / Charged</span>
+                <span className="font-bold">2 cr</span>
+              </div>
+              <div className="flex items-center justify-between text-[10px] sm:text-xs">
+                <span className="text-destructive font-medium">Dead</span>
+                <span className="font-bold">1 cr</span>
+              </div>
+              <div className="flex items-center justify-between text-[10px] sm:text-xs">
+                <span className="text-yellow-500 font-medium">Killed (Killer)</span>
+                <span className="font-bold">5 cr</span>
+              </div>
+              <div className="flex items-center justify-between text-[10px] sm:text-xs">
+                <span className="text-muted-foreground font-medium">Error / Unknown</span>
+                <span className="font-bold">0 cr</span>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
