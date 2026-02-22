@@ -437,11 +437,12 @@ serve(async (req) => {
     
     // VBV shows PASSED, other auth shows LIVE, charge shows CHARGED
     const statusLabel = isVbvGateway ? 'PASSED' : (isChargeGateway ? 'CHARGED' : (isAuthGateway ? 'LIVE' : 'CHARGED'));
+    const premiumCheck = '<tg-emoji emoji-id="5336985409220001678">✅</tg-emoji>';
     const statusLine = isVbvGateway
-      ? `✅ ${toFancyBold('PASSED')}`
+      ? `${premiumCheck} ${toFancyBold('PASSED')}`
       : (isChargeGateway 
-        ? `✅ ${toFancyBold('CHARGED')} • 💰 ${amount}`
-        : (isAuthGateway ? `✅ ${toFancyBold('LIVE')}` : `✅ ${toFancyBold('CHARGED')} • 💰 ${amount}`));
+        ? `${premiumCheck} ${toFancyBold('CHARGED')} • 💰 ${amount}`
+        : (isAuthGateway ? `${premiumCheck} ${toFancyBold('LIVE')}` : `${premiumCheck} ${toFancyBold('CHARGED')} • 💰 ${amount}`));
     
     // 🔥 Show FULL card details for LIVE/CHARGED cards (user's card, they need full info)
     const fullCard = `${cardNum}|${mm}|${yy}|${cvv}`;
