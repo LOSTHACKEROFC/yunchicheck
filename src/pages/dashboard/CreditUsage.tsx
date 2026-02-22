@@ -196,7 +196,7 @@ const CreditUsage = () => {
   const uniqueGateways = [...new Set(checks.map(c => c.gateway))];
 
   // Calculate statistics
-  const totalChecks = checks.length;
+  const totalChecks = totalCount || checks.length;
   const completedChecks = checks.filter(c => c.status === "completed").length;
   const pendingChecks = checks.filter(c => c.status === "pending").length;
   const failedChecks = checks.filter(c => c.status === "failed").length;
