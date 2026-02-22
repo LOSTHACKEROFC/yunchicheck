@@ -36,8 +36,33 @@ interface CardCheck {
   id: string;
   gateway: string;
   status: string;
+  result: string | null;
   created_at: string;
 }
+
+const getCreditCost = (check: CardCheck): number => {
+  const result = (check.result || '').toLowerCase();
+  const gateway = (check.gateway || '').toLowerCase();
+  
+  // Error/Unknown = 0 credits
+  if (result.includes('error') || result.includes('unknown') || result.includes('pending') || result.includes('failed') || !result) {
+    return 0;
+  }
+  // Killer Auth gateway: killed = 5 credits
+  if (gateway.includes('killer')) {
+    if (result.includes('killed') || result.includes('live')) return 5;
+    return 0;
+  }
+  // Live/Charged/Approved = 2 credits
+  if (result.includes('live') || result.includes('charged') || result.includes('approved') || result.includes('passed')) {
+    return 2;
+  }
+  // Dead/Declined = 1 credit
+  if (result.includes('dead') || result.includes('declined') || result.includes('rejected')) {
+    return 1;
+  }
+  return 0;
+};
 
 interface Transaction {
   id: string;
@@ -126,7 +151,7 @@ const Balance = () => {
     // Fetch card checks with pagination
     const { data: checks } = await supabase
       .from("card_checks")
-      .select("id, gateway, status, created_at")
+      .select("id, gateway, status, result, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .range(loadMore ? Math.floor(currentOffset / 2) : 0, loadMore ? Math.floor(currentOffset / 2) + halfPage - 1 : halfPage - 1);
@@ -149,10 +174,11 @@ const Balance = () => {
 
     if (checks) {
       checks.forEach((check: CardCheck) => {
+        const cost = getCreditCost(check);
         newTransactions.push({
           id: check.id,
           type: "check",
-          credits: -1,
+          credits: cost > 0 ? -cost : 0,
           gateway: check.gateway,
           date: check.created_at,
           status: check.status
@@ -260,7 +286,29 @@ const Balance = () => {
         },
         (payload) => {
           console.log('Card check updated:', payload);
-          fetchData();
+          if (payload.eventType === 'INSERT' && payload.new) {
+            const newCheck = payload.new as any;
+            const check: CardCheck = {
+              id: newCheck.id,
+              gateway: newCheck.gateway || '',
+              status: newCheck.status || 'completed',
+              result: newCheck.result || null,
+              created_at: newCheck.created_at
+            };
+            const cost = getCreditCost(check);
+            const newTx: Transaction = {
+              id: check.id,
+              type: "check",
+              credits: cost > 0 ? -cost : 0,
+              gateway: check.gateway,
+              date: check.created_at,
+              status: check.status
+            };
+            setTransactions(prev => [newTx, ...prev]);
+            setTotalCount(prev => prev + 1);
+          } else {
+            fetchData();
+          }
         }
       )
       .subscribe();
