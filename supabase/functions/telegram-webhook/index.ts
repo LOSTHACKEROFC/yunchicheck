@@ -126,11 +126,16 @@ async function sendUnbanEmail(email: string, username: string | null): Promise<v
   console.error(`Failed to send unban email to ${email} with all senders`);
 }
 
-async function sendBroadcastEmail(email: string, username: string | null, broadcastMessage: string): Promise<boolean> {
+async function sendBroadcastEmail(email: string, username: string | null, broadcastMessage: string, linkUrl?: string | null): Promise<boolean> {
+  const linkButtonHtml = linkUrl ? `
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${linkUrl}" style="display: inline-block; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 600; font-size: 15px;">🔗 Open Link</a>
+          </div>` : "";
+
   const result = await sendEmail({
     to: email,
     subject: "📢 Announcement from Yunchi",
-    text: `Hello${username ? ` ${username}` : ''},\n\n${broadcastMessage}\n\n— Yunchi Team\n\nIf you no longer wish to receive these announcements, you can update your notification preferences in your account settings.`,
+    text: `Hello${username ? ` ${username}` : ''},\n\n${broadcastMessage}${linkUrl ? `\n\nLink: ${linkUrl}` : ''}\n\n— Yunchi Team\n\nIf you no longer wish to receive these announcements, you can update your notification preferences in your account settings.`,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0a0a0a;">
         <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); border-radius: 16px 16px 0 0; padding: 40px 30px; text-align: center;">
@@ -147,7 +152,7 @@ async function sendBroadcastEmail(email: string, username: string | null, broadc
           <div style="background: #1a0a0a; border-left: 4px solid #dc2626; border-radius: 8px; padding: 20px; margin: 20px 0;">
             <p style="color: #e5e5e5; font-size: 16px; line-height: 1.7; margin: 0; white-space: pre-wrap;">${broadcastMessage}</p>
           </div>
-          
+          ${linkButtonHtml}
           <div style="text-align: center; margin-top: 30px;">
             <a href="https://yunchicheck.com/dashboard" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 600; font-size: 15px;">Visit Dashboard</a>
           </div>
@@ -959,6 +964,7 @@ async function handleAdminCmd(chatId: string, supabase: any, messageId?: number)
 
 <b>📢 Communication</b>
 /broadcast <code>[message]</code> - Send to all users
+<i>Add |link:URL at end for clickable button</i>
 
 <b>🌐 Gateways</b>
 /gate - Set gateway availability
@@ -1919,8 +1925,17 @@ async function handleBroadcast(chatId: string, message: string, supabase: any): 
   }
 
   if (!message) {
-    await sendTelegramMessage(chatId, "❌ <b>Usage:</b> /broadcast <code>[message]</code>");
+    await sendTelegramMessage(chatId, "❌ <b>Usage:</b> /broadcast <code>[message]</code>\n\nOptional: add <code>|link:URL</code> at the end to include a clickable button.\nExample: <code>/broadcast Hello everyone! |link:https://yunchicheck.com</code>");
     return;
+  }
+
+  // Extract optional link from message using |link:URL pattern
+  let broadcastLink: string | null = null;
+  let cleanMessage = message;
+  const linkMatch = message.match(/\|link:(https?:\/\/\S+)\s*$/i);
+  if (linkMatch) {
+    broadcastLink = linkMatch[1];
+    cleanMessage = message.replace(/\s*\|link:https?:\/\/\S+\s*$/i, "").trim();
   }
 
   // Use paginated fetch to get ALL users (bypasses 1000 row limit)
@@ -1966,7 +1981,11 @@ async function handleBroadcast(chatId: string, message: string, supabase: any): 
     // Send Telegram messages in parallel within batch
     const telegramPromises = batch
       .filter((p: any) => p.telegram_chat_id)
-      .map((p: any) => sendTelegramMessage(p.telegram_chat_id, `📢 <b>Announcement</b>\n\n${message}`));
+      .map((p: any) => {
+        const telegramMsg = `📢 <b>Announcement</b>\n\n${cleanMessage}${broadcastLink ? `\n\n🔗 <a href="${broadcastLink}">Open Link</a>` : ""}`;
+        const replyMarkup = broadcastLink ? { inline_keyboard: [[{ text: "🔗 Open Link", url: broadcastLink }]] } : undefined;
+        return sendTelegramMessage(p.telegram_chat_id, telegramMsg, replyMarkup);
+      });
     const telegramResults = await Promise.allSettled(telegramPromises);
     telegramSent += telegramResults.filter(r => r.status === "fulfilled" && r.value === true).length;
 
@@ -1975,7 +1994,8 @@ async function handleBroadcast(chatId: string, message: string, supabase: any): 
       user_id: p.user_id,
       type: "announcement",
       title: "Announcement",
-      message: message,
+      message: cleanMessage,
+      metadata: broadcastLink ? { link_url: broadcastLink, link_label: "Open Link" } : undefined,
     }));
     const { error: insertErr } = await supabase.from("notifications").insert(webNotifications);
     if (!insertErr) webSent += batch.length;
@@ -1988,7 +2008,7 @@ async function handleBroadcast(chatId: string, message: string, supabase: any): 
           emailSkipped++;
         } else {
           await new Promise(resolve => setTimeout(resolve, 600));
-          const emailSuccess = await sendBroadcastEmail(userEmail, p.username, message);
+          const emailSuccess = await sendBroadcastEmail(userEmail, p.username, cleanMessage, broadcastLink);
           if (emailSuccess) emailSent++;
         }
       }
