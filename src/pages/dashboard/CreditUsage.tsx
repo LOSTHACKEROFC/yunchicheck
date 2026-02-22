@@ -32,6 +32,7 @@ interface CardCheck {
   id: string;
   gateway: string;
   status: string;
+  result: string | null;
   created_at: string;
 }
 
@@ -44,12 +45,19 @@ interface GatewayStats {
 // Real credit cost based on gateway and result
 const getCreditCost = (check: CardCheck): number => {
   if (check.status === "failed" || check.status === "pending") return 0;
-  // completed checks
-  if (check.gateway === "killer_auth") return 5; // Killed
-  // "completed" on other gateways = Live/Charged = 2, but we store both live/dead as completed
-  // Actually card_checks status is "completed" or "failed" — result field has the outcome
-  // For simplicity we use 1 as base since we don't have result column here
-  return 1;
+  const result = (check.result || "").toLowerCase();
+  // Error/Unknown = 0 credits
+  if (result === "unknown" || result === "error" || result === "") return 0;
+  // Killer Auth: killed = 5 credits
+  if (check.gateway === "killer_auth") {
+    if (result === "live" || result === "killed") return 5;
+    return 0;
+  }
+  // Live/Charged/Passed = 2 credits
+  if (result === "live" || result === "charged" || result === "passed") return 2;
+  // Dead/Declined = 1 credit
+  if (result === "dead" || result === "declined" || result === "rejected") return 1;
+  return 0;
 };
 
 const CREDIT_COST_PER_CHECK = 1;
@@ -125,7 +133,7 @@ const CreditUsage = () => {
     const offset = loadMore ? checks.length : 0;
     let query = supabase
       .from("card_checks")
-      .select("id, gateway, status, created_at")
+      .select("id, gateway, status, result, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .range(offset, offset + ITEMS_PER_PAGE - 1);
@@ -200,17 +208,17 @@ const CreditUsage = () => {
   const completedChecks = checks.filter(c => c.status === "completed").length;
   const pendingChecks = checks.filter(c => c.status === "pending").length;
   const failedChecks = checks.filter(c => c.status === "failed").length;
-  const totalCreditsUsed = completedChecks * CREDIT_COST_PER_CHECK;
+  const totalCreditsUsed = checks.reduce((sum, c) => sum + getCreditCost(c), 0);
 
   // Gateway breakdown
   const gatewayStats: GatewayStats[] = uniqueGateways.map(gateway => {
-    const gatewayChecks = checks.filter(c => c.gateway === gateway && c.status === "completed");
+    const gatewayChecks = checks.filter(c => c.gateway === gateway);
     return {
       gateway,
       count: gatewayChecks.length,
-      credits: gatewayChecks.length * CREDIT_COST_PER_CHECK
+      credits: gatewayChecks.reduce((sum, c) => sum + getCreditCost(c), 0)
     };
-  }).sort((a, b) => b.count - a.count);
+  }).sort((a, b) => b.credits - a.credits);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -460,7 +468,7 @@ const CreditUsage = () => {
                     </div>
                     <div className="text-right shrink-0 ml-2">
                       <p className="font-bold text-xs sm:text-base text-foreground flex items-center gap-1 justify-end">
-                        -{CREDIT_COST_PER_CHECK}
+                        {getCreditCost(check) > 0 ? `-${getCreditCost(check)}` : "0"}
                         <Coins className="h-3 w-3 sm:hidden" />
                         <span className="hidden sm:inline">credits</span>
                       </p>
