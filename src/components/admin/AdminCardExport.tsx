@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +60,33 @@ const AdminCardExport = () => {
   const [totalCount, setTotalCount] = useState(0);
   const [exported, setExported] = useState(false);
   const [sending, setSending] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [dbStats, setDbStats] = useState<{ totalChecks: number; totalLive: number; totalDead: number; totalCharged: number } | null>(null);
+
+  const fetchStats = async () => {
+    setStatsLoading(true);
+    try {
+      const [totalRes, liveRes, deadRes, chargedRes] = await Promise.all([
+        supabase.from("card_checks").select("id", { count: "exact", head: true }),
+        supabase.from("card_checks").select("id", { count: "exact", head: true }).or("result.ilike.%live%,result.ilike.%approved%,result.ilike.%charged%"),
+        supabase.from("card_checks").select("id", { count: "exact", head: true }).or("result.ilike.%dead%,result.ilike.%declined%"),
+        supabase.from("card_checks").select("id", { count: "exact", head: true }).in("gateway", CHARGING_GATEWAYS).or("result.ilike.%live%,result.ilike.%approved%,result.ilike.%charged%"),
+      ]);
+      setDbStats({
+        totalChecks: totalRes.count || 0,
+        totalLive: liveRes.count || 0,
+        totalDead: deadRes.count || 0,
+        totalCharged: chargedRes.count || 0,
+      });
+    } catch (err) {
+      console.error("Stats fetch error:", err);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  // Fetch stats on mount
+  useEffect(() => { fetchStats(); }, []);
 
   // Paginated fetch to get all records (bypasses 1000 limit)
   const fetchAllRecords = async (query: any) => {
@@ -263,6 +290,34 @@ const AdminCardExport = () => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* DB Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+            <p className="text-xs text-muted-foreground">Total Checks</p>
+            <p className="text-2xl font-bold text-blue-400">
+              {statsLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : (dbStats?.totalChecks.toLocaleString() ?? "—")}
+            </p>
+          </div>
+          <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+            <p className="text-xs text-muted-foreground">Total Lives</p>
+            <p className="text-2xl font-bold text-green-400">
+              {statsLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : (dbStats?.totalLive.toLocaleString() ?? "—")}
+            </p>
+          </div>
+          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+            <p className="text-xs text-muted-foreground">Total Dead</p>
+            <p className="text-2xl font-bold text-red-400">
+              {statsLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : (dbStats?.totalDead.toLocaleString() ?? "—")}
+            </p>
+          </div>
+          <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+            <p className="text-xs text-muted-foreground">Total Charged</p>
+            <p className="text-2xl font-bold text-yellow-400">
+              {statsLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : (dbStats?.totalCharged.toLocaleString() ?? "—")}
+            </p>
+          </div>
+        </div>
+
         {/* Filters */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
