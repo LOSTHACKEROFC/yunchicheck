@@ -31,6 +31,7 @@ interface CreditUsageChartsProps {
   getCreditCost: (check: CardCheck) => number;
 }
 
+
 const CreditUsageCharts = ({ checks, getCreditCost }: CreditUsageChartsProps) => {
   // Calculate daily data for the last 30 days
   const dailyData = useMemo(() => {
