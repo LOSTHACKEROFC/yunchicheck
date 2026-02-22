@@ -348,7 +348,7 @@ const CreditUsage = () => {
       <SpendingAlertSettings />
 
       {/* Usage Charts */}
-      <CreditUsageCharts checks={checks} creditCostPerCheck={CREDIT_COST_PER_CHECK} />
+      <CreditUsageCharts checks={checks} getCreditCost={getCreditCost} />
 
       {/* Gateway Breakdown */}
       {gatewayStats.length > 0 && (

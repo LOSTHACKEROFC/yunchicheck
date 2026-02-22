@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TrendingUp, TrendingDown, BarChart3, Activity } from "lucide-react";
-import { format, subDays, startOfDay, parseISO, eachDayOfInterval, startOfWeek, endOfWeek, eachWeekOfInterval } from "date-fns";
+import { format, subDays, startOfDay, parseISO, eachDayOfInterval, endOfWeek, eachWeekOfInterval } from "date-fns";
 import {
   AreaChart,
   Area,
@@ -22,15 +22,16 @@ interface CardCheck {
   id: string;
   gateway: string;
   status: string;
+  result: string | null;
   created_at: string;
 }
 
 interface CreditUsageChartsProps {
   checks: CardCheck[];
-  creditCostPerCheck: number;
+  getCreditCost: (check: CardCheck) => number;
 }
 
-const CreditUsageCharts = ({ checks, creditCostPerCheck }: CreditUsageChartsProps) => {
+const CreditUsageCharts = ({ checks, getCreditCost }: CreditUsageChartsProps) => {
   // Calculate daily data for the last 30 days
   const dailyData = useMemo(() => {
     const days = eachDayOfInterval({
@@ -57,10 +58,10 @@ const CreditUsageCharts = ({ checks, creditCostPerCheck }: CreditUsageChartsProp
         checks: dayChecks.length,
         completed: completedChecks,
         failed: failedChecks,
-        credits: completedChecks * creditCostPerCheck,
+        credits: dayChecks.reduce((sum, c) => sum + getCreditCost(c), 0),
       };
     });
-  }, [checks, creditCostPerCheck]);
+  }, [checks, getCreditCost]);
 
   // Calculate weekly data for the last 12 weeks
   const weeklyData = useMemo(() => {
@@ -77,17 +78,15 @@ const CreditUsageCharts = ({ checks, creditCostPerCheck }: CreditUsageChartsProp
         return checkDate >= weekStart && checkDate <= weekEnd;
       });
 
-      const completedChecks = weekChecks.filter((c) => c.status === "completed").length;
-
       return {
         week: format(weekStart, "MMM d"),
         fullWeek: `${format(weekStart, "MMM d")} - ${format(weekEnd, "MMM d")}`,
         checks: weekChecks.length,
-        completed: completedChecks,
-        credits: completedChecks * creditCostPerCheck,
+        completed: weekChecks.filter((c) => c.status === "completed").length,
+        credits: weekChecks.reduce((sum, c) => sum + getCreditCost(c), 0),
       };
     });
-  }, [checks, creditCostPerCheck]);
+  }, [checks, getCreditCost]);
 
   // Calculate trend (comparing last 7 days to previous 7 days)
   const trend = useMemo(() => {
