@@ -13,7 +13,8 @@ import {
   TrendingUp,
   DollarSign,
   Activity,
-  Bell
+  Bell,
+  FileText
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import AdminUserManagement from "@/components/admin/AdminUserManagement";
@@ -21,6 +22,7 @@ import AdminSupportTickets from "@/components/admin/AdminSupportTickets";
 import AdminAnalytics from "@/components/admin/AdminAnalytics";
 import AdminGatewayManagement from "@/components/admin/AdminGatewayManagement";
 import AdminAnnouncements from "@/components/admin/AdminAnnouncements";
+import AdminCardExport from "@/components/admin/AdminCardExport";
 
 interface AdminStats {
   totalUsers: number;
@@ -224,6 +226,10 @@ const AdminPanel = () => {
             <Bell className="h-4 w-4" />
             <span className="hidden sm:inline">Announce</span>
           </TabsTrigger>
+          <TabsTrigger value="export" className="gap-2">
+            <FileText className="h-4 w-4" />
+            <span className="hidden sm:inline">Export</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
@@ -244,6 +250,10 @@ const AdminPanel = () => {
 
         <TabsContent value="announcements">
           <AdminAnnouncements />
+        </TabsContent>
+
+        <TabsContent value="export">
+          <AdminCardExport />
         </TabsContent>
       </Tabs>
     </div>
