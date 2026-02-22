@@ -1,4 +1,4 @@
-import { useEffect, useState, createContext, useContext, ReactNode } from "react";
+import { useEffect, useState, useRef, createContext, useContext, ReactNode } from "react";
 import { useDeviceFingerprint } from "@/hooks/useDeviceFingerprint";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -10,7 +10,7 @@ interface DeviceBlockContextType {
 
 const DeviceBlockContext = createContext<DeviceBlockContextType>({
   isBlocked: false,
-  isChecking: true,
+  isChecking: false,
   blockReason: null,
 });
 
@@ -23,12 +23,16 @@ interface DeviceBlockProviderProps {
 export function DeviceBlockProvider({ children }: DeviceBlockProviderProps) {
   const { fingerprint, loading: fingerprintLoading } = useDeviceFingerprint();
   const [isBlocked, setIsBlocked] = useState(false);
-  const [isChecking, setIsChecking] = useState(true);
+  const [isChecking, setIsChecking] = useState(false);
   const [blockReason, setBlockReason] = useState<string | null>(null);
+  const hasChecked = useRef(false);
 
   useEffect(() => {
+    if (fingerprintLoading || hasChecked.current) return;
+
     const checkBlock = async () => {
-      if (fingerprintLoading) return;
+      setIsChecking(true);
+      hasChecked.current = true;
 
       try {
         const { data, error } = await supabase.functions.invoke("check-device-block", {
@@ -37,7 +41,6 @@ export function DeviceBlockProvider({ children }: DeviceBlockProviderProps) {
 
         if (error) {
           console.error("Error checking device block:", error);
-          setIsChecking(false);
           return;
         }
 

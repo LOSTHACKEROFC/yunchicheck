@@ -51,19 +51,10 @@ const PageLoader = () => (
 
 // Component that handles device logging and blocking
 function AppContent() {
-  const { isBlocked, isChecking } = useDeviceBlock();
+  const { isBlocked } = useDeviceBlock();
   
   // Log device on login
   useDeviceLogger();
-
-  // Show loading while checking device block status
-  if (isChecking) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
 
   // Show blocked page if device is blocked
   if (isBlocked) {
