@@ -39,6 +39,8 @@ interface RecentAnnouncement {
 const AdminAnnouncements = () => {
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkLabel, setLinkLabel] = useState("");
   const [type, setType] = useState("info");
   const [sending, setSending] = useState(false);
   const [recentAnnouncements, setRecentAnnouncements] = useState<RecentAnnouncement[]>([]);
@@ -119,7 +121,7 @@ const AdminAnnouncements = () => {
         type: 'announcement',
         title: title.trim(),
         message: message.trim(),
-        metadata: { announcement_type: type }
+        metadata: { announcement_type: type, ...(linkUrl.trim() ? { link_url: linkUrl.trim(), link_label: linkLabel.trim() || "Open Link" } : {}) }
       }));
 
       // Insert in batches of 100
@@ -139,6 +141,8 @@ const AdminAnnouncements = () => {
       toast.success(`Announcement sent to ${users.length} users!`);
       setTitle("");
       setMessage("");
+      setLinkUrl("");
+      setLinkLabel("");
       setType("info");
       fetchData();
     } catch (error) {
@@ -241,8 +245,32 @@ const AdminAnnouncements = () => {
                   </div>
                 </SelectItem>
               </SelectContent>
-            </Select>
+          </Select>
           </div>
+
+          <div>
+            <label className="text-sm font-medium">Link URL (optional)</label>
+            <Input
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="https://example.com"
+              className="mt-1 bg-secondary border-border"
+              type="url"
+            />
+          </div>
+
+          {linkUrl.trim() && (
+            <div>
+              <label className="text-sm font-medium">Link Button Text</label>
+              <Input
+                value={linkLabel}
+                onChange={(e) => setLinkLabel(e.target.value)}
+                placeholder="Open Link"
+                className="mt-1 bg-secondary border-border"
+                maxLength={50}
+              />
+            </div>
+          )}
 
           <Button 
             onClick={handleSendAnnouncement}
