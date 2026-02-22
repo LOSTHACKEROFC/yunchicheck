@@ -98,6 +98,7 @@ const Balance = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
+  const [totalCheckCount, setTotalCheckCount] = useState(0);
   const [typeFilter, setTypeFilter] = useState<"all" | "topup" | "check">("all");
 
   // Filter transactions based on type
@@ -135,6 +136,7 @@ const Balance = () => {
 
     const total = (topupCount || 0) + (checkCount || 0);
     setTotalCount(total);
+    setTotalCheckCount(checkCount || 0);
 
     // Calculate offset for pagination
     const currentOffset = loadMore ? transactions.length : 0;
@@ -306,6 +308,7 @@ const Balance = () => {
             };
             setTransactions(prev => [newTx, ...prev]);
             setTotalCount(prev => prev + 1);
+            setTotalCheckCount(prev => prev + 1);
           } else {
             fetchData();
           }
@@ -325,7 +328,7 @@ const Balance = () => {
       .filter(t => t.type === "check" && t.status === "completed")
       .reduce((sum, t) => sum + t.credits, 0)
   );
-  const totalChecks = transactions.filter(t => t.type === "check").length;
+  const totalChecks = totalCheckCount;
 
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
