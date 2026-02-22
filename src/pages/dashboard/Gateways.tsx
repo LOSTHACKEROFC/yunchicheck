@@ -264,6 +264,7 @@ interface CheckResult {
 }
 
 interface BulkResult extends CheckResult {
+  _id: string;
   cardMasked: string;
   fullCard: string;
   displayCard: string; // Card as entered by user (without auto-added CVC)
@@ -2358,13 +2359,15 @@ const Gateways = () => {
         setBulkEstimatedTime("Finishing...");
       }
       
-      // Update remaining lines in textarea
-      const remainingLinesNow = originalLines.slice(stats.completed);
-      setBulkInput(remainingLinesNow.join('\n'));
+      // Update remaining lines in textarea only every 5th flush to reduce re-renders
+      if (stats.completed % 5 === 0 || stats.completed >= stats.total) {
+        const remainingLinesNow = originalLines.slice(stats.completed);
+        setBulkInput(remainingLinesNow.join('\n'));
+      }
     };
 
     // Start periodic flush timer
-    const flushInterval = setInterval(flushPendingResults, 150);
+    const flushInterval = setInterval(flushPendingResults, 300);
 
     // Worker function to process a single card
     const processCard = async (cardIndex: number): Promise<BulkResult | null> => {
@@ -2506,6 +2509,7 @@ const Gateways = () => {
           : undefined;
         
         const bulkResult: BulkResult = {
+          _id: crypto.randomUUID(),
           status: checkStatus,
           message: checkStatus === "live" 
             ? "Valid" 
@@ -2580,6 +2584,7 @@ const Gateways = () => {
           : `${cardData.card}|${cardData.month}|${cardData.year}`;
         const { brand: errorBrand, brandColor: errorBrandColor } = detectCardBrandLocal(cardData.card);
         return {
+          _id: crypto.randomUUID(),
           status: "unknown" as const,
           message: "Error",
           gateway: selectedGateway.name,
@@ -3871,14 +3876,14 @@ const Gateways = () => {
                 <ScrollArea className="h-[350px] sm:h-[450px] rounded border border-border">
                   <div className="p-3 space-y-3">
                     {filteredBulkResults
-                      .map((r, i) => {
+                      .map((r) => {
                         // Get BIN info for display
                         const cardNum = r.fullCard?.split('|')[0] || '';
                         const brand = r.brand || detectCardBrandLocal(cardNum).brand;
                         
                         return (
                           <div 
-                            key={i} 
+                            key={r._id} 
                             className={`p-3 rounded-lg border animate-fade-in-fast ${
                               r.status === "live" 
                                 ? "bg-green-500/5 border-green-500/30" 
