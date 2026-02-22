@@ -6196,12 +6196,36 @@ Top up at yunchicheck.com/dashboard/topup
         ? `${cardParts[0].substring(0, 6)}******${cardParts[0].slice(-4)}`
         : "Invalid card";
 
+      // Build response message with all 6 results
+      let resultMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+   🎯 <b>KILLER AUTH RESULTS</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>Card:</b> <code>${escapeHtml(maskedCard)}</code>
+<b>Total Time:</b> ${totalTime}s
+
+<b>━━━ 6 API Responses ━━━</b>
+`;
+
+      responses.forEach((r) => {
+        resultMessage += `
+<b>#${r.attempt}</b> ${r.status} (${r.time}s)
+└ <code>${escapeHtml(r.response)}</code>
+`;
+      });
+
       // Count results
       const killedCount = responses.filter(r => r.status.includes("KILLED")).length;
       const failedCount = responses.filter(r => r.status.includes("FAILED")).length;
       const errorCount = responses.filter(r => r.status.includes("ERROR")).length;
 
-      let resultMessage = "";
+      resultMessage += `
+<b>━━━ Summary ━━━</b>
+🟢 Killed: <b>${killedCount}</b>
+🔴 Failed: <b>${failedCount}</b>
+⚠️ Errors: <b>${errorCount}</b>
+`;
 
       if (isKilled) {
         // Deduct 5 credits for successful kill (at least one success)
@@ -6220,14 +6244,12 @@ Top up at yunchicheck.com/dashboard/topup
           result: "killed"
         });
 
-        // KILLED: Show only success message, no API response
-        resultMessage = `
-━━━━━━━━━━━━━━━━━━━━━━
+        resultMessage += `
+<b>━━━ Final Status ━━━</b>
 🟢 <b>KILLED SUCCESSFULLY</b> 🔥
-━━━━━━━━━━━━━━━━━━━━━━
 
-<b>Card:</b> <code>${escapeHtml(maskedCard)}</code>
 💰 <b>-5 credits</b> | Balance: <b>${newCredits}</b>
+━━━━━━━━━━━━━━━━━━━━━━
 `;
       } else {
         // Log the failed check (no credits deducted)
@@ -6254,14 +6276,8 @@ Top up at yunchicheck.com/dashboard/topup
 `).catch(() => {});
         }
 
-        resultMessage = `
-━━━━━━━━━━━━━━━━━━━━━━
-   🎯 <b>KILLER AUTH RESULTS</b>
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>Card:</b> <code>${escapeHtml(maskedCard)}</code>
-<b>Total Time:</b> ${totalTime}s
-
+        resultMessage += `
+<b>━━━ Final Status ━━━</b>
 🔴 <b>NOT KILLED</b>
 
 💰 <b>Free</b> | Balance: <b>${profile.credits}</b>
