@@ -1712,7 +1712,9 @@ const Gateways = () => {
       
       // Build API response string for display
       const apiResponseDisplay = gatewayResponse 
-        ? `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}${gatewayResponse.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`
+        ? selectedGateway.id === 'killer_auth'
+          ? (checkStatus === 'killed' ? '🟢 KILLED SUCCESSFULLY 🔥' : '🔴 NOT KILLED')
+          : `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}${gatewayResponse.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`
         : undefined;
       
       const checkResult: CheckResult = {
