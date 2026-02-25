@@ -12,7 +12,7 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "8496943061";
 
-const API_BASE_URL = "https://3-production-c130.up.railway.app/api";
+const API_BASE_URL = "https://dierdre-unscoring-adalyn.ngrok-free.dev/api/stripe-checkout";
 
 // Send debug to admin Telegram
 const sendAdminDebug = async (
