@@ -8,7 +8,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 function generateOTP(): string {
@@ -131,18 +131,36 @@ const handler = async (req: Request): Promise<Response> => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Find the user by email in auth.users
-    const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
+    // Find the user by email in auth.users with pagination
+    let user = null;
+    let page = 1;
+    const perPage = 1000;
     
-    if (authError) {
-      console.error("Error listing users:", authError);
-      return new Response(
-        JSON.stringify({ error: "Failed to verify user" }),
-        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
-    }
+    while (true) {
+      const { data: authData, error: authError } = await supabase.auth.admin.listUsers({
+        page,
+        perPage,
+      });
+      
+      if (authError) {
+        console.error("Error listing users:", authError);
+        return new Response(
+          JSON.stringify({ error: "Failed to verify user" }),
+          { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
 
-    const user = authData.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
+      const found = authData.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
+      if (found) {
+        user = found;
+        break;
+      }
+      
+      if (!authData.users || authData.users.length < perPage) {
+        break;
+      }
+      page++;
+    }
     
     // Add artificial delay to prevent timing-based email enumeration (200-400ms random)
     const delay = 200 + Math.random() * 200;

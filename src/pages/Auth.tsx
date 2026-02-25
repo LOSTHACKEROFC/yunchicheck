@@ -605,8 +605,8 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
     }
   };
 
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleForgotPassword = async (e?: React.FormEvent | React.MouseEvent) => {
+    e?.preventDefault();
     
     if (!email.trim()) {
       toast.error("Please enter your email address");
@@ -881,11 +881,14 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
             },
           }).catch((err) => console.error("Registration notification error:", err));
 
-          // Clean up the pending verification
-          await supabase
-            .from("pending_verifications")
-            .delete()
-            .eq("verification_code", verificationCode);
+          // Clean up the pending verification via edge function (RLS blocks direct delete)
+          try {
+            await supabase.functions.invoke("check-verification-status", {
+              body: { verification_code: verificationCode, cleanup: true },
+            });
+          } catch (cleanupError) {
+            console.error("Cleanup error:", cleanupError);
+          }
         }
         
         toast.success(t.registrationSuccessful);
