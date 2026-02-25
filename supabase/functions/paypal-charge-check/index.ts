@@ -139,6 +139,18 @@ serve(async (req) => {
         if (jsonData.details) {
           if (Array.isArray(jsonData.details)) {
             detailMsg = jsonData.details.map((d: any) => d.description || d.issue || "").join("; ");
+          } else if (jsonData.details?.data?.errors?.errors) {
+            // Extract gateway_error or unknown_error arrays
+            const nestedErrors = jsonData.details.data.errors.errors;
+            const errorMessages: string[] = [];
+            for (const key of Object.keys(nestedErrors)) {
+              if (Array.isArray(nestedErrors[key])) {
+                errorMessages.push(...nestedErrors[key]);
+              }
+            }
+            if (errorMessages.length > 0) {
+              detailMsg = errorMessages.join("; ");
+            }
           } else if (jsonData.details.message) {
             detailMsg = jsonData.details.message;
           } else if (jsonData.details.name) {
@@ -146,7 +158,7 @@ serve(async (req) => {
           }
         }
         
-        const fullMsg = msg || detailMsg || "";
+        const fullMsg = detailMsg || msg || "";
         const lowerMsg = fullMsg.toLowerCase();
         
         console.log(`[PAYPAL] Parsed - success: ${successField}, status: ${statusField}, message: ${fullMsg}`);
