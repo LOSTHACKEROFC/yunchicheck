@@ -1,7 +1,7 @@
 // Shared email helper with fallback mechanism for Resend
 // This provides consistent email sending with domain verification fallback
 
-import { Resend } from "https://esm.sh/resend@2.0.0";
+import { Resend } from "npm:resend@2.0.0";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
