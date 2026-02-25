@@ -630,15 +630,20 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
         throw new Error(response.error.message || "Failed to send OTP");
       }
 
+      if (response.data?.not_registered) {
+        toast.error("This email is not registered. Please check and try again.");
+        return;
+      }
+
       if (response.data?.error) {
         throw new Error(response.data.error);
       }
 
       setResetOtpSent(true);
-      setHasTelegramForReset(false); // No longer exposed for security
-      setResetOtpExpiry(new Date(Date.now() + 2 * 60 * 1000)); // 2 minutes from now
-      setResetTimeRemaining(2 * 60 * 1000); // 2 minutes
-      toast.success("If your email is registered, you will receive an OTP code");
+      setHasTelegramForReset(false);
+      setResetOtpExpiry(new Date(Date.now() + 2 * 60 * 1000));
+      setResetTimeRemaining(2 * 60 * 1000);
+      toast.success("OTP code has been sent to your email");
     } catch (error: unknown) {
       if (error instanceof Error) {
         toast.error(error.message);

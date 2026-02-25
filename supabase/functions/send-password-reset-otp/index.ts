@@ -166,12 +166,10 @@ const handler = async (req: Request): Promise<Response> => {
     const delay = 200 + Math.random() * 200;
     
     if (!user) {
-      // Don't reveal that the email doesn't exist for security
       console.log("User not found for email:", email);
-      // Wait the delay before responding
       await new Promise(resolve => setTimeout(resolve, delay));
       return new Response(
-        JSON.stringify({ success: true, message: "If your email is registered, you will receive an OTP code." }),
+        JSON.stringify({ success: false, not_registered: true, error: "This email is not registered. Please check and try again." }),
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
