@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
@@ -36,20 +36,38 @@ serve(async (req) => {
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
-    // List users and filter by email - using pagination to handle large user bases
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
-      page: 1,
-      perPage: 1000,
-    });
+    // Search for the specific email by listing users with pagination
+    let emailExists = false;
+    let page = 1;
+    const perPage = 1000;
+    
+    while (true) {
+      const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+        page,
+        perPage,
+      });
 
-    if (error) {
-      console.error("Error listing users:", error);
-      throw error;
+      if (error) {
+        console.error("Error listing users:", error);
+        throw error;
+      }
+
+      const found = data?.users?.some(
+        (user) => user.email?.toLowerCase() === email.toLowerCase()
+      );
+
+      if (found) {
+        emailExists = true;
+        break;
+      }
+
+      // If we got fewer users than perPage, we've reached the end
+      if (!data?.users || data.users.length < perPage) {
+        break;
+      }
+      
+      page++;
     }
-
-    const emailExists = data?.users?.some(
-      (user) => user.email?.toLowerCase() === email.toLowerCase()
-    );
 
     console.log(`Email check for ${email}: ${emailExists ? "taken" : "available"}`);
 

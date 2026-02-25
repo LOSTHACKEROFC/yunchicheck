@@ -6,7 +6,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 const handler = async (req: Request): Promise<Response> => {
@@ -17,7 +17,7 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { verification_code } = await req.json();
+    const { verification_code, cleanup } = await req.json();
 
     if (!verification_code) {
       return new Response(
@@ -35,6 +35,19 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // If cleanup requested, delete the verification record
+    if (cleanup) {
+      await supabase
+        .from("pending_verifications")
+        .delete()
+        .eq("verification_code", verification_code);
+
+      return new Response(
+        JSON.stringify({ success: true, cleaned: true }),
+        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
 
     // Query pending verification using service role (bypasses RLS)
     const { data, error } = await supabase
