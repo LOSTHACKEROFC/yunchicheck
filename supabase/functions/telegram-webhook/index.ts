@@ -529,7 +529,7 @@ async function sendTelegramDocument(
 // BOT COMMANDS REGISTRATION
 // ═══════════════════════════════════════════════════════════
 
-async function setBotCommands(): Promise<void> {
+async function setBotCommands(supabase?: any): Promise<void> {
   if (!TELEGRAM_BOT_TOKEN) return;
 
   const publicCommands = [
@@ -583,13 +583,29 @@ async function setBotCommands(): Promise<void> {
     { command: "delgate", description: "Delete a gateway" },
   ];
 
+  const moderatorCommands = [
+    { command: "start", description: "Start bot" },
+    { command: "menu", description: "Full navigation" },
+    { command: "help", description: "View help" },
+    { command: "mystatus", description: "Check status" },
+    { command: "admincmd", description: "Moderator panel" },
+    { command: "ticket", description: "View & reply to tickets" },
+    { command: "addfund", description: "Add credits to user" },
+    { command: "stats", description: "View statistics" },
+    { command: "allusers", description: "List all users" },
+    { command: "userinfo", description: "View user details" },
+    { command: "viewbans", description: "View banned users" },
+  ];
+
   try {
+    // Set public commands (default)
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ commands: publicCommands }),
     });
 
+    // Set admin commands for super admin
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -598,6 +614,60 @@ async function setBotCommands(): Promise<void> {
         scope: { type: "chat", chat_id: parseInt(ADMIN_CHAT_ID) },
       }),
     });
+
+    // Set moderator commands for all granted moderators
+    const { data: modProfiles } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "moderator");
+
+    if (modProfiles) {
+      for (const mod of modProfiles) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("telegram_chat_id")
+          .eq("user_id", mod.user_id)
+          .maybeSingle();
+
+        if (profile?.telegram_chat_id) {
+          await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              commands: moderatorCommands,
+              scope: { type: "chat", chat_id: parseInt(profile.telegram_chat_id) },
+            }),
+          });
+        }
+      }
+    }
+
+    // Also set admin commands for all granted admins (not just super admin)
+    const { data: adminProfiles } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "admin");
+
+    if (adminProfiles) {
+      for (const admin of adminProfiles) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("telegram_chat_id")
+          .eq("user_id", admin.user_id)
+          .maybeSingle();
+
+        if (profile?.telegram_chat_id && profile.telegram_chat_id !== ADMIN_CHAT_ID) {
+          await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              commands: adminCommands,
+              scope: { type: "chat", chat_id: parseInt(profile.telegram_chat_id) },
+            }),
+          });
+        }
+      }
+    }
   } catch (error) {
     console.error("Error setting commands:", error);
   }
@@ -5993,7 +6063,8 @@ Use /admincmd for staff panel
 
     // /help
     if (text === "/help") {
-      const isAdminUser = isAdmin(chatId);
+      const isAdminUser = await isAdminAsync(chatId, supabase);
+      const isModUser = await isModeratorAsync(chatId, supabase);
       let msg = `
 📚 <b>Help</b>
 
@@ -6015,10 +6086,23 @@ Use /admincmd for staff panel
 /help - This message
 /mystatus - Account status`;
 
+      if (isModUser && !isAdminUser) {
+        msg += `
+
+<b>🛡️ Moderator Commands:</b>
+/admincmd - Moderator panel
+/ticket [id] - View &amp; reply to tickets
+/addfund [email] [amount] - Add credits
+/stats - View statistics
+/allusers - Browse all users
+/userinfo [user] - User details (read-only)
+/viewbans - View banned users`;
+      }
+
       if (isAdminUser) {
         msg += `
 
-<b>Admin:</b>
+<b>🔐 Admin Commands:</b>
 /admincmd - Admin panel
 /ticket [id] - Manage ticket
 /topups - Pending topups

@@ -14,7 +14,8 @@ import {
   DollarSign,
   Activity,
   Bell,
-  FileText
+  FileText,
+  Bot
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import AdminUserManagement from "@/components/admin/AdminUserManagement";
@@ -23,6 +24,7 @@ import AdminAnalytics from "@/components/admin/AdminAnalytics";
 import AdminGatewayManagement from "@/components/admin/AdminGatewayManagement";
 import AdminAnnouncements from "@/components/admin/AdminAnnouncements";
 import AdminCardExport from "@/components/admin/AdminCardExport";
+import AdminBotCommands from "@/components/admin/AdminBotCommands";
 
 interface AdminStats {
   totalUsers: number;
@@ -230,6 +232,10 @@ const AdminPanel = () => {
             <FileText className="h-4 w-4" />
             <span className="hidden sm:inline">Export</span>
           </TabsTrigger>
+          <TabsTrigger value="commands" className="gap-2">
+            <Bot className="h-4 w-4" />
+            <span className="hidden sm:inline">Commands</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
@@ -254,6 +260,10 @@ const AdminPanel = () => {
 
         <TabsContent value="export">
           <AdminCardExport />
+        </TabsContent>
+
+        <TabsContent value="commands">
+          <AdminBotCommands />
         </TabsContent>
       </Tabs>
     </div>
