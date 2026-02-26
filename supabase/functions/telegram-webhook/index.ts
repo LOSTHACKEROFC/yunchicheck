@@ -906,6 +906,9 @@ async function handleAdminCmd(chatId: string, supabase: any, messageId?: number)
 <b>📋 Support Tickets</b>
 /ticket <code>[id]</code> - View &amp; reply to tickets
 
+<b>💰 Credits</b>
+/addfund <code>[email] [amount]</code> - Add credits to user
+
 <b>📊 Data &amp; Monitoring</b>
 /stats - View platform statistics
 /allusers - Browse all users (paginated)
@@ -914,12 +917,13 @@ async function handleAdminCmd(chatId: string, supabase: any, messageId?: number)
 
 <b>✅ Your Permissions:</b>
 • View &amp; reply to support tickets
+• Add credits to users (no deductions)
 • View platform stats &amp; user data
 • View banned users
 • View user info (no action buttons)
 
 <b>❌ Restricted (Admin Only):</b>
-• Ban/Unban, Delete users, Add credits
+• Ban/Unban, Delete users, Deduct credits
 • Topup management, Broadcasts
 • Gateway &amp; device management
 • Card exports, Staff management
@@ -1301,6 +1305,7 @@ Use /admincmd to view your available commands.
 
 <b>✅ What You CAN Do:</b>
 • 📋 View &amp; reply to support tickets
+• 💰 Add credits to users (/addfund)
 • 📊 View platform statistics (/stats)
 • 👥 List all users (/allusers)
 • 🔍 View detailed user info (/userinfo) — <i>view only, no actions</i>
@@ -1309,7 +1314,7 @@ Use /admincmd to view your available commands.
 
 <b>❌ What You CANNOT Do:</b>
 • Ban / Unban users
-• Add or deduct credits
+• Deduct credits from users
 • Delete users
 • Approve or reject topups
 • Broadcast messages
@@ -1329,6 +1334,7 @@ Use /admincmd to view your available commands.
 
 <b>Granted Permissions:</b>
 • View &amp; reply to support tickets
+• Add credits to users (no deductions)
 • View stats, user list, user info (read-only)
 • View banned users list
 
@@ -1410,8 +1416,9 @@ User can no longer use moderator commands.
 }
 
 async function handleAddFund(chatId: string, args: string, supabase: any): Promise<void> {
-  const hasAccess = await isAdminAsync(chatId, supabase);
-  if (!hasAccess) {
+  const isAdminUser = await isAdminAsync(chatId, supabase);
+  const isStaff = await isStaffAsync(chatId, supabase);
+  if (!isStaff) {
     await sendTelegramMessage(chatId, "❌ Access denied");
     return;
   }
@@ -1433,6 +1440,12 @@ Examples:
 
   if (isNaN(amount) || amount === 0) {
     await sendTelegramMessage(chatId, "❌ Invalid amount");
+    return;
+  }
+
+  // Moderators can only add credits, not deduct
+  if (!isAdminUser && amount < 0) {
+    await sendTelegramMessage(chatId, "❌ Moderators can only add credits, not deduct. Contact an admin for deductions.");
     return;
   }
 
