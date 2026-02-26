@@ -18,13 +18,13 @@ const publicCommands: CommandInfo[] = [
 ];
 
 const moderatorCommands: CommandInfo[] = [
-  { command: "/admincmd", description: "Open moderator panel" },
+  { command: "/admincmd", description: "Open staff panel with quick-action buttons" },
+  { command: "/addfund", description: "Add credits to any user account (positive amounts only)", usage: "/addfund user@email.com 50" },
   { command: "/ticket", description: "View & reply to support tickets", usage: "/ticket TK-XXXX" },
-  { command: "/addfund", description: "Add credits to a user (no deductions)", usage: "/addfund user@email.com 50" },
-  { command: "/stats", description: "View platform statistics" },
-  { command: "/allusers", description: "Browse all users (paginated)" },
-  { command: "/userinfo", description: "View detailed user info (read-only)", usage: "/userinfo username" },
-  { command: "/viewbans", description: "View banned users list" },
+  { command: "/stats", description: "View platform statistics & analytics" },
+  { command: "/allusers", description: "Browse all registered users (paginated)" },
+  { command: "/userinfo", description: "View detailed user info & account analytics (read-only)", usage: "/userinfo username" },
+  { command: "/viewbans", description: "View all currently banned users" },
 ];
 
 const adminCommands: CommandInfo[] = [
