@@ -454,6 +454,7 @@ const Gateways = () => {
     CircleDollarSign,
     ShoppingBag,
     CreditCard,
+    Shield: ShieldCheck,
   };
 
   // Fetch gateways from database and subscribe to real-time updates
@@ -1085,6 +1086,47 @@ const Gateways = () => {
     }
   };
 
+  // AuthNet Auth check via edge function with retry
+  const checkCardViaAuthNet = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[AUTHNET] Attempt ${attempt}/${maxRetries}`);
+        const { data, error } = await supabase.functions.invoke('authnet-auth-check', {
+          body: { cc }
+        });
+        
+        if (error) throw error;
+        
+        if (data?.computedStatus === 'unknown' && attempt < maxRetries) {
+          console.log(`[AUTHNET] UNKNOWN on attempt ${attempt}, retrying...`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          continue;
+        }
+        
+        return {
+          status: data?.computedStatus || 'unknown',
+          apiStatus: data?.apiStatus || 'UNKNOWN',
+          apiMessage: data?.apiMessage || 'No response',
+          rawResponse: data?.rawResponse || JSON.stringify(data)
+        };
+      } catch (error) {
+        console.error(`[AUTHNET] Attempt ${attempt} error:`, error);
+        if (attempt === maxRetries) {
+          return {
+            status: "unknown",
+            apiStatus: "ERROR",
+            apiMessage: error instanceof Error ? error.message : "Unknown error",
+            rawResponse: String(error)
+          };
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+    return { status: "unknown", apiStatus: "ERROR", apiMessage: "Max retries exceeded", rawResponse: "" };
+  };
+
 
   // PwGate API check via edge function - returns status AND API response
   const checkCardViaPwgate = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
@@ -1663,6 +1705,8 @@ const Gateways = () => {
         gatewayResponse = await checkCardViaRizzup(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "paypal_charge") {
         gatewayResponse = await checkCardViaPaypal(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+      } else if (selectedGateway.id === "authnet_auth") {
+        gatewayResponse = await checkCardViaAuthNet(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       }
       
       const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -2461,6 +2505,8 @@ const Gateways = () => {
           gatewayResponse = await checkCardViaRizzup(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "paypal_charge") {
           gatewayResponse = await checkCardViaPaypal(cardData.card, cardData.month, cardData.year, cardData.cvv);
+        } else if (selectedGateway.id === "authnet_auth") {
+          gatewayResponse = await checkCardViaAuthNet(cardData.card, cardData.month, cardData.year, cardData.cvv);
         }
         
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
