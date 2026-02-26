@@ -3605,9 +3605,11 @@ const Gateways = () => {
                             ? "$14 CHARGE"
                             : selectedGateway?.id === "stripe_charge"
                               ? "$10 CHARGE"
-                              : selectedGateway?.type === "charge" 
-                                ? "$1 CHARGE" 
-                                : "$0 AUTH"}
+                              : selectedGateway?.id === "paypal_graphql"
+                                ? "$0.01 CHARGE"
+                                : selectedGateway?.type === "charge" 
+                                  ? "$1 CHARGE" 
+                                  : "$0 AUTH"}
                       </span>
                     </div>
                     
@@ -4053,7 +4055,7 @@ const Gateways = () => {
                                 <span className="w-20 text-muted-foreground font-bold italic">AMOUNT</span>
                                 <span className="text-muted-foreground font-bold italic mr-1">:</span>
                                 <span className="text-foreground font-bold italic">
-                                  {selectedGateway?.type === "auth" ? "$0 AUTH" : selectedGateway?.id === "paygate_charge" ? "$14.00" : selectedGateway?.id === "payu_charge" ? `₹${payuAmount}` : selectedGateway?.id === "stripelow_charge" ? "£0.30" : selectedGateway?.id === "rizzup_charge" ? "$5.00" : selectedGateway?.id === "paypal_charge" ? "$1.00" : "$10.00"}
+                                  {selectedGateway?.type === "auth" ? "$0 AUTH" : selectedGateway?.id === "paygate_charge" ? "$14.00" : selectedGateway?.id === "payu_charge" ? `₹${payuAmount}` : selectedGateway?.id === "stripelow_charge" ? "£0.30" : selectedGateway?.id === "rizzup_charge" ? "$5.00" : selectedGateway?.id === "paypal_charge" ? "$1.00" : selectedGateway?.id === "paypal_graphql" ? "$0.01" : "$10.00"}
                                 </span>
                               </div>
                               
