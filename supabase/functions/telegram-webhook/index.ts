@@ -1003,7 +1003,12 @@ async function handleAdminCmd(chatId: string, supabase: any, messageId?: number)
 
 <i>Need elevated access? Contact an admin.</i>
 `;
-    const modKeyboard = { inline_keyboard: [[{ text: "🔙 Back to Menu", callback_data: "menu_back" }]] };
+    const modKeyboard = { inline_keyboard: [
+      [{ text: "💰 Add Fund", callback_data: "mod_addfund" }, { text: "📋 Tickets", callback_data: "mod_tickets" }],
+      [{ text: "📊 Stats", callback_data: "mod_stats" }, { text: "👥 All Users", callback_data: "mod_allusers" }],
+      [{ text: "🔍 User Info", callback_data: "mod_userinfo" }, { text: "🚫 View Bans", callback_data: "mod_viewbans" }],
+      [{ text: "🔙 Back to Menu", callback_data: "menu_back" }]
+    ] };
     if (messageId) {
       await editTelegramMessage(chatId, messageId, modMenu, modKeyboard);
     } else {
@@ -5564,6 +5569,162 @@ ${ticketsList}
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // ─────────────────────────────────────────────────────────
+      // MODERATOR PANEL QUICK ACTION CALLBACKS
+      // ─────────────────────────────────────────────────────────
+
+      if (callbackData === "mod_addfund") {
+        const hasAccess = await isStaffAsync(callbackChatId!, supabase);
+        if (!hasAccess) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        const helpMsg = `
+💰 <b>Add Fund</b>
+
+<b>Usage:</b> /addfund <code>[email] [amount]</code>
+
+<b>Example:</b>
+<code>/addfund user@email.com 50</code>
+
+⚠️ <i>Moderators can only add credits (positive amounts).</i>
+`;
+        const kb = { inline_keyboard: [[{ text: "🔙 Back to Panel", callback_data: "menu_admincmd" }]] };
+        if (messageId) {
+          await editTelegramMessage(callbackChatId!, messageId, helpMsg, kb);
+        } else {
+          await sendTelegramMessage(callbackChatId!, helpMsg, kb);
+        }
+        await answerCallbackQuery(update.callback_query.id, "💰 Add Fund");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (callbackData === "mod_tickets") {
+        const hasAccess = await isStaffAsync(callbackChatId!, supabase);
+        if (!hasAccess) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const { data: tickets } = await supabase
+          .from("support_tickets")
+          .select("ticket_id, subject, status, priority, created_at")
+          .in("status", ["open", "processing"])
+          .order("created_at", { ascending: false })
+          .limit(10);
+
+        const statusEmoji: Record<string, string> = { open: "🟡", processing: "🔵", solved: "🟢", closed: "⚫" };
+        let ticketsList = "";
+        if (tickets && tickets.length > 0) {
+          tickets.forEach((t: any, i: number) => {
+            ticketsList += `\n${i + 1}. ${statusEmoji[t.status] || "⚪"} <b>${t.ticket_id}</b>\n   ${t.subject.substring(0, 30)}${t.subject.length > 30 ? "..." : ""}`;
+          });
+        } else {
+          ticketsList = "\n✅ No open tickets!";
+        }
+
+        const ticketsMsg = `
+━━━━━━━━━━━━━━━━━━━━━━
+      🎫 <b>SUPPORT TICKETS</b>
+━━━━━━━━━━━━━━━━━━━━━━
+${ticketsList}
+
+<i>Use /ticket [id] to manage</i>
+━━━━━━━━━━━━━━━━━━━━━━
+`;
+        const kb = { inline_keyboard: [[{ text: "🔙 Back to Panel", callback_data: "menu_admincmd" }]] };
+        if (messageId) {
+          await editTelegramMessage(callbackChatId!, messageId, ticketsMsg, kb);
+        } else {
+          await sendTelegramMessage(callbackChatId!, ticketsMsg, kb);
+        }
+        await answerCallbackQuery(update.callback_query.id, "📋 Tickets loaded");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (callbackData === "mod_stats") {
+        const hasAccess = await isStaffAsync(callbackChatId!, supabase);
+        if (!hasAccess) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        await handleStats(callbackChatId!, supabase);
+        await answerCallbackQuery(update.callback_query.id, "📊 Stats loaded");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (callbackData === "mod_allusers") {
+        const hasAccess = await isStaffAsync(callbackChatId!, supabase);
+        if (!hasAccess) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const perPage = 5;
+        const { data: users, count } = await supabase
+          .from("profiles")
+          .select("user_id, username, credits, telegram_chat_id, is_banned", { count: "exact" })
+          .order("created_at", { ascending: false });
+
+        const { data: authData } = await supabase.auth.admin.listUsers();
+        const usersWithEmail = users?.map((u: any) => ({
+          ...u,
+          email: authData?.users?.find((a: any) => a.id === u.user_id)?.email || null
+        })) || [];
+
+        const { message, keyboard } = buildUsersListMessage(
+          usersWithEmail, 0, count || 0,
+          usersWithEmail.filter((u: any) => u.telegram_chat_id).length,
+          usersWithEmail.filter((u: any) => u.is_banned).length,
+          perPage
+        );
+
+        if (messageId) {
+          await editTelegramMessage(callbackChatId!, messageId, message, keyboard || undefined);
+        } else {
+          await sendTelegramMessage(callbackChatId!, message, keyboard || undefined);
+        }
+        await answerCallbackQuery(update.callback_query.id, "👥 Users loaded");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (callbackData === "mod_userinfo") {
+        const hasAccess = await isStaffAsync(callbackChatId!, supabase);
+        if (!hasAccess) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        const helpMsg = `
+🔍 <b>User Info</b>
+
+<b>Usage:</b> /userinfo <code>[username]</code>
+
+<b>Example:</b>
+<code>/userinfo john123</code>
+
+<i>View detailed user information (read-only for moderators).</i>
+`;
+        const kb = { inline_keyboard: [[{ text: "🔙 Back to Panel", callback_data: "menu_admincmd" }]] };
+        if (messageId) {
+          await editTelegramMessage(callbackChatId!, messageId, helpMsg, kb);
+        } else {
+          await sendTelegramMessage(callbackChatId!, helpMsg, kb);
+        }
+        await answerCallbackQuery(update.callback_query.id, "🔍 User Info");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (callbackData === "mod_viewbans") {
+        const hasAccess = await isStaffAsync(callbackChatId!, supabase);
+        if (!hasAccess) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        await handleViewBans(callbackChatId!, supabase);
+        await answerCallbackQuery(update.callback_query.id, "🚫 Bans loaded");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       if (callbackData === "menu_back") {
         // Rebuild menu
         const isAdminUser = await isAdminAsync(callbackChatId!, supabase);
@@ -5606,11 +5767,19 @@ Use /menu for full command list
           keyboard = {
             inline_keyboard: [
               [
-                { text: "📊 Stats", callback_data: "menu_stats" },
-                { text: "👥 Users", callback_data: "menu_allusers" }
+                { text: "💰 Add Fund", callback_data: "mod_addfund" },
+                { text: "📋 Tickets", callback_data: "mod_tickets" }
               ],
               [
-                { text: "🚫 Bans", callback_data: "menu_viewbans" }
+                { text: "📊 Stats", callback_data: "mod_stats" },
+                { text: "👥 Users", callback_data: "mod_allusers" }
+              ],
+              [
+                { text: "🔍 User Info", callback_data: "mod_userinfo" },
+                { text: "🚫 Bans", callback_data: "mod_viewbans" }
+              ],
+              [
+                { text: "🛡️ Mod Panel", callback_data: "menu_admincmd" }
               ]
             ]
           };
