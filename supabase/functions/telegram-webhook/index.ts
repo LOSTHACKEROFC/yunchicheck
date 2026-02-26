@@ -903,16 +903,28 @@ async function handleAdminCmd(chatId: string, supabase: any, messageId?: number)
     const modMenu = `
 🛡️ <b>Moderator Panel</b>
 
-<b>📋 Tickets</b>
-/ticket <code>[id]</code> - View & reply to tickets
+<b>📋 Support Tickets</b>
+/ticket <code>[id]</code> - View &amp; reply to tickets
 
-<b>📊 Data</b>
-/stats - View statistics
-/allusers - List all users
-/userinfo <code>[user]</code> - User details
-/viewbans - View banned users
+<b>📊 Data &amp; Monitoring</b>
+/stats - View platform statistics
+/allusers - Browse all users (paginated)
+/userinfo <code>[user]</code> - View user details (read-only)
+/viewbans - View banned users list
 
-<i>⚠️ Limited permissions - Contact admin for elevated actions</i>
+<b>✅ Your Permissions:</b>
+• View &amp; reply to support tickets
+• View platform stats &amp; user data
+• View banned users
+• View user info (no action buttons)
+
+<b>❌ Restricted (Admin Only):</b>
+• Ban/Unban, Delete users, Add credits
+• Topup management, Broadcasts
+• Gateway &amp; device management
+• Card exports, Staff management
+
+<i>Need elevated access? Contact an admin.</i>
 `;
     const modKeyboard = { inline_keyboard: [[{ text: "🔙 Back to Menu", callback_data: "menu_back" }]] };
     if (messageId) {
@@ -1284,13 +1296,28 @@ Example: /promote 123456789
   await sendTelegramMessage(targetChatId, `
 🎉 <b>Moderator Access Granted</b>
 
-You have been promoted to moderator.
-Use /admincmd to view available commands.
+You have been promoted to <b>Moderator</b>.
+Use /admincmd to view your available commands.
 
-<b>Moderator Permissions:</b>
-• View & reply to tickets
-• View user info & statistics
-• View banned users
+<b>✅ What You CAN Do:</b>
+• 📋 View &amp; reply to support tickets
+• 📊 View platform statistics (/stats)
+• 👥 List all users (/allusers)
+• 🔍 View detailed user info (/userinfo) — <i>view only, no actions</i>
+• 🚫 View banned users list (/viewbans)
+• 📂 Access the Moderator Panel (/admincmd)
+
+<b>❌ What You CANNOT Do:</b>
+• Ban / Unban users
+• Add or deduct credits
+• Delete users
+• Approve or reject topups
+• Broadcast messages
+• Manage gateways
+• Block / Unblock devices
+• Export card data
+• Promote / Demote staff
+• Grant / Revoke admin access
 `);
 
   await sendTelegramMessage(chatId, `
@@ -1300,7 +1327,12 @@ Use /admincmd to view available commands.
 <b>Telegram:</b> @${profile.telegram_username || targetChatId}
 <b>Chat ID:</b> <code>${targetChatId}</code>
 
-User can now use moderator commands.
+<b>Granted Permissions:</b>
+• View &amp; reply to support tickets
+• View stats, user list, user info (read-only)
+• View banned users list
+
+User has been notified of their new role.
 `);
 }
 
