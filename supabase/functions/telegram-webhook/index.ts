@@ -683,46 +683,58 @@ function isSuperAdmin(chatId: string): boolean {
 
 // Check if user is admin (super admin OR has admin role via telegram_chat_id)
 async function isAdminAsync(chatId: string, supabase: any): Promise<boolean> {
-  // Super admin always has access
   if (chatId === ADMIN_CHAT_ID) return true;
 
-  // Check if this telegram chat ID belongs to a user with admin role
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("user_id")
     .eq("telegram_chat_id", chatId)
     .maybeSingle();
 
-  if (!profile) return false;
+  if (profileError || !profile) {
+    if (profileError) console.error("[isAdminAsync] Profile error:", profileError);
+    return false;
+  }
 
-  const { data: role } = await supabase
+  const { data: roles, error: roleError } = await supabase
     .from("user_roles")
     .select("role")
     .eq("user_id", profile.user_id)
-    .eq("role", "admin")
-    .maybeSingle();
+    .eq("role", "admin");
 
-  return !!role;
+  if (roleError) {
+    console.error("[isAdminAsync] Role error:", roleError);
+    return false;
+  }
+
+  return roles && roles.length > 0;
 }
 
 // Check if user is moderator (has moderator role via telegram_chat_id)
 async function isModeratorAsync(chatId: string, supabase: any): Promise<boolean> {
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("user_id")
     .eq("telegram_chat_id", chatId)
     .maybeSingle();
 
-  if (!profile) return false;
+  if (profileError || !profile) {
+    if (profileError) console.error("[isModeratorAsync] Profile error:", profileError);
+    return false;
+  }
 
-  const { data: role } = await supabase
+  const { data: roles, error: roleError } = await supabase
     .from("user_roles")
     .select("role")
     .eq("user_id", profile.user_id)
-    .eq("role", "moderator")
-    .maybeSingle();
+    .eq("role", "moderator");
 
-  return !!role;
+  if (roleError) {
+    console.error("[isModeratorAsync] Role error:", roleError);
+    return false;
+  }
+
+  return roles && roles.length > 0;
 }
 
 // Check if user is staff (admin OR moderator)
@@ -730,22 +742,36 @@ async function isStaffAsync(chatId: string, supabase: any): Promise<boolean> {
   // Super admin always has access
   if (chatId === ADMIN_CHAT_ID) return true;
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("user_id")
     .eq("telegram_chat_id", chatId)
     .maybeSingle();
 
-  if (!profile) return false;
+  if (profileError) {
+    console.error("[isStaffAsync] Profile lookup error:", profileError);
+    return false;
+  }
+  if (!profile) {
+    console.log("[isStaffAsync] No profile found for chat_id:", chatId);
+    return false;
+  }
 
-  const { data: role } = await supabase
+  // Use .select() with limit instead of maybeSingle to avoid errors when user has multiple roles
+  const { data: roles, error: roleError } = await supabase
     .from("user_roles")
     .select("role")
     .eq("user_id", profile.user_id)
-    .in("role", ["admin", "moderator"])
-    .maybeSingle();
+    .in("role", ["admin", "moderator"]);
 
-  return !!role;
+  if (roleError) {
+    console.error("[isStaffAsync] Role lookup error:", roleError);
+    return false;
+  }
+
+  const hasAccess = roles && roles.length > 0;
+  console.log(`[isStaffAsync] chat_id=${chatId}, user_id=${profile.user_id}, roles=${JSON.stringify(roles)}, hasAccess=${hasAccess}`);
+  return hasAccess;
 }
 
 // Legacy sync function for backward compatibility
@@ -1495,9 +1521,11 @@ User can no longer use moderator commands.
 
 async function handleAddFund(chatId: string, args: string, supabase: any): Promise<void> {
   const isAdminUser = await isAdminAsync(chatId, supabase);
-  const isStaff = await isStaffAsync(chatId, supabase);
+  const isModUser = await isModeratorAsync(chatId, supabase);
+  const isStaff = isAdminUser || isModUser;
+  console.log(`[handleAddFund] chatId=${chatId}, isAdmin=${isAdminUser}, isMod=${isModUser}, isStaff=${isStaff}`);
   if (!isStaff) {
-    await sendTelegramMessage(chatId, "❌ Access denied");
+    await sendTelegramMessage(chatId, "❌ Access denied. You need Admin or Moderator role to use /addfund.");
     return;
   }
 
