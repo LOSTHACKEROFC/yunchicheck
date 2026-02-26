@@ -615,56 +615,59 @@ async function setBotCommands(supabase?: any): Promise<void> {
       }),
     });
 
-    // Set moderator commands for all granted moderators
-    const { data: modProfiles } = await supabase
-      .from("user_roles")
-      .select("user_id")
-      .eq("role", "moderator");
+    // Set moderator and admin commands per-user (only if supabase client provided)
+    if (supabase) {
+      // Set moderator commands for all granted moderators
+      const { data: modProfiles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "moderator");
 
-    if (modProfiles) {
-      for (const mod of modProfiles) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("telegram_chat_id")
-          .eq("user_id", mod.user_id)
-          .maybeSingle();
+      if (modProfiles) {
+        for (const mod of modProfiles) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("telegram_chat_id")
+            .eq("user_id", mod.user_id)
+            .maybeSingle();
 
-        if (profile?.telegram_chat_id) {
-          await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              commands: moderatorCommands,
-              scope: { type: "chat", chat_id: parseInt(profile.telegram_chat_id) },
-            }),
-          });
+          if (profile?.telegram_chat_id) {
+            await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                commands: moderatorCommands,
+                scope: { type: "chat", chat_id: parseInt(profile.telegram_chat_id) },
+              }),
+            });
+          }
         }
       }
-    }
 
-    // Also set admin commands for all granted admins (not just super admin)
-    const { data: adminProfiles } = await supabase
-      .from("user_roles")
-      .select("user_id")
-      .eq("role", "admin");
+      // Also set admin commands for all granted admins (not just super admin)
+      const { data: adminProfiles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "admin");
 
-    if (adminProfiles) {
-      for (const admin of adminProfiles) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("telegram_chat_id")
-          .eq("user_id", admin.user_id)
-          .maybeSingle();
+      if (adminProfiles) {
+        for (const admin of adminProfiles) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("telegram_chat_id")
+            .eq("user_id", admin.user_id)
+            .maybeSingle();
 
-        if (profile?.telegram_chat_id && profile.telegram_chat_id !== ADMIN_CHAT_ID) {
-          await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              commands: adminCommands,
-              scope: { type: "chat", chat_id: parseInt(profile.telegram_chat_id) },
-            }),
-          });
+          if (profile?.telegram_chat_id && profile.telegram_chat_id !== ADMIN_CHAT_ID) {
+            await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                commands: adminCommands,
+                scope: { type: "chat", chat_id: parseInt(profile.telegram_chat_id) },
+              }),
+            });
+          }
         }
       }
     }
@@ -966,7 +969,7 @@ async function handleAdminCmd(chatId: string, supabase: any, messageId?: number)
     return;
   }
 
-  await setBotCommands();
+  await setBotCommands(supabase);
 
   // Moderator menu (limited)
   if (isModUser && !isAdminUser) {
@@ -3214,8 +3217,9 @@ const handler = async (req: Request): Promise<Response> => {
     });
     const setData = await setResult.json();
     
-    // Register commands
-    await setBotCommands();
+    // Register commands (create supabase client for role-based command registration)
+    const supabaseForCommands = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    await setBotCommands(supabaseForCommands);
     
     // Get webhook info
     const infoResult = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo`);
