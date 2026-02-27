@@ -6456,7 +6456,7 @@ Top up at yunchicheck.com/dashboard/topup
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
       ];
       
-      const apiUrl = `https://killer-edbu.onrender.com/kill?cc=${cc}`;
+      const apiUrl = `http://killer-production.up.railway.app/kill?cc=${cc}`;
       
       // Send 6 requests sequentially and collect responses
       const responses: { attempt: number; status: string; response: string; time: string }[] = [];
