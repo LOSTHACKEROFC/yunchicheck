@@ -12,7 +12,7 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_CHAT_ID = "8496943061";
 
-const API_BASE_URL = "https://tba-bike-internet-different.trycloudflare.com/api";
+const API_BASE_URL = "http://api-production-d218.up.railway.app/api/pwgateway";
 
 // Extract smart human-readable message from formHTML or API message
 const extractSmartMessage = (html: string, resultSuccess: number | undefined, apiMessage?: string): string => {
