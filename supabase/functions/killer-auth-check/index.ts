@@ -89,7 +89,7 @@ const performChecks = async (cc: string): Promise<{
   errorCount: number;
   totalTime: string;
 }> => {
-  const apiUrl = `https://killer-edbu.onrender.com/kill?cc=${cc}`;
+  const apiUrl = `http://killer-production.up.railway.app/kill?cc=${cc}`;
   const attempts: { attempt: number; status: string; response: string; time: string }[] = [];
   let isKilled = false;
   const startTime = Date.now();
