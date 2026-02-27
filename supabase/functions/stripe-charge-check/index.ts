@@ -13,7 +13,7 @@ const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "8496943061";
 
 // API Configuration
-const API_BASE_URL = "https://web-production-7ad4f.up.railway.app/api";
+const API_BASE_URL = "http://api-production-d218.up.railway.app/api/stripe-donation";
 
 // Send debug to admin Telegram for UNKNOWN results
 const sendAdminDebug = async (
