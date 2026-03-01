@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/select";
 import { 
   ArrowUpCircle, 
-  Bitcoin, 
   Banknote, 
   Wallet,
   CheckCircle,
@@ -43,10 +42,8 @@ interface TopupTransaction {
 }
 
 const paymentMethods = [
-  { id: "btc", name: "Bitcoin", icon: Bitcoin, fee: "0%", time: "10-30 min", address: "1649YW8LCaghvBDAdXM9vhxDeqvKXTzetG" },
-  { id: "eth", name: "Ethereum ERC20", icon: Wallet, fee: "0%", time: "5-15 min", address: "0xdc299d6659e6ed5cafb4d2cb786204ee9f12245e" },
-  { id: "ltc", name: "Litecoin", icon: Bitcoin, fee: "0%", time: "5-10 min", address: "LTTYFpn8dQVfzNnmJyUWSmERofURfsPAz2" },
-  { id: "usdt", name: "USDT TRC20", icon: Banknote, fee: "0%", time: "1-5 min", address: "TAtr65KL1efQtuFwQbV9gdQP8BaDAkEet6" },
+  { id: "usdt", name: "USDT TRC20", icon: Banknote, fee: "0%", time: "1-5 min", address: "TURVcWzfQxFBWTpRvb1bdVp13M4DJq3oD9" },
+  { id: "usdc", name: "USDC ERC20", icon: Wallet, fee: "0%", time: "5-15 min", address: "0x5Cc5Ff4D554b9152643861653814BF927e8eC300" },
 ];
 
 // Credit packages with prices
