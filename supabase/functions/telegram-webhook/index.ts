@@ -4327,9 +4327,9 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
           hour: "2-digit", minute: "2-digit" 
         });
 
-        // Show rejected status and ask for reason
+        // Update photo caption - remove buttons, mark as rejected
         const rejectedCaption = `
-❌ <b>REJECTED</b> — Awaiting reason
+❌ <b>REJECTED</b>
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
@@ -4343,10 +4343,14 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
 <b>📅 Rejected:</b> ${timestamp}
 
 ━━━━━━━━━━━━━━━━━━━━━━
-
-<i>Select a rejection reason to notify the user:</i>
 `;
 
+        // Remove buttons from the photo message
+        if (messageId && callbackChatId) {
+          await editMessageCaption(callbackChatId, messageId, rejectedCaption, null);
+        }
+
+        // Send a SEPARATE message asking for the rejection reason
         const reasonKeyboard = {
           inline_keyboard: [
             [{ text: "❌ Invalid payment proof", callback_data: `topup_reject_reason_invalid_${transactionId}` }],
@@ -4357,10 +4361,13 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
           ],
         };
 
-        if (messageId && callbackChatId) {
-          await editMessageCaption(callbackChatId, messageId, rejectedCaption, reasonKeyboard);
-        }
-        await answerCallbackQuery(update.callback_query.id, "❌ Rejected! Now select a reason.");
+        await sendTelegramMessage(
+          callbackChatId,
+          `📋 <b>Enter rejection reason</b>\n\n<b>User:</b> ${escapeHtml(username)}\n<b>Amount:</b> ${credits} credits\n\n<i>Select a reason below to notify the user:</i>`,
+          reasonKeyboard
+        );
+
+        await answerCallbackQuery(update.callback_query.id, "❌ Rejected!");
 
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -4409,26 +4416,15 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
 
         const credits = Number(transaction.amount);
 
-        // Update message to ask for custom reason
+        // Send a separate message asking for custom reason
+        await sendTelegramMessage(
+          callbackChatId,
+          `📝 <b>Enter custom rejection reason</b>\n\n<b>User:</b> ${escapeHtml(profile?.username || "Unknown")}\n<b>Amount:</b> ${credits} credits\n\n<b>Type your rejection reason and send it.</b>\n<i>The reason will be sent to the user.</i>`
+        );
+
+        // Remove the reason selection buttons from the previous message
         if (messageId && callbackChatId) {
-          const askReasonCaption = `
-📝 <b>ENTER REJECTION REASON</b>
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>Transaction:</b> <code>${transactionId.slice(0, 8)}...</code>
-<b>User:</b> ${escapeHtml(profile?.username || "Unknown")}
-<b>Amount:</b> ${credits} credits
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>Type your rejection reason and send it.</b>
-
-<i>The reason will be sent to the user.</i>
-`;
-          await editMessageCaption(callbackChatId, messageId, askReasonCaption, {
-            inline_keyboard: []
-          });
+          await editTelegramMessage(callbackChatId, messageId, `📋 <b>Rejection reason:</b> Custom (typing...)`, { inline_keyboard: [] });
         }
         await answerCallbackQuery(update.callback_query.id, "Enter rejection reason");
 
@@ -4493,28 +4489,9 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
           hour: "2-digit", minute: "2-digit" 
         });
 
-        // Update the payment proof message - remove buttons and show rejected status
+        // Update the separate reason message to show the selected reason (remove buttons)
         if (messageId && callbackChatId) {
-          const rejectedCaption = `
-❌ <b>REJECTED</b>
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>Transaction ID:</b>
-<code>${transactionId}</code>
-
-<b>👤 User:</b> ${username}
-<b>📧 Email:</b> ${userEmail}
-<b>💵 Amount:</b> ${credits} credits
-<b>💳 Method:</b> ${paymentMethod}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>❌ Status:</b> Rejected
-<b>📋 Reason:</b> ${rejectionReason}
-<b>📅 Processed:</b> ${timestamp}
-`;
-          await editMessageCaption(callbackChatId, messageId, rejectedCaption, null);
+          await editTelegramMessage(callbackChatId, messageId, `✅ <b>Rejection reason sent:</b> ${rejectionReason}`, { inline_keyboard: [] });
         }
 
         // Notify user with rejection reason via Telegram
