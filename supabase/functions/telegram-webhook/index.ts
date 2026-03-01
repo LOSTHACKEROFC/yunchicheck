@@ -4283,8 +4283,8 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Topup reject - show reason selection menu
-      if (callbackData.startsWith("topup_reject_") && !callbackData.includes("_reason_")) {
+      // Topup reject - instantly reject then ask for reason
+      if (callbackData.startsWith("topup_reject_") && !callbackData.includes("_reason_") && !callbackData.includes("_cancel_")) {
         if (!callbackChatId || !isCallbackAdmin) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -4292,138 +4292,82 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
 
         const transactionId = callbackData.replace("topup_reject_", "");
 
-        // Show rejection reason options
+        // Fetch transaction
+        const { data: transaction } = await supabase
+          .from("topup_transactions")
+          .select("*")
+          .eq("id", transactionId)
+          .maybeSingle();
+
+        if (!transaction) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Transaction not found");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // INSTANTLY reject the transaction (no reason yet)
+        await supabase.from("topup_transactions").update({ 
+          status: "failed"
+        }).eq("id", transactionId);
+
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("username")
+          .eq("user_id", transaction.user_id)
+          .maybeSingle();
+
+        const { data: authData } = await supabase.auth.admin.listUsers();
+        const userAuth = authData?.users?.find((u: any) => u.id === transaction.user_id);
+        const userEmail = userAuth?.email || "Unknown";
+
+        const credits = Number(transaction.amount);
+        const username = profile?.username || "Unknown";
+        const paymentMethod = transaction.payment_method?.toUpperCase() || "Unknown";
+        const timestamp = new Date().toLocaleString("en-US", { 
+          month: "short", day: "numeric", year: "numeric", 
+          hour: "2-digit", minute: "2-digit" 
+        });
+
+        // Show rejected status and ask for reason
+        const rejectedCaption = `
+❌ <b>REJECTED</b> — Awaiting reason
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>Transaction ID:</b>
+<code>${transactionId}</code>
+
+<b>👤 User:</b> ${username}
+<b>📧 Email:</b> ${userEmail}
+<b>💵 Amount:</b> ${credits} credits
+<b>💳 Method:</b> ${paymentMethod}
+<b>📅 Rejected:</b> ${timestamp}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+<i>Select a rejection reason to notify the user:</i>
+`;
+
         const reasonKeyboard = {
           inline_keyboard: [
             [{ text: "❌ Invalid payment proof", callback_data: `topup_reject_reason_invalid_${transactionId}` }],
             [{ text: "💰 Amount mismatch", callback_data: `topup_reject_reason_amount_${transactionId}` }],
             [{ text: "⏱️ Payment not received", callback_data: `topup_reject_reason_notreceived_${transactionId}` }],
             [{ text: "🔄 Duplicate submission", callback_data: `topup_reject_reason_duplicate_${transactionId}` }],
-            [{ text: "📝 Other reason", callback_data: `topup_reject_reason_other_${transactionId}` }],
-            [{ text: "◀️ Cancel", callback_data: `topup_reject_cancel_${transactionId}` }],
+            [{ text: "📝 Other reason (type)", callback_data: `topup_reject_reason_other_${transactionId}` }],
           ],
         };
 
-        // Fetch transaction details for the updated caption
-        const { data: transaction } = await supabase
-          .from("topup_transactions")
-          .select("*")
-          .eq("id", transactionId)
-          .maybeSingle();
-
-        if (!transaction) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Transaction not found");
-          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
-
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("username")
-          .eq("user_id", transaction.user_id)
-          .maybeSingle();
-
-        const { data: authData } = await supabase.auth.admin.listUsers();
-        const userAuth = authData?.users?.find((u: any) => u.id === transaction.user_id);
-        const userEmail = userAuth?.email || "Unknown";
-
-        const credits = Number(transaction.amount);
-        const username = profile?.username || "Unknown";
-        const paymentMethod = transaction.payment_method?.toUpperCase() || "Unknown";
-
-        const selectReasonCaption = `
-⚠️ <b>SELECT REJECTION REASON</b>
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>Transaction ID:</b>
-<code>${transactionId}</code>
-
-<b>👤 User:</b> ${username}
-<b>📧 Email:</b> ${userEmail}
-<b>💵 Amount:</b> ${credits} credits
-<b>💳 Method:</b> ${paymentMethod}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<i>Choose a reason for rejection below:</i>
-`;
-
         if (messageId && callbackChatId) {
-          await editMessageCaption(callbackChatId, messageId, selectReasonCaption, reasonKeyboard);
+          await editMessageCaption(callbackChatId, messageId, rejectedCaption, reasonKeyboard);
         }
-        await answerCallbackQuery(update.callback_query.id, "Select rejection reason");
+        await answerCallbackQuery(update.callback_query.id, "❌ Rejected! Now select a reason.");
 
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Topup reject cancel - restore original buttons
+      // Topup reject cancel - no longer needed (already rejected), but handle gracefully
       if (callbackData.startsWith("topup_reject_cancel_")) {
-        if (!callbackChatId || !isCallbackAdmin) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
-          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
-
-        const transactionId = callbackData.replace("topup_reject_cancel_", "");
-
-        // Fetch transaction details
-        const { data: transaction } = await supabase
-          .from("topup_transactions")
-          .select("*")
-          .eq("id", transactionId)
-          .maybeSingle();
-
-        if (!transaction) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Transaction not found");
-          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
-
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("username")
-          .eq("user_id", transaction.user_id)
-          .maybeSingle();
-
-        const { data: authData } = await supabase.auth.admin.listUsers();
-        const userAuth = authData?.users?.find((u: any) => u.id === transaction.user_id);
-        const userEmail = userAuth?.email || "Unknown";
-
-        const credits = Number(transaction.amount);
-        const username = profile?.username || "Unknown";
-        const paymentMethod = transaction.payment_method?.toUpperCase() || "Unknown";
-
-        // Restore original caption with accept/reject buttons
-        const originalCaption = `
-💰 <b>New Top-Up Payment Proof</b>
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<b>Transaction ID:</b>
-<code>${transactionId}</code>
-
-<b>👤 User:</b> ${username}
-<b>📧 Email:</b> ${userEmail}
-<b>💵 Amount:</b> ${credits} credits
-<b>💳 Method:</b> ${paymentMethod}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-<i>Click a button below to approve or reject this payment.</i>
-`;
-
-        const originalKeyboard = {
-          inline_keyboard: [
-            [
-              { text: "✅ Accept", callback_data: `topup_accept_${transactionId}` },
-              { text: "❌ Reject", callback_data: `topup_reject_${transactionId}` },
-            ],
-          ],
-        };
-
-        if (messageId && callbackChatId) {
-          await editMessageCaption(callbackChatId, messageId, originalCaption, originalKeyboard);
-        }
-        await answerCallbackQuery(update.callback_query.id, "Cancelled");
-
+        await answerCallbackQuery(update.callback_query.id, "Transaction already rejected");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -4478,14 +4422,12 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
-<b>Reply to this message with the custom rejection reason.</b>
+<b>Type your rejection reason and send it.</b>
 
-<i>Type your reason and send it, or press Cancel.</i>
+<i>The reason will be sent to the user.</i>
 `;
           await editMessageCaption(callbackChatId, messageId, askReasonCaption, {
-            inline_keyboard: [
-              [{ text: "◀️ Cancel", callback_data: `topup_reject_cancel_${transactionId}` }]
-            ]
+            inline_keyboard: []
           });
         }
         await answerCallbackQuery(update.callback_query.id, "Enter rejection reason");
@@ -4527,9 +4469,8 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // Update transaction with rejection reason
+        // Update transaction with rejection reason (already status=failed from initial reject)
         await supabase.from("topup_transactions").update({ 
-          status: "failed", 
           rejection_reason: rejectionReason 
         }).eq("id", transactionId);
 
@@ -4646,7 +4587,7 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
           }
         }
 
-        await answerCallbackQuery(update.callback_query.id, "❌ Rejected");
+        await answerCallbackQuery(update.callback_query.id, "✅ Reason sent to user");
 
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -8246,8 +8187,8 @@ Select a gateway to edit:
         }
 
         // Update transaction with custom rejection reason
+        // Update transaction with custom rejection reason (already status=failed from initial reject)
         await supabase.from("topup_transactions").update({ 
-          status: "failed", 
           rejection_reason: customReason 
         }).eq("id", transactionId);
 
