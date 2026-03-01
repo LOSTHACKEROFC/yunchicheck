@@ -346,10 +346,8 @@ const TopupUser = () => {
 
   const getPaymentMethodLabel = (method: string) => {
     const labels: Record<string, string> = {
-      btc: 'Bitcoin',
-      eth: 'Ethereum',
-      ltc: 'Litecoin',
-      usdt: 'USDT TRC20'
+      usdt: 'USDT TRC20',
+      usdc: 'USDC ERC20'
     };
     return labels[method] || method.toUpperCase();
   };
