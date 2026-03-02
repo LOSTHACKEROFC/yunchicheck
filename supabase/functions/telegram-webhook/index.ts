@@ -2222,9 +2222,6 @@ async function handleStats(chatId: string, supabase: any, messageId?: number): P
   const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).toISOString();
 
   const [
-    { data: allCards },
-    { data: todayCards },
-    { data: weekCards },
     { data: stats },
     { data: allProfiles },
     { data: tickets },
@@ -2232,11 +2229,7 @@ async function handleStats(chatId: string, supabase: any, messageId?: number): P
     { data: todayTopups },
     { data: weekTopups },
     { data: pendingTopups },
-    { count: activeUsersCount },
   ] = await Promise.all([
-    supabase.from("card_checks").select("result, gateway"),
-    supabase.from("card_checks").select("result").gte("created_at", todayStart),
-    supabase.from("card_checks").select("result").gte("created_at", weekStart),
     supabase.from("site_stats").select("*").eq("id", "global").maybeSingle(),
     supabase.from("profiles").select("is_banned, telegram_chat_id, credits"),
     supabase.from("support_tickets").select("status"),
@@ -2244,7 +2237,6 @@ async function handleStats(chatId: string, supabase: any, messageId?: number): P
     supabase.from("topup_transactions").select("amount, status, payment_method").eq("status", "completed").gte("created_at", todayStart),
     supabase.from("topup_transactions").select("amount, status, payment_method").eq("status", "completed").gte("created_at", weekStart),
     supabase.from("topup_transactions").select("id").eq("status", "pending"),
-    supabase.from("card_checks").select("user_id", { count: "exact", head: true }).gte("created_at", weekStart),
   ]);
 
   // Credit-to-USDT conversion using package tiers
@@ -2258,47 +2250,12 @@ async function handleStats(chatId: string, supabase: any, messageId?: number): P
   ];
   
   function creditsToUsdt(credits: number): number {
-    // Find the matching package or use closest rate
     const pkg = creditPackages.find(p => p.credits === credits);
     if (pkg) return pkg.price;
-    // Fallback: use weighted average rate from closest package
     const sorted = [...creditPackages].sort((a, b) => Math.abs(a.credits - credits) - Math.abs(b.credits - credits));
     const closest = sorted[0];
     return Number(((credits / closest.credits) * closest.price).toFixed(2));
   }
-
-  // Card status classifier based on actual DB values: "live", "dead", "killed", "unknown"
-  function classifyCard(result: string): "live" | "charged" | "dead" | "unknown" {
-    const r = (result || "").toLowerCase();
-    // "killed" = charged/killed on Killer Auth gateway
-    if (r === "killed" || r.startsWith("killed")) return "charged";
-    // "live" = live/approved/passed on auth gateways
-    if (r === "live" || r.startsWith("live")) return "live";
-    // "dead" = dead/declined/rejected
-    if (r.startsWith("dead")) return "dead";
-    // everything else is unknown/error
-    return "unknown";
-  }
-
-  // Card Stats
-  const cards = allCards || [];
-  const totalCards = cards.length;
-  const liveCards = cards.filter((c: any) => classifyCard(c.result) === "live").length;
-  const chargedCards = cards.filter((c: any) => classifyCard(c.result) === "charged").length;
-  const deadCards = cards.filter((c: any) => classifyCard(c.result) === "dead").length;
-  const unknownCards = cards.filter((c: any) => classifyCard(c.result) === "unknown").length;
-  const successRate = totalCards > 0 ? (((liveCards + chargedCards) / totalCards) * 100).toFixed(1) : "0.0";
-
-  // Today's card stats
-  const tCards = todayCards || [];
-  const todayTotal = tCards.length;
-  const todayLive = tCards.filter((c: any) => classifyCard(c.result) === "live").length;
-  const todayCharged = tCards.filter((c: any) => classifyCard(c.result) === "charged").length;
-  const todayDead = tCards.filter((c: any) => classifyCard(c.result) === "dead").length;
-
-  // Week card stats
-  const wCards = weekCards || [];
-  const weekTotal = wCards.length;
 
   // User Stats
   const profiles = allProfiles || [];
@@ -2330,19 +2287,6 @@ async function handleStats(chatId: string, supabase: any, messageId?: number): P
   };
   const totalTickets = (tickets || []).length;
 
-  // Top 5 Gateways
-  const gatewayMap: Record<string, number> = {};
-  cards.forEach((c: any) => {
-    const gw = c.gateway || "unknown";
-    gatewayMap[gw] = (gatewayMap[gw] || 0) + 1;
-  });
-  const topGateways = Object.entries(gatewayMap)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
-  const topGatewayText = topGateways.length > 0
-    ? topGateways.map(([gw, count], i) => `  ${i + 1}. ${gw} — ${count.toLocaleString()}`).join("\n")
-    : "  No data";
-
   const timestamp = now.toLocaleString("en-US", {
     month: "short", day: "numeric", year: "numeric",
     hour: "2-digit", minute: "2-digit", timeZone: "UTC"
@@ -2351,25 +2295,6 @@ async function handleStats(chatId: string, supabase: any, messageId?: number): P
   const statsMessage = `
 📊 <b>Platform Statistics</b>
 <i>Updated: ${timestamp} UTC</i>
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-🃏 <b>Card Analytics</b>
-┌ Total Checks: <b>${totalCards.toLocaleString()}</b>
-├ ✅ Live: <b>${liveCards.toLocaleString()}</b>
-├ 💳 Charged: <b>${chargedCards.toLocaleString()}</b>
-├ ❌ Dead: <b>${deadCards.toLocaleString()}</b>
-├ ❓ Unknown/Error: <b>${unknownCards.toLocaleString()}</b>
-└ 📈 Success Rate: <b>${successRate}%</b>
-
-📅 <b>Today's Activity</b>
-┌ Checks: <b>${todayTotal.toLocaleString()}</b>
-├ ✅ Live: <b>${todayLive.toLocaleString()}</b>
-├ 💳 Charged: <b>${todayCharged.toLocaleString()}</b>
-└ ❌ Dead: <b>${todayDead.toLocaleString()}</b>
-
-📆 <b>This Week</b>
-└ Total Checks: <b>${weekTotal.toLocaleString()}</b>
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
@@ -2395,11 +2320,6 @@ async function handleStats(chatId: string, supabase: any, messageId?: number): P
 ├ 🔵 Processing: <b>${ticketStats.processing}</b>
 ├ ✅ Solved: <b>${ticketStats.solved}</b>
 └ ⚫ Closed: <b>${ticketStats.closed}</b>
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-🏆 <b>Top Gateways</b>
-${topGatewayText}
 `;
 
   const statsKeyboard = {
