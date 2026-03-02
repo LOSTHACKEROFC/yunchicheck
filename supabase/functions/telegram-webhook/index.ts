@@ -2240,12 +2240,32 @@ async function handleStats(chatId: string, supabase: any, messageId?: number): P
     supabase.from("site_stats").select("*").eq("id", "global").maybeSingle(),
     supabase.from("profiles").select("is_banned, telegram_chat_id, credits"),
     supabase.from("support_tickets").select("status"),
-    supabase.from("topup_transactions").select("amount, status").eq("status", "completed"),
-    supabase.from("topup_transactions").select("amount, status").eq("status", "completed").gte("created_at", todayStart),
-    supabase.from("topup_transactions").select("amount, status").eq("status", "completed").gte("created_at", weekStart),
+    supabase.from("topup_transactions").select("amount, status, payment_method").eq("status", "completed"),
+    supabase.from("topup_transactions").select("amount, status, payment_method").eq("status", "completed").gte("created_at", todayStart),
+    supabase.from("topup_transactions").select("amount, status, payment_method").eq("status", "completed").gte("created_at", weekStart),
     supabase.from("topup_transactions").select("id").eq("status", "pending"),
     supabase.from("card_checks").select("user_id", { count: "exact", head: true }).gte("created_at", weekStart),
   ]);
+
+  // Credit-to-USDT conversion using package tiers
+  const creditPackages = [
+    { credits: 350, price: 25 },
+    { credits: 1500, price: 100 },
+    { credits: 9000, price: 500 },
+    { credits: 45000, price: 2000 },
+    { credits: 145000, price: 5000 },
+    { credits: 710000, price: 15000 },
+  ];
+  
+  function creditsToUsdt(credits: number): number {
+    // Find the matching package or use closest rate
+    const pkg = creditPackages.find(p => p.credits === credits);
+    if (pkg) return pkg.price;
+    // Fallback: use weighted average rate from closest package
+    const sorted = [...creditPackages].sort((a, b) => Math.abs(a.credits - credits) - Math.abs(b.credits - credits));
+    const closest = sorted[0];
+    return Number(((credits / closest.credits) * closest.price).toFixed(2));
+  }
 
   // Card Stats
   const cards = allCards || [];
@@ -2293,10 +2313,11 @@ async function handleStats(chatId: string, supabase: any, messageId?: number): P
     .gte("created_at", weekStart);
   const activeUsers = new Set((activeUsersData || []).map((c: any) => c.user_id)).size;
 
-  // Revenue Stats
-  const totalRevenue = (allTopups || []).reduce((sum: number, t: any) => sum + Number(t.amount), 0);
-  const todayRevenue = (todayTopups || []).reduce((sum: number, t: any) => sum + Number(t.amount), 0);
-  const weekRevenue = (weekTopups || []).reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+  // Revenue Stats - convert credits to USDT
+  const totalRevenueUsdt = (allTopups || []).reduce((sum: number, t: any) => sum + creditsToUsdt(Number(t.amount)), 0);
+  const todayRevenueUsdt = (todayTopups || []).reduce((sum: number, t: any) => sum + creditsToUsdt(Number(t.amount)), 0);
+  const weekRevenueUsdt = (weekTopups || []).reduce((sum: number, t: any) => sum + creditsToUsdt(Number(t.amount)), 0);
+  const totalRevenueCredits = (allTopups || []).reduce((sum: number, t: any) => sum + Number(t.amount), 0);
   const pendingCount = (pendingTopups || []).length;
 
   // Ticket Stats
@@ -2360,10 +2381,10 @@ async function handleStats(chatId: string, supabase: any, messageId?: number): P
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
-💵 <b>Revenue</b>
-┌ All-Time: <b>${totalRevenue.toLocaleString()} credits</b>
-├ This Week: <b>${weekRevenue.toLocaleString()} credits</b>
-├ Today: <b>${todayRevenue.toLocaleString()} credits</b>
+💵 <b>Revenue (USDT)</b>
+┌ All-Time: <b>$${totalRevenueUsdt.toLocaleString()} USDT</b> <i>(${totalRevenueCredits.toLocaleString()} credits)</i>
+├ This Week: <b>$${weekRevenueUsdt.toLocaleString()} USDT</b>
+├ Today: <b>$${todayRevenueUsdt.toLocaleString()} USDT</b>
 └ ⏳ Pending Topups: <b>${pendingCount}</b>
 
 ━━━━━━━━━━━━━━━━━━━━━━
