@@ -7688,10 +7688,14 @@ ${ticket.message}
         const lastResults = recentResults.slice(-3).reverse();
         
         let resultsDisplay = "";
+        const savedCount = recentResults.filter(r => r.status === "success" && r.price > 0).length;
+        const removedCount = recentResults.filter(r => r.status === "error" || (r.status === "success" && r.price <= 0)).length;
         for (const r of lastResults) {
-          const icon = r.status === "success" ? "✅" : "❌";
+          const hasPriceVal = r.status === "success" && r.price > 0;
+          const icon = hasPriceVal ? "✅" : "🗑️";
+          const action = hasPriceVal ? "SAVED" : "REMOVED";
           const shortUrl = r.url.length > 25 ? r.url.substring(0, 25) + "..." : r.url;
-          resultsDisplay += `${icon} ${shortUrl} → ${r.priceStr}\n`;
+          resultsDisplay += `${icon} ${shortUrl} → ${r.priceStr} [${action}]\n`;
         }
 
         const statusText = isStopped ? "🛑 <b>STOPPED</b>" : "🔄 <b>SCANNING...</b>";
@@ -7706,8 +7710,8 @@ ${statusText}
 [${progressBar}] ${progress}%
 
 ┌─────────────────────
-│ ✅ Success: <b>${successCount}</b>
-│ ❌ Errors: <b>${errorCount}</b>
+│ ✅ Saved: <b>${savedCount}</b>
+│ 🗑️ Removed: <b>${removedCount}</b>
 └─────────────────────
 
 🌐 <b>Current Site:</b>
@@ -7828,9 +7832,17 @@ ${resultsDisplay || "Waiting for results..."}
             url: siteUrl,
             price,
             priceStr,
-            rawResponse: responseText, // Store full response
+            rawResponse: responseText,
             status: "success"
           });
+
+          // If price found → keep site, if no price → remove site from DB
+          if (price > 0) {
+            // Site has a price, keep it
+          } else {
+            // No price found, remove site from gateway_urls
+            await supabase.from("gateway_urls").delete().eq("url", siteUrl);
+          }
 
           // Update with full raw response
           await editTelegramMessage(
@@ -7850,6 +7862,9 @@ ${resultsDisplay || "Waiting for results..."}
             status: "error",
             error: errorMsg
           });
+
+          // Error = no price, remove site
+          await supabase.from("gateway_urls").delete().eq("url", siteUrl);
 
           await editTelegramMessage(
             chatId,
