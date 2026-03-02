@@ -117,26 +117,26 @@ const TopupUser = () => {
     }
   }, []);
 
-  // Check admin status
+  // Check staff status (admin or moderator)
   useEffect(() => {
-    const checkAdmin = async () => {
+    const checkStaff = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', user.id)
-        .eq('role', 'admin')
-        .maybeSingle();
+        .eq('user_id', user.id);
 
-      setIsAdmin(!!data);
-      if (!data) {
+      const roles = data?.map(r => r.role) || [];
+      const hasAccess = roles.includes('admin') || roles.includes('moderator');
+      setIsAdmin(hasAccess);
+      if (!hasAccess) {
         setLoading(false);
       }
     };
 
-    checkAdmin();
+    checkStaff();
   }, []);
 
   // Fetch pending transactions only

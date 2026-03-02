@@ -1660,7 +1660,7 @@ Balance: ${oldCredits} → ${newCredits}
 }
 
 async function handleTopups(chatId: string, supabase: any, page: number = 0): Promise<{ message: string; keyboard: object | null }> {
-  const hasAccess = await isAdminAsync(chatId, supabase);
+  const hasAccess = await isStaffAsync(chatId, supabase);
   if (!hasAccess) {
     await sendTelegramMessage(chatId, "❌ Access denied");
     return { message: "", keyboard: null };
@@ -1697,7 +1697,7 @@ async function handleTopups(chatId: string, supabase: any, page: number = 0): Pr
 
 // Handle reject all pending topups
 async function handleRejectAllTopups(chatId: string, supabase: any, messageId?: number, reason?: string): Promise<void> {
-  const hasAccess = await isAdminAsync(chatId, supabase);
+  const hasAccess = await isStaffAsync(chatId, supabase);
   if (!hasAccess) {
     if (messageId) {
       await editTelegramMessage(chatId, messageId, "❌ Access denied");
@@ -4228,7 +4228,7 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
 
       // Reject all - confirmed
       if (callbackData === "topups_reject_all_confirm") {
-        if (!callbackChatId || !isCallbackAdmin) {
+        if (!callbackChatId || !isCallbackStaff) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -4240,7 +4240,7 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
 
       // Topup approve
       if (callbackData.startsWith("topup_accept_")) {
-        if (!callbackChatId || !isCallbackAdmin) {
+        if (!callbackChatId || !isCallbackStaff) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -4317,12 +4317,15 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
         }
         await answerCallbackQuery(update.callback_query.id, `✅ Approved ${credits} credits`);
 
+        // Notify super admin if a moderator took the action
+        await notifyAdminOfStaffAction(callbackChatId, "✅ Topup Approved", `<b>User:</b> ${escapeHtml(username)}\n<b>Amount:</b> ${credits} credits`, supabase);
+
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       // Topup reject - instantly reject then ask for reason
       if (callbackData.startsWith("topup_reject_") && !callbackData.includes("_reason_") && !callbackData.includes("_cancel_")) {
-        if (!callbackChatId || !isCallbackAdmin) {
+        if (!callbackChatId || !isCallbackStaff) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -4417,7 +4420,7 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
 
       // Topup reject with "Other" reason - ask for custom reason
       if (callbackData.startsWith("topup_reject_reason_other_")) {
-        if (!callbackChatId || !isCallbackAdmin) {
+        if (!callbackChatId || !isCallbackStaff) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -4470,7 +4473,7 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
 
       // Topup reject with reason - process the rejection
       if (callbackData.startsWith("topup_reject_reason_")) {
-        if (!callbackChatId || !isCallbackAdmin) {
+        if (!callbackChatId || !isCallbackStaff) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -4602,6 +4605,9 @@ Reply with the new value for <b>${fieldLabels[field || ""] || field}</b>:
         }
 
         await answerCallbackQuery(update.callback_query.id, "✅ Reason sent to user");
+
+        // Notify super admin if a moderator took the action
+        await notifyAdminOfStaffAction(callbackChatId, "❌ Topup Rejected", `<b>User:</b> ${escapeHtml(username)}\n<b>Amount:</b> ${credits} credits\n<b>Reason:</b> ${rejectionReason}`, supabase);
 
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -7400,7 +7406,26 @@ ${gatewayStats || "  No gateway data"}
       }
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+}
+
+// Notify super admin when a moderator takes a topup action
+async function notifyAdminOfStaffAction(actionChatId: string, action: string, details: string, supabase: any): Promise<void> {
+  // Only notify if the actor is NOT the super admin
+  if (actionChatId === ADMIN_CHAT_ID) return;
+  if (!ADMIN_CHAT_ID) return;
+
+  // Get the staff member's username
+  const { data: staffProfile } = await supabase
+    .from("profiles")
+    .select("username")
+    .eq("telegram_chat_id", actionChatId)
+    .maybeSingle();
+
+  const staffName = staffProfile?.username || `Chat ${actionChatId}`;
+
+  const message = `🔔 <b>Staff Action Alert</b>\n\n<b>Staff:</b> ${escapeHtml(staffName)}\n<b>Action:</b> ${action}\n${details}`;
+  await sendTelegramMessage(ADMIN_CHAT_ID, message);
+}
 
 
     if (text.startsWith("/ticket")) {
@@ -8616,6 +8641,9 @@ Select a gateway to edit:
 
 📧 User notified via Telegram, Website & Email
 `);
+
+        // Notify super admin if a moderator took the action
+        await notifyAdminOfStaffAction(chatId, "❌ Topup Rejected (Custom)", `<b>User:</b> ${escapeHtml(username)}\n<b>Amount:</b> ${credits} credits\n<b>Reason:</b> ${escapeHtml(customReason)}`, supabase);
 
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
