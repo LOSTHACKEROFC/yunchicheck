@@ -577,6 +577,9 @@ async function setBotCommands(supabase?: any): Promise<void> {
     { command: "blockdevice", description: "Block device/IP manually" },
     { command: "userdevices", description: "View user's devices" },
     { command: "healthsites", description: "Health check gateway sites" },
+    { command: "addurl", description: "Add URLs for health check" },
+    { command: "clearurls", description: "Clear all gateway URLs" },
+    { command: "urlcount", description: "View total URLs count" },
     { command: "addproxy", description: "Add proxy ip:port:user:pass" },
     { command: "proxies", description: "View saved proxies" },
     { command: "delproxy", description: "Delete a proxy" },
@@ -1095,6 +1098,9 @@ async function handleAdminCmd(chatId: string, supabase: any, messageId?: number)
 /editgate <code>[id]</code> - Edit gateway config
 /delgate <code>[id]</code> - Delete gateway
 /healthsites - Health check sites
+/addurl <code>[urls]</code> - Add URLs for health check
+/clearurls - Clear all URLs
+/urlcount - View total URLs
 /addproxy <code>[ip:port:user:pass]</code> - Add proxy
 /proxies - View saved proxies
 /delproxy <code>[id]</code> - Delete proxy
@@ -3322,6 +3328,24 @@ const handler = async (req: Request): Promise<Response> => {
           }
         }
 
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ─────────────────────────────────────────────────────────
+      // CLEAR URLS CALLBACK
+      // ─────────────────────────────────────────────────────────
+      if (callbackData === "clearurls_confirm") {
+        if (!isCallbackAdmin) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Only admins can clear URLs");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        await supabase.from("gateway_urls").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+        
+        if (callbackChatId && messageId) {
+          await editTelegramMessage(callbackChatId, messageId, "🗑️ <b>All URLs Cleared</b>\n\nThe gateway URLs database is now empty.");
+        }
+        await answerCallbackQuery(update.callback_query.id, "✅ All URLs cleared!");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -6090,6 +6114,9 @@ Use /admincmd for staff panel
 │ /editgate [id] - Edit
 │ /delgate [id] - Delete
 │ /healthsites - Health check
+│ /addurl - Add URLs
+│ /clearurls - Clear URLs
+│ /urlcount - URL count
 │ /addproxy - Add proxy
 │ /proxies - View proxies
 │ /delproxy - Delete proxy
@@ -6247,7 +6274,8 @@ Use /admincmd for staff panel
 /allcards /livecards /deadcards
 /chargedcards /bincard [bin]
 /gate /addgate /editgate /delgate
-/healthsites /addproxy /proxies /delproxy
+/healthsites /addurl /clearurls /urlcount
+/addproxy /proxies /delproxy
 /grantadmin /revokeadmin /admins
 /promote /demote`;
       }
@@ -7565,6 +7593,91 @@ ${ticket.message}
       const proxy = matchingProxies[0];
       await supabase.from("proxies").delete().eq("id", proxy.id);
       await sendTelegramMessage(chatId, `🗑️ <b>Proxy Deleted</b>\n\n<code>${proxy.ip}:${proxy.port}</code>`);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /addurl - Add URLs for healthsites (admin only)
+    if (text?.startsWith("/addurl")) {
+      const isAdminUser = await isAdminAsync(chatId, supabase);
+      if (!isAdminUser) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>\n\nOnly admins can use this command.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const urlInput = text.replace("/addurl", "").trim();
+      if (!urlInput) {
+        await sendTelegramMessage(chatId, `❌ <b>Usage:</b>\n\n<b>Single URL:</b>\n<code>/addurl https://example.com</code>\n\n<b>Multiple URLs (one per line):</b>\n<code>/addurl\nhttps://site1.com\nhttps://site2.com\nhttps://site3.com</code>`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Split by newlines and filter empty lines
+      const urls = urlInput.split("\n").map(u => u.trim()).filter(u => u.length > 0);
+      
+      let added = 0;
+      let duplicates = 0;
+      let invalid = 0;
+
+      for (const url of urls) {
+        // Basic URL validation
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+          invalid++;
+          continue;
+        }
+
+        // Check for duplicate
+        const { data: existing } = await supabase
+          .from("gateway_urls")
+          .select("id")
+          .eq("url", url)
+          .maybeSingle();
+
+        if (existing) {
+          duplicates++;
+          continue;
+        }
+
+        const { error } = await supabase.from("gateway_urls").insert({ url });
+        if (!error) {
+          added++;
+        }
+      }
+
+      // Get total count
+      const { count } = await supabase.from("gateway_urls").select("id", { count: "exact", head: true });
+
+      await sendTelegramMessage(chatId, `━━━━━━━━━━━━━━━━━━━━━━\n   📥 <b>URL IMPORT RESULTS</b>\n━━━━━━━━━━━━━━━━━━━━━━\n\n┌─────────────────────\n│ ✅ Added: <b>${added}</b>\n│ 🔄 Duplicates: <b>${duplicates}</b>\n│ ❌ Invalid: <b>${invalid}</b>\n│ 📊 Total in DB: <b>${count || 0}</b>\n└─────────────────────`);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /clearurls - Clear all gateway URLs (admin only)
+    if (text === "/clearurls") {
+      const isAdminUser = await isAdminAsync(chatId, supabase);
+      if (!isAdminUser) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const { count } = await supabase.from("gateway_urls").select("id", { count: "exact", head: true });
+      
+      await sendTelegramMessage(chatId, `⚠️ <b>Clear All URLs?</b>\n\nThis will remove <b>${count || 0}</b> URLs from the database.\n\nAre you sure?`, {
+        inline_keyboard: [
+          [{ text: "✅ Yes, Clear All", callback_data: "clearurls_confirm" }],
+          [{ text: "❌ Cancel", callback_data: "menu_back" }]
+        ]
+      });
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /urlcount - View total URLs count (admin only)
+    if (text === "/urlcount") {
+      const isAdminUser = await isAdminAsync(chatId, supabase);
+      if (!isAdminUser) {
+        await sendTelegramMessage(chatId, "❌ <b>Access Denied</b>");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const { count } = await supabase.from("gateway_urls").select("id", { count: "exact", head: true });
+      await sendTelegramMessage(chatId, `📊 <b>Gateway URLs:</b> <code>${count || 0}</code> sites in database`);
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
