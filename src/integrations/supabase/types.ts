@@ -632,6 +632,42 @@ export type Database = {
         }
         Relationships: []
       }
+      proxies: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          id: string
+          ip: string
+          last_checked_at: string | null
+          password: string | null
+          port: string
+          status: string
+          username: string | null
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          id?: string
+          ip: string
+          last_checked_at?: string | null
+          password?: string | null
+          port: string
+          status?: string
+          username?: string | null
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          id?: string
+          ip?: string
+          last_checked_at?: string | null
+          password?: string | null
+          port?: string
+          status?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
       site_stats: {
         Row: {
           id: string

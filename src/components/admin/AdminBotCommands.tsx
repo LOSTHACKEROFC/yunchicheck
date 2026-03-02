@@ -59,6 +59,9 @@ const adminCommands: CommandInfo[] = [
   { command: "/editgate", description: "Edit gateway configuration", usage: "/editgate gateway_id" },
   { command: "/delgate", description: "Delete a gateway", usage: "/delgate gateway_id" },
   { command: "/healthsites", description: "Health check gateway sites" },
+  { command: "/addproxy", description: "Add a proxy for health checks", usage: "/addproxy ip:port:user:pass" },
+  { command: "/proxies", description: "View all saved proxies" },
+  { command: "/delproxy", description: "Delete a proxy by ID", usage: "/delproxy [id]" },
   { command: "/promote", description: "Promote user to moderator", usage: "/promote 123456789" },
   { command: "/demote", description: "Demote moderator to user", usage: "/demote 123456789" },
 ];
