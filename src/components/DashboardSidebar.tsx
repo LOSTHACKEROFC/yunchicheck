@@ -44,11 +44,14 @@ const menuItems = [
   { titleKey: "contactSupport" as const, url: "/dashboard/support", icon: HeadphonesIcon },
 ];
 
-const adminItems = [
+const adminOnlyItems = [
   { title: "Admin Panel", url: "/dashboard/admin/panel", icon: LayoutDashboard },
+  { title: "Blocked Devices", url: "/dashboard/admin/blocked", icon: ShieldOff },
+];
+
+const staffItems = [
   { title: "Pending Topups", url: "/dashboard/topupuser", icon: DollarSign },
   { title: "Manage Topups", url: "/dashboard/admin/topups", icon: Shield },
-  { title: "Blocked Devices", url: "/dashboard/admin/blocked", icon: ShieldOff },
 ];
 
 const DashboardSidebar = () => {
@@ -57,23 +60,24 @@ const DashboardSidebar = () => {
   const { setOpen } = useSidebar();
   const { t } = useLanguage();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isStaff, setIsStaff] = useState(false);
 
   useEffect(() => {
-    const checkAdmin = async () => {
+    const checkRoles = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', user.id)
-        .eq('role', 'admin')
-        .maybeSingle();
+        .eq('user_id', user.id);
 
-      setIsAdmin(!!data);
+      const roles = data?.map(r => r.role) || [];
+      setIsAdmin(roles.includes('admin'));
+      setIsStaff(roles.includes('admin') || roles.includes('moderator'));
     };
 
-    checkAdmin();
+    checkRoles();
   }, []);
 
   const handleLogout = async () => {
@@ -144,15 +148,33 @@ const DashboardSidebar = () => {
         </SidebarGroup>
 
         {/* Admin Section */}
-        {isAdmin && (
+        {isStaff && (
           <SidebarGroup>
             <SidebarGroupContent>
               <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                 <Shield className="h-3 w-3" />
-                Admin
+                {isAdmin ? 'Admin' : 'Staff'}
               </div>
               <SidebarMenu>
-                {adminItems.map((item) => (
+                {isAdmin && adminOnlyItems.map((item) => (
+                  <SidebarMenuItem key={item.url}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive(item.url)}
+                    >
+                      <NavLink
+                        to={item.url}
+                        onClick={handleMenuClick}
+                        className="flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-secondary"
+                        activeClassName="bg-yellow-500/20 text-yellow-400 border-l-2 border-yellow-500"
+                      >
+                        <item.icon className="h-5 w-5 text-yellow-500" />
+                        <span className="text-yellow-500">{item.title}</span>
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+                {staffItems.map((item) => (
                   <SidebarMenuItem key={item.url}>
                     <SidebarMenuButton
                       asChild

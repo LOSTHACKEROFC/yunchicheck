@@ -143,16 +143,45 @@ const handler = async (req: Request): Promise<Response> => {
       ],
     };
 
-    // Send photo to admin via Telegram
-    if (ADMIN_TELEGRAM_CHAT_ID) {
+    // Get all staff (admin + moderator) telegram chat IDs
+    const { data: staffRoles } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .in("role", ["admin", "moderator"]);
+
+    const staffChatIds: string[] = [];
+    if (staffRoles && staffRoles.length > 0) {
+      const staffUserIds = staffRoles.map((r: any) => r.user_id);
+      const { data: staffProfiles } = await supabase
+        .from("profiles")
+        .select("telegram_chat_id")
+        .in("user_id", staffUserIds)
+        .not("telegram_chat_id", "is", null);
+
+      if (staffProfiles) {
+        staffProfiles.forEach((p: any) => {
+          if (p.telegram_chat_id && !staffChatIds.includes(p.telegram_chat_id)) {
+            staffChatIds.push(p.telegram_chat_id);
+          }
+        });
+      }
+    }
+
+    // Always include the super admin
+    if (ADMIN_TELEGRAM_CHAT_ID && !staffChatIds.includes(ADMIN_TELEGRAM_CHAT_ID)) {
+      staffChatIds.push(ADMIN_TELEGRAM_CHAT_ID);
+    }
+
+    // Send photo to all staff via Telegram
+    for (const chatId of staffChatIds) {
       await sendTelegramPhoto(
-        ADMIN_TELEGRAM_CHAT_ID,
+        chatId,
         proof_image_url,
         caption,
         inlineKeyboard
       );
-      console.log("Telegram notification sent to admin");
     }
+    console.log(`Telegram notification sent to ${staffChatIds.length} staff members`);
 
     // Send email to admin using shared email helper
     const emailHtml = `
