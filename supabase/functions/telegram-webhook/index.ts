@@ -7749,7 +7749,7 @@ ${resultsDisplay || "Waiting for results..."}
         (site: string, cc: string, proxy: string) => 
           `https://teamoicxkiller.online/code/index.php?url=${encodeURIComponent(site)}&cc=${encodeURIComponent(cc)}&proxy=${encodeURIComponent(proxy)}`,
       ];
-      const TEST_CC = "4000222732521176|01|27|906";
+      const TEST_CC = "4266841674104656|03|27|908";
 
       let wasStopped = false;
 
