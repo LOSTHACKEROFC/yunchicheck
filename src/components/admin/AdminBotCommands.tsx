@@ -59,7 +59,7 @@ const adminCommands: CommandInfo[] = [
   { command: "/editgate", description: "Edit gateway configuration", usage: "/editgate gateway_id" },
   { command: "/delgate", description: "Delete a gateway", usage: "/delgate gateway_id" },
   { command: "/healthsites", description: "Health check gateway sites" },
-  { command: "/addurl", description: "Add URLs for health check", usage: "/addurl https://site1.com" },
+  { command: "/addurl", description: "Add URLs (line-by-line text or .txt file upload)", usage: "/addurl https://site1.com" },
   { command: "/clearurls", description: "Clear all gateway URLs" },
   { command: "/urlcount", description: "View total URLs count" },
   { command: "/addproxy", description: "Add a proxy for health checks", usage: "/addproxy ip:port:user:pass" },
