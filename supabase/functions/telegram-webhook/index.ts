@@ -7641,44 +7641,42 @@ ${ticket.message}
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Split by newlines and filter empty lines
-      const urls = urlInput.split("\n").map(u => u.trim()).filter(u => u.length > 0);
+      // Split by newlines and save raw URLs directly
+      const allLines = urlInput.split("\n").map(u => u.trim()).filter(u => u.length > 0);
       
-      await sendTelegramMessage(chatId, `⏳ <b>Processing ${urls.length} URLs...</b>`);
+      // Save raw - no filtering, just deduplicate within input
+      const uniqueUrls = [...new Set(allLines)];
+      
+      await sendTelegramMessage(chatId, `⏳ <b>Processing ${uniqueUrls.length} URLs...</b>`);
 
       let added = 0;
-      let duplicates = 0;
-      let invalid = 0;
+      let errors = 0;
 
-      for (const url of urls) {
-        // Basic URL validation
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-          invalid++;
-          continue;
-        }
+      // Batch upsert in chunks of 500 for speed
+      const batchSize = 500;
+      for (let i = 0; i < uniqueUrls.length; i += batchSize) {
+        const batch = uniqueUrls.slice(i, i + batchSize);
+        const urlObjects = batch.map(url => ({ url }));
 
-        // Check for duplicate
-        const { data: existing } = await supabase
+        const { data, error } = await supabase
           .from("gateway_urls")
-          .select("id")
-          .eq("url", url)
-          .maybeSingle();
+          .upsert(urlObjects, { onConflict: "url", ignoreDuplicates: true })
+          .select("id");
 
-        if (existing) {
-          duplicates++;
-          continue;
-        }
-
-        const { error } = await supabase.from("gateway_urls").insert({ url });
-        if (!error) {
-          added++;
+        if (error) {
+          console.error("Batch insert error:", error);
+          errors += batch.length;
+        } else {
+          added += data?.length || 0;
         }
       }
+
+      const skipped = uniqueUrls.length - added - errors;
 
       // Get total count
       const { count } = await supabase.from("gateway_urls").select("id", { count: "exact", head: true });
 
-      await sendTelegramMessage(chatId, `━━━━━━━━━━━━━━━━━━━━━━\n   📥 <b>URL IMPORT RESULTS</b>\n━━━━━━━━━━━━━━━━━━━━━━\n\n┌─────────────────────\n│ ✅ Added: <b>${added}</b>\n│ 🔄 Duplicates: <b>${duplicates}</b>\n│ ❌ Invalid: <b>${invalid}</b>\n│ 📊 Total in DB: <b>${count || 0}</b>\n└─────────────────────`);
+      await sendTelegramMessage(chatId, `━━━━━━━━━━━━━━━━━━━━━━\n   📥 <b>URL IMPORT RESULTS</b>\n━━━━━━━━━━━━━━━━━━━━━━\n\n┌─────────────────────\n│ ✅ Added: <b>${added}</b>\n│ 🔄 Duplicates: <b>${skipped}</b>\n│ ❌ Errors: <b>${errors}</b>\n│ 📊 Total in DB: <b>${count || 0}</b>\n└─────────────────────`);
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
