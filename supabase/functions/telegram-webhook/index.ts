@@ -21,8 +21,15 @@ interface TelegramUpdate {
     message_id: number;
     chat: { id: number };
     text?: string;
+    caption?: string;
     reply_to_message?: {
       text?: string;
+    };
+    document?: {
+      file_id: string;
+      file_name?: string;
+      mime_type?: string;
+      file_size?: number;
     };
   };
   callback_query?: {
@@ -5927,7 +5934,7 @@ Use /menu for full command list
     // COMMANDS
     // ─────────────────────────────────────────────────────────
 
-    const text = update.message?.text || "";
+    const text = update.message?.text || update.message?.caption || "";
     const chatId = update.message?.chat.id.toString() || "";
     const messageId = update.message?.message_id; // For reply-based responses
 
@@ -7604,15 +7611,41 @@ ${ticket.message}
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      const urlInput = text.replace("/addurl", "").trim();
+      let urlInput = text.replace("/addurl", "").trim();
+
+      // Check if a TXT file was attached
+      const doc = update.message?.document;
+      if (doc && (doc.mime_type === "text/plain" || doc.file_name?.endsWith(".txt"))) {
+        // Download the file from Telegram
+        try {
+          const fileInfoRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${doc.file_id}`);
+          const fileInfo = await fileInfoRes.json();
+          if (fileInfo.ok && fileInfo.result?.file_path) {
+            const fileRes = await fetch(`https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${fileInfo.result.file_path}`);
+            const fileContent = await fileRes.text();
+            urlInput = fileContent.trim();
+          }
+        } catch (err) {
+          await sendTelegramMessage(chatId, "❌ <b>Failed to download file</b>");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+      }
+
+      // Also support caption-based /addurl when sending a file
+      if (!urlInput && update.message?.caption?.startsWith("/addurl")) {
+        // File was already processed above, urlInput should be set
+      }
+
       if (!urlInput) {
-        await sendTelegramMessage(chatId, `❌ <b>Usage:</b>\n\n<b>Single URL:</b>\n<code>/addurl https://example.com</code>\n\n<b>Multiple URLs (one per line):</b>\n<code>/addurl\nhttps://site1.com\nhttps://site2.com\nhttps://site3.com</code>`);
+        await sendTelegramMessage(chatId, `❌ <b>Usage:</b>\n\n<b>Single URL:</b>\n<code>/addurl https://example.com</code>\n\n<b>Multiple URLs (one per line):</b>\n<code>/addurl\nhttps://site1.com\nhttps://site2.com</code>\n\n<b>TXT File:</b>\nSend a .txt file with <code>/addurl</code> as caption`);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       // Split by newlines and filter empty lines
       const urls = urlInput.split("\n").map(u => u.trim()).filter(u => u.length > 0);
       
+      await sendTelegramMessage(chatId, `⏳ <b>Processing ${urls.length} URLs...</b>`);
+
       let added = 0;
       let duplicates = 0;
       let invalid = 0;
