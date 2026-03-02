@@ -2267,33 +2267,34 @@ async function handleStats(chatId: string, supabase: any, messageId?: number): P
     return Number(((credits / closest.credits) * closest.price).toFixed(2));
   }
 
+  // Card status classifier based on actual DB values: "live", "dead", "killed", "unknown"
+  function classifyCard(result: string): "live" | "charged" | "dead" | "unknown" {
+    const r = (result || "").toLowerCase();
+    // "killed" = charged/killed on Killer Auth gateway
+    if (r === "killed" || r.startsWith("killed")) return "charged";
+    // "live" = live/approved/passed on auth gateways
+    if (r === "live" || r.startsWith("live")) return "live";
+    // "dead" = dead/declined/rejected
+    if (r.startsWith("dead")) return "dead";
+    // everything else is unknown/error
+    return "unknown";
+  }
+
   // Card Stats
   const cards = allCards || [];
   const totalCards = cards.length;
-  const liveCards = cards.filter((c: any) => {
-    const r = (c.result || "").toLowerCase();
-    return r.includes("live") || r.includes("approved") || r.includes("passed");
-  }).length;
-  const chargedCards = cards.filter((c: any) => {
-    const r = (c.result || "").toLowerCase();
-    return r.includes("charged") || r.includes("killed");
-  }).length;
-  const deadCards = cards.filter((c: any) => {
-    const r = (c.result || "").toLowerCase();
-    return r.includes("dead") || r.includes("declined") || r.includes("rejected");
-  }).length;
-  const unknownCards = cards.filter((c: any) => {
-    const r = (c.result || "").toLowerCase();
-    return r.includes("unknown") || r.includes("error");
-  }).length;
+  const liveCards = cards.filter((c: any) => classifyCard(c.result) === "live").length;
+  const chargedCards = cards.filter((c: any) => classifyCard(c.result) === "charged").length;
+  const deadCards = cards.filter((c: any) => classifyCard(c.result) === "dead").length;
+  const unknownCards = cards.filter((c: any) => classifyCard(c.result) === "unknown").length;
   const successRate = totalCards > 0 ? (((liveCards + chargedCards) / totalCards) * 100).toFixed(1) : "0.0";
 
   // Today's card stats
   const tCards = todayCards || [];
   const todayTotal = tCards.length;
-  const todayLive = tCards.filter((c: any) => { const r = (c.result || "").toLowerCase(); return r.includes("live") || r.includes("approved") || r.includes("passed"); }).length;
-  const todayCharged = tCards.filter((c: any) => { const r = (c.result || "").toLowerCase(); return r.includes("charged") || r.includes("killed"); }).length;
-  const todayDead = tCards.filter((c: any) => { const r = (c.result || "").toLowerCase(); return r.includes("dead") || r.includes("declined") || r.includes("rejected"); }).length;
+  const todayLive = tCards.filter((c: any) => classifyCard(c.result) === "live").length;
+  const todayCharged = tCards.filter((c: any) => classifyCard(c.result) === "charged").length;
+  const todayDead = tCards.filter((c: any) => classifyCard(c.result) === "dead").length;
 
   // Week card stats
   const wCards = weekCards || [];
