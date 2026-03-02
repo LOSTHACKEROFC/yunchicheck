@@ -7576,12 +7576,11 @@ ${ticket.message}
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Fetch ALL gateway URLs from database (no limit)
-      const { data: gatewayUrls, error: urlError } = await supabase
-        .from("gateway_urls")
-        .select("url");
+      // Fetch ALL gateway URLs from database (bypass 1000 row limit)
+      const allUrls = await fetchAllRecords(supabase, "gateway_urls", "url");
+      const gatewayUrls = allUrls;
 
-      if (urlError || !gatewayUrls || gatewayUrls.length === 0) {
+      if (!gatewayUrls || gatewayUrls.length === 0) {
         await sendTelegramMessage(chatId, "❌ <b>No URLs Found</b>\n\nThe gateway_urls table is empty or there was an error fetching data.");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
