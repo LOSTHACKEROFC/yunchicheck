@@ -2210,37 +2210,183 @@ async function handleStats(chatId: string, supabase: any, messageId?: number): P
     return;
   }
 
-  const { data: stats } = await supabase.from("site_stats").select("*").eq("id", "global").maybeSingle();
-  const { data: tickets } = await supabase.from("support_tickets").select("status");
-  const { data: banned } = await supabase.from("profiles").select("id").eq("is_banned", true);
-  const { data: telegram } = await supabase.from("profiles").select("id").not("telegram_chat_id", "is", null);
+  // Show loading
+  const loadingMsg = "⏳ <b>Loading platform statistics...</b>";
+  if (messageId) {
+    await editTelegramMessage(chatId, messageId, loadingMsg);
+  }
 
+  // Fetch all data in parallel
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).toISOString();
+
+  const [
+    { data: allCards },
+    { data: todayCards },
+    { data: weekCards },
+    { data: stats },
+    { data: allProfiles },
+    { data: tickets },
+    { data: allTopups },
+    { data: todayTopups },
+    { data: weekTopups },
+    { data: pendingTopups },
+    { count: activeUsersCount },
+  ] = await Promise.all([
+    supabase.from("card_checks").select("result, gateway"),
+    supabase.from("card_checks").select("result").gte("created_at", todayStart),
+    supabase.from("card_checks").select("result").gte("created_at", weekStart),
+    supabase.from("site_stats").select("*").eq("id", "global").maybeSingle(),
+    supabase.from("profiles").select("is_banned, telegram_chat_id, credits"),
+    supabase.from("support_tickets").select("status"),
+    supabase.from("topup_transactions").select("amount, status").eq("status", "completed"),
+    supabase.from("topup_transactions").select("amount, status").eq("status", "completed").gte("created_at", todayStart),
+    supabase.from("topup_transactions").select("amount, status").eq("status", "completed").gte("created_at", weekStart),
+    supabase.from("topup_transactions").select("id").eq("status", "pending"),
+    supabase.from("card_checks").select("user_id", { count: "exact", head: true }).gte("created_at", weekStart),
+  ]);
+
+  // Card Stats
+  const cards = allCards || [];
+  const totalCards = cards.length;
+  const liveCards = cards.filter((c: any) => {
+    const r = (c.result || "").toLowerCase();
+    return r.includes("live") || r.includes("approved") || r.includes("passed");
+  }).length;
+  const chargedCards = cards.filter((c: any) => {
+    const r = (c.result || "").toLowerCase();
+    return r.includes("charged") || r.includes("killed");
+  }).length;
+  const deadCards = cards.filter((c: any) => {
+    const r = (c.result || "").toLowerCase();
+    return r.includes("dead") || r.includes("declined") || r.includes("rejected");
+  }).length;
+  const unknownCards = cards.filter((c: any) => {
+    const r = (c.result || "").toLowerCase();
+    return r.includes("unknown") || r.includes("error");
+  }).length;
+  const successRate = totalCards > 0 ? (((liveCards + chargedCards) / totalCards) * 100).toFixed(1) : "0.0";
+
+  // Today's card stats
+  const tCards = todayCards || [];
+  const todayTotal = tCards.length;
+  const todayLive = tCards.filter((c: any) => { const r = (c.result || "").toLowerCase(); return r.includes("live") || r.includes("approved") || r.includes("passed"); }).length;
+  const todayCharged = tCards.filter((c: any) => { const r = (c.result || "").toLowerCase(); return r.includes("charged") || r.includes("killed"); }).length;
+  const todayDead = tCards.filter((c: any) => { const r = (c.result || "").toLowerCase(); return r.includes("dead") || r.includes("declined") || r.includes("rejected"); }).length;
+
+  // Week card stats
+  const wCards = weekCards || [];
+  const weekTotal = wCards.length;
+
+  // User Stats
+  const profiles = allProfiles || [];
+  const totalUsers = stats?.total_users || profiles.length;
+  const bannedUsers = profiles.filter((p: any) => p.is_banned).length;
+  const telegramUsers = profiles.filter((p: any) => p.telegram_chat_id).length;
+  const totalCreditsInCirculation = profiles.reduce((sum: number, p: any) => sum + (p.credits || 0), 0);
+
+  // Get unique active users this week
+  const { data: activeUsersData } = await supabase
+    .from("card_checks")
+    .select("user_id")
+    .gte("created_at", weekStart);
+  const activeUsers = new Set((activeUsersData || []).map((c: any) => c.user_id)).size;
+
+  // Revenue Stats
+  const totalRevenue = (allTopups || []).reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+  const todayRevenue = (todayTopups || []).reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+  const weekRevenue = (weekTopups || []).reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+  const pendingCount = (pendingTopups || []).length;
+
+  // Ticket Stats
   const ticketStats = {
-    open: tickets?.filter((t: any) => t.status === "open").length || 0,
-    processing: tickets?.filter((t: any) => t.status === "processing").length || 0,
-    solved: tickets?.filter((t: any) => t.status === "solved").length || 0,
-    closed: tickets?.filter((t: any) => t.status === "closed").length || 0,
+    open: (tickets || []).filter((t: any) => t.status === "open").length,
+    processing: (tickets || []).filter((t: any) => t.status === "processing").length,
+    solved: (tickets || []).filter((t: any) => t.status === "solved").length,
+    closed: (tickets || []).filter((t: any) => t.status === "closed").length,
   };
+  const totalTickets = (tickets || []).length;
+
+  // Top 5 Gateways
+  const gatewayMap: Record<string, number> = {};
+  cards.forEach((c: any) => {
+    const gw = c.gateway || "unknown";
+    gatewayMap[gw] = (gatewayMap[gw] || 0) + 1;
+  });
+  const topGateways = Object.entries(gatewayMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+  const topGatewayText = topGateways.length > 0
+    ? topGateways.map(([gw, count], i) => `  ${i + 1}. ${gw} — ${count.toLocaleString()}`).join("\n")
+    : "  No data";
+
+  const timestamp = now.toLocaleString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+    hour: "2-digit", minute: "2-digit", timeZone: "UTC"
+  });
 
   const statsMessage = `
-📊 <b>Statistics</b>
+📊 <b>Platform Statistics</b>
+<i>Updated: ${timestamp} UTC</i>
 
-<b>Users</b>
-• Total: ${stats?.total_users || 0}
-• Telegram: ${telegram?.length || 0}
-• Banned: ${banned?.length || 0}
+━━━━━━━━━━━━━━━━━━━━━━
 
-<b>Activity</b>
-• Card Checks: ${stats?.total_checks || 0}
+🃏 <b>Card Analytics</b>
+┌ Total Checks: <b>${totalCards.toLocaleString()}</b>
+├ ✅ Live: <b>${liveCards.toLocaleString()}</b>
+├ 💳 Charged: <b>${chargedCards.toLocaleString()}</b>
+├ ❌ Dead: <b>${deadCards.toLocaleString()}</b>
+├ ❓ Unknown/Error: <b>${unknownCards.toLocaleString()}</b>
+└ 📈 Success Rate: <b>${successRate}%</b>
 
-<b>Tickets</b>
-• Open: ${ticketStats.open}
-• Processing: ${ticketStats.processing}
-• Solved: ${ticketStats.solved}
-• Closed: ${ticketStats.closed}
+📅 <b>Today's Activity</b>
+┌ Checks: <b>${todayTotal.toLocaleString()}</b>
+├ ✅ Live: <b>${todayLive.toLocaleString()}</b>
+├ 💳 Charged: <b>${todayCharged.toLocaleString()}</b>
+└ ❌ Dead: <b>${todayDead.toLocaleString()}</b>
+
+📆 <b>This Week</b>
+└ Total Checks: <b>${weekTotal.toLocaleString()}</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+👥 <b>User Analytics</b>
+┌ Total Users: <b>${totalUsers.toLocaleString()}</b>
+├ 🟢 Active (7d): <b>${activeUsers.toLocaleString()}</b>
+├ 📱 Telegram Linked: <b>${telegramUsers.toLocaleString()}</b>
+├ 🚫 Banned: <b>${bannedUsers.toLocaleString()}</b>
+└ 💰 Credits in Circulation: <b>${totalCreditsInCirculation.toLocaleString()}</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+💵 <b>Revenue</b>
+┌ All-Time: <b>${totalRevenue.toLocaleString()} credits</b>
+├ This Week: <b>${weekRevenue.toLocaleString()} credits</b>
+├ Today: <b>${todayRevenue.toLocaleString()} credits</b>
+└ ⏳ Pending Topups: <b>${pendingCount}</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🎫 <b>Support Tickets</b> (${totalTickets})
+┌ 🟡 Open: <b>${ticketStats.open}</b>
+├ 🔵 Processing: <b>${ticketStats.processing}</b>
+├ ✅ Solved: <b>${ticketStats.solved}</b>
+└ ⚫ Closed: <b>${ticketStats.closed}</b>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🏆 <b>Top Gateways</b>
+${topGatewayText}
 `;
 
-  const statsKeyboard = { inline_keyboard: [[{ text: "🔙 Back to Menu", callback_data: "menu_back" }]] };
+  const statsKeyboard = {
+    inline_keyboard: [
+      [{ text: "🔄 Refresh Stats", callback_data: "stats_refresh" }],
+      [{ text: "🔙 Back to Menu", callback_data: "menu_back" }],
+    ],
+  };
+
   if (messageId) {
     await editTelegramMessage(chatId, messageId, statsMessage, statsKeyboard);
   } else {
@@ -5411,14 +5557,14 @@ Use /admincmd for staff panel
       // MENU QUICK ACTION CALLBACKS
       // ─────────────────────────────────────────────────────────
 
-      if (callbackData === "menu_stats") {
+      if (callbackData === "menu_stats" || callbackData === "stats_refresh") {
         const hasAccess = await isStaffAsync(callbackChatId!, supabase);
         if (!hasAccess) {
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
-        await handleStats(callbackChatId!, supabase);
-        await answerCallbackQuery(update.callback_query.id, "📊 Stats loaded");
+        await handleStats(callbackChatId!, supabase, messageId);
+        await answerCallbackQuery(update.callback_query.id, "📊 Stats refreshed");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -5637,7 +5783,7 @@ ${ticketsList}
           await answerCallbackQuery(update.callback_query.id, "❌ Access denied");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
-        await handleStats(callbackChatId!, supabase);
+        await handleStats(callbackChatId!, supabase, messageId);
         await answerCallbackQuery(update.callback_query.id, "📊 Stats loaded");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
