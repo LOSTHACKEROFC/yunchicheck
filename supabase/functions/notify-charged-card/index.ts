@@ -500,20 +500,23 @@ serve(async (req) => {
     
     // Determine gateway type for status display
     const isVbvGateway = gateway.toLowerCase().includes('vbv');
-    const isAuthGateway = gateway.toLowerCase().includes('auth') || 
-                          gateway.toLowerCase().includes('yunchi auth') ||
-                          gateway.toLowerCase().includes('braintree');
-    
-    // Charge gateways like PayU, PayGate show CHARGED with amount
+    const isKillerGateway = gateway.toLowerCase().includes('killer');
     const isChargeGateway = gateway.toLowerCase().includes('payu') || 
-                            gateway.toLowerCase().includes('paygate');
+                            gateway.toLowerCase().includes('paygate') ||
+                            gateway.toLowerCase().includes('charge') ||
+                            gateway.toLowerCase().includes('pwgate') ||
+                            gateway.toLowerCase().includes('rizzup');
     
-    // VBV shows PASSED, all others show LIVE (never CHARGED)
-    const statusLabel = isVbvGateway ? 'PASSED' : 'LIVE';
+    // Killer → KILLED, VBV → PASSED, Charge → CHARGED, Auth → LIVE
+    const statusLabel = isKillerGateway ? 'KILLED' : (isVbvGateway ? 'PASSED' : (isChargeGateway ? 'CHARGED' : 'LIVE'));
     // Use plain ✅ - it will be replaced with custom_emoji entity by parseMessageEntities()
-    const statusLine = isVbvGateway
-      ? `✅ ${toFancyBold('PASSED')}`
-      : `✅ ${toFancyBold('LIVE')}`;
+    const statusLine = isKillerGateway
+      ? `✅ ${toFancyBold('KILLED')}`
+      : isVbvGateway
+        ? `✅ ${toFancyBold('PASSED')}`
+        : isChargeGateway
+          ? `✅ ${toFancyBold('CHARGED')} • 💰 ${amount}`
+          : `✅ ${toFancyBold('LIVE')}`;
     
     // 🔥 Show FULL card details for LIVE/CHARGED cards (user's card, they need full info)
     const fullCard = `${cardNum}|${mm}|${yy}|${cvv}`;
