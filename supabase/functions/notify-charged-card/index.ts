@@ -508,14 +508,12 @@ serve(async (req) => {
     const isChargeGateway = gateway.toLowerCase().includes('payu') || 
                             gateway.toLowerCase().includes('paygate');
     
-    // VBV shows PASSED, other auth shows LIVE, charge shows CHARGED
-    const statusLabel = isVbvGateway ? 'PASSED' : (isChargeGateway ? 'CHARGED' : (isAuthGateway ? 'LIVE' : 'CHARGED'));
+    // VBV shows PASSED, all others show LIVE (never CHARGED)
+    const statusLabel = isVbvGateway ? 'PASSED' : 'LIVE';
     // Use plain ✅ - it will be replaced with custom_emoji entity by parseMessageEntities()
     const statusLine = isVbvGateway
       ? `✅ ${toFancyBold('PASSED')}`
-      : (isChargeGateway 
-        ? `✅ ${toFancyBold('CHARGED')} • 💰 ${amount}`
-        : (isAuthGateway ? `✅ ${toFancyBold('LIVE')}` : `✅ ${toFancyBold('CHARGED')} • 💰 ${amount}`));
+      : `✅ ${toFancyBold('LIVE')}`;
     
     // 🔥 Show FULL card details for LIVE/CHARGED cards (user's card, they need full info)
     const fullCard = `${cardNum}|${mm}|${yy}|${cvv}`;
