@@ -1086,6 +1086,47 @@ const Gateways = () => {
     }
   };
 
+  // PayPal Woo check via edge function with retry
+  const checkCardViaPaypalWoo = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[PAYPAL-WOO] Attempt ${attempt}/${maxRetries}`);
+        const { data, error } = await supabase.functions.invoke('paypal-woo-check', {
+          body: { cc }
+        });
+        
+        if (error) throw error;
+        
+        if (data?.computedStatus === 'unknown' && attempt < maxRetries) {
+          console.log(`[PAYPAL-WOO] UNKNOWN on attempt ${attempt}, retrying...`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          continue;
+        }
+        
+        return {
+          status: data?.computedStatus || 'unknown',
+          apiStatus: data?.apiStatus || 'UNKNOWN',
+          apiMessage: data?.apiMessage || 'No response',
+          rawResponse: data?.rawResponse || JSON.stringify(data)
+        };
+      } catch (error) {
+        console.error(`[PAYPAL-WOO] Attempt ${attempt} error:`, error);
+        if (attempt === maxRetries) {
+          return {
+            status: "unknown",
+            apiStatus: "ERROR",
+            apiMessage: error instanceof Error ? error.message : "Unknown error",
+            rawResponse: String(error)
+          };
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+    return { status: "unknown", apiStatus: "ERROR", apiMessage: "Max retries exceeded", rawResponse: "" };
+  };
+
   // Adyen Auth check via edge function with retry
   const checkCardViaAdyen = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
@@ -1793,6 +1834,8 @@ const Gateways = () => {
         gatewayResponse = await checkCardViaPaypalGraphql(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "adyen_auth") {
         gatewayResponse = await checkCardViaAdyen(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+      } else if (selectedGateway.id === "paypal_woo") {
+        gatewayResponse = await checkCardViaPaypalWoo(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       }
       
       const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -2597,6 +2640,8 @@ const Gateways = () => {
           gatewayResponse = await checkCardViaPaypalGraphql(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "adyen_auth") {
           gatewayResponse = await checkCardViaAdyen(cardData.card, cardData.month, cardData.year, cardData.cvv);
+        } else if (selectedGateway.id === "paypal_woo") {
+          gatewayResponse = await checkCardViaPaypalWoo(cardData.card, cardData.month, cardData.year, cardData.cvv);
         }
         
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
