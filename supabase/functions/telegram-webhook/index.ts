@@ -2241,12 +2241,12 @@ async function handleStats(chatId: string, supabase: any, messageId?: number): P
 
   // Credit-to-USDT conversion using package tiers
   const creditPackages = [
-    { credits: 350, price: 25 },
-    { credits: 1500, price: 100 },
-    { credits: 9000, price: 500 },
-    { credits: 45000, price: 2000 },
-    { credits: 145000, price: 5000 },
-    { credits: 710000, price: 15000 },
+    { credits: 600, price: 15 },
+    { credits: 2600, price: 60 },
+    { credits: 4200, price: 90 },
+    { credits: 7200, price: 150 },
+    { credits: 30400, price: 600 },
+    { credits: 62500, price: 1200 },
   ];
   
   function creditsToUsdt(credits: number): number {
