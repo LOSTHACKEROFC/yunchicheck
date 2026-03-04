@@ -14,10 +14,10 @@ interface PackageType {
 }
 
 const packages: PackageType[] = [
-  { name: "Silver", credits: 1500, price: 100, pricePerCredit: 0.067, icon: Medal },
-  { name: "Gold", credits: 9000, price: 500, pricePerCredit: 0.056, icon: Crown },
-  { name: "Diamond", credits: 45000, price: 2000, pricePerCredit: 0.044, icon: Gem },
-  { name: "Elite", credits: 145000, price: 5000, pricePerCredit: 0.034, icon: Star },
+  { name: "Silver", credits: 600, price: 15, pricePerCredit: 0.025, icon: Medal },
+  { name: "Gold", credits: 2600, price: 60, pricePerCredit: 0.023, icon: Crown },
+  { name: "Diamond", credits: 4200, price: 90, pricePerCredit: 0.021, icon: Gem },
+  { name: "Elite", credits: 7200, price: 150, pricePerCredit: 0.021, icon: Star },
 ];
 
 const VolumeDiscountCalculator = () => {
@@ -27,7 +27,7 @@ const VolumeDiscountCalculator = () => {
     if (!desiredCredits || desiredCredits <= 0) return null;
 
     // Calculate cost if buying at base rate ($0.10/credit)
-    const basePrice = desiredCredits * 0.10;
+    const basePrice = desiredCredits * 0.025;
 
     // Find optimal package combination
     const sortedPackages = [...packages].sort((a, b) => b.credits - a.credits);
