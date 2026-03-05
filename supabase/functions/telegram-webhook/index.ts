@@ -320,7 +320,8 @@ async function sendTelegramMessage(
 async function sendTelegramMessageWithId(
   chatId: string | number,
   message: string,
-  replyMarkup?: object
+  replyMarkup?: object,
+  replyToMessageId?: number
 ): Promise<number | null> {
   if (!TELEGRAM_BOT_TOKEN) return null;
 
@@ -331,6 +332,7 @@ async function sendTelegramMessageWithId(
       parse_mode: "HTML",
     };
     if (replyMarkup) body.reply_markup = replyMarkup;
+    if (replyToMessageId) body.reply_to_message_id = replyToMessageId;
 
     const response = await fetch(
       `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
@@ -6702,7 +6704,7 @@ Top up at yunchicheck.com/dashboard/topup
       const binDigits = binInput.replace(/\D/g, '').slice(0, 8);
 
       // Send loading message and get its ID for editing later
-      const loadingMsgId = await sendTelegramMessageWithId(chatId, `🔍 <i>Looking up</i> <code>${binDigits}</code><i>...</i>`);
+      const loadingMsgId = await sendTelegramMessageWithId(chatId, `🔍 <i>Looking up</i> <code>${binDigits}</code><i>...</i>`, undefined, messageId);
 
       // Call the bin-lookup edge function
       let binData: any = null;
