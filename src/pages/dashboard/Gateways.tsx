@@ -3028,6 +3028,15 @@ const Gateways = () => {
     stopBackgroundMode();
   };
 
+  // Auto-stop bulk check when user navigates away or component unmounts
+  useEffect(() => {
+    return () => {
+      bulkAbortRef.current = true;
+      bulkPauseRef.current = false;
+      stopBackgroundMode();
+    };
+  }, [stopBackgroundMode]);
+
   const copyResults = (type: "live" | "dead" | "all") => {
     let cards: string[];
     if (type === "all") {
