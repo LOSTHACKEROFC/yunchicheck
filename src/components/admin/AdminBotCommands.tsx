@@ -15,6 +15,7 @@ const publicCommands: CommandInfo[] = [
   { command: "/help", description: "View help guide & all commands" },
   { command: "/mystatus", description: "Check your account status & credits" },
   { command: "/kill", description: "Kill a card (costs 5 credits)", usage: "/kill 4111111111111111|12|2025|123" },
+  { command: "/bin", description: "Lookup BIN details (brand, type, bank, country)", usage: "/bin 411111" },
 ];
 
 const moderatorCommands: CommandInfo[] = [

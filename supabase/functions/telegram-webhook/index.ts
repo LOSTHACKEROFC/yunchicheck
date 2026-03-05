@@ -545,6 +545,7 @@ async function setBotCommands(supabase?: any): Promise<void> {
     { command: "help", description: "View help & features" },
     { command: "mystatus", description: "Check account status" },
     { command: "kill", description: "Kill a card (5 credits)" },
+    { command: "bin", description: "Lookup BIN details" },
   ];
 
   const adminCommands = [
@@ -6340,7 +6341,8 @@ Use /admincmd for staff panel
 <b>Commands:</b>
 /start - Get Chat ID
 /help - This message
-/mystatus - Account status`;
+/mystatus - Account status
+/bin [prefix] - BIN lookup`;
 
       if (isModUser && !isAdminUser) {
         msg += `
@@ -6673,6 +6675,129 @@ Top up at yunchicheck.com/dashboard/topup
 
       // Send the combined result message (NO broadcast, NO GIF)
       await sendTelegramMessage(chatId, resultMessage);
+
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /bin <prefix> - BIN Lookup
+    if (text.startsWith("/bin")) {
+      const binInput = text.replace("/bin", "").trim();
+      
+      if (!binInput || binInput.replace(/\D/g, '').length < 6) {
+        await sendTelegramMessage(chatId, `
+❌ <b>Usage:</b> /bin <code>&lt;6-8 digit prefix&gt;</code>
+
+<b>Example:</b>
+<code>/bin 411111</code>
+<code>/bin 45717360</code>
+
+<b>ℹ️</b> Looks up card brand, type, level, bank &amp; country.
+`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const binDigits = binInput.replace(/\D/g, '').slice(0, 8);
+
+      // Send loading message
+      const loadingMsgId = await sendTelegramMessageWithId(chatId, `⏳ <b>Looking up BIN</b> <code>${binDigits}</code>...`);
+
+      // Call the bin-lookup edge function
+      let binData: any = null;
+      try {
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/bin-lookup`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({ bin: binDigits }),
+        });
+        if (response.ok) {
+          binData = await response.json();
+        }
+      } catch (err) {
+        console.error("BIN lookup error:", err);
+      }
+
+      if (!binData || binData.error) {
+        const errorMsg = `
+❌ <b>BIN Lookup Failed</b>
+
+Could not retrieve data for <code>${binDigits}</code>.
+${binData?.error ? `\n<i>${escapeHtml(binData.error)}</i>` : ""}
+
+Try again with a valid 6-8 digit BIN prefix.
+`;
+        if (loadingMsgId) {
+          await editTelegramMessage(chatId, loadingMsgId, errorMsg);
+        } else {
+          await sendTelegramMessage(chatId, errorMsg);
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Country flag emoji from country code
+      const getFlag = (code: string): string => {
+        if (!code || code === "XX") return "🌍";
+        const codePoints = code.toUpperCase().split("").map(c => 127397 + c.charCodeAt(0));
+        return String.fromCodePoint(...codePoints);
+      };
+
+      // Brand emoji
+      const getBrandEmoji = (brand: string): string => {
+        const b = brand?.toUpperCase() || "";
+        if (b.includes("VISA")) return "💙";
+        if (b.includes("MASTER")) return "🧡";
+        if (b.includes("AMEX")) return "💚";
+        if (b.includes("DISCOVER")) return "🟠";
+        if (b.includes("JCB")) return "❤️";
+        if (b.includes("UNIONPAY")) return "🔴";
+        if (b.includes("DINERS")) return "🖤";
+        if (b.includes("MAESTRO")) return "💜";
+        return "💳";
+      };
+
+      // Type emoji
+      const getTypeEmoji = (type: string): string => {
+        const t = type?.toLowerCase() || "";
+        if (t.includes("credit")) return "💳";
+        if (t.includes("debit")) return "🏧";
+        if (t.includes("prepaid")) return "🎫";
+        return "💳";
+      };
+
+      const flag = getFlag(binData.countryCode);
+      const brandEmoji = getBrandEmoji(binData.brand);
+      const typeEmoji = getTypeEmoji(binData.type);
+      const dataSource = binData.isRealData ? "🟢 Live API" : "🟡 Local Detection";
+
+      const resultMessage = `
+━━━━━━━━━━━━━━━━━━━━━━
+   ${brandEmoji} <b>BIN LOOKUP RESULT</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+<b>🔢 BIN:</b> <code>${binDigits}</code>
+
+<b>┌─── Card Details ───┐</b>
+│ ${brandEmoji} <b>Brand:</b>   ${escapeHtml(binData.brand)}
+│ ${typeEmoji} <b>Type:</b>    ${escapeHtml(binData.type)}
+│ ⭐ <b>Level:</b>   ${escapeHtml(binData.level)}
+<b>└────────────────────┘</b>
+
+<b>┌─── Issuer Info ────┐</b>
+│ 🏦 <b>Bank:</b>    ${escapeHtml(binData.bank)}
+│ ${flag} <b>Country:</b> ${escapeHtml(binData.country)}
+<b>└────────────────────┘</b>
+
+<b>📡 Source:</b> ${dataSource}
+━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+      if (loadingMsgId) {
+        await editTelegramMessage(chatId, loadingMsgId, resultMessage);
+      } else {
+        await sendTelegramMessage(chatId, resultMessage);
+      }
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
