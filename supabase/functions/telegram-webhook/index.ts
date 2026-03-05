@@ -6679,8 +6679,9 @@ Top up at yunchicheck.com/dashboard/topup
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // /bin <prefix> - BIN Lookup
-    if (text.startsWith("/bin")) {
+    // /bin <prefix> - BIN Lookup (must check before any /binXxx commands)
+    if (text === "/bin" || text.startsWith("/bin ")) {
+      console.log(`[BIN] Command received from ${chatId}: ${text}`);
       const binInput = text.replace("/bin", "").trim();
       
       if (!binInput || binInput.replace(/\D/g, '').length < 6) {
