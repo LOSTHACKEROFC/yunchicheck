@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useBulkCheck } from "@/contexts/BulkCheckContext";
 import yunchiLogo from "@/assets/yunchi-logo.png";
 
 const menuItems = [
@@ -59,6 +60,7 @@ const DashboardSidebar = () => {
   const location = useLocation();
   const { setOpen } = useSidebar();
   const { t } = useLanguage();
+  const { isBulkChecking } = useBulkCheck();
   const [isAdmin, setIsAdmin] = useState(false);
   const [isStaff, setIsStaff] = useState(false);
 
@@ -90,7 +92,12 @@ const DashboardSidebar = () => {
     }
   };
 
-  const handleMenuClick = () => {
+  const handleMenuClick = (e: React.MouseEvent) => {
+    if (isBulkChecking) {
+      e.preventDefault();
+      toast.warning("Navigation is locked while bulk checking is in progress. Please stop or wait for it to finish.");
+      return;
+    }
     // Auto-collapse sidebar when a menu item is clicked
     setOpen(false);
   };
@@ -200,8 +207,15 @@ const DashboardSidebar = () => {
 
       <SidebarFooter className="border-t border-border p-4">
         <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2 w-full rounded-md transition-colors hover:bg-destructive/20 text-destructive"
+          onClick={(e) => {
+            if (isBulkChecking) {
+              e.preventDefault();
+              toast.warning("Cannot log out while bulk checking is in progress. Please stop or wait for it to finish.");
+              return;
+            }
+            handleLogout();
+          }}
+          className={`flex items-center gap-3 px-3 py-2 w-full rounded-md transition-colors hover:bg-destructive/20 text-destructive ${isBulkChecking ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           <LogOut className="h-5 w-5" />
           <span>{t.logout}</span>

@@ -8,6 +8,7 @@ import FloatingCardsBackground from "@/components/FloatingCardsBackground";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Outlet } from "react-router-dom";
 import { useSessionTracker } from "@/hooks/useSessionTracker";
+import { BulkCheckProvider } from "@/contexts/BulkCheckContext";
 const Dashboard = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,9 +119,11 @@ const Dashboard = () => {
   if (!user) return null;
 
   return (
-    <SidebarProvider>
-      <DashboardContent />
-    </SidebarProvider>
+    <BulkCheckProvider>
+      <SidebarProvider>
+        <DashboardContent />
+      </SidebarProvider>
+    </BulkCheckProvider>
   );
 };
 

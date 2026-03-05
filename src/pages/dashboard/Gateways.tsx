@@ -47,6 +47,7 @@ import {
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useBulkCheck } from "@/contexts/BulkCheckContext";
 
 // BIN Lookup utilities
 interface BinInfo {
@@ -286,6 +287,7 @@ interface GatewayCheck {
 }
 
 const Gateways = () => {
+  const { setIsBulkChecking } = useBulkCheck();
   const [selectedGateway, setSelectedGateway] = useState<Gateway | null>(null);
   const [cardNumber, setCardNumber] = useState("");
   const [expMonth, setExpMonth] = useState("");
@@ -2480,6 +2482,7 @@ const Gateways = () => {
     const originalLines = bulkInput.trim().split('\n').filter(line => line.trim());
 
     setBulkChecking(true);
+    setIsBulkChecking(true);
     setBulkPaused(false);
     setBulkResults([]);
     setBulkProgress(0);
@@ -2827,6 +2830,7 @@ const Gateways = () => {
     stopBackgroundMode();
     
     setBulkChecking(false);
+    setIsBulkChecking(false);
     setBulkPaused(false);
     
     // Trigger final celebration after a short delay to ensure all results are counted
@@ -3034,8 +3038,9 @@ const Gateways = () => {
       bulkAbortRef.current = true;
       bulkPauseRef.current = false;
       stopBackgroundMode();
+      setIsBulkChecking(false);
     };
-  }, [stopBackgroundMode]);
+  }, [stopBackgroundMode, setIsBulkChecking]);
 
   const copyResults = (type: "live" | "dead" | "all") => {
     let cards: string[];
