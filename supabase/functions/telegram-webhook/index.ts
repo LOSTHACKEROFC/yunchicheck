@@ -6686,21 +6686,23 @@ Top up at yunchicheck.com/dashboard/topup
       
       if (!binInput || binInput.replace(/\D/g, '').length < 6) {
         await sendTelegramMessage(chatId, `
-❌ <b>Usage:</b> /bin <code>&lt;6-8 digit prefix&gt;</code>
+⚠️ <b>𝗕𝗜𝗡 𝗟𝗢𝗢𝗞𝗨𝗣</b>
 
-<b>Example:</b>
-<code>/bin 411111</code>
-<code>/bin 45717360</code>
+<b>Usage:</b> <code>/bin &lt;6-8 digits&gt;</code>
 
-<b>ℹ️</b> Looks up card brand, type, level, bank &amp; country.
+<b>Examples:</b>
+  <code>/bin 411111</code>
+  <code>/bin 45717360</code>
+
+ℹ️ <i>Returns card brand, type, level, issuing bank &amp; country.</i>
 `, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       const binDigits = binInput.replace(/\D/g, '').slice(0, 8);
 
-      // Send loading message
-      const loadingMsgId = await sendTelegramMessageWithId(chatId, `⏳ <b>Looking up BIN</b> <code>${binDigits}</code>...`);
+      // Send loading message as reply to the user's message
+      await sendTelegramMessage(chatId, `🔍 <i>Looking up</i> <code>${binDigits}</code><i>...</i>`, undefined, messageId);
 
       // Call the bin-lookup edge function
       let binData: any = null;
@@ -6721,19 +6723,14 @@ Top up at yunchicheck.com/dashboard/topup
       }
 
       if (!binData || binData.error) {
-        const errorMsg = `
-❌ <b>BIN Lookup Failed</b>
+        await sendTelegramMessage(chatId, `
+❌ <b>𝗕𝗜𝗡 𝗟𝗼𝗼𝗸𝘂𝗽 𝗙𝗮𝗶𝗹𝗲𝗱</b>
 
 Could not retrieve data for <code>${binDigits}</code>.
-${binData?.error ? `\n<i>${escapeHtml(binData.error)}</i>` : ""}
+${binData?.error ? `<i>${escapeHtml(binData.error)}</i>` : ""}
 
-Try again with a valid 6-8 digit BIN prefix.
-`;
-        if (loadingMsgId) {
-          await editTelegramMessage(chatId, loadingMsgId, errorMsg);
-        } else {
-          await sendTelegramMessage(chatId, errorMsg);
-        }
+<i>Try again with a valid 6-8 digit BIN prefix.</i>
+`, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -6744,22 +6741,37 @@ Try again with a valid 6-8 digit BIN prefix.
         return String.fromCodePoint(...codePoints);
       };
 
-      // Brand emoji
-      const getBrandEmoji = (brand: string): string => {
-        const b = brand?.toUpperCase() || "";
-        if (b.includes("VISA")) return "💙";
-        if (b.includes("MASTER")) return "🧡";
-        if (b.includes("AMEX")) return "💚";
-        if (b.includes("DISCOVER")) return "🟠";
-        if (b.includes("JCB")) return "❤️";
-        if (b.includes("UNIONPAY")) return "🔴";
-        if (b.includes("DINERS")) return "🖤";
-        if (b.includes("MAESTRO")) return "💜";
-        return "💳";
+      // Unicode bold text for brand names
+      const toBold = (s: string): string => {
+        const boldMap: Record<string, string> = {
+          'A':'𝗔','B':'𝗕','C':'𝗖','D':'𝗗','E':'𝗘','F':'𝗙','G':'𝗚','H':'𝗛','I':'𝗜',
+          'J':'𝗝','K':'𝗞','L':'𝗟','M':'𝗠','N':'𝗡','O':'𝗢','P':'𝗣','Q':'𝗤','R':'𝗥',
+          'S':'𝗦','T':'𝗧','U':'𝗨','V':'𝗩','W':'𝗪','X':'𝗫','Y':'𝗬','Z':'𝗭',
+          'a':'𝗮','b':'𝗯','c':'𝗰','d':'𝗱','e':'𝗲','f':'𝗳','g':'𝗴','h':'𝗵','i':'𝗶',
+          'j':'𝗷','k':'𝗸','l':'𝗹','m':'𝗺','n':'𝗻','o':'𝗼','p':'𝗽','q':'𝗾','r':'𝗿',
+          's':'𝘀','t':'𝘁','u':'𝘂','v':'𝘃','w':'𝘄','x':'𝘅','y':'𝘆','z':'𝘇',
+          '0':'𝟬','1':'𝟭','2':'𝟮','3':'𝟯','4':'𝟰','5':'𝟱','6':'𝟲','7':'𝟳','8':'𝟴','9':'𝟵',
+          '/':'/', ' ':' ', '-':'-', '.':'.', '(':' (', ')':')','&':'&',
+        };
+        return s.split('').map(c => boldMap[c] || c).join('');
       };
 
-      // Type emoji
-      const getTypeEmoji = (type: string): string => {
+      // Brand logo
+      const getBrandLogo = (brand: string): string => {
+        const b = brand?.toUpperCase() || "";
+        if (b.includes("VISA")) return "💙 𝗩𝗜𝗦𝗔";
+        if (b.includes("MASTER")) return "🟠 𝗠𝗔𝗦𝗧𝗘𝗥𝗖𝗔𝗥𝗗";
+        if (b.includes("AMEX") || b.includes("AMERICAN")) return "💚 𝗔𝗠𝗘𝗫";
+        if (b.includes("DISCOVER")) return "🟡 𝗗𝗜𝗦𝗖𝗢𝗩𝗘𝗥";
+        if (b.includes("JCB")) return "🔴 𝗝𝗖𝗕";
+        if (b.includes("UNIONPAY")) return "🔴 𝗨𝗡𝗜𝗢𝗡𝗣𝗔𝗬";
+        if (b.includes("DINERS")) return "⚫ 𝗗𝗜𝗡𝗘𝗥𝗦 𝗖𝗟𝗨𝗕";
+        if (b.includes("MAESTRO")) return "💜 𝗠𝗔𝗘𝗦𝗧𝗥𝗢";
+        return "💳 " + toBold(brand || "UNKNOWN");
+      };
+
+      // Type icon
+      const getTypeIcon = (type: string): string => {
         const t = type?.toLowerCase() || "";
         if (t.includes("credit")) return "💳";
         if (t.includes("debit")) return "🏧";
@@ -6768,37 +6780,35 @@ Try again with a valid 6-8 digit BIN prefix.
       };
 
       const flag = getFlag(binData.countryCode);
-      const brandEmoji = getBrandEmoji(binData.brand);
-      const typeEmoji = getTypeEmoji(binData.type);
-      const dataSource = binData.isRealData ? "🟢 Live API" : "🟡 Local Detection";
+      const brandLogo = getBrandLogo(binData.brand);
+      const typeIcon = getTypeIcon(binData.type);
+      const dataSource = binData.isRealData ? "✅ 𝗟𝗶𝘃𝗲 𝗗𝗮𝘁𝗮" : "⚠️ 𝗟𝗼𝗰𝗮𝗹";
 
       const resultMessage = `
-━━━━━━━━━━━━━━━━━━━━━━
-   ${brandEmoji} <b>BIN LOOKUP RESULT</b>
-━━━━━━━━━━━━━━━━━━━━━━
+<b>╔══════════════════════╗</b>
+<b>║</b>  🔎 <b>𝗕𝗜𝗡 𝗟𝗢𝗢𝗞𝗨𝗣</b>
+<b>╚══════════════════════╝</b>
 
-<b>🔢 BIN:</b> <code>${binDigits}</code>
+🔢 <b>BIN:</b>  <code>${binDigits}</code>
 
-<b>┌─── Card Details ───┐</b>
-│ ${brandEmoji} <b>Brand:</b>   ${escapeHtml(binData.brand)}
-│ ${typeEmoji} <b>Type:</b>    ${escapeHtml(binData.type)}
-│ ⭐ <b>Level:</b>   ${escapeHtml(binData.level)}
-<b>└────────────────────┘</b>
+▬▬▬▬▬ 𝗖𝗔𝗥𝗗 ▬▬▬▬▬
 
-<b>┌─── Issuer Info ────┐</b>
-│ 🏦 <b>Bank:</b>    ${escapeHtml(binData.bank)}
-│ ${flag} <b>Country:</b> ${escapeHtml(binData.country)}
-<b>└────────────────────┘</b>
+  ${brandLogo}
+  ${typeIcon} 𝗧𝘆𝗽𝗲:     ${toBold(binData.type || "Unknown")}
+  ⭐ 𝗟𝗲𝘃𝗲𝗹:    ${toBold(binData.level || "Standard")}
 
-<b>📡 Source:</b> ${dataSource}
-━━━━━━━━━━━━━━━━━━━━━━
+▬▬▬▬ 𝗜𝗦𝗦𝗨𝗘𝗥 ▬▬▬▬▬
+
+  🏦 𝗕𝗮𝗻𝗸:     ${toBold(binData.bank || "Unknown")}
+  ${flag} 𝗖𝗼𝘂𝗻𝘁𝗿𝘆:  ${toBold(binData.country || "Unknown")}
+
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+
+📡 ${dataSource}
+<i>Powered by YunChi</i> <tg-emoji emoji-id="5336985409220001678">✔️</tg-emoji>
 `;
 
-      if (loadingMsgId) {
-        await editTelegramMessage(chatId, loadingMsgId, resultMessage);
-      } else {
-        await sendTelegramMessage(chatId, resultMessage);
-      }
+      await sendTelegramMessage(chatId, resultMessage, undefined, messageId);
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
