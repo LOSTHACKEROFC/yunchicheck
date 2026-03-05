@@ -3302,11 +3302,16 @@ const Gateways = () => {
             variant="ghost" 
             size="icon"
             onClick={() => {
+              if (bulkChecking) {
+                toast.warning("Please stop the bulk check before going back.");
+                return;
+              }
               setSelectedGateway(null);
               clearForm();
               clearBulk();
             }}
             className="shrink-0"
+            disabled={bulkChecking}
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
