@@ -6701,8 +6701,8 @@ Top up at yunchicheck.com/dashboard/topup
 
       const binDigits = binInput.replace(/\D/g, '').slice(0, 8);
 
-      // Send loading message as reply to the user's message
-      await sendTelegramMessage(chatId, `🔍 <i>Looking up</i> <code>${binDigits}</code><i>...</i>`, undefined, messageId);
+      // Send loading message and get its ID for editing later
+      const loadingMsgId = await sendTelegramMessageWithId(chatId, `🔍 <i>Looking up</i> <code>${binDigits}</code><i>...</i>`);
 
       // Call the bin-lookup edge function
       let binData: any = null;
@@ -6723,14 +6723,19 @@ Top up at yunchicheck.com/dashboard/topup
       }
 
       if (!binData || binData.error) {
-        await sendTelegramMessage(chatId, `
+        const errorMsg = `
 ❌ <b>𝗕𝗜𝗡 𝗟𝗼𝗼𝗸𝘂𝗽 𝗙𝗮𝗶𝗹𝗲𝗱</b>
 
 Could not retrieve data for <code>${binDigits}</code>.
 ${binData?.error ? `<i>${escapeHtml(binData.error)}</i>` : ""}
 
 <i>Try again with a valid 6-8 digit BIN prefix.</i>
-`, undefined, messageId);
+`;
+        if (loadingMsgId) {
+          await editTelegramMessage(chatId, loadingMsgId, errorMsg);
+        } else {
+          await sendTelegramMessage(chatId, errorMsg, undefined, messageId);
+        }
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -6808,7 +6813,11 @@ ${binData?.error ? `<i>${escapeHtml(binData.error)}</i>` : ""}
 <i>Powered by YunChi</i> <tg-emoji emoji-id="5336985409220001678">✔️</tg-emoji>
 `;
 
-      await sendTelegramMessage(chatId, resultMessage, undefined, messageId);
+      if (loadingMsgId) {
+        await editTelegramMessage(chatId, loadingMsgId, resultMessage);
+      } else {
+        await sendTelegramMessage(chatId, resultMessage, undefined, messageId);
+      }
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
