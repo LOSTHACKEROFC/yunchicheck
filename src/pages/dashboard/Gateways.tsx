@@ -289,6 +289,7 @@ interface GatewayCheck {
 const Gateways = () => {
   const { setIsBulkChecking } = useBulkCheck();
   const [selectedGateway, setSelectedGateway] = useState<Gateway | null>(null);
+  const [gatewayTab, setGatewayTab] = useState<string>(() => localStorage.getItem("gatewayTab") || "auth");
   const [cardNumber, setCardNumber] = useState("");
   const [expMonth, setExpMonth] = useState("");
   const [expYear, setExpYear] = useState("");
