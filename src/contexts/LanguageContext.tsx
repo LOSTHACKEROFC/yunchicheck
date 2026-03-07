@@ -848,6 +848,14 @@ interface LanguageContextType {
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
+const countryToLanguage: Record<string, Language> = {
+  CN: "zh", TW: "zh", HK: "zh", MO: "zh",
+  ES: "es", MX: "es", AR: "es", CO: "es", CL: "es", PE: "es", VE: "es", EC: "es", GT: "es", CU: "es", BO: "es", DO: "es", HN: "es", PY: "es", SV: "es", NI: "es", CR: "es", PA: "es", UY: "es",
+  FR: "fr", BE: "fr", SN: "fr", CI: "fr", ML: "fr", BF: "fr", NE: "fr", TD: "fr", GN: "fr", RW: "fr", HT: "fr", CD: "fr", CG: "fr", GA: "fr", CM: "fr", MG: "fr",
+  DE: "de", AT: "de", CH: "de", LI: "de", LU: "de",
+  SA: "ar", AE: "ar", EG: "ar", IQ: "ar", MA: "ar", DZ: "ar", SD: "ar", SY: "ar", YE: "ar", TN: "ar", JO: "ar", LY: "ar", LB: "ar", OM: "ar", KW: "ar", QA: "ar", BH: "ar", PS: "ar",
+};
+
 export const LanguageProvider = ({ children }: { children: ReactNode }) => {
   const [language, setLanguageState] = useState<Language>(() => {
     const saved = localStorage.getItem("app-language");
@@ -857,12 +865,29 @@ export const LanguageProvider = ({ children }: { children: ReactNode }) => {
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
     localStorage.setItem("app-language", lang);
-    // Update document direction for RTL languages
     document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
   };
 
   useEffect(() => {
     document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
+
+    // Auto-detect language from IP on first visit only
+    if (!localStorage.getItem("app-language")) {
+      fetch("https://ipapi.co/json/")
+        .then((res) => res.json())
+        .then((data) => {
+          const detectedLang = countryToLanguage[data?.country_code];
+          if (detectedLang) {
+            setLanguage(detectedLang);
+          } else {
+            // Save default so we don't re-fetch
+            localStorage.setItem("app-language", "en");
+          }
+        })
+        .catch(() => {
+          localStorage.setItem("app-language", "en");
+        });
+    }
   }, []);
 
   const t = translations[language];
