@@ -1746,7 +1746,53 @@ const Gateways = () => {
     }
   };
 
-  // Parallel distributed check for bulk mode - sends card to specific API (stripe or b3)
+  // AuthNet Charge API check via edge function - $1 charge
+  const checkCardViaAuthNetCharge = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    try {
+      console.log(`[AUTHNET-CHARGE] Sending:`, cc);
+      
+      const { data, error } = await supabase.functions.invoke('authnet-charge-check', {
+        body: { cc }
+      });
+      
+      if (error) {
+        console.error('[AUTHNET-CHARGE] Error:', error);
+        return {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: error.message || "Connection error",
+          rawResponse: JSON.stringify(error)
+        };
+      }
+      
+      console.log('[AUTHNET-CHARGE] Response:', data);
+      
+      const apiStatus = data?.apiStatus || 'UNKNOWN';
+      const apiMessage = data?.apiMessage || data?.message || 'No response';
+      const rawResponse = data?.rawResponse || JSON.stringify(data);
+      const computedStatus = data?.computedStatus;
+      
+      return { 
+        status: computedStatus === "live" ? "live" : computedStatus === "dead" ? "dead" : "unknown",
+        apiStatus, 
+        apiMessage, 
+        apiTotal: '$1.00', 
+        rawResponse 
+      };
+    } catch (error) {
+      console.error('[AUTHNET-CHARGE] Exception:', error);
+      return {
+        status: "unknown",
+        apiStatus: "ERROR",
+        apiMessage: error instanceof Error ? error.message : "Unknown error",
+        rawResponse: String(error)
+      };
+    }
+  };
+
+
   const checkCardViaDistributed = async (cardNumber: string, month: string, year: string, cvv: string, targetApi: 'stripe' | 'b3', maxRetries = 5): Promise<GatewayApiResponse> => {
     if (targetApi === 'stripe') {
       const result = await checkCardViaApi(cardNumber, month, year, cvv, maxRetries);
