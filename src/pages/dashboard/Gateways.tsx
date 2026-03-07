@@ -289,6 +289,7 @@ interface GatewayCheck {
 const Gateways = () => {
   const { setIsBulkChecking } = useBulkCheck();
   const [selectedGateway, setSelectedGateway] = useState<Gateway | null>(null);
+  const [gatewayTab, setGatewayTab] = useState<string>(() => localStorage.getItem("gatewayTab") || "auth");
   const [cardNumber, setCardNumber] = useState("");
   const [expMonth, setExpMonth] = useState("");
   const [expYear, setExpYear] = useState("");
@@ -3243,7 +3244,7 @@ const Gateways = () => {
           </div>
         </div>
 
-        <Tabs defaultValue="auth" className="w-full">
+        <Tabs value={gatewayTab} onValueChange={(v) => { setGatewayTab(v); localStorage.setItem("gatewayTab", v); }} className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-4">
             <TabsTrigger value="auth" className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4" />
