@@ -24,6 +24,12 @@ interface TelegramUpdate {
     caption?: string;
     reply_to_message?: {
       text?: string;
+      document?: {
+        file_id: string;
+        file_name?: string;
+        mime_type?: string;
+        file_size?: number;
+      };
     };
     document?: {
       file_id: string;
