@@ -314,12 +314,14 @@ serve(async (req) => {
       p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
 
     // Try proxies with rotation - retry on 407/proxy errors
-    let result: { status: string; message: string; rawResponse: string; price: number; priceStr: string } | null = null;
+    let result: { status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string } | null = null;
     const maxRetries = Math.min(shuffledProxies.length, 3);
+    const failedProxyIds: string[] = [];
     
     for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const proxyStr = formatProxy(shuffledProxies[attempt]);
-      console.log(`[SHOPIFY-CHARGE] Attempt ${attempt + 1}/${maxRetries} with proxy ${shuffledProxies[attempt].ip}:${shuffledProxies[attempt].port}`);
+      const currentProxy = shuffledProxies[attempt];
+      const proxyStr = formatProxy(currentProxy);
+      console.log(`[SHOPIFY-CHARGE] Attempt ${attempt + 1}/${maxRetries} with proxy ${currentProxy.ip}:${currentProxy.port}`);
       
       result = await callApi(cc, randomSite.url, proxyStr);
       
@@ -329,12 +331,29 @@ serve(async (req) => {
                            rawLower.includes('proxy authentication') || rawLower.includes('connection refused') ||
                            rawLower.includes('proxy connect') || rawLower.includes('tunneling socket');
       
-      if (!isProxyError) {
+      if (isProxyError) {
+        console.log(`[SHOPIFY-CHARGE] Proxy error on attempt ${attempt + 1}, removing proxy ${currentProxy.ip}:${currentProxy.port}`);
+        failedProxyIds.push(currentProxy.id);
+        
+        if (attempt + 1 >= maxRetries) {
+          // All retries exhausted due to proxy errors - mark as unknown
+          result.status = 'unknown';
+          result.message = 'All proxies failed (407)';
+        }
+      } else {
         console.log(`[SHOPIFY-CHARGE] Success on attempt ${attempt + 1}`);
         break;
       }
-      
-      console.log(`[SHOPIFY-CHARGE] Proxy error on attempt ${attempt + 1}, ${attempt + 1 < maxRetries ? 'retrying...' : 'no more proxies'}`);
+    }
+    
+    // Delete failed proxies from DB
+    if (failedProxyIds.length > 0) {
+      for (const proxyId of failedProxyIds) {
+        adminClient.from('user_proxies').delete().eq('id', proxyId).then(({ error: delErr }) => {
+          if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove proxy ${proxyId}:`, delErr);
+          else console.log(`[SHOPIFY-CHARGE] Removed dead proxy: ${proxyId}`);
+        });
+      }
     }
     
     if (!result) {
