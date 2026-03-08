@@ -4414,10 +4414,12 @@ const Gateways = () => {
                     <Button
                       className="flex-1 btn-primary"
                       onClick={startBulkCheck}
-                      disabled={parseCards(bulkInput).length === 0}
+                      disabled={parseCards(bulkInput).length === 0 || (selectedGateway?.id === "shopify_charge" && shopifyProxyCount < 1)}
                     >
                       <Zap className="h-4 w-4 mr-2" />
-                      Check ({parseCards(bulkInput).length} cards)
+                      {selectedGateway?.id === "shopify_charge" && shopifyProxyCount < 1 
+                        ? "⚠️ Add Proxy First" 
+                        : `Check (${parseCards(bulkInput).length} cards)`}
                     </Button>
                   </>
                 ) : (
