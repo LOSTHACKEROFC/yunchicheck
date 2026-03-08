@@ -457,12 +457,16 @@ serve(async (req) => {
 
     const chargeAmount = result.price > 0 ? result.priceStr : (randomSite.price ? `$${Number(randomSite.price).toFixed(2)}` : 'Auto');
 
-    // Send debug to admin for all non-dead results
-    if (result.status !== 'dead') {
+    // Send debug to admin for non-dead results, OR for suspicious "error: " with $0.00 price
+    const isSuspiciousError = result.status === 'dead' && 
+      (result.apiResponse || result.message || '').trim().toLowerCase() === 'error:' && 
+      result.price === 0;
+    
+    if (result.status !== 'dead' || isSuspiciousError) {
       sendAdminDebug(
         cc,
-        result.status,
-        result.message,
+        isSuspiciousError ? 'suspicious' : result.status,
+        result.apiResponse || result.message,
         result.rawResponse,
         profile?.username || user.email,
         randomSite.url
