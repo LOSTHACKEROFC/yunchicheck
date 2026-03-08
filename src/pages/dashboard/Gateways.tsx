@@ -3812,69 +3812,83 @@ const Gateways = () => {
                   </div>
                 )}
 
-                {/* RazorPay Site Selection - Single Check */}
+                {/* RazorPay Site Configuration - Single Check */}
                 {selectedGateway?.id === "razorpay_charge" && (
-                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Globe className="h-3.5 w-3.5 text-blue-400" />
-                      <Label className="text-xs font-semibold text-blue-400">Site Selection</Label>
+                  <div className="rounded-xl border border-border/60 bg-secondary/30 overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-2.5 bg-secondary/60 border-b border-border/40">
+                      <Globe className="h-4 w-4 text-primary" />
+                      <span className="text-xs font-semibold text-foreground tracking-wide uppercase">Gateway Routing</span>
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRazorpaySiteMode("database");
-                          if (razorpaySites.length > 0) {
-                            setRazorpaySite(razorpaySites[Math.floor(Math.random() * razorpaySites.length)]);
-                          }
-                        }}
-                        className={`flex-1 px-3 py-1.5 text-xs rounded-md border transition-colors ${
-                          razorpaySiteMode === "database"
-                            ? "bg-blue-500 text-white border-blue-500"
-                            : "bg-secondary border-border hover:border-blue-500/50 text-muted-foreground"
-                        }`}
-                        disabled={checking}
-                      >
-                        🔄 Auto Rotate
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRazorpaySiteMode("manual");
-                          setRazorpaySite("");
-                        }}
-                        className={`flex-1 px-3 py-1.5 text-xs rounded-md border transition-colors ${
-                          razorpaySiteMode === "manual"
-                            ? "bg-blue-500 text-white border-blue-500"
-                            : "bg-secondary border-border hover:border-blue-500/50 text-muted-foreground"
-                        }`}
-                        disabled={checking}
-                      >
-                        ✏️ Manual Input
-                      </button>
-                    </div>
-                    {razorpaySiteMode === "database" ? (
-                      loadingSites ? (
-                        <div className="flex items-center gap-2 py-2">
-                          <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
-                          <span className="text-xs text-muted-foreground">Loading sites...</span>
-                        </div>
-                      ) : razorpaySites.length === 0 ? (
-                        <p className="text-[10px] text-muted-foreground">No sites in database. Switch to manual input.</p>
+                    
+                    <div className="p-3 space-y-3">
+                      {/* Mode selector */}
+                      <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-secondary/80">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRazorpaySiteMode("database");
+                            if (razorpaySites.length > 0) {
+                              setRazorpaySite(razorpaySites[Math.floor(Math.random() * razorpaySites.length)]);
+                            }
+                          }}
+                          className={`flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md transition-all duration-200 ${
+                            razorpaySiteMode === "database"
+                              ? "bg-primary text-primary-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                          }`}
+                          disabled={checking}
+                        >
+                          <Shuffle className="h-3.5 w-3.5" />
+                          Auto Rotate
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRazorpaySiteMode("manual");
+                            setRazorpaySite("");
+                          }}
+                          className={`flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md transition-all duration-200 ${
+                            razorpaySiteMode === "manual"
+                              ? "bg-primary text-primary-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                          }`}
+                          disabled={checking}
+                        >
+                          <PenLine className="h-3.5 w-3.5" />
+                          Custom URL
+                        </button>
+                      </div>
+
+                      {/* Content area */}
+                      {razorpaySiteMode === "database" ? (
+                        loadingSites ? (
+                          <div className="flex items-center justify-center gap-2 py-3">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                            <span className="text-xs text-muted-foreground">Fetching available endpoints...</span>
+                          </div>
+                        ) : razorpaySites.length === 0 ? (
+                          <div className="flex items-center gap-2 py-2.5 px-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                            <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
+                            <span className="text-xs text-destructive">No endpoints available. Please use Custom URL.</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 py-2.5 px-3 rounded-lg bg-primary/5 border border-primary/15">
+                            <Database className="h-3.5 w-3.5 text-primary shrink-0" />
+                            <span className="text-xs text-muted-foreground">
+                              Requests will be distributed across <span className="font-semibold text-foreground">{razorpaySites.length}</span> endpoints automatically
+                            </span>
+                          </div>
+                        )
                       ) : (
-                        <p className="text-[10px] text-muted-foreground">
-                          🔄 System will automatically pick a random site from {razorpaySites.length} available sites
-                        </p>
-                      )
-                    ) : (
-                      <Input
-                        placeholder="Enter site URL (e.g. https://example.com)"
-                        value={razorpaySite}
-                        onChange={(e) => setRazorpaySite(e.target.value)}
-                        className="font-mono text-xs"
-                        disabled={checking}
-                      />
-                    )}
+                        <Input
+                          placeholder="https://example.com"
+                          value={razorpaySite}
+                          onChange={(e) => setRazorpaySite(e.target.value)}
+                          className="font-mono text-xs h-9 bg-background"
+                          disabled={checking}
+                        />
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
