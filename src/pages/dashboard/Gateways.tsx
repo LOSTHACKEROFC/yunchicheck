@@ -2579,9 +2579,15 @@ const Gateways = () => {
     }
 
     // RazorPay requires a site selection
-    if (selectedGateway.id === "razorpay_charge" && !razorpaySite) {
-      toast.error("Please select a site for RazorPay");
-      return;
+    if (selectedGateway.id === "razorpay_charge") {
+      if (razorpaySiteMode === "manual" && !razorpaySite) {
+        toast.error("Please enter a site URL for RazorPay");
+        return;
+      }
+      if (razorpaySiteMode === "database" && razorpaySites.length === 0) {
+        toast.error("No sites in database. Switch to manual input.");
+        return;
+      }
     }
 
     const isAuthGateway = selectedGateway.type === "auth";
