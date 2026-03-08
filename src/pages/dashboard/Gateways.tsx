@@ -3778,6 +3778,51 @@ const Gateways = () => {
                     </p>
                   </div>
                 )}
+
+                {/* RazorPay Site Selection */}
+                {selectedGateway?.id === "razorpay_charge" && (
+                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Globe className="h-3.5 w-3.5 text-blue-400" />
+                      <Label className="text-xs font-semibold text-blue-400">Select Site</Label>
+                    </div>
+                    {loadingSites ? (
+                      <div className="flex items-center gap-2 py-2">
+                        <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
+                        <span className="text-xs text-muted-foreground">Loading sites...</span>
+                      </div>
+                    ) : razorpaySites.length === 0 ? (
+                      <div className="flex flex-col gap-2">
+                        <Input
+                          placeholder="Enter site URL (e.g. https://example.com)"
+                          value={razorpaySite}
+                          onChange={(e) => setRazorpaySite(e.target.value)}
+                          className="font-mono text-xs"
+                          disabled={checking}
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                          No saved sites found. Enter a site URL manually.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <select
+                          value={razorpaySite}
+                          onChange={(e) => setRazorpaySite(e.target.value)}
+                          className="w-full px-3 py-2 rounded-md border border-border bg-secondary text-foreground text-xs font-mono"
+                          disabled={checking}
+                        >
+                          {razorpaySites.map((url, i) => (
+                            <option key={i} value={url}>{url}</option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-muted-foreground">
+                          Select a site for RazorPay gateway processing
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {result && (
