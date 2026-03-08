@@ -296,17 +296,39 @@ serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Pick a random user proxy
-    let proxyStr = '';
-    const randomProxy = getRandomItem(userProxies);
-    if (randomProxy.username && randomProxy.password) {
-      proxyStr = `${randomProxy.ip}:${randomProxy.port}:${randomProxy.username}:${randomProxy.password}`;
-    } else {
-      proxyStr = `${randomProxy.ip}:${randomProxy.port}`;
-    }
+    // Shuffle proxies for rotation
+    const shuffledProxies = [...userProxies].sort(() => Math.random() - 0.5);
+    
+    const formatProxy = (p: typeof userProxies[0]) => 
+      p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
 
-    // Call the Shopify API
-    const result = await callApi(cc, randomSite.url, proxyStr);
+    // Try proxies with rotation - retry on 407/proxy errors
+    let result: { status: string; message: string; rawResponse: string; price: number; priceStr: string } | null = null;
+    const maxRetries = Math.min(shuffledProxies.length, 3);
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const proxyStr = formatProxy(shuffledProxies[attempt]);
+      console.log(`[SHOPIFY-CHARGE] Attempt ${attempt + 1}/${maxRetries} with proxy ${shuffledProxies[attempt].ip}:${shuffledProxies[attempt].port}`);
+      
+      result = await callApi(cc, randomSite.url, proxyStr);
+      
+      // Check if it's a proxy-related error (407, proxy auth, connection refused)
+      const rawLower = (result.rawResponse || '').toLowerCase();
+      const isProxyError = rawLower.includes('407') || rawLower.includes('proxy error') || 
+                           rawLower.includes('proxy authentication') || rawLower.includes('connection refused') ||
+                           rawLower.includes('proxy connect') || rawLower.includes('tunneling socket');
+      
+      if (!isProxyError) {
+        console.log(`[SHOPIFY-CHARGE] Success on attempt ${attempt + 1}`);
+        break;
+      }
+      
+      console.log(`[SHOPIFY-CHARGE] Proxy error on attempt ${attempt + 1}, ${attempt + 1 < maxRetries ? 'retrying...' : 'no more proxies'}`);
+    }
+    
+    if (!result) {
+      result = { status: 'unknown', message: 'All proxies failed', rawResponse: '', price: 0, priceStr: '$0.00' };
+    }
 
     // Auto-remove bad sites from gateway_urls
     const rawLower = (result.rawResponse || '').toLowerCase();
