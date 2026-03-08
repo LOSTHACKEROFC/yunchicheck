@@ -1797,8 +1797,9 @@ const Gateways = () => {
         apiStatus, 
         apiMessage, 
         apiTotal, 
-        rawResponse 
-      };
+        rawResponse,
+        allProxiesDead: data?.allProxiesDead || false,
+      } as GatewayApiResponse & { allProxiesDead?: boolean };
     } catch (error) {
       console.error('[SHOPIFY] Exception:', error);
       return {
@@ -2885,6 +2886,15 @@ const Gateways = () => {
           gatewayResponse = await checkCardViaRazorpay(cardData.card, cardData.month, cardData.year, cardData.cvv, site);
         } else if (selectedGateway.id === "shopify_charge") {
           gatewayResponse = await checkCardViaShopify(cardData.card, cardData.month, cardData.year, cardData.cvv);
+          // Stop bulk if all user proxies are dead
+          if ((gatewayResponse as any)?.allProxiesDead) {
+            bulkAbortRef.current = true;
+            toast.error("⚠️ All proxies are dead! Add new valid proxies to restart checking.", {
+              duration: 10000,
+              description: "Go to Proxy Manager and add working proxies before continuing.",
+            });
+            return null;
+          }
         }
         
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
