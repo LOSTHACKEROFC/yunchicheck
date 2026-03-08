@@ -1986,8 +1986,8 @@ const Gateways = () => {
             return;
           }
           site = razorpaySites[Math.floor(Math.random() * razorpaySites.length)];
-        } else if (!site) {
-          toast.error("Please enter a site URL for RazorPay");
+        } else if (!site || !site.match(/^https:\/\/razorpay\.me\/@[a-zA-Z0-9_.-]+$/)) {
+          toast.error("Invalid RazorPay URL. Use format: razorpay.me/@username");
           setChecking(false);
           return;
         }
