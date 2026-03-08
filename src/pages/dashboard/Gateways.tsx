@@ -4569,6 +4569,7 @@ const Gateways = () => {
                                   }
                                   
                                   if (inner?.Price !== undefined) bPrice = typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price);
+                                  else if (raw.Price !== undefined) bPrice = typeof raw.Price === 'number' ? `$${raw.Price.toFixed(2)}` : String(raw.Price);
                                 }
                               } catch {}
                               
