@@ -116,3 +116,6 @@ verify_jwt = false
 
 [functions.paypal-charge-check]
 verify_jwt = false
+
+[functions.shopify-charge-check]
+verify_jwt = false
