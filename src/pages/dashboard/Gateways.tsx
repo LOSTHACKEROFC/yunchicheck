@@ -4050,7 +4050,7 @@ const Gateways = () => {
                       }
                     } catch {}
                     
-                    if (!apiResponseText) apiResponseText = result.apiMessage || result.message || 'No response';
+                    if (!apiResponseText) apiResponseText = result.message || 'No response';
                     if (!apiPrice) apiPrice = selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A";
                     
                     return (
