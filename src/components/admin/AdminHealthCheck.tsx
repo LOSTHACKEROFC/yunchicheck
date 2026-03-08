@@ -145,9 +145,6 @@ const AdminHealthCheck = () => {
       toast.error("Failed to export saved sites");
     }
   };
-      setLoadingSaved(false);
-    }
-  };
 
   const handleStop = () => {
     stopRef.current = true;
