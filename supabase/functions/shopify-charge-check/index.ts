@@ -398,6 +398,23 @@ serve(async (req) => {
       }
     }
 
+    // Update site price in DB if API returned a valid price, remove if > $100
+    if (result.price > 0 && !isBadSite) {
+      if (result.price > 100) {
+        console.log(`[SHOPIFY-CHARGE] Removing site ${randomSite.url} - price $${result.price} exceeds $100 limit`);
+        adminClient.from('gateway_urls').delete().eq('url', randomSite.url).then(({ error: delErr }) => {
+          if (delErr) console.error('[SHOPIFY-CHARGE] Failed to remove expensive site:', delErr);
+          else console.log(`[SHOPIFY-CHARGE] Expensive site removed: ${randomSite.url}`);
+        });
+      } else if (result.price !== Number(randomSite.price)) {
+        // Update the stored price to match actual API price
+        adminClient.from('gateway_urls').update({ price: result.price }).eq('url', randomSite.url).then(({ error: upErr }) => {
+          if (upErr) console.error('[SHOPIFY-CHARGE] Failed to update site price:', upErr);
+          else console.log(`[SHOPIFY-CHARGE] Updated price for ${randomSite.url}: $${result.price}`);
+        });
+      }
+    }
+
     // Map status
     let computedStatus: string;
     let displayStatus: string;
