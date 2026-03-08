@@ -1761,6 +1761,53 @@ const Gateways = () => {
     }
   };
 
+  // Shopify Charge API check via edge function - uses user proxies + auto-rotating sites
+  const checkCardViaShopify = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    try {
+      console.log(`[SHOPIFY] Sending:`, cc);
+      
+      const { data, error } = await supabase.functions.invoke('shopify-charge-check', {
+        body: { cc }
+      });
+      
+      if (error) {
+        console.error('[SHOPIFY] Error:', error);
+        return {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: error.message || "Connection error",
+          rawResponse: JSON.stringify(error)
+        };
+      }
+      
+      console.log('[SHOPIFY] Response:', data);
+      
+      const apiStatus = data?.apiStatus || 'UNKNOWN';
+      const apiMessage = data?.apiMessage || data?.message || 'No response';
+      const apiTotal = data?.apiTotal || 'Auto';
+      const rawResponse = data?.rawResponse || JSON.stringify(data);
+      const computedStatus = data?.computedStatus;
+      
+      return { 
+        status: computedStatus === "live" ? "live" : computedStatus === "dead" ? "dead" : "unknown",
+        apiStatus, 
+        apiMessage, 
+        apiTotal, 
+        rawResponse 
+      };
+    } catch (error) {
+      console.error('[SHOPIFY] Exception:', error);
+      return {
+        status: "unknown",
+        apiStatus: "ERROR",
+        apiMessage: error instanceof Error ? error.message : "Unknown error",
+        rawResponse: String(error)
+      };
+    }
+  };
+
   // AuthNet Charge API check via edge function - $1 charge
   const checkCardViaAuthNetCharge = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
