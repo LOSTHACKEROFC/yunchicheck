@@ -192,7 +192,7 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
       if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true) {
         apiStatus = 'live';
         apiMessage = json.message || 'Charged';
-      } else if (json.status === 'DECLINED' || json.status === 'failed' || json.status === 'error' || json.full_response === false) {
+      } else if (json.status === 'DECLINED' || json.status === 'failed' || json.status === 'error' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED') {
         apiStatus = 'dead';
         apiMessage = json.message || json.error || 'Declined';
       } else {
