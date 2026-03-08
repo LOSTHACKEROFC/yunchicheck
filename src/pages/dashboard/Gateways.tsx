@@ -2657,6 +2657,12 @@ const Gateways = () => {
       }
     }
 
+    // Shopify requires proxies
+    if (selectedGateway.id === "shopify_charge" && shopifyProxyCount < 1) {
+      toast.error("Add at least 1 proxy to use Shopify Charge");
+      return;
+    }
+
     const isAuthGateway = selectedGateway.type === "auth";
     const isChargeGateway = selectedGateway.type === "charge";
     // For charge gateways, CVC is MANDATORY
