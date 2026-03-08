@@ -1,0 +1,1 @@
+ALTER TABLE public.gateway_urls ADD COLUMN IF NOT EXISTS price numeric DEFAULT 0;
