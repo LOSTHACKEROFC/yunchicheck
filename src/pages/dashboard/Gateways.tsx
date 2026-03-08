@@ -4020,75 +4020,13 @@ const Gateways = () => {
                   {/* Separator line */}
                   <div className="border-t border-dashed border-muted-foreground/30 my-3" />
 
-                  {/* Details in mono bold italic style */}
+                  {/* Clean output: Gateway + Response only */}
                   <div className="space-y-1.5 font-mono text-xs">
-                    <div className="flex">
-                      <span className="w-24 text-muted-foreground font-bold italic">STATUS</span>
-                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
-                      <span className={`font-bold italic ${
-                        result.status === "live" || result.status === "killed"
-                          ? "text-green-500" 
-                          : result.status === "dead"
-                            ? "text-red-500"
-                            : "text-yellow-500"
-                      }`}>
-                        {getStatusDisplayLabel(result.status, selectedGateway?.id, selectedGateway?.type)}
-                      </span>
-                    </div>
-
-                    {/* Time Taken - Only for Killer Auth killed cards */}
-                    {result.status === "killed" && result.timeTaken !== undefined && (
-                      <div className="flex">
-                        <span className="w-24 text-muted-foreground font-bold italic">TIME</span>
-                        <span className="text-muted-foreground font-bold italic mr-2">:</span>
-                        <span className="text-green-500 font-bold italic">
-                          {result.timeTaken}s
-                        </span>
-                      </div>
-                    )}
-                    
-                    <div className="flex">
-                      <span className="w-24 text-muted-foreground font-bold italic">AMOUNT</span>
-                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
-                      <span className="text-foreground font-bold italic">
-                        {selectedGateway?.id === "payu_charge" 
-                          ? `₹${payuAmount} CHARGE` 
-                          : selectedGateway?.id === "paygate_charge"
-                            ? "$14 CHARGE"
-                            : selectedGateway?.id === "stripe_charge"
-                              ? "$10 CHARGE"
-                              : selectedGateway?.id === "paypal_graphql"
-                                ? "$0.01 CHARGE"
-                                : selectedGateway?.id === "razorpay_charge"
-                                  ? "RAZORPAY CHARGE"
-                                  : selectedGateway?.type === "charge" 
-                                    ? "$1 CHARGE" 
-                                    : "$0 AUTH"}
-                      </span>
-                    </div>
-                    
-                    <div className="flex">
-                      <span className="w-24 text-muted-foreground font-bold italic">RESPONSE</span>
-                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
-                      <span className="text-foreground font-bold italic">
-                        {result.apiResponse || result.message}
-                      </span>
-                    </div>
-                    
-                    <div className="flex">
-                      <span className="w-24 text-muted-foreground font-bold italic">BIN</span>
-                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
-                      <span className="text-foreground font-bold italic">
-                        {binInfo.brand.toUpperCase()} / {binInfo.type} / {binInfo.country} {binInfo.countryCode && binInfo.countryCode !== 'XX' ? String.fromCodePoint(...[...binInfo.countryCode.toUpperCase()].map(c => 0x1F1E6 - 65 + c.charCodeAt(0))) : ''}
-                      </span>
-                    </div>
-                    
                     <div className="flex">
                       <span className="w-24 text-muted-foreground font-bold italic">GATEWAY</span>
                       <span className="text-muted-foreground font-bold italic mr-2">:</span>
-                      <span className="text-foreground font-bold italic">
+                      <span className="text-primary font-bold italic">
                         {selectedGateway?.name || result.gateway}
-                        {/* Show which API was used for combined gateway */}
                         {selectedGateway?.id === "combined_auth" && result.usedApi && (
                           <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold ${
                             result.usedApi === 'stripe' 
@@ -4104,36 +4042,36 @@ const Gateways = () => {
                     </div>
                     
                     <div className="flex">
-                      <span className="w-24 text-muted-foreground font-bold italic">TIME</span>
+                      <span className="w-24 text-muted-foreground font-bold italic">RESPONSE</span>
                       <span className="text-muted-foreground font-bold italic mr-2">:</span>
-                      <span className="text-foreground font-bold italic">
-                        {format(new Date(), 'yyyy-MM-dd HH:mm')} UTC
+                      <span className="text-foreground font-bold italic break-all">
+                        {result.apiResponse || result.message}
                       </span>
                     </div>
-                    
-                    {/* Raw API Response - Expandable (hidden for Killer Auth) */}
-                    {result.rawResponse && selectedGateway?.id !== "killer_auth" && (
-                      <div className="mt-3 pt-3 border-t border-dashed border-muted-foreground/30">
-                        <details className="group">
-                          <summary className="cursor-pointer flex items-center gap-2 text-muted-foreground font-bold italic text-[11px] hover:text-foreground transition-colors">
-                            <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
-                            RAW API RESPONSE
-                          </summary>
-                          <div className="mt-2 p-2 bg-black/30 rounded border border-border overflow-x-auto">
-                            <pre className="text-[10px] text-green-400 whitespace-pre-wrap break-all font-mono">
-                              {(() => {
-                                try {
-                                  const parsed = JSON.parse(result.rawResponse || '{}');
-                                  return JSON.stringify(parsed, null, 2);
-                                } catch {
-                                  return result.rawResponse;
-                                }
-                              })()}
-                            </pre>
-                          </div>
-                        </details>
-                      </div>
-                    )}
+
+                    {/* Real-time price from API response */}
+                    {(() => {
+                      // Extract price from apiResponse or rawResponse
+                      let priceDisplay = '';
+                      try {
+                        const raw = result.rawResponse ? JSON.parse(result.rawResponse) : null;
+                        if (raw?.apiTotal) priceDisplay = raw.apiTotal;
+                      } catch {}
+                      if (!priceDisplay && result.apiResponse) {
+                        const priceMatch = result.apiResponse.match(/\(([^)]+)\)/);
+                        if (priceMatch) priceDisplay = priceMatch[1];
+                      }
+                      if (!priceDisplay) {
+                        priceDisplay = selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A";
+                      }
+                      return (
+                        <div className="flex">
+                          <span className="w-24 text-muted-foreground font-bold italic">PRICE</span>
+                          <span className="text-muted-foreground font-bold italic mr-2">:</span>
+                          <span className="text-foreground font-bold italic">{priceDisplay}</span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -4581,50 +4519,13 @@ const Gateways = () => {
                             {/* Separator */}
                             <div className="border-t border-dashed border-muted-foreground/30 my-2" />
                             
-                            {/* Details in bold italic mono style */}
+                            {/* Clean output: Gateway + Response only */}
                             <div className="space-y-1 font-mono text-[10px]">
-                              <div className="flex">
-                                <span className="w-20 text-muted-foreground font-bold italic">STATUS</span>
-                                <span className="text-muted-foreground font-bold italic mr-1">:</span>
-                                <span className={`font-bold italic ${
-                                  r.status === "live" ? "text-green-500" : r.status === "dead" ? "text-red-500" : "text-yellow-500"
-                                }`}>
-                                  {getStatusDisplayLabel(r.status, selectedGateway?.id, selectedGateway?.type)}
-                                </span>
-                              </div>
-                              
-                              <div className="flex">
-                                <span className="w-20 text-muted-foreground font-bold italic">AMOUNT</span>
-                                <span className="text-muted-foreground font-bold italic mr-1">:</span>
-                                <span className="text-foreground font-bold italic">
-                                  {selectedGateway?.type === "auth" ? "$0 AUTH" : selectedGateway?.id === "paygate_charge" ? "$14.00" : selectedGateway?.id === "payu_charge" ? `₹${payuAmount}` : selectedGateway?.id === "stripelow_charge" ? "£0.30" : selectedGateway?.id === "rizzup_charge" ? "$5.00" : selectedGateway?.id === "paypal_charge" ? "$1.00" : selectedGateway?.id === "authnet_charge" ? "$1.00" : selectedGateway?.id === "paypal_graphql" ? "$0.01" : "$10.00"}
-                                </span>
-                              </div>
-                              
-                              {r.apiResponse && (
-                                <div className="flex">
-                                  <span className="w-20 text-muted-foreground font-bold italic shrink-0">RESPONSE</span>
-                                  <span className="text-muted-foreground font-bold italic mr-1">:</span>
-                                  <span className="text-foreground font-bold italic truncate">
-                                    {r.apiResponse}
-                                  </span>
-                                </div>
-                              )}
-                              
-                              <div className="flex">
-                                <span className="w-20 text-muted-foreground font-bold italic">BIN</span>
-                                <span className="text-muted-foreground font-bold italic mr-1">:</span>
-                                <span className="text-foreground font-bold italic">
-                                  {brand.toUpperCase()}
-                                </span>
-                              </div>
-                              
                               <div className="flex">
                                 <span className="w-20 text-muted-foreground font-bold italic">GATEWAY</span>
                                 <span className="text-muted-foreground font-bold italic mr-1">:</span>
                                 <span className="text-primary font-bold italic">
                                   {selectedGateway?.name || 'N/A'}
-                                  {/* Show which API was used for combined gateway */}
                                   {selectedGateway?.id === "combined_auth" && r.usedApi && (
                                     <span className={`ml-1.5 px-1 py-0.5 rounded text-[8px] font-bold ${
                                       r.usedApi === 'stripe' 
@@ -4638,6 +4539,16 @@ const Gateways = () => {
                                   )}
                                 </span>
                               </div>
+                              
+                              {r.apiResponse && (
+                                <div className="flex">
+                                  <span className="w-20 text-muted-foreground font-bold italic shrink-0">RESPONSE</span>
+                                  <span className="text-muted-foreground font-bold italic mr-1">:</span>
+                                  <span className="text-foreground font-bold italic break-all">
+                                    {r.apiResponse}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         );
