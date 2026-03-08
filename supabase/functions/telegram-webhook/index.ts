@@ -24,6 +24,12 @@ interface TelegramUpdate {
     caption?: string;
     reply_to_message?: {
       text?: string;
+      document?: {
+        file_id: string;
+        file_name?: string;
+        mime_type?: string;
+        file_size?: number;
+      };
     };
     document?: {
       file_id: string;
@@ -7980,24 +7986,36 @@ ${ticket.message}
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Fetch URLs from urls.txt file
+      // Check if user replied to a .txt file
+      const replyDoc = update.message?.reply_to_message?.document;
+      if (!replyDoc || (!replyDoc.file_name?.endsWith(".txt") && replyDoc.mime_type !== "text/plain")) {
+        await sendTelegramMessage(chatId, "❌ <b>No File Detected</b>\n\nReply to a <code>.txt</code> file containing URLs with /healthsites to start scanning.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Download the .txt file from Telegram
       let gatewayUrls: { url: string }[] = [];
       try {
-        const txtResponse = await fetch("https://yunchicheck.lovable.app/urls.txt");
-        if (txtResponse.ok) {
-          const txtContent = await txtResponse.text();
-          gatewayUrls = txtContent
-            .split("\n")
-            .map(line => line.trim())
-            .filter(line => line.length > 0 && (line.startsWith("http://") || line.startsWith("https://")))
-            .map(url => ({ url }));
+        const fileInfoRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${replyDoc.file_id}`);
+        const fileInfo = await fileInfoRes.json();
+        if (fileInfo.ok && fileInfo.result?.file_path) {
+          const fileUrl = `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${fileInfo.result.file_path}`;
+          const fileRes = await fetch(fileUrl);
+          if (fileRes.ok) {
+            const txtContent = await fileRes.text();
+            gatewayUrls = txtContent
+              .split("\n")
+              .map(line => line.trim())
+              .filter(line => line.length > 0 && (line.startsWith("http://") || line.startsWith("https://")))
+              .map(url => ({ url }));
+          }
         }
       } catch (e) {
-        console.error("[HEALTHSITES] Failed to fetch urls.txt:", e);
+        console.error("[HEALTHSITES] Failed to download replied file:", e);
       }
 
       if (!gatewayUrls || gatewayUrls.length === 0) {
-        await sendTelegramMessage(chatId, "❌ <b>No URLs Found</b>\n\nThe gateway_urls table is empty or there was an error fetching data.");
+        await sendTelegramMessage(chatId, "❌ <b>No Valid URLs Found</b>\n\nThe replied file contains no valid URLs (must start with http:// or https://).");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -8249,12 +8267,9 @@ ${resultsDisplay || "Waiting for results..."}
             status: "success"
           });
 
-          // If price found → keep site, if no price → remove site from DB
+          // Save working sites (with price) to gateway_urls
           if (price > 0) {
-            // Site has a price, keep it
-          } else {
-            // No price found, remove site from gateway_urls
-            await supabase.from("gateway_urls").delete().eq("url", siteUrl);
+            await supabase.from("gateway_urls").upsert({ url: siteUrl }, { onConflict: "url", ignoreDuplicates: true });
           }
 
           // Update with full raw response
@@ -8276,8 +8291,7 @@ ${resultsDisplay || "Waiting for results..."}
             error: errorMsg
           });
 
-          // Error = no price, remove site
-          await supabase.from("gateway_urls").delete().eq("url", siteUrl);
+          // Error = skip, don't save to gateway_urls
 
           await editTelegramMessage(
             chatId,
