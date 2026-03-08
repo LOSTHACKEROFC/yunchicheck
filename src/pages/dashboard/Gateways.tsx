@@ -303,6 +303,7 @@ const Gateways = () => {
   const [razorpaySites, setRazorpaySites] = useState<string[]>([]); // Available sites from gateway_urls
   const [loadingSites, setLoadingSites] = useState(false);
   const [razorpaySiteMode, setRazorpaySiteMode] = useState<"database" | "manual">("database"); // Site source mode for bulk
+  const [shopifyProxyCount, setShopifyProxyCount] = useState(0);
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<CheckResult | null>(null);
   const [userCredits, setUserCredits] = useState<number>(0);
