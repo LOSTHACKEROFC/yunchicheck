@@ -52,6 +52,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useBulkCheck } from "@/contexts/BulkCheckContext";
 import UserProxyManager from "@/components/UserProxyManager";
+import ShopifySiteGroups from "@/components/ShopifySiteGroups";
 
 // BIN Lookup utilities
 interface BinInfo {
