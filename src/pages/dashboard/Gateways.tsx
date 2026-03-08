@@ -295,6 +295,9 @@ const Gateways = () => {
   const [expYear, setExpYear] = useState("");
   const [cvv, setCvv] = useState("");
   const [payuAmount, setPayuAmount] = useState<number>(1); // PayU custom amount (default ₹1)
+  const [razorpaySite, setRazorpaySite] = useState<string>(""); // RazorPay site URL
+  const [razorpaySites, setRazorpaySites] = useState<string[]>([]); // Available sites from gateway_urls
+  const [loadingSites, setLoadingSites] = useState(false);
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<CheckResult | null>(null);
   const [userCredits, setUserCredits] = useState<number>(0);
@@ -563,6 +566,11 @@ const Gateways = () => {
   useEffect(() => {
     if (selectedGateway && userId) {
       fetchGatewayHistory(selectedGateway.id);
+      
+      // Fetch sites for RazorPay gateway
+      if (selectedGateway.id === "razorpay_charge") {
+        fetchRazorpaySites();
+      }
 
       // Subscribe to real-time card check updates
       const channel = supabase
@@ -1793,6 +1801,84 @@ const Gateways = () => {
     }
   };
 
+  // RazorPay Charge API check via edge function with site selection
+  const checkCardViaRazorpay = async (cardNumber: string, month: string, year: string, cvv: string, site: string): Promise<GatewayApiResponse> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    try {
+      console.log(`[RAZORPAY] Sending:`, cc, `Site: ${site}`);
+      
+      const { data, error } = await supabase.functions.invoke('razorpay-charge-check', {
+        body: { cc, site }
+      });
+      
+      if (error) {
+        console.error('[RAZORPAY] Error:', error);
+        return {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: error.message || "Connection error",
+          rawResponse: JSON.stringify(error)
+        };
+      }
+      
+      console.log('[RAZORPAY] Response:', data);
+      
+      const apiStatus = data?.apiStatus || 'UNKNOWN';
+      const apiMessage = data?.apiMessage || data?.message || 'No response';
+      const rawResponse = data?.rawResponse || JSON.stringify(data);
+      const computedStatus = data?.computedStatus;
+      const is3ds = data?.is3ds === true;
+      
+      // 3DS Required maps to unknown for credit logic but shows special label
+      if (is3ds) {
+        return { 
+          status: "unknown",
+          apiStatus: "3DS REQUIRED",
+          apiMessage: apiMessage,
+          rawResponse 
+        };
+      }
+      
+      return { 
+        status: computedStatus === "live" ? "live" : computedStatus === "dead" ? "dead" : "unknown",
+        apiStatus, 
+        apiMessage, 
+        rawResponse 
+      };
+    } catch (error) {
+      console.error('[RAZORPAY] Exception:', error);
+      return {
+        status: "unknown",
+        apiStatus: "ERROR",
+        apiMessage: error instanceof Error ? error.message : "Unknown error",
+        rawResponse: String(error)
+      };
+    }
+  };
+
+  // Fetch available sites for RazorPay from gateway_urls table
+  const fetchRazorpaySites = async () => {
+    setLoadingSites(true);
+    try {
+      const { data, error } = await supabase
+        .from('gateway_urls')
+        .select('url')
+        .order('created_at', { ascending: true });
+      
+      if (!error && data && data.length > 0) {
+        const urls = data.map(d => d.url);
+        setRazorpaySites(urls);
+        if (!razorpaySite && urls.length > 0) {
+          setRazorpaySite(urls[0]);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch sites:', err);
+    } finally {
+      setLoadingSites(false);
+    }
+  };
 
   const checkCardViaDistributed = async (cardNumber: string, month: string, year: string, cvv: string, targetApi: 'stripe' | 'b3', maxRetries = 5): Promise<GatewayApiResponse> => {
     if (targetApi === 'stripe') {
@@ -1887,6 +1973,13 @@ const Gateways = () => {
         gatewayResponse = await checkCardViaPaypalWoo(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "authnet_charge") {
         gatewayResponse = await checkCardViaAuthNetCharge(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+      } else if (selectedGateway.id === "razorpay_charge") {
+        if (!razorpaySite) {
+          toast.error("Please select a site for RazorPay");
+          setChecking(false);
+          return;
+        }
+        gatewayResponse = await checkCardViaRazorpay(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv, razorpaySite);
       }
       
       const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -2484,6 +2577,12 @@ const Gateways = () => {
       return;
     }
 
+    // RazorPay requires a site selection
+    if (selectedGateway.id === "razorpay_charge" && !razorpaySite) {
+      toast.error("Please select a site for RazorPay");
+      return;
+    }
+
     const isAuthGateway = selectedGateway.type === "auth";
     const isChargeGateway = selectedGateway.type === "charge";
     // For charge gateways, CVC is MANDATORY
@@ -2696,6 +2795,8 @@ const Gateways = () => {
           gatewayResponse = await checkCardViaPaypalWoo(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "authnet_charge") {
           gatewayResponse = await checkCardViaAuthNetCharge(cardData.card, cardData.month, cardData.year, cardData.cvv);
+        } else if (selectedGateway.id === "razorpay_charge") {
+          gatewayResponse = await checkCardViaRazorpay(cardData.card, cardData.month, cardData.year, cardData.cvv, razorpaySite);
         }
         
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -3688,6 +3789,51 @@ const Gateways = () => {
                     </p>
                   </div>
                 )}
+
+                {/* RazorPay Site Selection */}
+                {selectedGateway?.id === "razorpay_charge" && (
+                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Globe className="h-3.5 w-3.5 text-blue-400" />
+                      <Label className="text-xs font-semibold text-blue-400">Select Site</Label>
+                    </div>
+                    {loadingSites ? (
+                      <div className="flex items-center gap-2 py-2">
+                        <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
+                        <span className="text-xs text-muted-foreground">Loading sites...</span>
+                      </div>
+                    ) : razorpaySites.length === 0 ? (
+                      <div className="flex flex-col gap-2">
+                        <Input
+                          placeholder="Enter site URL (e.g. https://example.com)"
+                          value={razorpaySite}
+                          onChange={(e) => setRazorpaySite(e.target.value)}
+                          className="font-mono text-xs"
+                          disabled={checking}
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                          No saved sites found. Enter a site URL manually.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <select
+                          value={razorpaySite}
+                          onChange={(e) => setRazorpaySite(e.target.value)}
+                          className="w-full px-3 py-2 rounded-md border border-border bg-secondary text-foreground text-xs font-mono"
+                          disabled={checking}
+                        >
+                          {razorpaySites.map((url, i) => (
+                            <option key={i} value={url}>{url}</option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-muted-foreground">
+                          Select a site for RazorPay gateway processing
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {result && (
@@ -3767,9 +3913,11 @@ const Gateways = () => {
                               ? "$10 CHARGE"
                               : selectedGateway?.id === "paypal_graphql"
                                 ? "$0.01 CHARGE"
-                                : selectedGateway?.type === "charge" 
-                                  ? "$1 CHARGE" 
-                                  : "$0 AUTH"}
+                                : selectedGateway?.id === "razorpay_charge"
+                                  ? "RAZORPAY CHARGE"
+                                  : selectedGateway?.type === "charge" 
+                                    ? "$1 CHARGE" 
+                                    : "$0 AUTH"}
                       </span>
                     </div>
                     
