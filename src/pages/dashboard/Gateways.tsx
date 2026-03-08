@@ -1768,10 +1768,10 @@ const Gateways = () => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
     try {
-      console.log(`[SHOPIFY] Sending:`, cc);
+      console.log(`[SHOPIFY] Sending:`, cc, `Price group:`, shopifyPriceGroup);
       
       const { data, error } = await supabase.functions.invoke('shopify-charge-check', {
-        body: { cc }
+        body: { cc, priceGroup: shopifyPriceGroup }
       });
       
       if (error) {
