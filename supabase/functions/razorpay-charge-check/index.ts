@@ -220,6 +220,9 @@ serve(async (req) => {
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Wait for API result
+    const result = await resultPromise;
+
     // Auto-remove site if "international cards not supported"
     const msgLower = (result.message || '').toLowerCase();
     if (msgLower.includes('international cards are not supported') || msgLower.includes('international card')) {
