@@ -526,7 +526,7 @@ serve(async (req) => {
 ${toFancyScript('Card')} ▸ <code>${fullCard}</code>
 
 ${statusLine}
-${toFancyScript('Response')} ▸ <code>${response_message}</code>
+${toFancyScript('Response')} ▸ ${(response_message || '').toUpperCase().includes('ORDER_PLACED') || (response_message || '').toUpperCase().includes('ORDER PLACED') ? '💎 ORDER PLACED' : `<code>${response_message}</code>`}
 
 ${brandEmoji} ${toFancyItalic(binInfo.brand)} • ${toFancyItalic(binInfo.type)}
 🏦 ${binInfo.bank}
