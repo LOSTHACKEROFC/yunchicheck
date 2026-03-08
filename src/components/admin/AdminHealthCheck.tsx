@@ -46,6 +46,7 @@ const AdminHealthCheck = () => {
   const [stats, setStats] = useState({ total: 0, live: 0, dead: 0, errors: 0 });
   const [loadingSaved, setLoadingSaved] = useState(false);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+  const [exportFilter, setExportFilter] = useState<"all" | "live" | "dead" | "error">("all");
   const stopRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
