@@ -8291,8 +8291,7 @@ ${resultsDisplay || "Waiting for results..."}
             error: errorMsg
           });
 
-          // Error = no price, remove site
-          await supabase.from("gateway_urls").delete().eq("url", siteUrl);
+          // Error = skip, don't save to gateway_urls
 
           await editTelegramMessage(
             chatId,
