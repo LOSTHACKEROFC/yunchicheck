@@ -223,18 +223,26 @@ serve(async (req) => {
     // Wait for API result
     const result = await resultPromise;
 
-    // Auto-remove site for known bad responses
+    // Auto-remove site for known bad responses & unknown errors
     const msgLower = (result.message || '').toLowerCase();
     const rawLower = (result.rawResponse || '').toLowerCase();
-    const shouldRemove = 
-      msgLower.includes('international cards are not supported') || msgLower.includes('international card') ||
-      rawLower.includes('merchant extraction failed') || rawLower.includes('missing merchant fields');
     
-    if (shouldRemove) {
-      const removalReason = rawLower.includes('merchant extraction failed') || rawLower.includes('missing merchant fields')
-        ? 'Merchant extraction failed / Missing merchant fields'
-        : 'International cards not supported';
-      
+    let removalReason = '';
+    if (rawLower.includes('merchant extraction failed') || rawLower.includes('missing merchant fields')) {
+      removalReason = 'Merchant extraction failed / Missing merchant fields';
+    } else if (msgLower.includes('international cards are not supported') || msgLower.includes('international card')) {
+      removalReason = 'International cards not supported';
+    } else if (rawLower.includes('payment page expired') || rawLower.includes('page has expired')) {
+      removalReason = 'Payment page expired';
+    } else if (rawLower.includes('account is not activated') || rawLower.includes('not activated')) {
+      removalReason = 'Account not activated';
+    } else if (rawLower.includes('page not found') || rawLower.includes('404') || rawLower.includes('invalid payment link')) {
+      removalReason = 'Invalid/dead payment link';
+    } else if (result.status === 'unknown' && (!result.rawResponse || result.rawResponse.trim() === '' || msgLower === 'empty response' || msgLower === 'timeout')) {
+      removalReason = 'Empty response / Timeout';
+    }
+    
+    if (removalReason) {
       console.log(`[RAZORPAY] Removing site: ${site} - ${removalReason}`);
       const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       adminClient.from('gateway_urls').delete().eq('url', site).then(({ error: delErr }) => {
