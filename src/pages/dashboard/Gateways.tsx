@@ -1986,8 +1986,8 @@ const Gateways = () => {
             return;
           }
           site = razorpaySites[Math.floor(Math.random() * razorpaySites.length)];
-        } else if (!site) {
-          toast.error("Please enter a site URL for RazorPay");
+        } else if (!site || !site.match(/^https:\/\/razorpay\.me\/@[a-zA-Z0-9_.-]+$/)) {
+          toast.error("Invalid RazorPay URL. Use format: razorpay.me/@username");
           setChecking(false);
           return;
         }
@@ -2591,8 +2591,8 @@ const Gateways = () => {
 
     // RazorPay requires a site selection
     if (selectedGateway.id === "razorpay_charge") {
-      if (razorpaySiteMode === "manual" && !razorpaySite) {
-        toast.error("Please enter a site URL for RazorPay");
+      if (razorpaySiteMode === "manual" && (!razorpaySite || !razorpaySite.match(/^https:\/\/razorpay\.me\/@[a-zA-Z0-9_.-]+$/))) {
+        toast.error("Invalid RazorPay URL. Use format: razorpay.me/@username");
         return;
       }
       if (razorpaySiteMode === "database" && razorpaySites.length === 0) {
@@ -3880,13 +3880,26 @@ const Gateways = () => {
                           </div>
                         )
                       ) : (
-                        <Input
-                          placeholder="https://example.com"
-                          value={razorpaySite}
-                          onChange={(e) => setRazorpaySite(e.target.value)}
-                          className="font-mono text-xs h-9 bg-background"
-                          disabled={checking}
-                        />
+                        <div className="space-y-1.5">
+                          <div className="flex items-center">
+                            <span className="px-3 py-[7px] text-xs font-mono bg-secondary border border-r-0 border-border rounded-l-md text-muted-foreground whitespace-nowrap">
+                              razorpay.me/@
+                            </span>
+                            <Input
+                              placeholder="username"
+                              value={razorpaySite.replace(/^https?:\/\/razorpay\.me\/@?/i, '')}
+                              onChange={(e) => {
+                                const username = e.target.value.replace(/[^a-zA-Z0-9_.-]/g, '');
+                                setRazorpaySite(username ? `https://razorpay.me/@${username}` : '');
+                              }}
+                              className="font-mono text-xs h-9 bg-background rounded-l-none"
+                              disabled={checking}
+                            />
+                          </div>
+                          <p className="text-[10px] text-muted-foreground pl-1">
+                            Enter the merchant username (e.g. <span className="font-mono">starinternational6682</span>)
+                          </p>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -4229,15 +4242,23 @@ const Gateways = () => {
                       )
                     ) : (
                       <div className="space-y-1.5">
-                        <Input
-                          placeholder="https://example.com"
-                          value={razorpaySite}
-                          onChange={(e) => setRazorpaySite(e.target.value)}
-                          className="font-mono text-xs h-9 bg-background"
-                          disabled={bulkChecking}
-                        />
+                        <div className="flex items-center">
+                          <span className="px-3 py-[7px] text-xs font-mono bg-secondary border border-r-0 border-border rounded-l-md text-muted-foreground whitespace-nowrap">
+                            razorpay.me/@
+                          </span>
+                          <Input
+                            placeholder="username"
+                            value={razorpaySite.replace(/^https?:\/\/razorpay\.me\/@?/i, '')}
+                            onChange={(e) => {
+                              const username = e.target.value.replace(/[^a-zA-Z0-9_.-]/g, '');
+                              setRazorpaySite(username ? `https://razorpay.me/@${username}` : '');
+                            }}
+                            className="font-mono text-xs h-9 bg-background rounded-l-none"
+                            disabled={bulkChecking}
+                          />
+                        </div>
                         <p className="text-[10px] text-muted-foreground pl-1">
-                          All requests will be routed through this single endpoint
+                          Enter the merchant username — all requests route through this endpoint
                         </p>
                       </div>
                     )}
