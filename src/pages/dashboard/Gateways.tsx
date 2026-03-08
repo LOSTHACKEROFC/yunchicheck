@@ -3880,13 +3880,26 @@ const Gateways = () => {
                           </div>
                         )
                       ) : (
-                        <Input
-                          placeholder="https://example.com"
-                          value={razorpaySite}
-                          onChange={(e) => setRazorpaySite(e.target.value)}
-                          className="font-mono text-xs h-9 bg-background"
-                          disabled={checking}
-                        />
+                        <div className="space-y-1.5">
+                          <div className="flex items-center">
+                            <span className="px-3 py-[7px] text-xs font-mono bg-secondary border border-r-0 border-border rounded-l-md text-muted-foreground whitespace-nowrap">
+                              razorpay.me/@
+                            </span>
+                            <Input
+                              placeholder="username"
+                              value={razorpaySite.replace(/^https?:\/\/razorpay\.me\/@?/i, '')}
+                              onChange={(e) => {
+                                const username = e.target.value.replace(/[^a-zA-Z0-9_.-]/g, '');
+                                setRazorpaySite(username ? `https://razorpay.me/@${username}` : '');
+                              }}
+                              className="font-mono text-xs h-9 bg-background rounded-l-none"
+                              disabled={checking}
+                            />
+                          </div>
+                          <p className="text-[10px] text-muted-foreground pl-1">
+                            Enter the merchant username (e.g. <span className="font-mono">starinternational6682</span>)
+                          </p>
+                        </div>
                       )}
                     </div>
                   </div>
