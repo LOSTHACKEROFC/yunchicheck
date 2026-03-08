@@ -3982,7 +3982,10 @@ const Gateways = () => {
                 {selectedGateway?.id === "shopify_charge" && (
                   <>
                     <UserProxyManager onProxyCountChange={setShopifyProxyCount} />
-                    <ShopifySiteGroups />
+                    <ShopifyPriceGroupSelector 
+                      onGroupSelect={setShopifyPriceGroup}
+                      selectedGroup={shopifyPriceGroup}
+                    />
                   </>
                 )}
               </div>
