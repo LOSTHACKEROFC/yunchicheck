@@ -47,8 +47,25 @@ const AdminHealthCheck = () => {
   const [loadingSaved, setLoadingSaved] = useState(false);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [exportFilter, setExportFilter] = useState<"all" | "live" | "dead" | "error">("all");
+  const [deletingAll, setDeletingAll] = useState(false);
   const stopRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDeleteAllSaved = async () => {
+    if (!confirm("Are you sure you want to delete ALL saved URLs? This cannot be undone.")) return;
+    setDeletingAll(true);
+    try {
+      const { error } = await supabase.from("gateway_urls").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      if (error) throw error;
+      toast.success("All saved URLs deleted successfully");
+      setUrls([]);
+      setUrlInput("");
+    } catch (err) {
+      toast.error("Failed to delete saved URLs");
+    } finally {
+      setDeletingAll(false);
+    }
+  };
 
   const parseUrls = (text: string): string[] => {
     return text
