@@ -2591,8 +2591,8 @@ const Gateways = () => {
 
     // RazorPay requires a site selection
     if (selectedGateway.id === "razorpay_charge") {
-      if (razorpaySiteMode === "manual" && !razorpaySite) {
-        toast.error("Please enter a site URL for RazorPay");
+      if (razorpaySiteMode === "manual" && (!razorpaySite || !razorpaySite.match(/^https:\/\/razorpay\.me\/@[a-zA-Z0-9_.-]+$/))) {
+        toast.error("Invalid RazorPay URL. Use format: razorpay.me/@username");
         return;
       }
       if (razorpaySiteMode === "database" && razorpaySites.length === 0) {
