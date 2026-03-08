@@ -3907,9 +3907,11 @@ const Gateways = () => {
                               ? "$10 CHARGE"
                               : selectedGateway?.id === "paypal_graphql"
                                 ? "$0.01 CHARGE"
-                                : selectedGateway?.type === "charge" 
-                                  ? "$1 CHARGE" 
-                                  : "$0 AUTH"}
+                                : selectedGateway?.id === "razorpay_charge"
+                                  ? "RAZORPAY CHARGE"
+                                  : selectedGateway?.type === "charge" 
+                                    ? "$1 CHARGE" 
+                                    : "$0 AUTH"}
                       </span>
                     </div>
                     
