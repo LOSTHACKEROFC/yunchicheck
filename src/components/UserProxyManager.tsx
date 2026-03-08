@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -79,6 +78,26 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
     return { ip, port, username, password };
   };
 
+  // Check proxies via edge function
+  const checkProxiesViaEdge = async (
+    proxyList: { ip: string; port: string; username?: string; password?: string; id?: string }[]
+  ): Promise<{ ip: string; port: string; id?: string; status: "live" | "dead" }[]> => {
+    try {
+      const { data, error } = await supabase.functions.invoke("check-proxy", {
+        body: { proxies: proxyList },
+      });
+
+      if (error || !data?.results) {
+        console.error("Proxy check error:", error);
+        return proxyList.map(p => ({ ...p, status: "dead" as const }));
+      }
+
+      return data.results;
+    } catch {
+      return proxyList.map(p => ({ ...p, status: "dead" as const }));
+    }
+  };
+
   const addProxy = async () => {
     if (!newProxy.trim()) return;
     if (proxies.length >= 10) {
@@ -93,6 +112,18 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
     }
 
     setAdding(true);
+
+    // Check proxy liveness FIRST
+    toast.info("Checking proxy liveness...");
+    const results = await checkProxiesViaEdge([parsed]);
+    const result = results[0];
+
+    if (result?.status !== "live") {
+      toast.error(`Proxy ${parsed.ip}:${parsed.port} is DEAD — not added`);
+      setAdding(false);
+      return;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       toast.error("Not authenticated");
@@ -115,7 +146,7 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
     } else {
       setNewProxy("");
       fetchProxies();
-      toast.success("Proxy added");
+      toast.success(`Proxy ${parsed.ip}:${parsed.port} is LIVE ✓ — added`);
     }
     setAdding(false);
   };
@@ -131,13 +162,30 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
     }
 
     const toAdd = lines.slice(0, remaining);
-    const parsed = toAdd.map(parseProxy).filter(Boolean);
+    const parsed = toAdd.map(parseProxy).filter(Boolean) as { ip: string; port: string; username?: string; password?: string }[];
     if (!parsed.length) {
       toast.error("No valid proxies found");
       return;
     }
 
     setAdding(true);
+    toast.info(`Checking ${parsed.length} proxies for liveness...`);
+
+    // Check ALL proxies first
+    const results = await checkProxiesViaEdge(parsed);
+    const liveProxies = results.filter(r => r.status === "live");
+    const deadCount = results.filter(r => r.status === "dead").length;
+
+    if (liveProxies.length === 0) {
+      toast.error(`All ${parsed.length} proxies are DEAD — none added`);
+      setAdding(false);
+      return;
+    }
+
+    if (deadCount > 0) {
+      toast.warning(`${deadCount} dead proxies skipped`);
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       toast.error("Not authenticated");
@@ -145,12 +193,12 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
       return;
     }
 
-    const rows = parsed.map(p => ({
+    const rows = liveProxies.map(p => ({
       user_id: user.id,
-      ip: p!.ip,
-      port: p!.port,
-      username: p!.username || null,
-      password: p!.password || null,
+      ip: p.ip,
+      port: p.port,
+      username: (parsed.find(pp => pp.ip === p.ip && pp.port === p.port)?.username) || null,
+      password: (parsed.find(pp => pp.ip === p.ip && pp.port === p.port)?.password) || null,
     }));
 
     const { error } = await supabase
@@ -162,7 +210,7 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
     } else {
       setBulkText("");
       fetchProxies();
-      toast.success(`${parsed.length} proxies added`);
+      toast.success(`${liveProxies.length} live proxies added, ${deadCount} dead skipped`);
     }
     setAdding(false);
   };
@@ -186,39 +234,51 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
 
   const checkSingleProxy = useCallback(async (proxy: UserProxy) => {
     setProxyStatuses(prev => ({ ...prev, [proxy.id]: "checking" }));
-    try {
-      const proxyStr = proxy.username && proxy.password
-        ? `${proxy.ip}:${proxy.port}:${proxy.username}:${proxy.password}`
-        : `${proxy.ip}:${proxy.port}`;
-
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
-
-      const response = await fetch(
-        `https://api.proxyscrape.com/v4/accounts/freebies/ipport/check?proxy=${encodeURIComponent(proxyStr)}`,
-        { signal: controller.signal }
-      );
-      clearTimeout(timeout);
-
-      if (response.ok) {
-        const data = await response.json();
-        const alive = data?.alive === true || data?.status === "alive";
-        setProxyStatuses(prev => ({ ...prev, [proxy.id]: alive ? "live" : "dead" }));
-      } else {
-        // Fallback: try a simple connectivity test via edge function
-        setProxyStatuses(prev => ({ ...prev, [proxy.id]: "unknown" }));
-      }
-    } catch {
-      setProxyStatuses(prev => ({ ...prev, [proxy.id]: "unknown" }));
-    }
+    const results = await checkProxiesViaEdge([{
+      id: proxy.id,
+      ip: proxy.ip,
+      port: proxy.port,
+      username: proxy.username || undefined,
+      password: proxy.password || undefined,
+    }]);
+    const result = results[0];
+    setProxyStatuses(prev => ({
+      ...prev,
+      [proxy.id]: result?.status === "live" ? "live" : "dead",
+    }));
   }, []);
 
   const checkAllProxies = async () => {
     if (!proxies.length) return;
     setCheckingAll(true);
-    await Promise.all(proxies.map(p => checkSingleProxy(p)));
+
+    // Set all to checking
+    const checkingState: ProxyStatus = {};
+    proxies.forEach(p => { checkingState[p.id] = "checking"; });
+    setProxyStatuses(checkingState);
+
+    const proxyList = proxies.map(p => ({
+      id: p.id,
+      ip: p.ip,
+      port: p.port,
+      username: p.username || undefined,
+      password: p.password || undefined,
+    }));
+
+    const results = await checkProxiesViaEdge(proxyList);
+
+    const newStatuses: ProxyStatus = {};
+    results.forEach(r => {
+      if (r.id) {
+        newStatuses[r.id] = r.status === "live" ? "live" : "dead";
+      }
+    });
+    setProxyStatuses(prev => ({ ...prev, ...newStatuses }));
+
+    const live = results.filter(r => r.status === "live").length;
+    const dead = results.filter(r => r.status === "dead").length;
     setCheckingAll(false);
-    toast.success("Proxy check complete");
+    toast.success(`Check complete: ${live} live, ${dead} dead`);
   };
 
   const getStatusIcon = (id: string) => {
@@ -308,7 +368,7 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
 
                 <ScrollArea className="max-h-44">
                   <div className="space-y-1.5">
-                    {proxies.map((proxy, i) => (
+                    {proxies.map((proxy) => (
                       <div
                         key={proxy.id}
                         className={`group flex items-center justify-between rounded-lg px-3 py-2 text-xs transition-all border ${
@@ -385,6 +445,7 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
                       {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
                     </Button>
                   </div>
+                  <p className="text-[9px] text-muted-foreground mt-1">Only live proxies will be saved</p>
                 </TabsContent>
 
                 <TabsContent value="bulk" className="mt-2 space-y-2">
@@ -402,8 +463,9 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
                     disabled={adding || !bulkText.trim()}
                   >
                     {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
-                    Import ({bulkText.split("\n").filter(l => l.trim()).length} lines)
+                    Check & Import ({bulkText.split("\n").filter(l => l.trim()).length} lines)
                   </Button>
+                  <p className="text-[9px] text-muted-foreground">Dead proxies will be auto-skipped</p>
                 </TabsContent>
               </Tabs>
             )}
