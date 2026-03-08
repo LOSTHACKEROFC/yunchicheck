@@ -148,7 +148,7 @@ serve(async (req) => {
             }
 
             if (price > 0) {
-              await supabase.from("gateway_urls").upsert({ url: siteUrl }, { onConflict: "url", ignoreDuplicates: true });
+              await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
               return { url: siteUrl, status: "live", price, priceStr, apiResponse: truncatedResponse };
             }
 
