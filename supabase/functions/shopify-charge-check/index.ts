@@ -383,6 +383,9 @@ serve(async (req) => {
       result = { status: 'unknown', message: 'All proxies failed', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
     }
 
+    // Check if all proxies failed — signal frontend to stop bulk
+    const allProxiesDead = failedProxyIds.length >= userProxies.length;
+
     // Auto-remove bad sites from gateway_urls
     const rawLower = (result.rawResponse || '').toLowerCase();
     const isBadSite = badResponses.some(bad => rawLower.includes(bad.toLowerCase()));
