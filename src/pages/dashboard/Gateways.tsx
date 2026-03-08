@@ -4519,50 +4519,13 @@ const Gateways = () => {
                             {/* Separator */}
                             <div className="border-t border-dashed border-muted-foreground/30 my-2" />
                             
-                            {/* Details in bold italic mono style */}
+                            {/* Clean output: Gateway + Response only */}
                             <div className="space-y-1 font-mono text-[10px]">
-                              <div className="flex">
-                                <span className="w-20 text-muted-foreground font-bold italic">STATUS</span>
-                                <span className="text-muted-foreground font-bold italic mr-1">:</span>
-                                <span className={`font-bold italic ${
-                                  r.status === "live" ? "text-green-500" : r.status === "dead" ? "text-red-500" : "text-yellow-500"
-                                }`}>
-                                  {getStatusDisplayLabel(r.status, selectedGateway?.id, selectedGateway?.type)}
-                                </span>
-                              </div>
-                              
-                              <div className="flex">
-                                <span className="w-20 text-muted-foreground font-bold italic">AMOUNT</span>
-                                <span className="text-muted-foreground font-bold italic mr-1">:</span>
-                                <span className="text-foreground font-bold italic">
-                                  {selectedGateway?.type === "auth" ? "$0 AUTH" : selectedGateway?.id === "paygate_charge" ? "$14.00" : selectedGateway?.id === "payu_charge" ? `₹${payuAmount}` : selectedGateway?.id === "stripelow_charge" ? "£0.30" : selectedGateway?.id === "rizzup_charge" ? "$5.00" : selectedGateway?.id === "paypal_charge" ? "$1.00" : selectedGateway?.id === "authnet_charge" ? "$1.00" : selectedGateway?.id === "paypal_graphql" ? "$0.01" : "$10.00"}
-                                </span>
-                              </div>
-                              
-                              {r.apiResponse && (
-                                <div className="flex">
-                                  <span className="w-20 text-muted-foreground font-bold italic shrink-0">RESPONSE</span>
-                                  <span className="text-muted-foreground font-bold italic mr-1">:</span>
-                                  <span className="text-foreground font-bold italic truncate">
-                                    {r.apiResponse}
-                                  </span>
-                                </div>
-                              )}
-                              
-                              <div className="flex">
-                                <span className="w-20 text-muted-foreground font-bold italic">BIN</span>
-                                <span className="text-muted-foreground font-bold italic mr-1">:</span>
-                                <span className="text-foreground font-bold italic">
-                                  {brand.toUpperCase()}
-                                </span>
-                              </div>
-                              
                               <div className="flex">
                                 <span className="w-20 text-muted-foreground font-bold italic">GATEWAY</span>
                                 <span className="text-muted-foreground font-bold italic mr-1">:</span>
                                 <span className="text-primary font-bold italic">
                                   {selectedGateway?.name || 'N/A'}
-                                  {/* Show which API was used for combined gateway */}
                                   {selectedGateway?.id === "combined_auth" && r.usedApi && (
                                     <span className={`ml-1.5 px-1 py-0.5 rounded text-[8px] font-bold ${
                                       r.usedApi === 'stripe' 
@@ -4576,6 +4539,16 @@ const Gateways = () => {
                                   )}
                                 </span>
                               </div>
+                              
+                              {r.apiResponse && (
+                                <div className="flex">
+                                  <span className="w-20 text-muted-foreground font-bold italic shrink-0">RESPONSE</span>
+                                  <span className="text-muted-foreground font-bold italic mr-1">:</span>
+                                  <span className="text-foreground font-bold italic break-all">
+                                    {r.apiResponse}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         );
