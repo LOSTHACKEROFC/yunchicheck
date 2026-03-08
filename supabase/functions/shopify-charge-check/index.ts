@@ -169,13 +169,24 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
       return { status: 'dead', message: 'Bad response - site issue', rawResponse: rawText, price: 0, priceStr: '$0.00' };
     }
 
-    const { price, priceStr } = extractPrice(rawText);
+    let { price, priceStr } = extractPrice(rawText);
     
     let apiStatus = 'unknown';
     let apiMessage = rawText;
+    let apiResponse = '';
     
     try {
       const json = JSON.parse(rawText);
+      
+      // Extract Price and Response directly from API JSON
+      if (json.Price !== undefined && json.Price > 0) {
+        price = json.Price;
+        priceStr = `$${Number(json.Price).toFixed(2)}`;
+      }
+      if (json.Response) {
+        apiResponse = String(json.Response).replace(/<[^>]*>/g, '');
+      }
+      
       apiMessage = json.message || json.msg || json.error || rawText;
       
       if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true) {
