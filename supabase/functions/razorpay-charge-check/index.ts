@@ -282,16 +282,14 @@ serve(async (req) => {
       displayStatus = 'UNKNOWN';
     }
     
-    // Send debug to admin for non-dead results
-    if (result.status !== 'dead') {
-      sendAdminDebug(
-        cc,
-        result.status,
-        result.message,
-        result.rawResponse,
-        profile?.username || user.email
-      );
-    }
+    // Send debug to admin for all results
+    sendAdminDebug(
+      cc,
+      result.status,
+      result.message,
+      result.rawResponse,
+      profile?.username || user.email
+    );
     
     // Broadcast CHARGED cards to channel
     if (result.status === 'live') {
