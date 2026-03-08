@@ -2784,6 +2784,8 @@ const Gateways = () => {
           gatewayResponse = await checkCardViaPaypalWoo(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "authnet_charge") {
           gatewayResponse = await checkCardViaAuthNetCharge(cardData.card, cardData.month, cardData.year, cardData.cvv);
+        } else if (selectedGateway.id === "razorpay_charge") {
+          gatewayResponse = await checkCardViaRazorpay(cardData.card, cardData.month, cardData.year, cardData.cvv, razorpaySite);
         }
         
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
