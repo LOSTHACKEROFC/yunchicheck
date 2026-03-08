@@ -877,6 +877,36 @@ export type Database = {
         }
         Relationships: []
       }
+      user_proxies: {
+        Row: {
+          created_at: string
+          id: string
+          ip: string
+          password: string | null
+          port: string
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ip: string
+          password?: string | null
+          port: string
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ip?: string
+          password?: string | null
+          port?: string
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
