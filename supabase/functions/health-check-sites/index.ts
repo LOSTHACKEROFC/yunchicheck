@@ -134,6 +134,7 @@ serve(async (req) => {
             // Check for bad responses that should never be saved
             const badResponses = [
               "MERCHANDISE_EXPECTED_PRICE_MISMATCH",
+              "site not supported",
             ];
             const isBadResponse = badResponses.some(bad => responseText.includes(bad));
 
