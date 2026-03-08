@@ -295,6 +295,9 @@ const Gateways = () => {
   const [expYear, setExpYear] = useState("");
   const [cvv, setCvv] = useState("");
   const [payuAmount, setPayuAmount] = useState<number>(1); // PayU custom amount (default ₹1)
+  const [razorpaySite, setRazorpaySite] = useState<string>(""); // RazorPay site URL
+  const [razorpaySites, setRazorpaySites] = useState<string[]>([]); // Available sites from gateway_urls
+  const [loadingSites, setLoadingSites] = useState(false);
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<CheckResult | null>(null);
   const [userCredits, setUserCredits] = useState<number>(0);
