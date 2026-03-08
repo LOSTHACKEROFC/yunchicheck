@@ -4020,38 +4020,32 @@ const Gateways = () => {
                   {/* Separator line */}
                   <div className="border-t border-dashed border-muted-foreground/30 my-3" />
 
-                  {/* Gateway, Response, Price parsed from API */}
+                  {/* Gateway, Status, Response, Price from API */}
                   {(() => {
-                    let apiGateway = '';
+                    let apiGateway = selectedGateway?.name || result.gateway || 'N/A';
                     let apiPrice = '';
                     let apiResponseText = '';
-                    let apiStatusText = '';
+                    let apiStatusText = getStatusDisplayLabel(result.status, selectedGateway?.id, selectedGateway?.type);
                     
                     try {
                       const raw = result.rawResponse ? JSON.parse(result.rawResponse) : null;
                       if (raw) {
-                        // Extract directly from top-level API response fields
                         if (raw.apiStatus) apiStatusText = raw.apiStatus;
                         if (raw.apiMessage) apiResponseText = String(raw.apiMessage).replace(/<[^>]*>/g, '');
                         if (raw.apiTotal) apiPrice = raw.apiTotal;
                         
-                        // Try nested JSON inside apiMessage for structured responses
+                        // Try nested JSON inside apiMessage
                         let inner = null;
                         try { inner = typeof raw.apiMessage === 'string' ? JSON.parse(raw.apiMessage) : null; } catch {}
                         if (!inner) try { inner = typeof raw.rawResponse === 'string' ? JSON.parse(raw.rawResponse) : null; } catch {}
                         
-                        if (inner && inner.Gateway !== undefined) {
-                          apiGateway = inner.Gateway || '';
+                        if (inner) {
                           if (inner.Price !== undefined) apiPrice = typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price);
                           if (inner.Response) apiResponseText = String(inner.Response).replace(/<[^>]*>/g, '');
                         }
-                        
-                        // Use usedSite if available (Shopify)
-                        if (!apiGateway && raw.usedSite) apiGateway = raw.usedSite;
                       }
                     } catch {}
                     
-                    if (!apiGateway) apiGateway = selectedGateway?.name || result.gateway || 'N/A';
                     if (!apiResponseText) apiResponseText = result.apiResponse || result.message || 'No response';
                     if (!apiPrice) apiPrice = selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A";
                     
@@ -4075,16 +4069,14 @@ const Gateways = () => {
                             )}
                           </span>
                         </div>
-                        {apiStatusText && (
-                          <div className="flex">
-                            <span className="w-24 text-muted-foreground font-bold italic">STATUS</span>
-                            <span className="text-muted-foreground font-bold italic mr-2">:</span>
-                            <span className={`font-bold italic ${
-                              apiStatusText === 'CHARGED' || apiStatusText === 'APPROVED' || apiStatusText === 'LIVE' ? 'text-green-400' :
-                              apiStatusText === 'DECLINED' || apiStatusText === 'DEAD' ? 'text-red-400' : 'text-yellow-400'
-                            }`}>{apiStatusText}</span>
-                          </div>
-                        )}
+                        <div className="flex">
+                          <span className="w-24 text-muted-foreground font-bold italic">STATUS</span>
+                          <span className="text-muted-foreground font-bold italic mr-2">:</span>
+                          <span className={`font-bold italic ${
+                            /charged|approved|live|killed|passed/i.test(apiStatusText) ? 'text-green-400' :
+                            /declined|dead|failed|rejected/i.test(apiStatusText) ? 'text-red-400' : 'text-yellow-400'
+                          }`}>{apiStatusText}</span>
+                        </div>
                         <div className="flex">
                           <span className="w-24 text-muted-foreground font-bold italic">RESPONSE</span>
                           <span className="text-muted-foreground font-bold italic mr-2">:</span>
