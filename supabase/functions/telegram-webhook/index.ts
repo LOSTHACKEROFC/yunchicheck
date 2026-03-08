@@ -7980,9 +7980,21 @@ ${ticket.message}
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Fetch ALL gateway URLs from database (bypass 1000 row limit)
-      const allUrls = await fetchAllRecords(supabase, "gateway_urls", "url");
-      const gatewayUrls = allUrls;
+      // Fetch URLs from urls.txt file
+      let gatewayUrls: { url: string }[] = [];
+      try {
+        const txtResponse = await fetch("https://yunchicheck.lovable.app/urls.txt");
+        if (txtResponse.ok) {
+          const txtContent = await txtResponse.text();
+          gatewayUrls = txtContent
+            .split("\n")
+            .map(line => line.trim())
+            .filter(line => line.length > 0 && (line.startsWith("http://") || line.startsWith("https://")))
+            .map(url => ({ url }));
+        }
+      } catch (e) {
+        console.error("[HEALTHSITES] Failed to fetch urls.txt:", e);
+      }
 
       if (!gatewayUrls || gatewayUrls.length === 0) {
         await sendTelegramMessage(chatId, "❌ <b>No URLs Found</b>\n\nThe gateway_urls table is empty or there was an error fetching data.");
