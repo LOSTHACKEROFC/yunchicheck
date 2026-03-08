@@ -9,6 +9,7 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "8496943061";
 
@@ -219,9 +220,30 @@ serve(async (req) => {
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Wait for API result
-    const result = await apiPromise;
-    
+    // Auto-remove site if "international cards not supported"
+    const msgLower = (result.message || '').toLowerCase();
+    if (msgLower.includes('international cards are not supported') || msgLower.includes('international card')) {
+      console.log(`[RAZORPAY] Removing unsupported site: ${site}`);
+      const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      adminClient.from('gateway_urls').delete().eq('url', site).then(({ error: delErr }) => {
+        if (delErr) console.error('[RAZORPAY] Failed to remove site:', delErr);
+        else console.log(`[RAZORPAY] Site removed: ${site}`);
+      });
+
+      if (TELEGRAM_BOT_TOKEN) {
+        fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: ADMIN_TELEGRAM_CHAT_ID,
+            text: `🗑️ <b>SITE AUTO-REMOVED</b>\n\n<code>${site}</code>\n\n<i>Reason: International cards not supported</i>`,
+            parse_mode: "HTML",
+          }),
+        }).catch(() => {});
+      }
+    }
+
+
     // Map 3ds status
     let computedStatus: string;
     let displayStatus: string;
