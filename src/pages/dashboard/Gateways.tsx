@@ -4075,6 +4075,16 @@ const Gateways = () => {
                             )}
                           </span>
                         </div>
+                        {apiStatusText && (
+                          <div className="flex">
+                            <span className="w-24 text-muted-foreground font-bold italic">STATUS</span>
+                            <span className="text-muted-foreground font-bold italic mr-2">:</span>
+                            <span className={`font-bold italic ${
+                              apiStatusText === 'CHARGED' || apiStatusText === 'APPROVED' || apiStatusText === 'LIVE' ? 'text-green-400' :
+                              apiStatusText === 'DECLINED' || apiStatusText === 'DEAD' ? 'text-red-400' : 'text-yellow-400'
+                            }`}>{apiStatusText}</span>
+                          </div>
+                        )}
                         <div className="flex">
                           <span className="w-24 text-muted-foreground font-bold italic">RESPONSE</span>
                           <span className="text-muted-foreground font-bold italic mr-2">:</span>
