@@ -128,7 +128,7 @@ const AdminHealthCheck = () => {
     try {
       const { data, error } = await supabase
         .from("gateway_urls")
-        .select("url, created_at")
+        .select("url, created_at, price")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -142,10 +142,11 @@ const AdminHealthCheck = () => {
 
       const lines = data.map((row) => {
         const scanResult = resultMap.get(row.url);
+        const savedPrice = row.price ? `$${Number(row.price).toFixed(2)}` : "--";
         if (scanResult) {
           return `${row.url} | ${scanResult.priceStr} | ${scanResult.status.toUpperCase()}${scanResult.apiResponse ? ` | ${scanResult.apiResponse.replace(/\n/g, " ")}` : ""}`;
         }
-        return `${row.url} | -- | SAVED`;
+        return `${row.url} | ${savedPrice} | SAVED`;
       });
 
       const header = `# Saved Sites Export - ${new Date().toISOString()}\n# Total: ${data.length}\n# Format: URL | Price | Status | API Response\n\n`;
