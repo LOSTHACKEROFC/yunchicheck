@@ -258,6 +258,14 @@ const AdminHealthCheck = () => {
             </Button>
             <Button
               variant="outline"
+              onClick={handleExportSaved}
+              disabled={isRunning}
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Export Saved
+            </Button>
+              variant="outline"
               onClick={handleLoadSaved}
               disabled={isRunning || loadingSaved}
               className="gap-2"
