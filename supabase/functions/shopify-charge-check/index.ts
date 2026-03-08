@@ -411,8 +411,9 @@ serve(async (req) => {
       JSON.stringify({
         computedStatus,
         apiStatus: displayStatus,
-        apiMessage: result.message,
+        apiMessage: result.apiResponse || result.message,
         apiTotal: chargeAmount,
+        apiPrice: result.priceStr,
         status: computedStatus,
         message: result.message,
         rawResponse: result.rawResponse,
