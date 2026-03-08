@@ -1796,6 +1796,84 @@ const Gateways = () => {
     }
   };
 
+  // RazorPay Charge API check via edge function with site selection
+  const checkCardViaRazorpay = async (cardNumber: string, month: string, year: string, cvv: string, site: string): Promise<GatewayApiResponse> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    try {
+      console.log(`[RAZORPAY] Sending:`, cc, `Site: ${site}`);
+      
+      const { data, error } = await supabase.functions.invoke('razorpay-charge-check', {
+        body: { cc, site }
+      });
+      
+      if (error) {
+        console.error('[RAZORPAY] Error:', error);
+        return {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: error.message || "Connection error",
+          rawResponse: JSON.stringify(error)
+        };
+      }
+      
+      console.log('[RAZORPAY] Response:', data);
+      
+      const apiStatus = data?.apiStatus || 'UNKNOWN';
+      const apiMessage = data?.apiMessage || data?.message || 'No response';
+      const rawResponse = data?.rawResponse || JSON.stringify(data);
+      const computedStatus = data?.computedStatus;
+      const is3ds = data?.is3ds === true;
+      
+      // 3DS Required maps to unknown for credit logic but shows special label
+      if (is3ds) {
+        return { 
+          status: "unknown",
+          apiStatus: "3DS REQUIRED",
+          apiMessage: apiMessage,
+          rawResponse 
+        };
+      }
+      
+      return { 
+        status: computedStatus === "live" ? "live" : computedStatus === "dead" ? "dead" : "unknown",
+        apiStatus, 
+        apiMessage, 
+        rawResponse 
+      };
+    } catch (error) {
+      console.error('[RAZORPAY] Exception:', error);
+      return {
+        status: "unknown",
+        apiStatus: "ERROR",
+        apiMessage: error instanceof Error ? error.message : "Unknown error",
+        rawResponse: String(error)
+      };
+    }
+  };
+
+  // Fetch available sites for RazorPay from gateway_urls table
+  const fetchRazorpaySites = async () => {
+    setLoadingSites(true);
+    try {
+      const { data, error } = await supabase
+        .from('gateway_urls')
+        .select('url')
+        .order('created_at', { ascending: true });
+      
+      if (!error && data && data.length > 0) {
+        const urls = data.map(d => d.url);
+        setRazorpaySites(urls);
+        if (!razorpaySite && urls.length > 0) {
+          setRazorpaySite(urls[0]);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch sites:', err);
+    } finally {
+      setLoadingSites(false);
+    }
+  };
 
   const checkCardViaDistributed = async (cardNumber: string, month: string, year: string, cvv: string, targetApi: 'stripe' | 'b3', maxRetries = 5): Promise<GatewayApiResponse> => {
     if (targetApi === 'stripe') {
