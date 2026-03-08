@@ -349,10 +349,21 @@ serve(async (req) => {
       result = await callApi(cc, randomSite.url, proxyStr);
       
       // Check if it's a proxy-related error (407, proxy auth, connection refused)
+      // BUT only if the response is NOT a valid API JSON (valid API responses mean proxy worked fine)
       const rawLower = (result.rawResponse || '').toLowerCase();
-      const isProxyError = rawLower.includes('407') || rawLower.includes('proxy error') || 
-                           rawLower.includes('proxy authentication') || rawLower.includes('connection refused') ||
-                           rawLower.includes('proxy connect') || rawLower.includes('tunneling socket');
+      let isValidApiResponse = false;
+      try {
+        const parsed = JSON.parse(result.rawResponse || '');
+        if (parsed && (parsed.Gateway || parsed.Response || parsed.Price !== undefined || parsed.status || parsed.message)) {
+          isValidApiResponse = true;
+        }
+      } catch { /* not valid JSON */ }
+      
+      const isProxyError = !isValidApiResponse && (
+        rawLower.includes('407') || rawLower.includes('proxy error') || 
+        rawLower.includes('proxy authentication') || rawLower.includes('connection refused') ||
+        rawLower.includes('proxy connect') || rawLower.includes('tunneling socket')
+      );
       
       if (isProxyError) {
         console.log(`[SHOPIFY-CHARGE] Proxy error on attempt ${attempt + 1}, removing proxy ${currentProxy.ip}:${currentProxy.port}`);
