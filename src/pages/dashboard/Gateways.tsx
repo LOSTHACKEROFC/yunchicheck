@@ -1975,12 +1975,20 @@ const Gateways = () => {
       } else if (selectedGateway.id === "authnet_charge") {
         gatewayResponse = await checkCardViaAuthNetCharge(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "razorpay_charge") {
-        if (!razorpaySite) {
-          toast.error("Please select a site for RazorPay");
+        let site = razorpaySite;
+        if (razorpaySiteMode === "database") {
+          if (razorpaySites.length === 0) {
+            toast.error("No sites in database. Switch to manual input.");
+            setChecking(false);
+            return;
+          }
+          site = razorpaySites[Math.floor(Math.random() * razorpaySites.length)];
+        } else if (!site) {
+          toast.error("Please enter a site URL for RazorPay");
           setChecking(false);
           return;
         }
-        gatewayResponse = await checkCardViaRazorpay(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv, razorpaySite);
+        gatewayResponse = await checkCardViaRazorpay(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv, site);
       }
       
       const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -2579,9 +2587,15 @@ const Gateways = () => {
     }
 
     // RazorPay requires a site selection
-    if (selectedGateway.id === "razorpay_charge" && !razorpaySite) {
-      toast.error("Please select a site for RazorPay");
-      return;
+    if (selectedGateway.id === "razorpay_charge") {
+      if (razorpaySiteMode === "manual" && !razorpaySite) {
+        toast.error("Please enter a site URL for RazorPay");
+        return;
+      }
+      if (razorpaySiteMode === "database" && razorpaySites.length === 0) {
+        toast.error("No sites in database. Switch to manual input.");
+        return;
+      }
     }
 
     const isAuthGateway = selectedGateway.type === "auth";
@@ -2797,7 +2811,11 @@ const Gateways = () => {
         } else if (selectedGateway.id === "authnet_charge") {
           gatewayResponse = await checkCardViaAuthNetCharge(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "razorpay_charge") {
-          gatewayResponse = await checkCardViaRazorpay(cardData.card, cardData.month, cardData.year, cardData.cvv, razorpaySite);
+          // Auto-rotate: pick a random site from database, or use manual site
+          const site = razorpaySiteMode === "database" 
+            ? razorpaySites[Math.floor(Math.random() * razorpaySites.length)] 
+            : razorpaySite;
+          gatewayResponse = await checkCardViaRazorpay(cardData.card, cardData.month, cardData.year, cardData.cvv, site);
         }
         
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -3791,47 +3809,68 @@ const Gateways = () => {
                   </div>
                 )}
 
-                {/* RazorPay Site Selection */}
+                {/* RazorPay Site Selection - Single Check */}
                 {selectedGateway?.id === "razorpay_charge" && (
-                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 space-y-2">
+                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 space-y-3">
                     <div className="flex items-center gap-2">
                       <Globe className="h-3.5 w-3.5 text-blue-400" />
-                      <Label className="text-xs font-semibold text-blue-400">Select Site</Label>
+                      <Label className="text-xs font-semibold text-blue-400">Site Selection</Label>
                     </div>
-                    {loadingSites ? (
-                      <div className="flex items-center gap-2 py-2">
-                        <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
-                        <span className="text-xs text-muted-foreground">Loading sites...</span>
-                      </div>
-                    ) : razorpaySites.length === 0 ? (
-                      <div className="flex flex-col gap-2">
-                        <Input
-                          placeholder="Enter site URL (e.g. https://example.com)"
-                          value={razorpaySite}
-                          onChange={(e) => setRazorpaySite(e.target.value)}
-                          className="font-mono text-xs"
-                          disabled={checking}
-                        />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRazorpaySiteMode("database");
+                          if (razorpaySites.length > 0) {
+                            setRazorpaySite(razorpaySites[Math.floor(Math.random() * razorpaySites.length)]);
+                          }
+                        }}
+                        className={`flex-1 px-3 py-1.5 text-xs rounded-md border transition-colors ${
+                          razorpaySiteMode === "database"
+                            ? "bg-blue-500 text-white border-blue-500"
+                            : "bg-secondary border-border hover:border-blue-500/50 text-muted-foreground"
+                        }`}
+                        disabled={checking}
+                      >
+                        🔄 Auto Rotate
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRazorpaySiteMode("manual");
+                          setRazorpaySite("");
+                        }}
+                        className={`flex-1 px-3 py-1.5 text-xs rounded-md border transition-colors ${
+                          razorpaySiteMode === "manual"
+                            ? "bg-blue-500 text-white border-blue-500"
+                            : "bg-secondary border-border hover:border-blue-500/50 text-muted-foreground"
+                        }`}
+                        disabled={checking}
+                      >
+                        ✏️ Manual Input
+                      </button>
+                    </div>
+                    {razorpaySiteMode === "database" ? (
+                      loadingSites ? (
+                        <div className="flex items-center gap-2 py-2">
+                          <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
+                          <span className="text-xs text-muted-foreground">Loading sites...</span>
+                        </div>
+                      ) : razorpaySites.length === 0 ? (
+                        <p className="text-[10px] text-muted-foreground">No sites in database. Switch to manual input.</p>
+                      ) : (
                         <p className="text-[10px] text-muted-foreground">
-                          No saved sites found. Enter a site URL manually.
+                          🔄 System will automatically pick a random site from {razorpaySites.length} available sites
                         </p>
-                      </div>
+                      )
                     ) : (
-                      <div className="space-y-2">
-                        <select
-                          value={razorpaySite}
-                          onChange={(e) => setRazorpaySite(e.target.value)}
-                          className="w-full px-3 py-2 rounded-md border border-border bg-secondary text-foreground text-xs font-mono"
-                          disabled={checking}
-                        >
-                          {razorpaySites.map((url, i) => (
-                            <option key={i} value={url}>{url}</option>
-                          ))}
-                        </select>
-                        <p className="text-[10px] text-muted-foreground">
-                          Select a site for RazorPay gateway processing
-                        </p>
-                      </div>
+                      <Input
+                        placeholder="Enter site URL (e.g. https://example.com)"
+                        value={razorpaySite}
+                        onChange={(e) => setRazorpaySite(e.target.value)}
+                        className="font-mono text-xs"
+                        disabled={checking}
+                      />
                     )}
                   </div>
                 )}
@@ -4117,15 +4156,12 @@ const Gateways = () => {
                     <Label className="text-xs font-semibold text-blue-400">Site Selection</Label>
                   </div>
                   
-                  {/* Toggle between database and manual */}
+                  {/* Toggle between auto-rotate and manual */}
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={() => {
                         setRazorpaySiteMode("database");
-                        if (razorpaySites.length > 0 && !razorpaySite) {
-                          setRazorpaySite(razorpaySites[0]);
-                        }
                       }}
                       className={`flex-1 px-3 py-1.5 text-xs rounded-md border transition-colors ${
                         razorpaySiteMode === "database"
@@ -4134,7 +4170,7 @@ const Gateways = () => {
                       }`}
                       disabled={bulkChecking}
                     >
-                      📂 From Database
+                      🔄 Auto Rotate
                     </button>
                     <button
                       type="button"
@@ -4162,32 +4198,24 @@ const Gateways = () => {
                     ) : razorpaySites.length === 0 ? (
                       <p className="text-[10px] text-muted-foreground">No sites in database. Switch to manual input.</p>
                     ) : (
-                      <select
-                        value={razorpaySite}
-                        onChange={(e) => setRazorpaySite(e.target.value)}
-                        className="w-full px-3 py-2 rounded-md border border-border bg-secondary text-foreground text-xs font-mono"
-                        disabled={bulkChecking}
-                      >
-                        {razorpaySites.map((url, i) => (
-                          <option key={i} value={url}>{url}</option>
-                        ))}
-                      </select>
+                      <p className="text-[10px] text-muted-foreground">
+                        🔄 Each card will be checked through a randomly selected site from {razorpaySites.length} available sites for load distribution
+                      </p>
                     )
                   ) : (
-                    <Input
-                      placeholder="Enter site URL (e.g. https://example.com)"
-                      value={razorpaySite}
-                      onChange={(e) => setRazorpaySite(e.target.value)}
-                      className="font-mono text-xs"
-                      disabled={bulkChecking}
-                    />
+                    <div className="space-y-2">
+                      <Input
+                        placeholder="Enter site URL (e.g. https://example.com)"
+                        value={razorpaySite}
+                        onChange={(e) => setRazorpaySite(e.target.value)}
+                        className="font-mono text-xs"
+                        disabled={bulkChecking}
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        All cards will be checked through this single site
+                      </p>
+                    </div>
                   )}
-                  
-                  <p className="text-[10px] text-muted-foreground">
-                    {razorpaySiteMode === "database" 
-                      ? "Select a saved site from the system database" 
-                      : "Enter your own website URL for RazorPay processing"}
-                  </p>
                 </div>
               )}
 
