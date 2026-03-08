@@ -271,6 +271,15 @@ const AdminHealthCheck = () => {
               {loadingSaved ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
               Load Saved Sites
             </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteAllSaved}
+              disabled={isRunning || deletingAll}
+              className="gap-2"
+            >
+              {deletingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+              Delete All Saved
+            </Button>
             <div className="flex items-center gap-2 ml-auto">
               <span className="text-sm text-muted-foreground">Threads:</span>
               <Select
