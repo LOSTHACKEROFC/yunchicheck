@@ -2577,6 +2577,12 @@ const Gateways = () => {
       return;
     }
 
+    // RazorPay requires a site selection
+    if (selectedGateway.id === "razorpay_charge" && !razorpaySite) {
+      toast.error("Please select a site for RazorPay");
+      return;
+    }
+
     const isAuthGateway = selectedGateway.type === "auth";
     const isChargeGateway = selectedGateway.type === "charge";
     // For charge gateways, CVC is MANDATORY
