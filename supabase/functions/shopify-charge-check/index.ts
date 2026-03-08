@@ -480,6 +480,7 @@ serve(async (req) => {
         message: result.message,
         rawResponse: result.rawResponse,
         usedSite: randomSite.url,
+        allProxiesDead,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
