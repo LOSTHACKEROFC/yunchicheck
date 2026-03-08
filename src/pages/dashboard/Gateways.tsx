@@ -1968,6 +1968,13 @@ const Gateways = () => {
         gatewayResponse = await checkCardViaPaypalWoo(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "authnet_charge") {
         gatewayResponse = await checkCardViaAuthNetCharge(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+      } else if (selectedGateway.id === "razorpay_charge") {
+        if (!razorpaySite) {
+          toast.error("Please select a site for RazorPay");
+          setChecking(false);
+          return;
+        }
+        gatewayResponse = await checkCardViaRazorpay(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv, razorpaySite);
       }
       
       const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
