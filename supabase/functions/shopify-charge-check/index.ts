@@ -315,7 +315,7 @@ serve(async (req) => {
 
     // Try proxies with rotation - retry on 407/proxy errors
     let result: { status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string } | null = null;
-    const maxRetries = Math.min(shuffledProxies.length, 3);
+    const maxRetries = shuffledProxies.length; // Try ALL proxies before giving up
     const failedProxyIds: string[] = [];
     
     for (let attempt = 0; attempt < maxRetries; attempt++) {
