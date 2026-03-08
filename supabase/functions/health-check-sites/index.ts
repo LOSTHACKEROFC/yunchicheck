@@ -49,7 +49,6 @@ serve(async (req) => {
   }
 
   try {
-    // Verify admin
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -63,7 +62,6 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Check admin role
     const { data: roleData } = await supabase
       .from("user_roles")
       .select("role")
@@ -96,9 +94,8 @@ serve(async (req) => {
       return `${randomProxy.ip}:${randomProxy.port}`;
     };
 
-    // Process URLs in parallel batches based on thread count
-    const concurrency = Math.min(Math.max(threads, 1), 20); // Cap at 20 threads
-    const results: Array<{ url: string; status: string; price: number; priceStr: string; error?: string }> = [];
+    const concurrency = Math.min(Math.max(threads, 1), 20);
+    const results: Array<{ url: string; status: string; price: number; priceStr: string; apiResponse?: string; error?: string }> = [];
     let savedCount = 0;
 
     for (let i = 0; i < urls.length; i += concurrency) {
@@ -126,20 +123,22 @@ serve(async (req) => {
             const responseText = await response.text();
 
             if (!response.ok || !responseText) {
-              return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", error: "No response" };
+              return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse: responseText || "No response", error: "No response" };
             }
 
             const { price, priceStr } = extractPrice(responseText);
 
+            // Truncate API response to avoid huge payloads
+            const truncatedResponse = responseText.length > 500 ? responseText.substring(0, 500) + "..." : responseText;
+
             if (price > 0) {
-              // Upsert valid site into gateway_urls
               await supabase.from("gateway_urls").upsert({ url: siteUrl }, { onConflict: "url", ignoreDuplicates: true });
-              return { url: siteUrl, status: "live", price, priceStr };
+              return { url: siteUrl, status: "live", price, priceStr, apiResponse: truncatedResponse };
             }
 
-            return { url: siteUrl, status: "dead", price, priceStr };
+            return { url: siteUrl, status: "dead", price, priceStr, apiResponse: truncatedResponse };
           } catch (error) {
-            return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: error instanceof Error ? error.message : "Unknown error" };
+            return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: "", error: error instanceof Error ? error.message : "Unknown error" };
           }
         })
       );
@@ -149,7 +148,7 @@ serve(async (req) => {
           results.push(result.value);
           if (result.value.status === "live") savedCount++;
         } else {
-          results.push({ url: "unknown", status: "error", price: 0, priceStr: "$0.00", error: "Promise rejected" });
+          results.push({ url: "unknown", status: "error", price: 0, priceStr: "$0.00", apiResponse: "", error: "Promise rejected" });
         }
       }
     }

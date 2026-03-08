@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -19,6 +19,9 @@ import {
   Loader2,
   FileText,
   Zap,
+  Database,
+  ChevronDown,
+  Code,
 } from "lucide-react";
 
 interface SiteResult {
@@ -26,6 +29,7 @@ interface SiteResult {
   status: "live" | "dead" | "error";
   price: number;
   priceStr: string;
+  apiResponse?: string;
   error?: string;
 }
 
@@ -38,6 +42,8 @@ const AdminHealthCheck = () => {
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<SiteResult[]>([]);
   const [stats, setStats] = useState({ total: 0, live: 0, dead: 0, errors: 0 });
+  const [loadingSaved, setLoadingSaved] = useState(false);
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const stopRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -50,8 +56,7 @@ const AdminHealthCheck = () => {
 
   const handleTextInput = (text: string) => {
     setUrlInput(text);
-    const parsed = parseUrls(text);
-    setUrls(parsed);
+    setUrls(parseUrls(text));
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -73,6 +78,32 @@ const AdminHealthCheck = () => {
     e.target.value = "";
   };
 
+  const handleLoadSaved = async () => {
+    setLoadingSaved(true);
+    try {
+      const { data, error } = await supabase
+        .from("gateway_urls")
+        .select("url")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        toast.error("No saved sites found in database");
+        return;
+      }
+
+      const savedUrls = data.map((r) => r.url);
+      const text = savedUrls.join("\n");
+      setUrlInput(text);
+      setUrls(savedUrls);
+      toast.success(`Loaded ${savedUrls.length} saved sites from database`);
+    } catch (err) {
+      toast.error("Failed to load saved sites");
+    } finally {
+      setLoadingSaved(false);
+    }
+  };
+
   const handleStop = () => {
     stopRef.current = true;
     setIsStopped(true);
@@ -89,6 +120,7 @@ const AdminHealthCheck = () => {
     stopRef.current = false;
     setResults([]);
     setProgress(0);
+    setExpandedIdx(null);
     setStats({ total: urls.length, live: 0, dead: 0, errors: 0 });
 
     const batchSize = threads;
@@ -113,6 +145,7 @@ const AdminHealthCheck = () => {
             status: "error" as const,
             price: 0,
             priceStr: "$0.00",
+            apiResponse: "",
             error: "Request failed",
           }));
           allResults = [...allResults, ...batchErrors];
@@ -129,6 +162,7 @@ const AdminHealthCheck = () => {
           status: "error" as const,
           price: 0,
           priceStr: "$0.00",
+          apiResponse: "",
           error: "Network error",
         }));
         allResults = [...allResults, ...batchErrors];
@@ -142,7 +176,7 @@ const AdminHealthCheck = () => {
 
     setProgress(100);
     setIsRunning(false);
-    toast.success(`Health check complete! ${liveCount} live sites saved to database.`);
+    toast.success(`Health check complete! ${liveCount} live sites saved.`);
   }, [urls, threads]);
 
   return (
@@ -155,12 +189,12 @@ const AdminHealthCheck = () => {
             Site Health Checker
           </CardTitle>
           <CardDescription>
-            Upload a .txt file or paste URLs to check site health. Live sites (price {">"} 0) are saved to the database.
+            Upload a .txt file, paste URLs, or load saved sites to check health. Live sites (price {">"} 0) are saved to the database.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* File Upload */}
-          <div className="flex gap-3">
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-3">
             <input
               ref={fileInputRef}
               type="file"
@@ -175,7 +209,16 @@ const AdminHealthCheck = () => {
               className="gap-2"
             >
               <Upload className="h-4 w-4" />
-              Upload .txt File
+              Upload .txt
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleLoadSaved}
+              disabled={isRunning || loadingSaved}
+              className="gap-2"
+            >
+              {loadingSaved ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
+              Load Saved Sites
             </Button>
             <div className="flex items-center gap-2 ml-auto">
               <span className="text-sm text-muted-foreground">Threads:</span>
@@ -250,7 +293,6 @@ const AdminHealthCheck = () => {
             </div>
             <Progress value={progress} />
 
-            {/* Stats */}
             <div className="grid grid-cols-4 gap-3">
               <div className="p-3 bg-muted/50 rounded-lg text-center">
                 <p className="text-xs text-muted-foreground">Total</p>
@@ -289,38 +331,62 @@ const AdminHealthCheck = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="max-h-[400px] overflow-y-auto space-y-1">
+            <div className="max-h-[500px] overflow-y-auto space-y-1">
               {results.map((r, idx) => (
-                <div
+                <Collapsible
                   key={idx}
-                  className={`flex items-center justify-between p-2 rounded text-sm font-mono ${
-                    r.status === "live"
-                      ? "bg-green-500/5 border border-green-500/20"
-                      : r.status === "dead"
-                      ? "bg-red-500/5 border border-red-500/20"
-                      : "bg-yellow-500/5 border border-yellow-500/20"
-                  }`}
+                  open={expandedIdx === idx}
+                  onOpenChange={(open) => setExpandedIdx(open ? idx : null)}
                 >
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    {r.status === "live" ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-400 shrink-0" />
-                    ) : r.status === "dead" ? (
-                      <XCircle className="h-4 w-4 text-red-400 shrink-0" />
-                    ) : (
-                      <AlertTriangle className="h-4 w-4 text-yellow-400 shrink-0" />
-                    )}
-                    <span className="truncate text-xs">{r.url}</span>
+                  <div
+                    className={`rounded text-sm font-mono ${
+                      r.status === "live"
+                        ? "bg-green-500/5 border border-green-500/20"
+                        : r.status === "dead"
+                        ? "bg-red-500/5 border border-red-500/20"
+                        : "bg-yellow-500/5 border border-yellow-500/20"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between p-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {r.status === "live" ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-400 shrink-0" />
+                        ) : r.status === "dead" ? (
+                          <XCircle className="h-4 w-4 text-red-400 shrink-0" />
+                        ) : (
+                          <AlertTriangle className="h-4 w-4 text-yellow-400 shrink-0" />
+                        )}
+                        <span className="truncate text-xs">{r.url}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        <span className="text-xs text-muted-foreground">{r.priceStr}</span>
+                        <Badge
+                          variant={r.status === "live" ? "default" : "destructive"}
+                          className="text-[10px] px-1.5 py-0"
+                        >
+                          {r.status === "live" ? "SAVED" : r.status === "dead" ? "DEAD" : "ERR"}
+                        </Badge>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-6 w-6">
+                            <ChevronDown className={`h-3 w-3 transition-transform ${expandedIdx === idx ? "rotate-180" : ""}`} />
+                          </Button>
+                        </CollapsibleTrigger>
+                      </div>
+                    </div>
+                    <CollapsibleContent>
+                      <div className="px-2 pb-2 pt-0">
+                        <div className="bg-background/80 rounded p-2 border border-border">
+                          <p className="text-[10px] text-muted-foreground flex items-center gap-1 mb-1">
+                            <Code className="h-3 w-3" /> API Response
+                          </p>
+                          <pre className="text-[10px] text-muted-foreground whitespace-pre-wrap break-all max-h-[200px] overflow-y-auto">
+                            {r.apiResponse || r.error || "No response data"}
+                          </pre>
+                        </div>
+                      </div>
+                    </CollapsibleContent>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0 ml-2">
-                    <span className="text-xs text-muted-foreground">{r.priceStr}</span>
-                    <Badge
-                      variant={r.status === "live" ? "default" : "destructive"}
-                      className="text-[10px] px-1.5 py-0"
-                    >
-                      {r.status === "live" ? "SAVED" : r.status === "dead" ? "DEAD" : "ERR"}
-                    </Badge>
-                  </div>
-                </div>
+                </Collapsible>
               ))}
             </div>
           </CardContent>
