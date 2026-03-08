@@ -47,8 +47,25 @@ const AdminHealthCheck = () => {
   const [loadingSaved, setLoadingSaved] = useState(false);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [exportFilter, setExportFilter] = useState<"all" | "live" | "dead" | "error">("all");
+  const [deletingAll, setDeletingAll] = useState(false);
   const stopRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDeleteAllSaved = async () => {
+    if (!confirm("Are you sure you want to delete ALL saved URLs? This cannot be undone.")) return;
+    setDeletingAll(true);
+    try {
+      const { error } = await supabase.from("gateway_urls").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      if (error) throw error;
+      toast.success("All saved URLs deleted successfully");
+      setUrls([]);
+      setUrlInput("");
+    } catch (err) {
+      toast.error("Failed to delete saved URLs");
+    } finally {
+      setDeletingAll(false);
+    }
+  };
 
   const parseUrls = (text: string): string[] => {
     return text
@@ -270,6 +287,15 @@ const AdminHealthCheck = () => {
             >
               {loadingSaved ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
               Load Saved Sites
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteAllSaved}
+              disabled={isRunning || deletingAll}
+              className="gap-2"
+            >
+              {deletingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+              Delete All Saved
             </Button>
             <div className="flex items-center gap-2 ml-auto">
               <span className="text-sm text-muted-foreground">Threads:</span>
