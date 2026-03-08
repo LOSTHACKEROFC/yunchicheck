@@ -42,6 +42,9 @@ import {
   CircleDollarSign,
   History,
   Paperclip,
+  Shuffle,
+  PenLine,
+  Database,
   type LucideIcon
 } from "lucide-react";
 import { format } from "date-fns";
