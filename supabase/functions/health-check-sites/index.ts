@@ -131,6 +131,18 @@ serve(async (req) => {
             // Truncate API response to avoid huge payloads
             const truncatedResponse = responseText.length > 500 ? responseText.substring(0, 500) + "..." : responseText;
 
+            // Check for bad responses that should never be saved
+            const badResponses = [
+              "MERCHANDISE_EXPECTED_PRICE_MISMATCH",
+            ];
+            const isBadResponse = badResponses.some(bad => responseText.includes(bad));
+
+            if (isBadResponse) {
+              // Remove from saved sites if it exists
+              await supabase.from("gateway_urls").delete().eq("url", siteUrl);
+              return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse: truncatedResponse, error: "Bad response detected" };
+            }
+
             if (price > 0) {
               await supabase.from("gateway_urls").upsert({ url: siteUrl }, { onConflict: "url", ignoreDuplicates: true });
               return { url: siteUrl, status: "live", price, priceStr, apiResponse: truncatedResponse };
