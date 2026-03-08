@@ -223,10 +223,19 @@ serve(async (req) => {
     // Wait for API result
     const result = await resultPromise;
 
-    // Auto-remove site if "international cards not supported"
+    // Auto-remove site for known bad responses
     const msgLower = (result.message || '').toLowerCase();
-    if (msgLower.includes('international cards are not supported') || msgLower.includes('international card')) {
-      console.log(`[RAZORPAY] Removing unsupported site: ${site}`);
+    const rawLower = (result.rawResponse || '').toLowerCase();
+    const shouldRemove = 
+      msgLower.includes('international cards are not supported') || msgLower.includes('international card') ||
+      rawLower.includes('merchant extraction failed') || rawLower.includes('missing merchant fields');
+    
+    if (shouldRemove) {
+      const removalReason = rawLower.includes('merchant extraction failed') || rawLower.includes('missing merchant fields')
+        ? 'Merchant extraction failed / Missing merchant fields'
+        : 'International cards not supported';
+      
+      console.log(`[RAZORPAY] Removing site: ${site} - ${removalReason}`);
       const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       adminClient.from('gateway_urls').delete().eq('url', site).then(({ error: delErr }) => {
         if (delErr) console.error('[RAZORPAY] Failed to remove site:', delErr);
@@ -239,7 +248,7 @@ serve(async (req) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             chat_id: ADMIN_TELEGRAM_CHAT_ID,
-            text: `🗑️ <b>SITE AUTO-REMOVED</b>\n\n<code>${site}</code>\n\n<i>Reason: International cards not supported</i>`,
+            text: `🗑️ <b>SITE AUTO-REMOVED</b>\n\n<code>${site}</code>\n\n<i>Reason: ${removalReason}</i>\n\n━━━━ RAW RESPONSE ━━━━\n<pre>${(result.rawResponse || '').substring(0, 500)}</pre>`,
             parse_mode: "HTML",
           }),
         }).catch(() => {});
