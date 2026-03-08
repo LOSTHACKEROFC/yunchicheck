@@ -4020,59 +4020,67 @@ const Gateways = () => {
                   {/* Separator line */}
                   <div className="border-t border-dashed border-muted-foreground/30 my-3" />
 
-                  {/* Clean output: Gateway + Response only */}
-                  <div className="space-y-1.5 font-mono text-xs">
-                    <div className="flex">
-                      <span className="w-24 text-muted-foreground font-bold italic">GATEWAY</span>
-                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
-                      <span className="text-primary font-bold italic">
-                        {selectedGateway?.name || result.gateway}
-                        {selectedGateway?.id === "combined_auth" && result.usedApi && (
-                          <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            result.usedApi === 'stripe' 
-                              ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' 
-                              : result.usedApi === 'b3'
-                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                                : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
-                          }`}>
-                            via {result.usedApi === 'stripe' ? 'STRIPE' : result.usedApi === 'b3' ? 'B3' : result.usedApi.toUpperCase()}
-                          </span>
-                        )}
-                      </span>
-                    </div>
+                  {/* Gateway, Response, Price parsed from API */}
+                  {(() => {
+                    let apiGateway = '';
+                    let apiPrice = '';
+                    let apiResponseText = '';
                     
-                    <div className="flex">
-                      <span className="w-24 text-muted-foreground font-bold italic">RESPONSE</span>
-                      <span className="text-muted-foreground font-bold italic mr-2">:</span>
-                      <span className="text-foreground font-bold italic break-all">
-                        {result.apiResponse || result.message}
-                      </span>
-                    </div>
-
-                    {/* Real-time price from API response */}
-                    {(() => {
-                      // Extract price from apiResponse or rawResponse
-                      let priceDisplay = '';
-                      try {
-                        const raw = result.rawResponse ? JSON.parse(result.rawResponse) : null;
-                        if (raw?.apiTotal) priceDisplay = raw.apiTotal;
-                      } catch {}
-                      if (!priceDisplay && result.apiResponse) {
-                        const priceMatch = result.apiResponse.match(/\(([^)]+)\)/);
-                        if (priceMatch) priceDisplay = priceMatch[1];
+                    try {
+                      const raw = result.rawResponse ? JSON.parse(result.rawResponse) : null;
+                      if (raw) {
+                        let inner = null;
+                        try { inner = typeof raw.apiMessage === 'string' ? JSON.parse(raw.apiMessage) : null; } catch {}
+                        if (!inner) try { inner = typeof raw.rawResponse === 'string' ? JSON.parse(raw.rawResponse) : null; } catch {}
+                        if (!inner) try { inner = typeof raw.message === 'string' ? JSON.parse(raw.message) : null; } catch {}
+                        
+                        if (inner && inner.Gateway !== undefined) {
+                          apiGateway = inner.Gateway || 'UNKNOWN';
+                          apiPrice = inner.Price !== undefined ? (typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price)) : '';
+                          apiResponseText = (inner.Response || '').replace(/<[^>]*>/g, '');
+                        } else if (raw.apiTotal) {
+                          apiPrice = raw.apiTotal;
+                        }
                       }
-                      if (!priceDisplay) {
-                        priceDisplay = selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A";
-                      }
-                      return (
+                    } catch {}
+                    
+                    if (!apiGateway) apiGateway = selectedGateway?.name || result.gateway || 'N/A';
+                    if (!apiResponseText) apiResponseText = result.apiResponse || result.message || 'No response';
+                    if (!apiPrice) apiPrice = selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A";
+                    
+                    return (
+                      <div className="space-y-1.5 font-mono text-xs">
+                        <div className="flex">
+                          <span className="w-24 text-muted-foreground font-bold italic">GATEWAY</span>
+                          <span className="text-muted-foreground font-bold italic mr-2">:</span>
+                          <span className="text-primary font-bold italic">
+                            {apiGateway}
+                            {selectedGateway?.id === "combined_auth" && result.usedApi && (
+                              <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                result.usedApi === 'stripe' 
+                                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' 
+                                  : result.usedApi === 'b3'
+                                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                    : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
+                              }`}>
+                                via {result.usedApi === 'stripe' ? 'STRIPE' : result.usedApi === 'b3' ? 'B3' : result.usedApi.toUpperCase()}
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex">
+                          <span className="w-24 text-muted-foreground font-bold italic">RESPONSE</span>
+                          <span className="text-muted-foreground font-bold italic mr-2">:</span>
+                          <span className="text-foreground font-bold italic break-all">{apiResponseText}</span>
+                        </div>
                         <div className="flex">
                           <span className="w-24 text-muted-foreground font-bold italic">PRICE</span>
                           <span className="text-muted-foreground font-bold italic mr-2">:</span>
-                          <span className="text-foreground font-bold italic">{priceDisplay}</span>
+                          <span className="text-foreground font-bold italic">{apiPrice}</span>
                         </div>
-                      );
-                    })()}
-                  </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -4519,37 +4527,67 @@ const Gateways = () => {
                             {/* Separator */}
                             <div className="border-t border-dashed border-muted-foreground/30 my-2" />
                             
-                            {/* Clean output: Gateway + Response only */}
-                            <div className="space-y-1 font-mono text-[10px]">
-                              <div className="flex">
-                                <span className="w-20 text-muted-foreground font-bold italic">GATEWAY</span>
-                                <span className="text-muted-foreground font-bold italic mr-1">:</span>
-                                <span className="text-primary font-bold italic">
-                                  {selectedGateway?.name || 'N/A'}
-                                  {selectedGateway?.id === "combined_auth" && r.usedApi && (
-                                    <span className={`ml-1.5 px-1 py-0.5 rounded text-[8px] font-bold ${
-                                      r.usedApi === 'stripe' 
-                                        ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' 
-                                        : r.usedApi === 'b3'
-                                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                                          : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
-                                    }`}>
-                                      via {r.usedApi === 'stripe' ? 'STRIPE' : r.usedApi === 'b3' ? 'B3' : r.usedApi.toUpperCase()}
-                                    </span>
-                                  )}
-                                </span>
-                              </div>
+                            {/* Gateway, Response, Price parsed from API */}
+                            {(() => {
+                              let bGateway = '';
+                              let bPrice = '';
+                              let bResponse = '';
                               
-                              {r.apiResponse && (
-                                <div className="flex">
-                                  <span className="w-20 text-muted-foreground font-bold italic shrink-0">RESPONSE</span>
-                                  <span className="text-muted-foreground font-bold italic mr-1">:</span>
-                                  <span className="text-foreground font-bold italic break-all">
-                                    {r.apiResponse}
-                                  </span>
+                              try {
+                                const raw = r.rawResponse ? JSON.parse(r.rawResponse) : null;
+                                if (raw) {
+                                  let inner = null;
+                                  try { inner = typeof raw.apiMessage === 'string' ? JSON.parse(raw.apiMessage) : null; } catch {}
+                                  if (!inner) try { inner = typeof raw.rawResponse === 'string' ? JSON.parse(raw.rawResponse) : null; } catch {}
+                                  if (!inner) try { inner = typeof raw.message === 'string' ? JSON.parse(raw.message) : null; } catch {}
+                                  
+                                  if (inner && inner.Gateway !== undefined) {
+                                    bGateway = inner.Gateway || 'UNKNOWN';
+                                    bPrice = inner.Price !== undefined ? (typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price)) : '';
+                                    bResponse = (inner.Response || '').replace(/<[^>]*>/g, '');
+                                  } else if (raw.apiTotal) {
+                                    bPrice = raw.apiTotal;
+                                  }
+                                }
+                              } catch {}
+                              
+                              if (!bGateway) bGateway = selectedGateway?.name || 'N/A';
+                              if (!bResponse) bResponse = r.apiResponse || r.message || 'No response';
+                              if (!bPrice) bPrice = selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A";
+                              
+                              return (
+                                <div className="space-y-1 font-mono text-[10px]">
+                                  <div className="flex">
+                                    <span className="w-20 text-muted-foreground font-bold italic">GATEWAY</span>
+                                    <span className="text-muted-foreground font-bold italic mr-1">:</span>
+                                    <span className="text-primary font-bold italic">
+                                      {bGateway}
+                                      {selectedGateway?.id === "combined_auth" && r.usedApi && (
+                                        <span className={`ml-1.5 px-1 py-0.5 rounded text-[8px] font-bold ${
+                                          r.usedApi === 'stripe' 
+                                            ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' 
+                                            : r.usedApi === 'b3'
+                                              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                              : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
+                                        }`}>
+                                          via {r.usedApi === 'stripe' ? 'STRIPE' : r.usedApi === 'b3' ? 'B3' : r.usedApi.toUpperCase()}
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  <div className="flex">
+                                    <span className="w-20 text-muted-foreground font-bold italic shrink-0">RESPONSE</span>
+                                    <span className="text-muted-foreground font-bold italic mr-1">:</span>
+                                    <span className="text-foreground font-bold italic break-all">{bResponse}</span>
+                                  </div>
+                                  <div className="flex">
+                                    <span className="w-20 text-muted-foreground font-bold italic">PRICE</span>
+                                    <span className="text-muted-foreground font-bold italic mr-1">:</span>
+                                    <span className="text-foreground font-bold italic">{bPrice}</span>
+                                  </div>
                                 </div>
-                              )}
-                            </div>
+                              );
+                            })()}
                           </div>
                         );
                       })}
