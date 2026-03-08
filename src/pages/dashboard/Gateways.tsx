@@ -4569,7 +4569,7 @@ const Gateways = () => {
                                 }
                               } catch {}
                               
-                              if (!bResponse) bResponse = r.apiMessage || r.message || 'No response';
+                              if (!bResponse) bResponse = r.message || 'No response';
                               if (!bPrice) bPrice = selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A";
                               
                               return (
