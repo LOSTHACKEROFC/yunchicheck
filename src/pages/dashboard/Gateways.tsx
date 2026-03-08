@@ -4025,22 +4025,29 @@ const Gateways = () => {
                     let apiGateway = '';
                     let apiPrice = '';
                     let apiResponseText = '';
+                    let apiStatusText = '';
                     
                     try {
                       const raw = result.rawResponse ? JSON.parse(result.rawResponse) : null;
                       if (raw) {
+                        // Extract directly from top-level API response fields
+                        if (raw.apiStatus) apiStatusText = raw.apiStatus;
+                        if (raw.apiMessage) apiResponseText = String(raw.apiMessage).replace(/<[^>]*>/g, '');
+                        if (raw.apiTotal) apiPrice = raw.apiTotal;
+                        
+                        // Try nested JSON inside apiMessage for structured responses
                         let inner = null;
                         try { inner = typeof raw.apiMessage === 'string' ? JSON.parse(raw.apiMessage) : null; } catch {}
                         if (!inner) try { inner = typeof raw.rawResponse === 'string' ? JSON.parse(raw.rawResponse) : null; } catch {}
-                        if (!inner) try { inner = typeof raw.message === 'string' ? JSON.parse(raw.message) : null; } catch {}
                         
                         if (inner && inner.Gateway !== undefined) {
-                          apiGateway = inner.Gateway || 'UNKNOWN';
-                          apiPrice = inner.Price !== undefined ? (typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price)) : '';
-                          apiResponseText = (inner.Response || '').replace(/<[^>]*>/g, '');
-                        } else if (raw.apiTotal) {
-                          apiPrice = raw.apiTotal;
+                          apiGateway = inner.Gateway || '';
+                          if (inner.Price !== undefined) apiPrice = typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price);
+                          if (inner.Response) apiResponseText = String(inner.Response).replace(/<[^>]*>/g, '');
                         }
+                        
+                        // Use usedSite if available (Shopify)
+                        if (!apiGateway && raw.usedSite) apiGateway = raw.usedSite;
                       }
                     } catch {}
                     
@@ -4068,6 +4075,16 @@ const Gateways = () => {
                             )}
                           </span>
                         </div>
+                        {apiStatusText && (
+                          <div className="flex">
+                            <span className="w-24 text-muted-foreground font-bold italic">STATUS</span>
+                            <span className="text-muted-foreground font-bold italic mr-2">:</span>
+                            <span className={`font-bold italic ${
+                              apiStatusText === 'CHARGED' || apiStatusText === 'APPROVED' || apiStatusText === 'LIVE' ? 'text-green-400' :
+                              apiStatusText === 'DECLINED' || apiStatusText === 'DEAD' ? 'text-red-400' : 'text-yellow-400'
+                            }`}>{apiStatusText}</span>
+                          </div>
+                        )}
                         <div className="flex">
                           <span className="w-24 text-muted-foreground font-bold italic">RESPONSE</span>
                           <span className="text-muted-foreground font-bold italic mr-2">:</span>
@@ -4532,22 +4549,26 @@ const Gateways = () => {
                               let bGateway = '';
                               let bPrice = '';
                               let bResponse = '';
+                              let bStatus = '';
                               
                               try {
                                 const raw = r.rawResponse ? JSON.parse(r.rawResponse) : null;
                                 if (raw) {
+                                  if (raw.apiStatus) bStatus = raw.apiStatus;
+                                  if (raw.apiMessage) bResponse = String(raw.apiMessage).replace(/<[^>]*>/g, '');
+                                  if (raw.apiTotal) bPrice = raw.apiTotal;
+                                  
                                   let inner = null;
                                   try { inner = typeof raw.apiMessage === 'string' ? JSON.parse(raw.apiMessage) : null; } catch {}
                                   if (!inner) try { inner = typeof raw.rawResponse === 'string' ? JSON.parse(raw.rawResponse) : null; } catch {}
-                                  if (!inner) try { inner = typeof raw.message === 'string' ? JSON.parse(raw.message) : null; } catch {}
                                   
                                   if (inner && inner.Gateway !== undefined) {
-                                    bGateway = inner.Gateway || 'UNKNOWN';
-                                    bPrice = inner.Price !== undefined ? (typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price)) : '';
-                                    bResponse = (inner.Response || '').replace(/<[^>]*>/g, '');
-                                  } else if (raw.apiTotal) {
-                                    bPrice = raw.apiTotal;
+                                    bGateway = inner.Gateway || '';
+                                    if (inner.Price !== undefined) bPrice = typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price);
+                                    if (inner.Response) bResponse = String(inner.Response).replace(/<[^>]*>/g, '');
                                   }
+                                  
+                                  if (!bGateway && raw.usedSite) bGateway = raw.usedSite;
                                 }
                               } catch {}
                               
