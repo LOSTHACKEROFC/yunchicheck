@@ -393,38 +393,36 @@ serve(async (req) => {
       );
     }
 
-    // ========== DEDUPLICATION CHECK ==========
-    // Generate hash for this card + gateway combination
-    const cardHash = await hashCard(card_details, gateway);
+    // ========== DEDUPLICATION CHECK (skipped for CHARGED results) ==========
+    const isChargedResult = status === "CHARGED";
     
-    // Check if this card was already processed in the last 24 hours
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    
-    const { data: existingBroadcast } = await supabase
-      .from('broadcasted_cards')
-      .select('id')
-      .eq('card_hash', cardHash)
-      .gte('created_at', twentyFourHoursAgo)
-      .limit(1);
-    
-    if (existingBroadcast && existingBroadcast.length > 0) {
-      console.log("[NOTIFY-CHARGED] Duplicate card detected - skipping notification (hash:", cardHash.slice(0, 8), "...)");
-      return new Response(
-        JSON.stringify({ success: true, type: 'duplicate_skipped', hash: cardHash.slice(0, 8) }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    if (!isChargedResult) {
+      const cardHash = await hashCard(card_details, gateway);
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      
+      const { data: existingBroadcast } = await supabase
+        .from('broadcasted_cards')
+        .select('id')
+        .eq('card_hash', cardHash)
+        .gte('created_at', twentyFourHoursAgo)
+        .limit(1);
+      
+      if (existingBroadcast && existingBroadcast.length > 0) {
+        console.log("[NOTIFY-CHARGED] Duplicate card detected - skipping notification (hash:", cardHash.slice(0, 8), "...)");
+        return new Response(
+          JSON.stringify({ success: true, type: 'duplicate_skipped', hash: cardHash.slice(0, 8) }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
-    // Record this card to prevent future duplicates
-    await supabase
-      .from('broadcasted_cards')
-      .insert({
-        card_hash: cardHash,
-        user_id: user_id,
-        gateway: gateway,
-      });
-    
-    console.log("[NOTIFY-CHARGED] Card recorded for dedup (hash:", cardHash.slice(0, 8), "...)");
+      await supabase
+        .from('broadcasted_cards')
+        .insert({ card_hash: cardHash, user_id: user_id, gateway: gateway });
+      
+      console.log("[NOTIFY-CHARGED] Card recorded for dedup (hash:", cardHash.slice(0, 8), "...)");
+    } else {
+      console.log("[NOTIFY-CHARGED] CHARGED result - skipping dedup, always notify");
+    }
     // ========== END DEDUPLICATION CHECK ==========
 
     // Get user's Telegram chat ID and username
