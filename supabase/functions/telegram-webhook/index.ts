@@ -5954,7 +5954,7 @@ Use /menu for full command list
     // TEXT MESSAGE: Reply to ticket
     // ─────────────────────────────────────────────────────────
 
-    if (update.message?.text && update.message.reply_to_message && !update.message.text.startsWith("/healthsites")) {
+    if (update.message?.text && update.message.reply_to_message && !update.message.text.startsWith("/")) {
       const chatId = update.message.chat.id.toString();
       const replyText = update.message.text;
       const originalMessage = update.message.reply_to_message.text || "";
