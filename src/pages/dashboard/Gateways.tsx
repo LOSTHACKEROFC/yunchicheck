@@ -298,6 +298,7 @@ const Gateways = () => {
   const [razorpaySite, setRazorpaySite] = useState<string>(""); // RazorPay site URL
   const [razorpaySites, setRazorpaySites] = useState<string[]>([]); // Available sites from gateway_urls
   const [loadingSites, setLoadingSites] = useState(false);
+  const [razorpaySiteMode, setRazorpaySiteMode] = useState<"database" | "manual">("database"); // Site source mode for bulk
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<CheckResult | null>(null);
   const [userCredits, setUserCredits] = useState<number>(0);
