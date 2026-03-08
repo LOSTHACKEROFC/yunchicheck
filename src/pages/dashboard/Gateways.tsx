@@ -4053,7 +4053,7 @@ const Gateways = () => {
                     
                     if (!apiGateway) apiGateway = selectedGateway?.name || result.gateway || 'N/A';
                     if (!apiResponseText) apiResponseText = result.apiResponse || result.message || 'No response';
-                    if (!apiPrice) apiPrice = selectedGateway?.charge_amount || (selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A");
+                    if (!apiPrice) apiPrice = selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A";
                     
                     return (
                       <div className="space-y-1.5 font-mono text-xs">
