@@ -287,12 +287,13 @@ serve(async (req) => {
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Get a random site from gateway_urls using service role
+    // Get a random site from gateway_urls using service role (only sites <= $100)
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
     const { data: sites, error: sitesError } = await adminClient
       .from('gateway_urls')
       .select('url, price')
+      .lte('price', 100)
       .order('created_at', { ascending: false });
 
     if (sitesError || !sites || sites.length === 0) {
@@ -394,6 +395,23 @@ serve(async (req) => {
             parse_mode: "HTML",
           }),
         }).catch(() => {});
+      }
+    }
+
+    // Update site price in DB if API returned a valid price, remove if > $100
+    if (result.price > 0 && !isBadSite) {
+      if (result.price > 100) {
+        console.log(`[SHOPIFY-CHARGE] Removing site ${randomSite.url} - price $${result.price} exceeds $100 limit`);
+        adminClient.from('gateway_urls').delete().eq('url', randomSite.url).then(({ error: delErr }) => {
+          if (delErr) console.error('[SHOPIFY-CHARGE] Failed to remove expensive site:', delErr);
+          else console.log(`[SHOPIFY-CHARGE] Expensive site removed: ${randomSite.url}`);
+        });
+      } else if (result.price !== Number(randomSite.price)) {
+        // Update the stored price to match actual API price
+        adminClient.from('gateway_urls').update({ price: result.price }).eq('url', randomSite.url).then(({ error: upErr }) => {
+          if (upErr) console.error('[SHOPIFY-CHARGE] Failed to update site price:', upErr);
+          else console.log(`[SHOPIFY-CHARGE] Updated price for ${randomSite.url}: $${result.price}`);
+        });
       }
     }
 
