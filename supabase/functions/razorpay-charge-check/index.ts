@@ -276,7 +276,7 @@ serve(async (req) => {
       displayStatus = '3DS REQUIRED';
     } else if (result.status === 'dead') {
       computedStatus = 'dead';
-      displayStatus = 'DECLINED';
+      displayStatus = 'PAYMENT FAILED';
     } else {
       computedStatus = 'unknown';
       displayStatus = 'UNKNOWN';
