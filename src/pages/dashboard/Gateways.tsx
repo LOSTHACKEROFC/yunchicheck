@@ -2803,7 +2803,11 @@ const Gateways = () => {
         } else if (selectedGateway.id === "authnet_charge") {
           gatewayResponse = await checkCardViaAuthNetCharge(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "razorpay_charge") {
-          gatewayResponse = await checkCardViaRazorpay(cardData.card, cardData.month, cardData.year, cardData.cvv, razorpaySite);
+          // Auto-rotate: pick a random site from database, or use manual site
+          const site = razorpaySiteMode === "database" 
+            ? razorpaySites[Math.floor(Math.random() * razorpaySites.length)] 
+            : razorpaySite;
+          gatewayResponse = await checkCardViaRazorpay(cardData.card, cardData.month, cardData.year, cardData.cvv, site);
         }
         
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
