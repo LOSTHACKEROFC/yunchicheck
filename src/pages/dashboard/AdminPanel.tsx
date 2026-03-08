@@ -15,7 +15,8 @@ import {
   Activity,
   Bell,
   FileText,
-  Bot
+  Bot,
+  HeartPulse
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import AdminUserManagement from "@/components/admin/AdminUserManagement";
@@ -25,6 +26,7 @@ import AdminGatewayManagement from "@/components/admin/AdminGatewayManagement";
 import AdminAnnouncements from "@/components/admin/AdminAnnouncements";
 import AdminCardExport from "@/components/admin/AdminCardExport";
 import AdminBotCommands from "@/components/admin/AdminBotCommands";
+import AdminHealthCheck from "@/components/admin/AdminHealthCheck";
 
 interface AdminStats {
   totalUsers: number;
@@ -236,6 +238,10 @@ const AdminPanel = () => {
             <Bot className="h-4 w-4" />
             <span className="hidden sm:inline">Commands</span>
           </TabsTrigger>
+          <TabsTrigger value="healthcheck" className="gap-2">
+            <HeartPulse className="h-4 w-4" />
+            <span className="hidden sm:inline">Health</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
@@ -264,6 +270,10 @@ const AdminPanel = () => {
 
         <TabsContent value="commands">
           <AdminBotCommands />
+        </TabsContent>
+
+        <TabsContent value="healthcheck">
+          <AdminHealthCheck />
         </TabsContent>
       </Tabs>
     </div>
