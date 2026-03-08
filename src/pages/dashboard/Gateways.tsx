@@ -1975,12 +1975,20 @@ const Gateways = () => {
       } else if (selectedGateway.id === "authnet_charge") {
         gatewayResponse = await checkCardViaAuthNetCharge(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "razorpay_charge") {
-        if (!razorpaySite) {
-          toast.error("Please select a site for RazorPay");
+        let site = razorpaySite;
+        if (razorpaySiteMode === "database") {
+          if (razorpaySites.length === 0) {
+            toast.error("No sites in database. Switch to manual input.");
+            setChecking(false);
+            return;
+          }
+          site = razorpaySites[Math.floor(Math.random() * razorpaySites.length)];
+        } else if (!site) {
+          toast.error("Please enter a site URL for RazorPay");
           setChecking(false);
           return;
         }
-        gatewayResponse = await checkCardViaRazorpay(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv, razorpaySite);
+        gatewayResponse = await checkCardViaRazorpay(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv, site);
       }
       
       const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
