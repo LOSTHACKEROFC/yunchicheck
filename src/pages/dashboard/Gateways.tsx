@@ -51,6 +51,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useBulkCheck } from "@/contexts/BulkCheckContext";
+import UserProxyManager from "@/components/UserProxyManager";
 
 // BIN Lookup utilities
 interface BinInfo {
@@ -302,6 +303,7 @@ const Gateways = () => {
   const [razorpaySites, setRazorpaySites] = useState<string[]>([]); // Available sites from gateway_urls
   const [loadingSites, setLoadingSites] = useState(false);
   const [razorpaySiteMode, setRazorpaySiteMode] = useState<"database" | "manual">("database"); // Site source mode for bulk
+  const [shopifyProxyCount, setShopifyProxyCount] = useState(0);
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<CheckResult | null>(null);
   const [userCredits, setUserCredits] = useState<number>(0);
@@ -1759,6 +1761,53 @@ const Gateways = () => {
     }
   };
 
+  // Shopify Charge API check via edge function - uses user proxies + auto-rotating sites
+  const checkCardViaShopify = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
+    const cc = `${cardNumber}|${month}|${year}|${cvv}`;
+    
+    try {
+      console.log(`[SHOPIFY] Sending:`, cc);
+      
+      const { data, error } = await supabase.functions.invoke('shopify-charge-check', {
+        body: { cc }
+      });
+      
+      if (error) {
+        console.error('[SHOPIFY] Error:', error);
+        return {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: error.message || "Connection error",
+          rawResponse: JSON.stringify(error)
+        };
+      }
+      
+      console.log('[SHOPIFY] Response:', data);
+      
+      const apiStatus = data?.apiStatus || 'UNKNOWN';
+      const apiMessage = data?.apiMessage || data?.message || 'No response';
+      const apiTotal = data?.apiTotal || 'Auto';
+      const rawResponse = data?.rawResponse || JSON.stringify(data);
+      const computedStatus = data?.computedStatus;
+      
+      return { 
+        status: computedStatus === "live" ? "live" : computedStatus === "dead" ? "dead" : "unknown",
+        apiStatus, 
+        apiMessage, 
+        apiTotal, 
+        rawResponse 
+      };
+    } catch (error) {
+      console.error('[SHOPIFY] Exception:', error);
+      return {
+        status: "unknown",
+        apiStatus: "ERROR",
+        apiMessage: error instanceof Error ? error.message : "Unknown error",
+        rawResponse: String(error)
+      };
+    }
+  };
+
   // AuthNet Charge API check via edge function - $1 charge
   const checkCardViaAuthNetCharge = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
@@ -1992,6 +2041,13 @@ const Gateways = () => {
           return;
         }
         gatewayResponse = await checkCardViaRazorpay(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv, site);
+      } else if (selectedGateway.id === "shopify_charge") {
+        if (shopifyProxyCount < 1) {
+          toast.error("Add at least 1 proxy to use Shopify Charge");
+          setChecking(false);
+          return;
+        }
+        gatewayResponse = await checkCardViaShopify(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       }
       
       const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -2601,6 +2657,12 @@ const Gateways = () => {
       }
     }
 
+    // Shopify requires proxies
+    if (selectedGateway.id === "shopify_charge" && shopifyProxyCount < 1) {
+      toast.error("Add at least 1 proxy to use Shopify Charge");
+      return;
+    }
+
     const isAuthGateway = selectedGateway.type === "auth";
     const isChargeGateway = selectedGateway.type === "charge";
     // For charge gateways, CVC is MANDATORY
@@ -2819,6 +2881,8 @@ const Gateways = () => {
             ? razorpaySites[Math.floor(Math.random() * razorpaySites.length)] 
             : razorpaySite;
           gatewayResponse = await checkCardViaRazorpay(cardData.card, cardData.month, cardData.year, cardData.cvv, site);
+        } else if (selectedGateway.id === "shopify_charge") {
+          gatewayResponse = await checkCardViaShopify(cardData.card, cardData.month, cardData.year, cardData.cvv);
         }
         
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
@@ -3910,6 +3974,11 @@ const Gateways = () => {
                       )}
                     </div>
                   </div>
+                )}
+
+                {/* Shopify Charge Proxy Manager */}
+                {selectedGateway?.id === "shopify_charge" && (
+                  <UserProxyManager onProxyCountChange={setShopifyProxyCount} />
                 )}
               </div>
 
