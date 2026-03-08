@@ -4536,12 +4536,12 @@ const Gateways = () => {
                             {/* Separator */}
                             <div className="border-t border-dashed border-muted-foreground/30 my-2" />
                             
-                            {/* Gateway, Response, Price parsed from API */}
+                            {/* Gateway, Status, Response, Price from API */}
                             {(() => {
-                              let bGateway = '';
+                              let bGateway = selectedGateway?.name || 'N/A';
                               let bPrice = '';
                               let bResponse = '';
-                              let bStatus = '';
+                              let bStatus = getStatusDisplayLabel(r.status, selectedGateway?.id, selectedGateway?.type);
                               
                               try {
                                 const raw = r.rawResponse ? JSON.parse(r.rawResponse) : null;
@@ -4554,17 +4554,13 @@ const Gateways = () => {
                                   try { inner = typeof raw.apiMessage === 'string' ? JSON.parse(raw.apiMessage) : null; } catch {}
                                   if (!inner) try { inner = typeof raw.rawResponse === 'string' ? JSON.parse(raw.rawResponse) : null; } catch {}
                                   
-                                  if (inner && inner.Gateway !== undefined) {
-                                    bGateway = inner.Gateway || '';
+                                  if (inner) {
                                     if (inner.Price !== undefined) bPrice = typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price);
                                     if (inner.Response) bResponse = String(inner.Response).replace(/<[^>]*>/g, '');
                                   }
-                                  
-                                  if (!bGateway && raw.usedSite) bGateway = raw.usedSite;
                                 }
                               } catch {}
                               
-                              if (!bGateway) bGateway = selectedGateway?.name || 'N/A';
                               if (!bResponse) bResponse = r.apiResponse || r.message || 'No response';
                               if (!bPrice) bPrice = selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A";
                               
@@ -4587,6 +4583,14 @@ const Gateways = () => {
                                         </span>
                                       )}
                                     </span>
+                                  </div>
+                                  <div className="flex">
+                                    <span className="w-20 text-muted-foreground font-bold italic">STATUS</span>
+                                    <span className="text-muted-foreground font-bold italic mr-1">:</span>
+                                    <span className={`font-bold italic ${
+                                      /charged|approved|live|killed|passed/i.test(bStatus) ? 'text-green-400' :
+                                      /declined|dead|failed|rejected/i.test(bStatus) ? 'text-red-400' : 'text-yellow-400'
+                                    }`}>{bStatus}</span>
                                   </div>
                                   <div className="flex">
                                     <span className="w-20 text-muted-foreground font-bold italic shrink-0">RESPONSE</span>
