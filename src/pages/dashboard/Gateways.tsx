@@ -4549,28 +4549,32 @@ const Gateways = () => {
                               let bGateway = '';
                               let bPrice = '';
                               let bResponse = '';
+                              let bStatus = '';
                               
                               try {
                                 const raw = r.rawResponse ? JSON.parse(r.rawResponse) : null;
                                 if (raw) {
+                                  if (raw.apiStatus) bStatus = raw.apiStatus;
+                                  if (raw.apiMessage) bResponse = String(raw.apiMessage).replace(/<[^>]*>/g, '');
+                                  if (raw.apiTotal) bPrice = raw.apiTotal;
+                                  
                                   let inner = null;
                                   try { inner = typeof raw.apiMessage === 'string' ? JSON.parse(raw.apiMessage) : null; } catch {}
                                   if (!inner) try { inner = typeof raw.rawResponse === 'string' ? JSON.parse(raw.rawResponse) : null; } catch {}
-                                  if (!inner) try { inner = typeof raw.message === 'string' ? JSON.parse(raw.message) : null; } catch {}
                                   
                                   if (inner && inner.Gateway !== undefined) {
-                                    bGateway = inner.Gateway || 'UNKNOWN';
-                                    bPrice = inner.Price !== undefined ? (typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price)) : '';
-                                    bResponse = (inner.Response || '').replace(/<[^>]*>/g, '');
-                                  } else if (raw.apiTotal) {
-                                    bPrice = raw.apiTotal;
+                                    bGateway = inner.Gateway || '';
+                                    if (inner.Price !== undefined) bPrice = typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price);
+                                    if (inner.Response) bResponse = String(inner.Response).replace(/<[^>]*>/g, '');
                                   }
+                                  
+                                  if (!bGateway && raw.usedSite) bGateway = raw.usedSite;
                                 }
                               } catch {}
                               
                               if (!bGateway) bGateway = selectedGateway?.name || 'N/A';
                               if (!bResponse) bResponse = r.apiResponse || r.message || 'No response';
-                              if (!bPrice) bPrice = selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A";
+                              if (!bPrice) bPrice = selectedGateway?.charge_amount || (selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A");
                               
                               return (
                                 <div className="space-y-1 font-mono text-[10px]">
