@@ -4025,28 +4025,35 @@ const Gateways = () => {
                     let apiGateway = '';
                     let apiPrice = '';
                     let apiResponseText = '';
+                    let apiStatusText = '';
                     
                     try {
                       const raw = result.rawResponse ? JSON.parse(result.rawResponse) : null;
                       if (raw) {
+                        // Extract directly from top-level API response fields
+                        if (raw.apiStatus) apiStatusText = raw.apiStatus;
+                        if (raw.apiMessage) apiResponseText = String(raw.apiMessage).replace(/<[^>]*>/g, '');
+                        if (raw.apiTotal) apiPrice = raw.apiTotal;
+                        
+                        // Try nested JSON inside apiMessage for structured responses
                         let inner = null;
                         try { inner = typeof raw.apiMessage === 'string' ? JSON.parse(raw.apiMessage) : null; } catch {}
                         if (!inner) try { inner = typeof raw.rawResponse === 'string' ? JSON.parse(raw.rawResponse) : null; } catch {}
-                        if (!inner) try { inner = typeof raw.message === 'string' ? JSON.parse(raw.message) : null; } catch {}
                         
                         if (inner && inner.Gateway !== undefined) {
-                          apiGateway = inner.Gateway || 'UNKNOWN';
-                          apiPrice = inner.Price !== undefined ? (typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price)) : '';
-                          apiResponseText = (inner.Response || '').replace(/<[^>]*>/g, '');
-                        } else if (raw.apiTotal) {
-                          apiPrice = raw.apiTotal;
+                          apiGateway = inner.Gateway || '';
+                          if (inner.Price !== undefined) apiPrice = typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price);
+                          if (inner.Response) apiResponseText = String(inner.Response).replace(/<[^>]*>/g, '');
                         }
+                        
+                        // Use usedSite if available (Shopify)
+                        if (!apiGateway && raw.usedSite) apiGateway = raw.usedSite;
                       }
                     } catch {}
                     
                     if (!apiGateway) apiGateway = selectedGateway?.name || result.gateway || 'N/A';
                     if (!apiResponseText) apiResponseText = result.apiResponse || result.message || 'No response';
-                    if (!apiPrice) apiPrice = selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A";
+                    if (!apiPrice) apiPrice = selectedGateway?.charge_amount || (selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A");
                     
                     return (
                       <div className="space-y-1.5 font-mono text-xs">
