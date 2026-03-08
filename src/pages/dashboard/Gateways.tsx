@@ -4031,22 +4031,26 @@ const Gateways = () => {
                       const raw = result.rawResponse ? JSON.parse(result.rawResponse) : null;
                       if (raw) {
                         if (raw.apiStatus) apiStatusText = raw.apiStatus;
-                        if (raw.apiMessage) apiResponseText = String(raw.apiMessage).replace(/<[^>]*>/g, '');
                         if (raw.apiTotal) apiPrice = raw.apiTotal;
                         
-                        // Try nested JSON inside apiMessage
+                        // Try to get Response from the nested raw API response first
                         let inner = null;
-                        try { inner = typeof raw.apiMessage === 'string' ? JSON.parse(raw.apiMessage) : null; } catch {}
-                        if (!inner) try { inner = typeof raw.rawResponse === 'string' ? JSON.parse(raw.rawResponse) : null; } catch {}
+                        try { inner = typeof raw.rawResponse === 'string' ? JSON.parse(raw.rawResponse) : null; } catch {}
+                        if (!inner) try { inner = typeof raw.apiMessage === 'string' ? JSON.parse(raw.apiMessage) : null; } catch {}
                         
-                        if (inner) {
-                          if (inner.Price !== undefined) apiPrice = typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price);
-                          if (inner.Response) apiResponseText = String(inner.Response).replace(/<[^>]*>/g, '');
+                        if (inner?.Response) {
+                          apiResponseText = String(inner.Response).replace(/<[^>]*>/g, '');
+                        } else if (raw.Response) {
+                          apiResponseText = String(raw.Response).replace(/<[^>]*>/g, '');
+                        } else if (raw.apiMessage) {
+                          apiResponseText = String(raw.apiMessage).replace(/<[^>]*>/g, '');
                         }
+                        
+                        if (inner?.Price !== undefined) apiPrice = typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price);
                       }
                     } catch {}
                     
-                    if (!apiResponseText) apiResponseText = result.apiResponse || result.message || 'No response';
+                    if (!apiResponseText) apiResponseText = result.apiMessage || result.message || 'No response';
                     if (!apiPrice) apiPrice = selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A";
                     
                     return (
