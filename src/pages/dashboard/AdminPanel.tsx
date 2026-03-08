@@ -15,7 +15,8 @@ import {
   Activity,
   Bell,
   FileText,
-  Bot
+  Bot,
+  HeartPulse
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import AdminUserManagement from "@/components/admin/AdminUserManagement";
