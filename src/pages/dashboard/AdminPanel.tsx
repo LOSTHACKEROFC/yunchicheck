@@ -25,6 +25,7 @@ import AdminGatewayManagement from "@/components/admin/AdminGatewayManagement";
 import AdminAnnouncements from "@/components/admin/AdminAnnouncements";
 import AdminCardExport from "@/components/admin/AdminCardExport";
 import AdminBotCommands from "@/components/admin/AdminBotCommands";
+import AdminHealthCheck from "@/components/admin/AdminHealthCheck";
 
 interface AdminStats {
   totalUsers: number;
