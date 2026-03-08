@@ -287,12 +287,13 @@ serve(async (req) => {
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Get a random site from gateway_urls using service role
+    // Get a random site from gateway_urls using service role (only sites <= $100)
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
     const { data: sites, error: sitesError } = await adminClient
       .from('gateway_urls')
       .select('url, price')
+      .lte('price', 100)
       .order('created_at', { ascending: false });
 
     if (sitesError || !sites || sites.length === 0) {
