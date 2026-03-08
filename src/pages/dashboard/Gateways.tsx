@@ -2041,6 +2041,13 @@ const Gateways = () => {
           return;
         }
         gatewayResponse = await checkCardViaRazorpay(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv, site);
+      } else if (selectedGateway.id === "shopify_charge") {
+        if (shopifyProxyCount < 1) {
+          toast.error("Add at least 1 proxy to use Shopify Charge");
+          setChecking(false);
+          return;
+        }
+        gatewayResponse = await checkCardViaShopify(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       }
       
       const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
