@@ -271,6 +271,10 @@ const AdminPanel = () => {
         <TabsContent value="commands">
           <AdminBotCommands />
         </TabsContent>
+
+        <TabsContent value="healthcheck">
+          <AdminHealthCheck />
+        </TabsContent>
       </Tabs>
     </div>
   );
