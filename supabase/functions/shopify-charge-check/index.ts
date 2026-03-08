@@ -202,7 +202,8 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
         } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || 
                    lower.includes('insufficient') || lower.includes('card_declined') || lower.includes('incorrect') ||
                    lower.includes('do_not_honor') || lower.includes('fraud') || lower.includes('error') ||
-                   lower.includes('failed') || lower.includes('not accepted')) {
+                   lower.includes('failed') || lower.includes('not accepted') ||
+                   lower.includes('ds_required') || lower.includes('3ds') || lower.includes('3d_secure')) {
           apiStatus = 'dead';
         }
       }
