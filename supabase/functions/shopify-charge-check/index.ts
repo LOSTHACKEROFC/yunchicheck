@@ -221,7 +221,7 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
     clearTimeout(timeoutId);
     const errMsg = error instanceof Error ? error.message : 'Error';
     console.error(`[SHOPIFY-CHARGE] Error: ${errMsg}`);
-    return { status: 'unknown', message: 'Timeout', rawResponse: errMsg, price: 0, priceStr: '$0.00' };
+    return { status: 'unknown', message: 'Timeout', apiResponse: '', rawResponse: errMsg, price: 0, priceStr: '$0.00' };
   }
 };
 
