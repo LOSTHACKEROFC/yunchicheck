@@ -134,11 +134,11 @@ serve(async (req) => {
             // Check for bad responses that should never be saved
             const badResponses = [
               "MERCHANDISE_EXPECTED_PRICE_MISMATCH",
-              "site not supported",
+              "Site not supported",
               "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH",
               "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED",
             ];
-            const isBadResponse = badResponses.some(bad => responseText.includes(bad));
+            const isBadResponse = badResponses.some(bad => responseText.toLowerCase().includes(bad.toLowerCase()));
 
             if (isBadResponse) {
               // Remove from saved sites if it exists
