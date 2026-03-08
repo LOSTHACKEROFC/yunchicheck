@@ -250,7 +250,7 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { cc } = body;
+    const { cc, priceGroup } = body;
     
     if (!cc) {
       return new Response(JSON.stringify({ error: 'Card required', computedStatus: 'unknown' }), 
