@@ -195,7 +195,7 @@ serve(async (req) => {
     }
 
     // Start API call immediately while auth happens
-    const apiPromise = callApi(cc, site);
+    const resultPromise = callApi(cc, site);
 
     // Auth check in parallel
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -219,6 +219,9 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Account suspended" }), 
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
+    // Wait for API result
+    const result = await resultPromise;
 
     // Auto-remove site if "international cards not supported"
     const msgLower = (result.message || '').toLowerCase();
