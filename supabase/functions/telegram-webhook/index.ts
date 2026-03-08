@@ -8267,12 +8267,9 @@ ${resultsDisplay || "Waiting for results..."}
             status: "success"
           });
 
-          // If price found → keep site, if no price → remove site from DB
+          // Save working sites (with price) to gateway_urls
           if (price > 0) {
-            // Site has a price, keep it
-          } else {
-            // No price found, remove site from gateway_urls
-            await supabase.from("gateway_urls").delete().eq("url", siteUrl);
+            await supabase.from("gateway_urls").upsert({ url: siteUrl }, { onConflict: "url", ignoreDuplicates: true });
           }
 
           // Update with full raw response
