@@ -195,7 +195,7 @@ serve(async (req) => {
     }
 
     // Start API call immediately while auth happens
-    const apiPromise = callApi(cc, site);
+    const resultPromise = callApi(cc, site);
 
     // Auth check in parallel
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
