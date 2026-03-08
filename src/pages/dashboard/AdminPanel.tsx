@@ -238,6 +238,10 @@ const AdminPanel = () => {
             <Bot className="h-4 w-4" />
             <span className="hidden sm:inline">Commands</span>
           </TabsTrigger>
+          <TabsTrigger value="healthcheck" className="gap-2">
+            <HeartPulse className="h-4 w-4" />
+            <span className="hidden sm:inline">Health</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
