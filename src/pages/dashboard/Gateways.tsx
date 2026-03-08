@@ -4574,7 +4574,7 @@ const Gateways = () => {
                               
                               if (!bGateway) bGateway = selectedGateway?.name || 'N/A';
                               if (!bResponse) bResponse = r.apiResponse || r.message || 'No response';
-                              if (!bPrice) bPrice = selectedGateway?.charge_amount || (selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A");
+                              if (!bPrice) bPrice = selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A";
                               
                               return (
                                 <div className="space-y-1 font-mono text-[10px]">
