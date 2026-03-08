@@ -338,7 +338,7 @@ serve(async (req) => {
     }
     
     if (!result) {
-      result = { status: 'unknown', message: 'All proxies failed', rawResponse: '', price: 0, priceStr: '$0.00' };
+      result = { status: 'unknown', message: 'All proxies failed', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
     }
 
     // Auto-remove bad sites from gateway_urls
