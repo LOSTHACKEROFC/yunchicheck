@@ -52,7 +52,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useBulkCheck } from "@/contexts/BulkCheckContext";
 import UserProxyManager from "@/components/UserProxyManager";
-import ShopifySiteGroups from "@/components/ShopifySiteGroups";
+import ShopifyPriceGroupSelector from "@/components/ShopifyPriceGroupSelector";
 
 // BIN Lookup utilities
 interface BinInfo {
@@ -305,6 +305,7 @@ const Gateways = () => {
   const [loadingSites, setLoadingSites] = useState(false);
   const [razorpaySiteMode, setRazorpaySiteMode] = useState<"database" | "manual">("database"); // Site source mode for bulk
   const [shopifyProxyCount, setShopifyProxyCount] = useState(0);
+  const [shopifyPriceGroup, setShopifyPriceGroup] = useState<{ min: number; max: number } | null>(null);
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<CheckResult | null>(null);
   const [userCredits, setUserCredits] = useState<number>(0);
@@ -1767,10 +1768,10 @@ const Gateways = () => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
     try {
-      console.log(`[SHOPIFY] Sending:`, cc);
+      console.log(`[SHOPIFY] Sending:`, cc, `Price group:`, shopifyPriceGroup);
       
       const { data, error } = await supabase.functions.invoke('shopify-charge-check', {
-        body: { cc }
+        body: { cc, priceGroup: shopifyPriceGroup }
       });
       
       if (error) {
@@ -3981,7 +3982,10 @@ const Gateways = () => {
                 {selectedGateway?.id === "shopify_charge" && (
                   <>
                     <UserProxyManager onProxyCountChange={setShopifyProxyCount} />
-                    <ShopifySiteGroups />
+                    <ShopifyPriceGroupSelector 
+                      onGroupSelect={setShopifyPriceGroup}
+                      selectedGroup={shopifyPriceGroup}
+                    />
                   </>
                 )}
               </div>

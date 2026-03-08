@@ -250,7 +250,7 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { cc } = body;
+    const { cc, priceGroup } = body;
     
     if (!cc) {
       return new Response(JSON.stringify({ error: 'Card required', computedStatus: 'unknown' }), 
@@ -290,11 +290,21 @@ serve(async (req) => {
     // Get a random site from gateway_urls using service role (only sites <= $100)
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
-    const { data: sites, error: sitesError } = await adminClient
+    // Build query - filter by price group if specified
+    let sitesQuery = adminClient
       .from('gateway_urls')
       .select('url, price')
-      .lte('price', 100)
-      .order('created_at', { ascending: false });
+      .lte('price', 100);
+    
+    if (priceGroup && typeof priceGroup.min === 'number' && typeof priceGroup.max === 'number') {
+      sitesQuery = sitesQuery.gte('price', priceGroup.min);
+      if (priceGroup.max < 100) {
+        sitesQuery = sitesQuery.lt('price', priceGroup.max);
+      }
+      console.log(`[SHOPIFY-CHARGE] Filtering sites by price range: $${priceGroup.min}-$${priceGroup.max}`);
+    }
+    
+    const { data: sites, error: sitesError } = await sitesQuery.order('created_at', { ascending: false });
 
     if (sitesError || !sites || sites.length === 0) {
       return new Response(JSON.stringify({ 
