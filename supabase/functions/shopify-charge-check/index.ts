@@ -215,7 +215,7 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
       }
     }
     
-    return { status: apiStatus, message: apiMessage, rawResponse: rawText, price, priceStr };
+    return { status: apiStatus, message: apiMessage, apiResponse, rawResponse: rawText, price, priceStr };
     
   } catch (error) {
     clearTimeout(timeoutId);
