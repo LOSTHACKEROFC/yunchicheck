@@ -4552,7 +4552,8 @@ const Gateways = () => {
                                 const raw = r.rawResponse ? JSON.parse(r.rawResponse) : null;
                                 if (raw) {
                                   if (raw.apiStatus) bStatus = raw.apiStatus;
-                                  if (raw.apiTotal) bPrice = raw.apiTotal;
+                                  if (raw.apiPrice) bPrice = raw.apiPrice;
+                                  else if (raw.apiTotal) bPrice = raw.apiTotal;
                                   
                                   let inner = null;
                                   try { inner = typeof raw.rawResponse === 'string' ? JSON.parse(raw.rawResponse) : null; } catch {}
