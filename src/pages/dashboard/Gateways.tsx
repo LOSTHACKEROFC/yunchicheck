@@ -1797,8 +1797,9 @@ const Gateways = () => {
         apiStatus, 
         apiMessage, 
         apiTotal, 
-        rawResponse 
-      };
+        rawResponse,
+        allProxiesDead: data?.allProxiesDead || false,
+      } as GatewayApiResponse & { allProxiesDead?: boolean };
     } catch (error) {
       console.error('[SHOPIFY] Exception:', error);
       return {
