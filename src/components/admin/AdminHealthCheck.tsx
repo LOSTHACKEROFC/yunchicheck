@@ -22,6 +22,8 @@ import {
   Database,
   ChevronDown,
   Code,
+  Download,
+  Filter,
 } from "lucide-react";
 
 interface SiteResult {
@@ -44,6 +46,7 @@ const AdminHealthCheck = () => {
   const [stats, setStats] = useState({ total: 0, live: 0, dead: 0, errors: 0 });
   const [loadingSaved, setLoadingSaved] = useState(false);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+  const [exportFilter, setExportFilter] = useState<"all" | "live" | "dead" | "error">("all");
   const stopRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -325,10 +328,54 @@ const AdminHealthCheck = () => {
       {results.length > 0 && (
         <Card className="border-border">
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Zap className="h-4 w-4 text-primary" />
-              Results ({results.length})
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Zap className="h-4 w-4 text-primary" />
+                Results ({results.length})
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                  <Filter className="h-3 w-3 text-muted-foreground" />
+                  <Select value={exportFilter} onValueChange={(v) => setExportFilter(v as any)}>
+                    <SelectTrigger className="h-7 w-24 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="live">Live</SelectItem>
+                      <SelectItem value="dead">Dead</SelectItem>
+                      <SelectItem value="error">Errors</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 h-7 text-xs"
+                  onClick={() => {
+                    const filtered = exportFilter === "all" ? results : results.filter((r) => r.status === exportFilter);
+                    if (filtered.length === 0) {
+                      toast.error("No results to export");
+                      return;
+                    }
+                    const lines = filtered.map((r) => `${r.url} | ${r.priceStr} | ${r.status.toUpperCase()}${r.apiResponse ? ` | ${r.apiResponse.replace(/\n/g, " ")}` : ""}`);
+                    const header = `# Health Check Export - ${new Date().toISOString()}\n# Filter: ${exportFilter} | Total: ${filtered.length}\n# Format: URL | Price | Status | API Response\n\n`;
+                    const content = header + lines.join("\n");
+                    const blob = new Blob([content], { type: "text/plain" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `health-check-${exportFilter}-${Date.now()}.txt`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    toast.success(`Exported ${filtered.length} results`);
+                  }}
+                >
+                  <Download className="h-3 w-3" />
+                  Export
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="max-h-[500px] overflow-y-auto space-y-1">
