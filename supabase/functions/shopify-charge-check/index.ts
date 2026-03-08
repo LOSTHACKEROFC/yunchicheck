@@ -166,7 +166,7 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
     // Check for bad responses
     const isBadResponse = badResponses.some(bad => rawText.toLowerCase().includes(bad.toLowerCase()));
     if (isBadResponse) {
-      return { status: 'dead', message: 'Bad response - site issue', rawResponse: rawText, price: 0, priceStr: '$0.00' };
+      return { status: 'dead', message: 'Bad response - site issue', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
     }
 
     let { price, priceStr } = extractPrice(rawText);
