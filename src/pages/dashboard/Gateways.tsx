@@ -4311,6 +4311,14 @@ const Gateways = () => {
                 </div>
               )}
 
+              {/* Shopify Charge Price Group Selector for Bulk */}
+              {selectedGateway?.id === "shopify_charge" && (
+                <ShopifyPriceGroupSelector 
+                  onGroupSelect={setShopifyPriceGroup}
+                  selectedGroup={shopifyPriceGroup}
+                />
+              )}
+
               <div>
                 <Label className="text-xs">Cards (one per line)</Label>
                 <Textarea
