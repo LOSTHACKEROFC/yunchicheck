@@ -22,6 +22,7 @@ const badResponses = [
   "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED",
   "Payment method not available",
   "ARTIFACT_DISSATISFACTION",
+  "VALIDATION_CUSTOM",
 ];
 
 const sendAdminDebug = async (
