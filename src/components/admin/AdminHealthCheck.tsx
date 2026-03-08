@@ -262,6 +262,7 @@ const AdminHealthCheck = () => {
               <Download className="h-4 w-4" />
               Export Saved
             </Button>
+            <Button
               variant="outline"
               onClick={handleLoadSaved}
               disabled={isRunning || loadingSaved}
