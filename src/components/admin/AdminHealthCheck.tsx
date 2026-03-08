@@ -107,6 +107,48 @@ const AdminHealthCheck = () => {
     }
   };
 
+  const handleExportSaved = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("gateway_urls")
+        .select("url, created_at")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        toast.error("No saved sites to export");
+        return;
+      }
+
+      // Check if we have scan results for these URLs
+      const resultMap = new Map(results.map((r) => [r.url, r]));
+
+      const lines = data.map((row) => {
+        const scanResult = resultMap.get(row.url);
+        if (scanResult) {
+          return `${row.url} | ${scanResult.priceStr} | ${scanResult.status.toUpperCase()}${scanResult.apiResponse ? ` | ${scanResult.apiResponse.replace(/\n/g, " ")}` : ""}`;
+        }
+        return `${row.url} | -- | SAVED`;
+      });
+
+      const header = `# Saved Sites Export - ${new Date().toISOString()}\n# Total: ${data.length}\n# Format: URL | Price | Status | API Response\n\n`;
+      const content = header + lines.join("\n");
+      const blob = new Blob([content], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `saved-sites-${Date.now()}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${data.length} saved sites`);
+    } catch (err) {
+      toast.error("Failed to export saved sites");
+    }
+  };
+      setLoadingSaved(false);
+    }
+  };
+
   const handleStop = () => {
     stopRef.current = true;
     setIsStopped(true);
