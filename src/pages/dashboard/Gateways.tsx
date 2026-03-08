@@ -2945,8 +2945,15 @@ const Gateways = () => {
         const { brand, brandColor } = detectCardBrandLocal(cardData.card);
         
         // Build API response string for display
+        const isOrderPlaced = gatewayResponse && (
+          (gatewayResponse.apiMessage || '').toUpperCase().includes('ORDER_PLACED') ||
+          (gatewayResponse.apiMessage || '').toUpperCase().includes('ORDER PLACED') ||
+          (gatewayResponse.rawResponse || '').toUpperCase().includes('ORDER_PLACED')
+        );
         const apiResponseDisplay = gatewayResponse 
-          ? `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}${gatewayResponse.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`
+          ? isOrderPlaced
+            ? '💎 ORDER PLACED'
+            : `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}${gatewayResponse.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`
           : undefined;
         
         const bulkResult: BulkResult = {
