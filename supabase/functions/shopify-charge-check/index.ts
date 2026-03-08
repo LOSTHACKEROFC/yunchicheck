@@ -197,21 +197,32 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
         apiMessage = json.message || json.error || 'Declined';
       } else {
         const lower = String(apiMessage).toLowerCase();
-        if (lower.includes('charged') || lower.includes('success') || lower.includes('approved') || lower.includes('thank you')) {
+        const responseLower = (apiResponse || '').toLowerCase();
+        const combinedText = lower + ' ' + responseLower;
+        
+        if (combinedText.includes('order_placed') || combinedText.includes('order placed') || 
+            combinedText.includes('thank you') || combinedText.includes('thankyou') ||
+            combinedText.includes('charged') || combinedText.includes('success') || 
+            combinedText.includes('approved')) {
           apiStatus = 'live';
-        } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || 
-                   lower.includes('insufficient') || lower.includes('card_declined') || lower.includes('incorrect') ||
-                   lower.includes('do_not_honor') || lower.includes('fraud') || lower.includes('error') ||
-                   lower.includes('failed') || lower.includes('not accepted') ||
-                   lower.includes('ds_required') || lower.includes('3ds') || lower.includes('3d_secure')) {
+        } else if (combinedText.includes('declined') || combinedText.includes('invalid') || combinedText.includes('expired') || 
+                   combinedText.includes('insufficient') || combinedText.includes('card_declined') || combinedText.includes('incorrect') ||
+                   combinedText.includes('do_not_honor') || combinedText.includes('fraud') || combinedText.includes('not accepted') ||
+                   combinedText.includes('ds_required') || combinedText.includes('3ds') || combinedText.includes('3d_secure') ||
+                   combinedText.includes('failed') || combinedText.includes('error') || combinedText.includes('rejected') ||
+                   combinedText.includes('pickup_card') || combinedText.includes('lost_card') || combinedText.includes('stolen_card') ||
+                   combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline')) {
           apiStatus = 'dead';
         }
       }
     } catch {
       const lower = rawText.toLowerCase();
-      if (lower.includes('charged') || lower.includes('success') || lower.includes('approved') || lower.includes('thank you for your purchase')) {
+      if (lower.includes('order_placed') || lower.includes('order placed') || lower.includes('thank you') || 
+          lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
         apiStatus = 'live';
-      } else if (lower.includes('declined') || lower.includes('error') || lower.includes('failed') || lower.includes('invalid')) {
+      } else if (lower.includes('declined') || lower.includes('error') || lower.includes('failed') || 
+                 lower.includes('invalid') || lower.includes('expired') || lower.includes('insufficient') ||
+                 lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) {
         apiStatus = 'dead';
       }
     }
