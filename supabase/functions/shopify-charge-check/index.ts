@@ -283,20 +283,26 @@ serve(async (req) => {
     const randomSite = getRandomItem(sites);
     console.log(`[SHOPIFY-CHARGE] Using site: ${randomSite.url} (price: ${randomSite.price})`);
 
-    // Get a random live proxy
-    const { data: liveProxies } = await adminClient
-      .from('proxies')
+    // Get user's own proxies (required, 1-10)
+    const { data: userProxies, error: proxyError } = await adminClient
+      .from('user_proxies')
       .select('*')
-      .eq('status', 'live');
+      .eq('user_id', user.id);
 
+    if (proxyError || !userProxies || userProxies.length < 1) {
+      return new Response(JSON.stringify({ 
+        error: 'You must add at least 1 proxy before using Shopify Charge.', 
+        computedStatus: 'unknown' 
+      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // Pick a random user proxy
     let proxyStr = '';
-    if (liveProxies && liveProxies.length > 0) {
-      const randomProxy = getRandomItem(liveProxies);
-      if (randomProxy.username && randomProxy.password) {
-        proxyStr = `${randomProxy.ip}:${randomProxy.port}:${randomProxy.username}:${randomProxy.password}`;
-      } else {
-        proxyStr = `${randomProxy.ip}:${randomProxy.port}`;
-      }
+    const randomProxy = getRandomItem(userProxies);
+    if (randomProxy.username && randomProxy.password) {
+      proxyStr = `${randomProxy.ip}:${randomProxy.port}:${randomProxy.username}:${randomProxy.password}`;
+    } else {
+      proxyStr = `${randomProxy.ip}:${randomProxy.port}`;
     }
 
     // Call the Shopify API
