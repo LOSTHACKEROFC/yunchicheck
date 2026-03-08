@@ -160,7 +160,7 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
     console.log(`[SHOPIFY-CHARGE] Response: ${rawText.substring(0, 500)}`);
     
     if (!rawText || rawText.trim() === '') {
-      return { status: 'unknown', message: 'Empty response', rawResponse: '', price: 0, priceStr: '$0.00' };
+      return { status: 'unknown', message: 'Empty response', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
     }
 
     // Check for bad responses
