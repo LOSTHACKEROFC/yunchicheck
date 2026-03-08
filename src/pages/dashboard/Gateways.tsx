@@ -2875,6 +2875,8 @@ const Gateways = () => {
             ? razorpaySites[Math.floor(Math.random() * razorpaySites.length)] 
             : razorpaySite;
           gatewayResponse = await checkCardViaRazorpay(cardData.card, cardData.month, cardData.year, cardData.cvv, site);
+        } else if (selectedGateway.id === "shopify_charge") {
+          gatewayResponse = await checkCardViaShopify(cardData.card, cardData.month, cardData.year, cardData.cvv);
         }
         
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
