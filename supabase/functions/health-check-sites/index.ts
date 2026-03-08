@@ -137,6 +137,7 @@ serve(async (req) => {
               "Site not supported",
               "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH",
               "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED",
+              "Payment method not available",
             ];
             const isBadResponse = badResponses.some(bad => responseText.toLowerCase().includes(bad.toLowerCase()));
 
