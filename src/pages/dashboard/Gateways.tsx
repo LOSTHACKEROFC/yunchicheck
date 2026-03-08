@@ -4551,21 +4551,25 @@ const Gateways = () => {
                                 const raw = r.rawResponse ? JSON.parse(r.rawResponse) : null;
                                 if (raw) {
                                   if (raw.apiStatus) bStatus = raw.apiStatus;
-                                  if (raw.apiMessage) bResponse = String(raw.apiMessage).replace(/<[^>]*>/g, '');
                                   if (raw.apiTotal) bPrice = raw.apiTotal;
                                   
                                   let inner = null;
-                                  try { inner = typeof raw.apiMessage === 'string' ? JSON.parse(raw.apiMessage) : null; } catch {}
-                                  if (!inner) try { inner = typeof raw.rawResponse === 'string' ? JSON.parse(raw.rawResponse) : null; } catch {}
+                                  try { inner = typeof raw.rawResponse === 'string' ? JSON.parse(raw.rawResponse) : null; } catch {}
+                                  if (!inner) try { inner = typeof raw.apiMessage === 'string' ? JSON.parse(raw.apiMessage) : null; } catch {}
                                   
-                                  if (inner) {
-                                    if (inner.Price !== undefined) bPrice = typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price);
-                                    if (inner.Response) bResponse = String(inner.Response).replace(/<[^>]*>/g, '');
+                                  if (inner?.Response) {
+                                    bResponse = String(inner.Response).replace(/<[^>]*>/g, '');
+                                  } else if (raw.Response) {
+                                    bResponse = String(raw.Response).replace(/<[^>]*>/g, '');
+                                  } else if (raw.apiMessage) {
+                                    bResponse = String(raw.apiMessage).replace(/<[^>]*>/g, '');
                                   }
+                                  
+                                  if (inner?.Price !== undefined) bPrice = typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price);
                                 }
                               } catch {}
                               
-                              if (!bResponse) bResponse = r.apiResponse || r.message || 'No response';
+                              if (!bResponse) bResponse = r.apiMessage || r.message || 'No response';
                               if (!bPrice) bPrice = selectedGateway?.type === "auth" ? "$0 AUTH" : "N/A";
                               
                               return (
