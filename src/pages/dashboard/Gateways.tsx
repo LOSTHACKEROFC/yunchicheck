@@ -566,6 +566,11 @@ const Gateways = () => {
   useEffect(() => {
     if (selectedGateway && userId) {
       fetchGatewayHistory(selectedGateway.id);
+      
+      // Fetch sites for RazorPay gateway
+      if (selectedGateway.id === "razorpay_charge") {
+        fetchRazorpaySites();
+      }
 
       // Subscribe to real-time card check updates
       const channel = supabase
