@@ -35,22 +35,28 @@ const ShopifyPriceGroupSelector = ({ onGroupSelect, selectedGroup }: ShopifyPric
 
   const fetchCounts = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("gateway_urls")
-      .select("price")
-      .lte("price", 100);
 
-    if (error || !data) {
-      setGroups(PRICE_GROUPS.map((g) => ({ ...g, count: 0 })));
-      setLoading(false);
-      return;
-    }
+    // Fetch counts per price group in parallel using head:true count queries (no row limit)
+    const results = await Promise.all(
+      PRICE_GROUPS.map((g) => {
+        let query = supabase
+          .from("gateway_urls")
+          .select("id", { count: "exact", head: true })
+          .gte("price", g.min);
 
-    const grouped = PRICE_GROUPS.map((g) => ({
+        if (g.max < 100) {
+          query = query.lt("price", g.max);
+        } else {
+          query = query.lte("price", 100);
+        }
+
+        return query;
+      })
+    );
+
+    const grouped = PRICE_GROUPS.map((g, i) => ({
       ...g,
-      count: data.filter(
-        (s) => (s.price ?? 0) >= g.min && (s.price ?? 0) < (g.max === 100 ? 101 : g.max)
-      ).length,
+      count: results[i].count || 0,
     }));
 
     setGroups(grouped);
