@@ -5,14 +5,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   User,
-  Mail,
   MessageSquare,
   CreditCard,
   Calendar,
@@ -25,6 +24,8 @@ import {
   DollarSign,
   Hash,
   Wifi,
+  ExternalLink,
+  Loader2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, formatDistanceToNow } from "date-fns";
@@ -32,12 +33,11 @@ import { format, formatDistanceToNow } from "date-fns";
 interface UserDetailModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  userId: string | null; // this is user_id (auth uid)
+  userId: string | null;
   username: string | null;
 }
 
 interface DetailData {
-  email: string | null;
   totalChecks: number;
   lastTopup: { amount: number; created_at: string; status: string } | null;
   deviceLogs: {
@@ -55,14 +55,39 @@ interface DetailData {
   } | null;
 }
 
-const InfoRow = ({ icon: Icon, label, value, color }: { icon: any; label: string; value: string | number | null | undefined; color?: string }) => (
+interface IpGeoData {
+  country: string;
+  city: string;
+  regionName: string;
+  isp: string;
+  org: string;
+}
+
+const InfoRow = ({ icon: Icon, label, value, color, onClick, linkHref }: {
+  icon: any; label: string; value: string | number | null | undefined; color?: string;
+  onClick?: () => void; linkHref?: string;
+}) => (
   <div className="flex items-start gap-3 py-2">
     <div className="p-1.5 rounded-md bg-secondary shrink-0 mt-0.5">
       <Icon className={`h-3.5 w-3.5 ${color || 'text-muted-foreground'}`} />
     </div>
     <div className="min-w-0 flex-1">
       <p className="text-[11px] text-muted-foreground uppercase tracking-wider">{label}</p>
-      <p className="text-sm font-medium break-all">{value || 'N/A'}</p>
+      {linkHref ? (
+        <a
+          href={linkHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm font-medium break-all text-primary hover:underline inline-flex items-center gap-1.5 cursor-pointer"
+        >
+          {value || 'N/A'}
+          <ExternalLink className="h-3 w-3 shrink-0" />
+        </a>
+      ) : (
+        <p className={`text-sm font-medium break-all ${onClick ? 'text-primary hover:underline cursor-pointer' : ''}`} onClick={onClick}>
+          {value || 'N/A'}
+        </p>
+      )}
     </div>
   </div>
 );
@@ -71,9 +96,14 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
   const [detail, setDetail] = useState<DetailData | null>(null);
+  const [telegramPhoto, setTelegramPhoto] = useState<string | null>(null);
+  const [ipGeo, setIpGeo] = useState<IpGeoData | null>(null);
+  const [geoLoading, setGeoLoading] = useState(false);
 
   useEffect(() => {
     if (open && userId) {
+      setTelegramPhoto(null);
+      setIpGeo(null);
       fetchFullDetails();
     }
   }, [open, userId]);
@@ -90,19 +120,84 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
       supabase.from('user_sessions').select('last_active, ip_address, browser, os, location').eq('user_id', userId).order('last_active', { ascending: false }).limit(1),
     ]);
 
-    setProfile(profileRes.data);
+    const profileData = profileRes.data;
+    const sessionData = sessionRes.data?.[0] || null;
+    const deviceData = deviceRes.data || [];
+
+    setProfile(profileData);
     setDetail({
-      email: null, // will be set below
       totalChecks: checksRes.count || 0,
       lastTopup: topupRes.data?.[0] || null,
-      deviceLogs: deviceRes.data || [],
-      lastSession: sessionRes.data?.[0] || null,
+      deviceLogs: deviceData,
+      lastSession: sessionData,
     });
-
     setLoading(false);
+
+    // Fetch telegram photo if chat_id exists
+    if (profileData?.telegram_chat_id) {
+      fetchTelegramPhoto(profileData.telegram_chat_id);
+    }
+
+    // Fetch IP geolocation
+    const ip = sessionData?.ip_address || deviceData?.[0]?.ip_address;
+    if (ip) {
+      fetchIpGeo(ip);
+    }
+  };
+
+  const fetchTelegramPhoto = async (chatId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('get-telegram-profile', {
+        body: { chat_id: chatId },
+      });
+      if (!error && data?.photo_url) {
+        setTelegramPhoto(data.photo_url);
+      }
+    } catch (err) {
+      console.error('Failed to fetch telegram photo:', err);
+    }
+  };
+
+  const fetchIpGeo = async (ip: string) => {
+    // Skip private/local IPs
+    if (ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('127.') || ip === '::1') {
+      setIpGeo({ country: 'Local', city: 'Local Network', regionName: '', isp: '', org: '' });
+      return;
+    }
+    setGeoLoading(true);
+    try {
+      const res = await fetch(`http://ip-api.com/json/${ip}?fields=country,city,regionName,isp,org`);
+      if (res.ok) {
+        const data = await res.json();
+        setIpGeo(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch IP geo:', err);
+    }
+    setGeoLoading(false);
   };
 
   const initials = (username || '??').slice(0, 2).toUpperCase();
+
+  const getTelegramLink = () => {
+    if (profile?.telegram_username) {
+      return `https://t.me/${profile.telegram_username}`;
+    }
+    if (profile?.telegram_chat_id) {
+      return `tg://user?id=${profile.telegram_chat_id}`;
+    }
+    return undefined;
+  };
+
+  const locationString = (() => {
+    if (geoLoading) return 'Fetching location...';
+    if (ipGeo) {
+      return [ipGeo.city, ipGeo.regionName, ipGeo.country].filter(Boolean).join(', ');
+    }
+    return detail?.lastSession?.location || null;
+  })();
+
+  const ispString = ipGeo ? [ipGeo.isp, ipGeo.org].filter(Boolean).join(' · ') : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -129,6 +224,9 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
               </DialogHeader>
               <div className="flex items-center gap-4">
                 <Avatar className="h-16 w-16 border-2 border-primary/30">
+                  {telegramPhoto && (
+                    <AvatarImage src={telegramPhoto} alt={profile.username || 'User'} />
+                  )}
                   <AvatarFallback className="bg-primary/20 text-primary text-lg font-bold">
                     {initials}
                   </AvatarFallback>
@@ -176,8 +274,14 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
                 {/* Account Info */}
                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold pt-1 pb-1">Account Information</p>
                 <InfoRow icon={User} label="Username" value={profile.username} color="text-primary" />
-                <InfoRow icon={Hash} label="Chat ID" value={profile.telegram_chat_id} color="text-blue-400" />
-                <InfoRow icon={MessageSquare} label="Telegram" value={profile.telegram_username ? `@${profile.telegram_username}` : null} color="text-sky-400" />
+                <InfoRow
+                  icon={Hash}
+                  label="Chat ID"
+                  value={profile.telegram_chat_id}
+                  color="text-blue-400"
+                  linkHref={getTelegramLink()}
+                />
+                <InfoRow icon={MessageSquare} label="Telegram" value={profile.telegram_username ? `@${profile.telegram_username}` : null} color="text-sky-400" linkHref={profile.telegram_username ? `https://t.me/${profile.telegram_username}` : undefined} />
                 <InfoRow icon={Calendar} label="Registered" value={profile.created_at ? format(new Date(profile.created_at), 'PPpp') : null} color="text-purple-400" />
 
                 <Separator className="my-2" />
@@ -195,7 +299,14 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
                     <InfoRow icon={Globe} label="Browser / OS" value={
                       [detail.lastSession.browser, detail.lastSession.os].filter(Boolean).join(' · ') || null
                     } color="text-cyan-400" />
-                    <InfoRow icon={MapPin} label="Location" value={detail.lastSession.location} color="text-pink-400" />
+                    <InfoRow icon={MapPin} label="Location" value={
+                      geoLoading ? (
+                        'Resolving location...'
+                      ) : locationString
+                    } color="text-pink-400" />
+                    {ispString && (
+                      <InfoRow icon={Globe} label="ISP / Org" value={ispString} color="text-indigo-400" />
+                    )}
                   </>
                 ) : (
                   <p className="text-sm text-muted-foreground py-2">No session data available</p>
