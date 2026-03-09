@@ -40,6 +40,7 @@ interface UserDetailModalProps {
 interface DetailData {
   totalChecks: number;
   lastTopup: { amount: number; created_at: string; status: string } | null;
+  totalTopup: number;
   deviceLogs: {
     fingerprint: string;
     ip_address: string | null;
