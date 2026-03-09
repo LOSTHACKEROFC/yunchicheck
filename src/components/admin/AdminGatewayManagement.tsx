@@ -4,17 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -366,73 +357,77 @@ const AdminGatewayManagement = () => {
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : (
-            <ScrollArea className="h-[500px]">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-secondary/50">
-                    <TableHead>Gateway</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Checks</TableHead>
-                    <TableHead>Success</TableHead>
-                    <TableHead>Active</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredGateways.map((gateway) => {
-                    const stats = gatewayStats[gateway.id] || { total_checks: 0, live_count: 0, dead_count: 0 };
-                    const actualSuccessRate = stats.total_checks > 0 
-                      ? ((stats.live_count / stats.total_checks) * 100).toFixed(1) + '%'
-                      : 'N/A';
-                    
-                    return (
-                      <TableRow key={gateway.id} className="hover:bg-secondary/30">
-                        <TableCell>
+            <div className="overflow-x-auto pb-4 -mx-2 px-2">
+              <div className="flex gap-4" style={{ minWidth: 'max-content' }}>
+                {filteredGateways.map((gateway) => {
+                  const stats = gatewayStats[gateway.id] || { total_checks: 0, live_count: 0, dead_count: 0 };
+                  const actualSuccessRate = stats.total_checks > 0 
+                    ? ((stats.live_count / stats.total_checks) * 100).toFixed(1) + '%'
+                    : 'N/A';
+                  
+                  return (
+                    <Card key={gateway.id} className="min-w-[240px] w-[240px] bg-secondary/30 border-border flex-shrink-0">
+                      <CardContent className="p-4 space-y-3">
+                        {/* Header: Icon + Name + Status */}
+                        <div className="flex items-start justify-between">
                           <div className="flex items-center gap-2">
                             <IconPreview iconName={gateway.icon_name} iconColor={gateway.icon_color} />
                             <div>
-                              <p className="font-medium">{gateway.name}</p>
-                              <p className="text-xs text-muted-foreground">{gateway.code || gateway.id}</p>
+                              <p className="font-medium text-sm leading-tight">{gateway.name}</p>
+                              <p className="text-[10px] text-muted-foreground">{gateway.code || gateway.id}</p>
                             </div>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{gateway.type}</Badge>
-                        </TableCell>
-                        <TableCell>
                           <button onClick={() => handleToggleStatus(gateway)} disabled={actionLoading}>
                             {getStatusBadge(gateway.status)}
                           </button>
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {stats.total_checks.toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-green-400">{actualSuccessRate}</span>
-                        </TableCell>
-                        <TableCell>
-                          <Switch
-                            checked={gateway.is_active}
-                            onCheckedChange={() => handleToggleActive(gateway)}
-                            disabled={actionLoading}
-                          />
-                        </TableCell>
-                        <TableCell className="text-right">
+                        </div>
+
+                        {/* Stats Row */}
+                        <div className="grid grid-cols-2 gap-2 text-center">
+                          <div className="p-2 rounded bg-secondary/50">
+                            <p className="text-[10px] text-muted-foreground">Checks</p>
+                            <p className="text-sm font-bold">{stats.total_checks.toLocaleString()}</p>
+                          </div>
+                          <div className="p-2 rounded bg-secondary/50">
+                            <p className="text-[10px] text-muted-foreground">Success</p>
+                            <p className="text-sm font-bold text-green-400">{actualSuccessRate}</p>
+                          </div>
+                        </div>
+
+                        {/* Type + Speed */}
+                        <div className="flex items-center justify-between text-xs">
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">{gateway.type}</Badge>
+                          <span className="text-muted-foreground">{gateway.speed}</span>
+                        </div>
+
+                        {/* Actions: Active toggle + Edit */}
+                        <div className="flex items-center justify-between pt-1 border-t border-border">
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={gateway.is_active}
+                              onCheckedChange={() => handleToggleActive(gateway)}
+                              disabled={actionLoading}
+                            />
+                            <span className="text-xs text-muted-foreground">
+                              {gateway.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                          </div>
                           <Button 
-                            variant="ghost" 
+                            variant="outline" 
                             size="sm"
                             onClick={() => handleOpenEdit(gateway)}
+                            className="gap-1 h-7 text-xs"
                           >
-                            <Edit className="h-4 w-4" />
+                            <Edit className="h-3 w-3" />
+                            Edit
                           </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </ScrollArea>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
