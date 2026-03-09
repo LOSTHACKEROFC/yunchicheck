@@ -129,8 +129,8 @@ const AdminAnalytics = () => {
     setLoading(true);
     try {
       const [checks, profiles] = await Promise.all([
-        fetchAllRows("card_checks", "id, status, result, gateway, created_at, user_id"),
-        fetchAllRows("profiles", "id"),
+        fetchAllChecks(),
+        fetchAllProfiles(),
       ]);
 
       setAllChecks(checks);
