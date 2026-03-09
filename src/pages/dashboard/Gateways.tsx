@@ -53,7 +53,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useBulkCheck } from "@/contexts/BulkCheckContext";
 import UserProxyManager from "@/components/UserProxyManager";
 import ShopifyPriceGroupSelector from "@/components/ShopifyPriceGroupSelector";
-import ShopifySiteGroups from "@/components/ShopifySiteGroups";
 
 // BIN Lookup utilities
 interface BinInfo {
@@ -307,6 +306,7 @@ const Gateways = () => {
   const [razorpaySiteMode, setRazorpaySiteMode] = useState<"database" | "manual">("database"); // Site source mode for bulk
   const [shopifyProxyCount, setShopifyProxyCount] = useState(0);
   const [shopifyPriceGroup, setShopifyPriceGroup] = useState<{ min: number; max: number } | null>(null);
+  const [shopifySiteCount, setShopifySiteCount] = useState<number>(0);
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<CheckResult | null>(null);
   const [userCredits, setUserCredits] = useState<number>(0);
@@ -570,6 +570,25 @@ const Gateways = () => {
       supabase.removeChannel(gatewaysChannel);
       supabase.removeChannel(statusChannel);
     };
+  }, []);
+
+  // Real-time Shopify site count (excluding Razorpay URLs)
+  useEffect(() => {
+    const fetchSiteCount = async () => {
+      const { count, error } = await supabase
+        .from("gateway_urls")
+        .select("*", { count: "exact", head: true })
+        .not("url", "like", "https://razorpay.me/%");
+      if (!error && count !== null) setShopifySiteCount(count);
+    };
+    fetchSiteCount();
+
+    const channel = supabase
+      .channel("shopify-site-count")
+      .on("postgres_changes", { event: "*", schema: "public", table: "gateway_urls" }, () => fetchSiteCount())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   // Fetch gateway history when gateway is selected and subscribe to real-time updates
@@ -4057,7 +4076,11 @@ const Gateways = () => {
                       onGroupSelect={setShopifyPriceGroup}
                       selectedGroup={shopifyPriceGroup}
                     />
-                    <ShopifySiteGroups />
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted/30 border border-border/50">
+                      <Database className="h-4 w-4 text-primary" />
+                      <span className="text-xs text-muted-foreground">Sites Available:</span>
+                      <Badge variant="secondary" className="text-xs font-mono">{shopifySiteCount}</Badge>
+                    </div>
                   </>
                 )}
               </div>
