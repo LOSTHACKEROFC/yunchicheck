@@ -353,6 +353,7 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
                     ? `$${detail.lastTopup.amount} — ${format(new Date(detail.lastTopup.created_at), 'MMM d, yyyy')} (${detail.lastTopup.status})`
                     : 'No top-ups'
                 } color="text-emerald-400" />
+                <InfoRow icon={DollarSign} label="Total Top-ups" value={`$${(detail?.totalTopup || 0).toLocaleString()}`} color="text-green-400" />
                 <InfoRow icon={Activity} label="Total Checks" value={(detail?.totalChecks || 0).toLocaleString()} color="text-violet-400" />
 
                 {/* Ban Info */}
