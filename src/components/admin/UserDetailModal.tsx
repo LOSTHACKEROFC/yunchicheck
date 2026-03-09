@@ -248,15 +248,20 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
                       <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-[10px]">Active</Badge>
                     )}
                   </div>
-                  {profile.name && (
-                    <p className="text-sm text-muted-foreground">{profile.name}</p>
+                  {(telegramName || profile.name) && (
+                    <p className="text-sm text-muted-foreground">
+                      {telegramName || profile.name}
+                      {telegramName && telegramName !== profile.name && (
+                        <span className="text-[10px] text-muted-foreground/60 ml-1.5">(Telegram)</span>
+                      )}
+                    </p>
                   )}
                   <p className="text-xs text-muted-foreground/70 font-mono mt-1 truncate">{userId}</p>
                 </div>
               </div>
 
               {/* Quick Stats Row */}
-              <div className="grid grid-cols-3 gap-3 mt-4">
+              <div className="grid grid-cols-4 gap-2 mt-4">
                 <div className="bg-card/60 backdrop-blur rounded-lg p-2.5 text-center border border-border/50">
                   <p className="text-lg font-bold text-primary">{profile.credits.toLocaleString()}</p>
                   <p className="text-[10px] text-muted-foreground uppercase">Credits</p>
@@ -264,6 +269,12 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
                 <div className="bg-card/60 backdrop-blur rounded-lg p-2.5 text-center border border-border/50">
                   <p className="text-lg font-bold text-foreground">{(detail?.totalChecks || 0).toLocaleString()}</p>
                   <p className="text-[10px] text-muted-foreground uppercase">Checks</p>
+                </div>
+                <div className="bg-card/60 backdrop-blur rounded-lg p-2.5 text-center border border-border/50">
+                  <p className="text-lg font-bold text-foreground">
+                    ${(detail?.totalTopup || 0).toLocaleString()}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground uppercase">Total Topup</p>
                 </div>
                 <div className="bg-card/60 backdrop-blur rounded-lg p-2.5 text-center border border-border/50">
                   <p className="text-lg font-bold text-foreground">
