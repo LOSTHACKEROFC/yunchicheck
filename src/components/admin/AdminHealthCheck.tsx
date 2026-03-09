@@ -139,12 +139,8 @@ const AdminHealthCheck = () => {
 
   const handleExportSaved = async () => {
     try {
-      const { data, error } = await supabase
-        .from("gateway_urls")
-        .select("url, created_at, price")
-        .order("created_at", { ascending: false });
+      const data = await fetchAllRows("gateway_urls", "url, created_at, price", "created_at");
 
-      if (error) throw error;
       if (!data || data.length === 0) {
         toast.error("No saved sites to export");
         return;
