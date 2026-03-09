@@ -1,4 +1,5 @@
-import { createClient } from "npm:@supabase/supabase-js@2.49.4";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -76,7 +77,7 @@ const fetchWithRetry = async (url: string, maxRetries = 2, timeoutMs = 45000): P
   return { ok: false, text: "Max retries exceeded", status: 0 };
 };
 
-Deno.serve(async (req) => {
+serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
