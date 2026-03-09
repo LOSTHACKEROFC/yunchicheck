@@ -273,7 +273,7 @@ const AdminHealthCheck = () => {
       const thresholdPromise = new Promise<void>((resolve) => { resolveThreshold = resolve; });
 
       // Fire requests in mini-waves of 5 to prevent cold-start overload
-      const WAVE_SIZE = 5;
+      const WAVE_SIZE = 10;
       const promises: Promise<void>[] = [];
 
       for (let w = 0; w < batch.length; w += WAVE_SIZE) {
