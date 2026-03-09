@@ -1,0 +1,1 @@
+UPDATE gateways SET charge_amount = '₹1.00' WHERE id = 'razorpay_charge';
