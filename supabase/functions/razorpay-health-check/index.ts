@@ -8,8 +8,17 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Demo card for health checking — will always decline but tests if the site/merchant is alive
-const DEMO_CC = "4000000000000002|12|28|123";
+// Random demo cards for health checking — will always decline but tests if the site/merchant is alive
+const DEMO_CARDS = [
+  "4000000000000002|12|28|123",
+  "4000000000000069|03|29|456",
+  "4000000000000127|06|27|789",
+  "4000000000000010|09|28|321",
+  "4000000000000028|01|29|654",
+  "4242424242424242|08|27|111",
+  "4000000000000101|11|28|222",
+  "4000000000000036|05|29|333",
+];
 
 const API_BASE_URL = "https://razorpay-production-4fdd.up.railway.app/razorpay";
 
@@ -53,7 +62,8 @@ const checkSingleSite = async (
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-      const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(DEMO_CC)}&site=${encodeURIComponent(siteUrl)}`;
+      const demoCC = getRandomItem(DEMO_CARDS);
+      const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(demoCC)}&site=${encodeURIComponent(siteUrl)}`;
       const userAgent = getRandomItem(userAgents);
 
       console.log(`[Attempt ${attempt + 1}] Checking: ${siteUrl}`);
