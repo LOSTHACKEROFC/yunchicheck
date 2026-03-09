@@ -205,6 +205,9 @@ const AdminHealthCheck = () => {
     const total = uniqueUrls.length;
     setStats({ total, live: 0, dead: 0, errors: 0 });
 
+    // Track remaining URLs for live textarea removal
+    const remainingSet = new Set(uniqueUrls);
+
     // Shared mutable counters for the worker pool
     let completed = 0;
     let liveCount = 0;
@@ -243,6 +246,12 @@ const AdminHealthCheck = () => {
 
         completed++;
         resultsArr.push(result);
+
+        // Remove checked site from remaining set and update textarea
+        remainingSet.delete(siteUrl);
+        const remainingUrls = Array.from(remainingSet);
+        setUrls(remainingUrls);
+        setUrlInput(remainingUrls.join("\n"));
 
         // Stream result immediately
         setResults((prev) => [...prev, result]);
