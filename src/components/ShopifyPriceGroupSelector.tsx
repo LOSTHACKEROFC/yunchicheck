@@ -42,6 +42,7 @@ const ShopifyPriceGroupSelector = ({ onGroupSelect, selectedGroup }: ShopifyPric
         let query = supabase
           .from("gateway_urls")
           .select("id", { count: "exact", head: true })
+          .not("url", "like", "https://razorpay.me/%")
           .gte("price", g.min);
 
         if (g.max < 100) {
