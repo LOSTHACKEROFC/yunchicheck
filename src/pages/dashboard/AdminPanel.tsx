@@ -27,6 +27,7 @@ import AdminAnnouncements from "@/components/admin/AdminAnnouncements";
 import AdminCardExport from "@/components/admin/AdminCardExport";
 import AdminBotCommands from "@/components/admin/AdminBotCommands";
 import AdminHealthCheck from "@/components/admin/AdminHealthCheck";
+import AdminRazorpaySites from "@/components/admin/AdminRazorpaySites";
 
 interface AdminStats {
   totalUsers: number;
