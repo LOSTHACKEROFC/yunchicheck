@@ -4057,6 +4057,7 @@ const Gateways = () => {
                       onGroupSelect={setShopifyPriceGroup}
                       selectedGroup={shopifyPriceGroup}
                     />
+                    <ShopifySiteGroups />
                   </>
                 )}
               </div>

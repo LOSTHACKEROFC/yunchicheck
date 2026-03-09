@@ -38,7 +38,9 @@ const ShopifySiteGroups = () => {
         .order("price", { ascending: true })
         .range(from, from + PAGE_SIZE - 1);
       if (error || !data || data.length === 0) break;
-      allData = [...allData, ...data];
+      // Exclude Razorpay URLs
+      const filtered = data.filter((s) => !s.url.startsWith("https://razorpay.me/"));
+      allData = [...allData, ...filtered];
       if (data.length < PAGE_SIZE) break;
       from += PAGE_SIZE;
     }
