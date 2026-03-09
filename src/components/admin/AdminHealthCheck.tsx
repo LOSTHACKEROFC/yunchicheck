@@ -12,6 +12,7 @@ import {
   Upload,
   Play,
   Square,
+  Eraser,
   CheckCircle2,
   XCircle,
   AlertTriangle,
