@@ -4057,7 +4057,11 @@ const Gateways = () => {
                       onGroupSelect={setShopifyPriceGroup}
                       selectedGroup={shopifyPriceGroup}
                     />
-                    <ShopifySiteGroups />
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted/30 border border-border/50">
+                      <Database className="h-4 w-4 text-primary" />
+                      <span className="text-xs text-muted-foreground">Sites Available:</span>
+                      <Badge variant="secondary" className="text-xs font-mono">{shopifySiteCount}</Badge>
+                    </div>
                   </>
                 )}
               </div>
