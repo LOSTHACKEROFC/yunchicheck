@@ -262,7 +262,7 @@ const AdminHealthCheck = () => {
       console.log(`[Batch ${batchNum}/${totalBatches}] Sending ${batch.length} sites in one request...`);
 
       try {
-        const { data, error } = await invokeWithRetry(batch[0], 3, batch);
+        const { data, error } = await invokeWithRetry(batch);
 
         if (error || !data?.results) {
           // Mark all sites in batch as error
