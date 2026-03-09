@@ -216,6 +216,33 @@ const AdminHealthCheck = () => {
     let queueIdx = 0;
     const resultsArr: SiteResult[] = [];
 
+    const invokeWithRetry = async (siteUrl: string, maxRetries = 3): Promise<{ data: any; error: any }> => {
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          const { data, error } = await supabase.functions.invoke("health-check-sites", {
+            body: { urls: [siteUrl], threads: 1 },
+          });
+          // If we got a 503 or boot error, retry
+          if (error && (error.message?.includes("503") || error.message?.includes("BOOT_ERROR"))) {
+            const backoff = 2000 * (attempt + 1); // 2s, 4s, 6s
+            console.log(`[Retry ${attempt + 1}/${maxRetries}] ${siteUrl} - waiting ${backoff}ms`);
+            await new Promise(r => setTimeout(r, backoff));
+            continue;
+          }
+          return { data, error };
+        } catch (e: any) {
+          if (attempt < maxRetries - 1) {
+            const backoff = 2000 * (attempt + 1);
+            console.log(`[Retry ${attempt + 1}/${maxRetries}] ${siteUrl} - ${e?.message} - waiting ${backoff}ms`);
+            await new Promise(r => setTimeout(r, backoff));
+            continue;
+          }
+          return { data: null, error: e };
+        }
+      }
+      return { data: null, error: new Error("All retries exhausted") };
+    };
+
     const processOne = async (workerDelay: number): Promise<void> => {
       // Stagger worker starts to avoid cold-start storms
       if (workerDelay > 0) await new Promise(r => setTimeout(r, workerDelay));
@@ -228,23 +255,16 @@ const AdminHealthCheck = () => {
         const siteUrl = uniqueUrls[idx];
 
         let result: SiteResult;
-        try {
-          const { data, error } = await supabase.functions.invoke("health-check-sites", {
-            body: { urls: [siteUrl], threads: 1 },
-          });
+        const { data, error } = await invokeWithRetry(siteUrl);
 
-          if (error || !data?.results?.[0]) {
-            result = { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: error?.message || "", error: "Request failed" };
-            errorCount++;
-          } else {
-            result = data.results[0];
-            if (result.status === "live") liveCount++;
-            else if (result.status === "dead") deadCount++;
-            else errorCount++;
-          }
-        } catch (e: any) {
-          result = { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: "", error: e?.message || "Network error" };
+        if (error || !data?.results?.[0]) {
+          result = { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: error?.message || "", error: "Request failed" };
           errorCount++;
+        } else {
+          result = data.results[0];
+          if (result.status === "live") liveCount++;
+          else if (result.status === "dead") deadCount++;
+          else errorCount++;
         }
 
         completed++;
@@ -261,8 +281,8 @@ const AdminHealthCheck = () => {
         setProgress(Math.round((completed / total) * 100));
         setStats({ total, live: liveCount, dead: deadCount, errors: errorCount });
 
-        // Delay between requests per worker to prevent 503 overload
-        await new Promise(r => setTimeout(r, 1500));
+        // Stable delay between requests per worker (800ms)
+        await new Promise(r => setTimeout(r, 800));
       }
     };
 
