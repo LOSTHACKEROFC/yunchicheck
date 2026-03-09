@@ -43,6 +43,40 @@ const extractPrice = (response: string): { price: number; priceStr: string } => 
   };
 };
 
+const fetchWithRetry = async (url: string, maxRetries = 2, timeoutMs = 45000): Promise<{ ok: boolean; text: string; status: number }> => {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      const response = await fetch(url, {
+        method: "GET",
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "application/json, text/plain, */*",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Encoding": "gzip, deflate",
+          "Connection": "keep-alive",
+          "Cache-Control": "no-cache",
+        },
+      });
+
+      clearTimeout(timeoutId);
+      const text = await response.text();
+      return { ok: response.ok, text, status: response.status };
+    } catch (err) {
+      if (attempt === maxRetries) {
+        const msg = err instanceof Error ? err.message : "Unknown fetch error";
+        return { ok: false, text: msg, status: 0 };
+      }
+      // Brief pause before retry
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+    }
+  }
+  return { ok: false, text: "Max retries exceeded", status: 0 };
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -98,6 +132,16 @@ serve(async (req) => {
     const results: Array<{ url: string; status: string; price: number; priceStr: string; apiResponse?: string; error?: string }> = [];
     let savedCount = 0;
 
+    const badResponses = [
+      "MERCHANDISE_EXPECTED_PRICE_MISMATCH",
+      "Site not supported",
+      "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH",
+      "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED",
+      "Payment method not available",
+      "ARTIFACT_DISSATISFACTION",
+      "VALIDATION_CUSTOM",
+    ];
+
     for (let i = 0; i < urls.length; i += concurrency) {
       const batch = urls.slice(i, i + concurrency);
       
@@ -105,45 +149,23 @@ serve(async (req) => {
         batch.map(async (siteUrl: string) => {
           try {
             const proxyStr = getProxyStr();
-            const apiUrl = `http://188.137.230.163:5000/shopify?site=${siteUrl}&cc=${TEST_CC}&proxy=${proxyStr}`;
+            const encodedSite = encodeURIComponent(siteUrl);
+            const encodedCC = encodeURIComponent(TEST_CC);
+            const encodedProxy = encodeURIComponent(proxyStr);
+            const apiUrl = `http://188.137.230.163:5000/shopify?site=${encodedSite}&cc=${encodedCC}&proxy=${encodedProxy}`;
             
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 60000);
+            const { ok, text: responseText, status } = await fetchWithRetry(apiUrl, 2, 45000);
 
-            const response = await fetch(apiUrl, {
-              method: "GET",
-              signal: controller.signal,
-              headers: {
-                "User-Agent": "Mozilla/5.0",
-                "Accept": "application/json,*/*",
-              },
-            });
-
-            clearTimeout(timeoutId);
-            const responseText = await response.text();
-
-            if (!response.ok || !responseText) {
-              return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse: responseText || "No response", error: "No response" };
+            if (!ok || !responseText || responseText.length < 3) {
+              return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse: responseText || `HTTP ${status} - No response`, error: "No valid response" };
             }
 
             const { price, priceStr } = extractPrice(responseText);
-
-            // Truncate API response to avoid huge payloads
             const truncatedResponse = responseText.length > 500 ? responseText.substring(0, 500) + "..." : responseText;
 
-            // Check for bad responses that should never be saved
-            const badResponses = [
-              "MERCHANDISE_EXPECTED_PRICE_MISMATCH",
-              "Site not supported",
-              "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH",
-              "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED",
-              "Payment method not available",
-              "ARTIFACT_DISSATISFACTION",
-            ];
             const isBadResponse = badResponses.some(bad => responseText.toLowerCase().includes(bad.toLowerCase()));
 
             if (isBadResponse) {
-              // Remove from saved sites if it exists
               await supabase.from("gateway_urls").delete().eq("url", siteUrl);
               return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse: truncatedResponse, error: "Bad response detected" };
             }
