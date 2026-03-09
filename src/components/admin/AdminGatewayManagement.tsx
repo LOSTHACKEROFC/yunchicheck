@@ -437,11 +437,7 @@ const AdminGatewayManagement = () => {
                 })}
               </div>
             </div>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </ScrollArea>
+          )}
           )}
         </CardContent>
       </Card>
