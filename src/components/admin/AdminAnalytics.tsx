@@ -36,18 +36,33 @@ interface AnalyticsData {
 const CHART_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
 // Paginated fetch to bypass the 1000-row limit
-const fetchAllRows = async (table: string, select: string, filters?: { column: string; op: string; value: string }[]) => {
+const fetchAllChecks = async () => {
   const PAGE_SIZE = 1000;
   let allData: any[] = [];
   let from = 0;
   while (true) {
-    let query = supabase.from(table).select(select).range(from, from + PAGE_SIZE - 1);
-    if (filters) {
-      for (const f of filters) {
-        query = query.gte(f.column, f.value);
-      }
-    }
-    const { data, error } = await query;
+    const { data, error } = await supabase
+      .from("card_checks")
+      .select("id, status, result, gateway, created_at, user_id")
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allData = [...allData, ...data];
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return allData;
+};
+
+const fetchAllProfiles = async () => {
+  const PAGE_SIZE = 1000;
+  let allData: any[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id")
+      .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;
     allData = [...allData, ...data];
