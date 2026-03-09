@@ -26,15 +26,30 @@ const ShopifySiteGroups = () => {
   const [loading, setLoading] = useState(true);
   const [openGroup, setOpenGroup] = useState<number | null>(null);
 
+  const fetchAllSites = async () => {
+    const PAGE_SIZE = 1000;
+    let allData: { url: string; price: number | null }[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("gateway_urls")
+        .select("url, price")
+        .lte("price", 100)
+        .order("price", { ascending: true })
+        .range(from, from + PAGE_SIZE - 1);
+      if (error || !data || data.length === 0) break;
+      allData = [...allData, ...data];
+      if (data.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+    return allData;
+  };
+
   const fetchSites = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("gateway_urls")
-      .select("url, price")
-      .lte("price", 100)
-      .order("price", { ascending: true });
+    const data = await fetchAllSites();
 
-    if (error || !data) {
+    if (!data || data.length === 0) {
       setGroups(PRICE_GROUPS.map((g) => ({ ...g, sites: [] })));
       setLoading(false);
       return;

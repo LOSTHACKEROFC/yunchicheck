@@ -36,6 +36,25 @@ interface SiteResult {
   error?: string;
 }
 
+const fetchAllGatewayUrls = async (fields: string) => {
+  const PAGE_SIZE = 1000;
+  let allData: any[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("gateway_urls")
+      .select(fields)
+      .order("created_at", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allData = [...allData, ...data];
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return allData;
+};
+
 const AdminHealthCheck = () => {
   const [urls, setUrls] = useState<string[]>([]);
   const [urlInput, setUrlInput] = useState("");
@@ -101,12 +120,8 @@ const AdminHealthCheck = () => {
   const handleLoadSaved = async () => {
     setLoadingSaved(true);
     try {
-      const { data, error } = await supabase
-        .from("gateway_urls")
-        .select("url")
-        .order("created_at", { ascending: false });
+      const data = await fetchAllGatewayUrls("url");
 
-      if (error) throw error;
       if (!data || data.length === 0) {
         toast.error("No saved sites found in database");
         return;
@@ -126,12 +141,8 @@ const AdminHealthCheck = () => {
 
   const handleExportSaved = async () => {
     try {
-      const { data, error } = await supabase
-        .from("gateway_urls")
-        .select("url, created_at, price")
-        .order("created_at", { ascending: false });
+      const data = await fetchAllGatewayUrls("url, created_at, price");
 
-      if (error) throw error;
       if (!data || data.length === 0) {
         toast.error("No saved sites to export");
         return;
