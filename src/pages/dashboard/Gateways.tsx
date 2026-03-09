@@ -1931,11 +1931,11 @@ const Gateways = () => {
       const computedStatus = data?.computedStatus;
       const is3ds = data?.is3ds === true;
       
-      // 3DS = declined for RazorPay
+      // 3DS = show as 3DS REQUIRED for RazorPay (counted as dead for credits)
       if (is3ds) {
         return { 
           status: "dead",
-          apiStatus: "PAYMENT FAILED",
+          apiStatus: "3DS REQUIRED",
           apiMessage: apiMessage,
           rawResponse 
         };
