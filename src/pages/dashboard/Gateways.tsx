@@ -53,6 +53,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useBulkCheck } from "@/contexts/BulkCheckContext";
 import UserProxyManager from "@/components/UserProxyManager";
 import ShopifyPriceGroupSelector from "@/components/ShopifyPriceGroupSelector";
+import ShopifySiteGroups from "@/components/ShopifySiteGroups";
 
 // BIN Lookup utilities
 interface BinInfo {
