@@ -3439,11 +3439,11 @@ const Gateways = () => {
       return "UNKNOWN";
     }
     
-    // RazorPay Charge - show CHARGED / PAYMENT FAILED / 3DS REQUIRED
+    // RazorPay Charge - show CHARGED / DECLINED
     if (gatewayId === "razorpay_charge") {
       if (status === "live") return "CHARGED";
-      if (status === "dead") return "PAYMENT FAILED";
-      return "3DS REQUIRED";
+      if (status === "dead") return "DECLINED";
+      return "UNKNOWN";
     }
     
     // Charge gateways - show CHARGED/DECLINED
