@@ -118,7 +118,7 @@ const AdminHealthCheck = () => {
   const handleLoadSaved = async () => {
     setLoadingSaved(true);
     try {
-      const data = await fetchAllRows("gateway_urls", "url", "created_at");
+      const data = await fetchAllGatewayUrls("url");
 
       if (!data || data.length === 0) {
         toast.error("No saved sites found in database");
