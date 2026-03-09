@@ -293,6 +293,9 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
                 {/* Account Info */}
                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold pt-1 pb-1">Account Information</p>
                 <InfoRow icon={User} label="Username" value={profile.username} color="text-primary" />
+                {telegramName && (
+                  <InfoRow icon={User} label="Name (Telegram)" value={telegramName} color="text-sky-400" />
+                )}
                 <InfoRow
                   icon={Hash}
                   label="Chat ID"
