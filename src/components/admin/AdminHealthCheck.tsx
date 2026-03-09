@@ -69,10 +69,9 @@ const AdminHealthCheck = () => {
   };
 
   const parseUrls = (text: string): string[] => {
-    return text
-      .split("\n")
-      .map((u) => u.trim())
-      .filter((u) => u.length > 0 && (u.startsWith("http://") || u.startsWith("https://")));
+    const urlRegex = /https?:\/\/[^\s,<>"')\]]+/gi;
+    const matches = text.match(urlRegex) || [];
+    return [...new Set(matches.map((u) => u.trim()))];
   };
 
   const handleTextInput = (text: string) => {
