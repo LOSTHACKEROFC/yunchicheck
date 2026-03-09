@@ -156,8 +156,10 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
       const { data, error } = await supabase.functions.invoke('get-telegram-profile', {
         body: { chat_id: chatId },
       });
-      if (!error && data?.photo_url) {
-        setTelegramPhoto(data.photo_url);
+      if (!error) {
+        if (data?.photo_url) setTelegramPhoto(data.photo_url);
+        const nameParts = [data?.first_name, data?.last_name].filter(Boolean);
+        if (nameParts.length > 0) setTelegramName(nameParts.join(' '));
       }
     } catch (err) {
       console.error('Failed to fetch telegram photo:', err);
