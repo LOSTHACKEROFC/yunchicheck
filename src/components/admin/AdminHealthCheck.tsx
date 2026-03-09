@@ -90,7 +90,9 @@ const AdminHealthCheck = () => {
   const parseUrls = (text: string): string[] => {
     const urlRegex = /https?:\/\/[^\s,<>"')\]]+/gi;
     const matches = text.match(urlRegex) || [];
-    return [...new Set(matches.map((u) => u.trim()))];
+    // Normalize: trim, lowercase, remove trailing slashes for dedup
+    const normalized = matches.map((u) => u.trim().replace(/\/+$/, ""));
+    return [...new Set(normalized)];
   };
 
   const handleTextInput = (text: string) => {
@@ -192,58 +194,67 @@ const AdminHealthCheck = () => {
     setResults([]);
     setProgress(0);
     setExpandedIdx(null);
-    setStats({ total: urls.length, live: 0, dead: 0, errors: 0 });
 
-    const batchSize = threads;
-    let allResults: SiteResult[] = [];
+    // Deduplicate URLs before starting
+    const uniqueUrls = [...new Set(urls.map((u) => u.replace(/\/+$/, "")))];
+    const skipped = urls.length - uniqueUrls.length;
+    if (skipped > 0) {
+      toast.info(`Skipped ${skipped} duplicate URL${skipped > 1 ? "s" : ""}`);
+    }
+
+    const total = uniqueUrls.length;
+    setStats({ total, live: 0, dead: 0, errors: 0 });
+
+    // Shared mutable counters for the worker pool
+    let completed = 0;
     let liveCount = 0;
     let deadCount = 0;
     let errorCount = 0;
+    let queueIdx = 0;
+    const resultsArr: SiteResult[] = [];
 
-    for (let i = 0; i < urls.length; i += batchSize) {
-      if (stopRef.current) break;
+    const processOne = async (): Promise<void> => {
+      while (queueIdx < uniqueUrls.length) {
+        if (stopRef.current) return;
 
-      const batch = urls.slice(i, i + batchSize);
+        const idx = queueIdx++;
+        if (idx >= uniqueUrls.length) return;
+        const siteUrl = uniqueUrls[idx];
 
-      try {
-        const { data, error } = await supabase.functions.invoke("health-check-sites", {
-          body: { urls: batch, threads: batchSize },
-        });
+        let result: SiteResult;
+        try {
+          const { data, error } = await supabase.functions.invoke("health-check-sites", {
+            body: { urls: [siteUrl], threads: 1 },
+          });
 
-        if (error) {
-          const batchErrors: SiteResult[] = batch.map((u) => ({
-            url: u,
-            status: "error" as const,
-            price: 0,
-            priceStr: "$0.00",
-            apiResponse: "",
-            error: "Request failed",
-          }));
-          allResults = [...allResults, ...batchErrors];
-          errorCount += batch.length;
-        } else if (data?.results) {
-          allResults = [...allResults, ...data.results];
-          liveCount += data.live || 0;
-          deadCount += data.dead || 0;
-          errorCount += data.errors || 0;
+          if (error || !data?.results?.[0]) {
+            result = { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: "", error: "Request failed" };
+            errorCount++;
+          } else {
+            result = data.results[0];
+            if (result.status === "live") liveCount++;
+            else if (result.status === "dead") deadCount++;
+            else errorCount++;
+          }
+        } catch {
+          result = { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: "", error: "Network error" };
+          errorCount++;
         }
-      } catch (err) {
-        const batchErrors: SiteResult[] = batch.map((u) => ({
-          url: u,
-          status: "error" as const,
-          price: 0,
-          priceStr: "$0.00",
-          apiResponse: "",
-          error: "Network error",
-        }));
-        allResults = [...allResults, ...batchErrors];
-        errorCount += batch.length;
-      }
 
-      setResults([...allResults]);
-      setProgress(Math.round(((i + batch.length) / urls.length) * 100));
-      setStats({ total: urls.length, live: liveCount, dead: deadCount, errors: errorCount });
-    }
+        completed++;
+        resultsArr.push(result);
+
+        // Stream result immediately
+        setResults((prev) => [...prev, result]);
+        setProgress(Math.round((completed / total) * 100));
+        setStats({ total, live: liveCount, dead: deadCount, errors: errorCount });
+      }
+    };
+
+    // Launch N concurrent workers
+    const concurrency = Math.min(threads, uniqueUrls.length);
+    const workers = Array.from({ length: concurrency }, () => processOne());
+    await Promise.all(workers);
 
     setProgress(100);
     setIsRunning(false);
