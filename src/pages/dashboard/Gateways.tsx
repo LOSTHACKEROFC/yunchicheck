@@ -339,6 +339,7 @@ const Gateways = () => {
   // Dynamic gateways state - merged from default config + database status
   const [gateways, setGateways] = useState<Gateway[]>(defaultGateways);
   const [loadingGateways, setLoadingGateways] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Sort gateways by status: online first, maintenance second, offline last
   const sortedGateways = useMemo(() => {
@@ -684,6 +685,15 @@ const Gateways = () => {
     if (!user) return;
 
     setUserId(user.id);
+    
+    // Check admin role
+    const { data: roleData } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('role', 'admin')
+      .maybeSingle();
+    setIsAdmin(!!roleData);
     
     const { data: profile } = await supabase
       .from('profiles')
@@ -4165,6 +4175,28 @@ const Gateways = () => {
                     );
                   })()}
                 </div>
+              )}
+
+              {/* Admin RAW API RESPONSE debug */}
+              {isAdmin && result?.rawResponse && (
+                <details className="rounded-lg border border-border/60 bg-secondary/20 overflow-hidden">
+                  <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors select-none">
+                    <Activity className="h-3.5 w-3.5 text-primary" />
+                    <span className="uppercase tracking-wide">RAW API RESPONSE</span>
+                  </summary>
+                  <div className="px-3 pb-3">
+                    <pre className="text-[10px] leading-relaxed text-muted-foreground font-mono whitespace-pre-wrap break-all bg-background/50 rounded-md p-2 max-h-64 overflow-y-auto border border-border/30">
+                      {(() => {
+                        try {
+                          const parsed = JSON.parse(result.rawResponse || '{}');
+                          return JSON.stringify(parsed, null, 2);
+                        } catch {
+                          return result.rawResponse;
+                        }
+                      })()}
+                    </pre>
+                  </div>
+                </details>
               )}
 
               <div className="flex gap-2">
