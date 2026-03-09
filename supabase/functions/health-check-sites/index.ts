@@ -43,38 +43,89 @@ const extractPrice = (response: string): { price: number; priceStr: string } => 
   };
 };
 
-const fetchWithRetry = async (url: string, maxRetries = 2, timeoutMs = 45000): Promise<{ ok: boolean; text: string; status: number }> => {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+const badResponses = [
+  "MERCHANDISE_EXPECTED_PRICE_MISMATCH",
+  "Site not supported",
+  "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH",
+  "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED",
+  "Payment method not available",
+  "ARTIFACT_DISSATISFACTION",
+  "VALIDATION_CUSTOM",
+];
+
+const checkSingleSite = async (
+  siteUrl: string,
+  proxyStr: string,
+  supabase: ReturnType<typeof createClient>,
+): Promise<{ url: string; status: string; price: number; priceStr: string; apiResponse?: string; error?: string }> => {
+  const maxAttempts = 2;
+  const timeoutMs = 55000; // 55s per attempt — generous for slow sites
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-      const response = await fetch(url, {
+      const apiUrl = `http://188.137.230.163:5000/shopify?site=${encodeURIComponent(siteUrl)}&cc=${encodeURIComponent(TEST_CC)}&proxy=${encodeURIComponent(proxyStr)}`;
+
+      console.log(`[Attempt ${attempt + 1}] Checking: ${siteUrl}`);
+
+      const response = await fetch(apiUrl, {
         method: "GET",
         signal: controller.signal,
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           "Accept": "application/json, text/plain, */*",
           "Accept-Language": "en-US,en;q=0.9",
-          "Accept-Encoding": "gzip, deflate",
           "Connection": "keep-alive",
           "Cache-Control": "no-cache",
         },
       });
 
       clearTimeout(timeoutId);
-      const text = await response.text();
-      return { ok: response.ok, text, status: response.status };
-    } catch (err) {
-      if (attempt === maxRetries) {
-        const msg = err instanceof Error ? err.message : "Unknown fetch error";
-        return { ok: false, text: msg, status: 0 };
+
+      const responseText = await response.text();
+
+      if (!response.ok || !responseText || responseText.length < 3) {
+        console.log(`[Attempt ${attempt + 1}] Bad HTTP response for ${siteUrl}: status=${response.status}, bodyLen=${responseText?.length ?? 0}`);
+        if (attempt < maxAttempts - 1) {
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse: responseText || `HTTP ${response.status}`, error: "No valid response" };
       }
-      // Brief pause before retry
-      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+
+      const { price, priceStr } = extractPrice(responseText);
+      const truncated = responseText.length > 500 ? responseText.substring(0, 500) + "..." : responseText;
+
+      const isBad = badResponses.some(bad => responseText.toLowerCase().includes(bad.toLowerCase()));
+      if (isBad) {
+        await supabase.from("gateway_urls").delete().eq("url", siteUrl);
+        console.log(`[Result] ${siteUrl} → DEAD (bad response)`);
+        return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse: truncated, error: "Bad response detected" };
+      }
+
+      if (price > 0) {
+        await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
+        console.log(`[Result] ${siteUrl} → LIVE (${priceStr})`);
+        return { url: siteUrl, status: "live", price, priceStr, apiResponse: truncated };
+      }
+
+      console.log(`[Result] ${siteUrl} → DEAD (price=0)`);
+      return { url: siteUrl, status: "dead", price, priceStr, apiResponse: truncated };
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      console.log(`[Attempt ${attempt + 1}] Error for ${siteUrl}: ${msg}`);
+      if (attempt < maxAttempts - 1) {
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: "", error: msg };
     }
   }
-  return { ok: false, text: "Max retries exceeded", status: 0 };
+
+  return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: "", error: "All attempts failed" };
 };
 
 serve(async (req) => {
@@ -91,7 +142,7 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: authError } = await createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY") || "").auth.getUser(token);
-    
+
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -107,7 +158,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { urls, threads = 5 } = await req.json();
+    const { urls, threads = 1 } = await req.json();
 
     if (!urls || !Array.isArray(urls) || urls.length === 0) {
       return new Response(JSON.stringify({ error: "No URLs provided" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -128,68 +179,15 @@ serve(async (req) => {
       return `${randomProxy.ip}:${randomProxy.port}`;
     };
 
-    const concurrency = Math.min(Math.max(threads, 1), 20);
+    // Process sites sequentially — each site gets a full dedicated request
     const results: Array<{ url: string; status: string; price: number; priceStr: string; apiResponse?: string; error?: string }> = [];
     let savedCount = 0;
 
-    const badResponses = [
-      "MERCHANDISE_EXPECTED_PRICE_MISMATCH",
-      "Site not supported",
-      "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH",
-      "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED",
-      "Payment method not available",
-      "ARTIFACT_DISSATISFACTION",
-      "VALIDATION_CUSTOM",
-    ];
-
-    for (let i = 0; i < urls.length; i += concurrency) {
-      const batch = urls.slice(i, i + concurrency);
-      
-      const batchResults = await Promise.allSettled(
-        batch.map(async (siteUrl: string) => {
-          try {
-            const proxyStr = getProxyStr();
-            const encodedSite = encodeURIComponent(siteUrl);
-            const encodedCC = encodeURIComponent(TEST_CC);
-            const encodedProxy = encodeURIComponent(proxyStr);
-            const apiUrl = `http://188.137.230.163:5000/shopify?site=${encodedSite}&cc=${encodedCC}&proxy=${encodedProxy}`;
-            
-            const { ok, text: responseText, status } = await fetchWithRetry(apiUrl, 2, 45000);
-
-            if (!ok || !responseText || responseText.length < 3) {
-              return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse: responseText || `HTTP ${status} - No response`, error: "No valid response" };
-            }
-
-            const { price, priceStr } = extractPrice(responseText);
-            const truncatedResponse = responseText.length > 500 ? responseText.substring(0, 500) + "..." : responseText;
-
-            const isBadResponse = badResponses.some(bad => responseText.toLowerCase().includes(bad.toLowerCase()));
-
-            if (isBadResponse) {
-              await supabase.from("gateway_urls").delete().eq("url", siteUrl);
-              return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse: truncatedResponse, error: "Bad response detected" };
-            }
-
-            if (price > 0) {
-              await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
-              return { url: siteUrl, status: "live", price, priceStr, apiResponse: truncatedResponse };
-            }
-
-            return { url: siteUrl, status: "dead", price, priceStr, apiResponse: truncatedResponse };
-          } catch (error) {
-            return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: "", error: error instanceof Error ? error.message : "Unknown error" };
-          }
-        })
-      );
-
-      for (const result of batchResults) {
-        if (result.status === "fulfilled") {
-          results.push(result.value);
-          if (result.value.status === "live") savedCount++;
-        } else {
-          results.push({ url: "unknown", status: "error", price: 0, priceStr: "$0.00", apiResponse: "", error: "Promise rejected" });
-        }
-      }
+    for (const siteUrl of urls) {
+      const proxyStr = getProxyStr();
+      const result = await checkSingleSite(siteUrl, proxyStr, supabase);
+      results.push(result);
+      if (result.status === "live") savedCount++;
     }
 
     return new Response(
