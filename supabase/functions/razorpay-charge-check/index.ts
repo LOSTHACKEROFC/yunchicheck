@@ -175,15 +175,10 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { cc, site } = body;
+    const { cc, site: userSite } = body;
     
     if (!cc) {
       return new Response(JSON.stringify({ error: 'Card required', computedStatus: 'unknown' }), 
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    if (!site) {
-      return new Response(JSON.stringify({ error: 'Site URL required', computedStatus: 'unknown' }), 
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
@@ -192,6 +187,23 @@ serve(async (req) => {
     if (parts.length < 4 || !parts[3] || parts[3].length < 3 || !/^\d+$/.test(parts[3])) {
       return new Response(JSON.stringify({ error: "Format: CardNumber|MM|YY|CVC", computedStatus: 'unknown' }), 
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // Load site: use provided site or pick random from DB
+    let site = userSite;
+    if (!site) {
+      const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const { data: razorpaySites, error: sitesErr } = await adminClient
+        .from('gateway_urls')
+        .select('url')
+        .like('url', 'https://razorpay.me/%');
+      
+      if (sitesErr || !razorpaySites || razorpaySites.length === 0) {
+        return new Response(JSON.stringify({ error: 'No Razorpay sites available', computedStatus: 'unknown' }), 
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      
+      site = razorpaySites[Math.floor(Math.random() * razorpaySites.length)].url;
     }
 
     // Start API call immediately while auth happens
