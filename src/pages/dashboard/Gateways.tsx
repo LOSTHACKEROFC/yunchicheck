@@ -1931,12 +1931,12 @@ const Gateways = () => {
       const computedStatus = data?.computedStatus;
       const is3ds = data?.is3ds === true;
       
-      // 3DS = show as 3DS REQUIRED for RazorPay (counted as dead for credits)
+      // 3DS = show as DECLINED with 3DS REQUIRED response (counted as dead for credits)
       if (is3ds) {
         return { 
           status: "dead",
           apiStatus: "3DS REQUIRED",
-          apiMessage: apiMessage,
+          apiMessage: "Payment Failed",
           rawResponse 
         };
       }
@@ -3439,11 +3439,11 @@ const Gateways = () => {
       return "UNKNOWN";
     }
     
-    // RazorPay Charge - show CHARGED / PAYMENT FAILED / 3DS REQUIRED
+    // RazorPay Charge - show CHARGED / DECLINED
     if (gatewayId === "razorpay_charge") {
       if (status === "live") return "CHARGED";
-      if (status === "dead") return "PAYMENT FAILED";
-      return "3DS REQUIRED";
+      if (status === "dead") return "DECLINED";
+      return "UNKNOWN";
     }
     
     // Charge gateways - show CHARGED/DECLINED
