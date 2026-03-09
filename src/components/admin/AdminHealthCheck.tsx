@@ -139,7 +139,7 @@ const AdminHealthCheck = () => {
 
   const handleExportSaved = async () => {
     try {
-      const data = await fetchAllRows("gateway_urls", "url, created_at, price", "created_at");
+      const data = await fetchAllGatewayUrls("url, created_at, price");
 
       if (!data || data.length === 0) {
         toast.error("No saved sites to export");
