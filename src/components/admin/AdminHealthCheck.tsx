@@ -195,7 +195,6 @@ const AdminHealthCheck = () => {
     setProgress(0);
     setExpandedIdx(null);
 
-    // Deduplicate URLs before starting
     const uniqueUrls = [...new Set(urls.map((u) => u.replace(/\/+$/, "")))];
     const skipped = urls.length - uniqueUrls.length;
     if (skipped > 0) {
@@ -203,18 +202,13 @@ const AdminHealthCheck = () => {
     }
 
     const total = uniqueUrls.length;
-    setStats({ total, live: 0, dead: 0, errors: 0 });
-
-    // Track remaining URLs for live textarea removal
-    const remainingSet = new Set(uniqueUrls);
-
-    // Shared mutable counters for the worker pool
     let completed = 0;
     let liveCount = 0;
     let deadCount = 0;
     let errorCount = 0;
-    let queueIdx = 0;
-    const resultsArr: SiteResult[] = [];
+    setStats({ total, live: 0, dead: 0, errors: 0 });
+
+    const remainingSet = new Set(uniqueUrls);
 
     const invokeWithRetry = async (siteUrl: string, maxRetries = 3): Promise<{ data: any; error: any }> => {
       for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -222,9 +216,8 @@ const AdminHealthCheck = () => {
           const { data, error } = await supabase.functions.invoke("health-check-sites", {
             body: { urls: [siteUrl], threads: 1 },
           });
-          // If we got a 503 or boot error, retry
           if (error && (error.message?.includes("503") || error.message?.includes("BOOT_ERROR"))) {
-            const backoff = 2000 * (attempt + 1); // 2s, 4s, 6s
+            const backoff = 2000 * (attempt + 1);
             console.log(`[Retry ${attempt + 1}/${maxRetries}] ${siteUrl} - waiting ${backoff}ms`);
             await new Promise(r => setTimeout(r, backoff));
             continue;
@@ -243,53 +236,66 @@ const AdminHealthCheck = () => {
       return { data: null, error: new Error("All retries exhausted") };
     };
 
-    const processOne = async (workerDelay: number): Promise<void> => {
-      // Stagger worker starts to avoid cold-start storms
-      if (workerDelay > 0) await new Promise(r => setTimeout(r, workerDelay));
+    const BATCH_SIZE = 25;
 
-      while (queueIdx < uniqueUrls.length) {
-        if (stopRef.current) return;
+    for (let batchStart = 0; batchStart < uniqueUrls.length; batchStart += BATCH_SIZE) {
+      if (stopRef.current) break;
 
-        const idx = queueIdx++;
-        if (idx >= uniqueUrls.length) return;
-        const siteUrl = uniqueUrls[idx];
+      const batchEnd = Math.min(batchStart + BATCH_SIZE, uniqueUrls.length);
+      const batch = uniqueUrls.slice(batchStart, batchEnd);
+      const batchNum = Math.floor(batchStart / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(uniqueUrls.length / BATCH_SIZE);
 
-        let result: SiteResult;
+      console.log(`[Batch ${batchNum}/${totalBatches}] Starting ${batch.length} sites...`);
+
+      // Fire all requests in this batch concurrently
+      const promises = batch.map(async (siteUrl, i) => {
+        // Small stagger (100ms apart) to avoid simultaneous cold starts
+        await new Promise(r => setTimeout(r, i * 100));
+        if (stopRef.current) return null;
         const { data, error } = await invokeWithRetry(siteUrl);
 
+        let result: SiteResult;
         if (error || !data?.results?.[0]) {
           result = { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: error?.message || "", error: "Request failed" };
-          errorCount++;
         } else {
           result = data.results[0];
-          if (result.status === "live") liveCount++;
-          else if (result.status === "dead") deadCount++;
-          else errorCount++;
         }
+        return result;
+      });
+
+      // Wait for ALL 25 responses, then display them one by one
+      const batchResults = await Promise.all(promises);
+
+      for (const result of batchResults) {
+        if (stopRef.current) break;
+        if (!result) continue;
 
         completed++;
-        resultsArr.push(result);
+        if (result.status === "live") liveCount++;
+        else if (result.status === "dead") deadCount++;
+        else errorCount++;
 
-        // Remove checked site from remaining set and update textarea
-        remainingSet.delete(siteUrl);
+        remainingSet.delete(result.url);
         const remainingUrls = Array.from(remainingSet);
         setUrls(remainingUrls);
         setUrlInput(remainingUrls.join("\n"));
 
-        // Stream result immediately
         setResults((prev) => [...prev, result]);
         setProgress(Math.round((completed / total) * 100));
         setStats({ total, live: liveCount, dead: deadCount, errors: errorCount });
 
-        // Stable delay between requests per worker (800ms)
-        await new Promise(r => setTimeout(r, 800));
+        // Small delay between displaying each result (50ms) for visual streaming
+        await new Promise(r => setTimeout(r, 50));
       }
-    };
 
-    // Launch N concurrent workers with staggered starts (300ms apart)
-    const concurrency = Math.min(threads, uniqueUrls.length);
-    const workers = Array.from({ length: concurrency }, (_, i) => processOne(i * 300));
-    await Promise.all(workers);
+      console.log(`[Batch ${batchNum}/${totalBatches}] Complete. Live: ${liveCount}, Dead: ${deadCount}, Errors: ${errorCount}`);
+
+      // Brief pause between batches (500ms) for stability
+      if (batchStart + BATCH_SIZE < uniqueUrls.length && !stopRef.current) {
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
 
     setProgress(100);
     setIsRunning(false);
