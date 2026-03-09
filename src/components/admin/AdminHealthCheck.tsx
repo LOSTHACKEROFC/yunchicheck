@@ -286,9 +286,9 @@ const AdminHealthCheck = () => {
       }
     };
 
-    // Launch N concurrent workers with staggered starts (500ms apart) to avoid cold-start storms
+    // Launch N concurrent workers with staggered starts (300ms apart)
     const concurrency = Math.min(threads, uniqueUrls.length);
-    const workers = Array.from({ length: concurrency }, (_, i) => processOne(i * 500));
+    const workers = Array.from({ length: concurrency }, (_, i) => processOne(i * 300));
     await Promise.all(workers);
 
     setProgress(100);
