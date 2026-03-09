@@ -41,6 +41,9 @@ const fatalResponses = [
   'page not found',
   '404',
   'invalid payment link',
+  'international cards are not supported',
+  'international card',
+  'international transactions',
 ];
 
 interface CheckResult {
