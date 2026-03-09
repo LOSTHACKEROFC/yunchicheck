@@ -237,10 +237,27 @@ const AdminHealthCheck = () => {
     };
 
     const BATCH_SIZE = 25;
+    const OVERLAP_THRESHOLD = 20; // Start next batch after 20 responses received
 
-    for (let batchStart = 0; batchStart < uniqueUrls.length; batchStart += BATCH_SIZE) {
-      if (stopRef.current) break;
+    const processResult = (result: SiteResult) => {
+      completed++;
+      if (result.status === "live") liveCount++;
+      else if (result.status === "dead") deadCount++;
+      else errorCount++;
 
+      remainingSet.delete(result.url);
+      const remainingUrls = Array.from(remainingSet);
+      setUrls(remainingUrls);
+      setUrlInput(remainingUrls.join("\n"));
+
+      setResults((prev) => [...prev, result]);
+      setProgress(Math.round((completed / total) * 100));
+      setStats({ total, live: liveCount, dead: deadCount, errors: errorCount });
+    };
+
+    let batchStart = 0;
+
+    while (batchStart < uniqueUrls.length && !stopRef.current) {
       const batchEnd = Math.min(batchStart + BATCH_SIZE, uniqueUrls.length);
       const batch = uniqueUrls.slice(batchStart, batchEnd);
       const batchNum = Math.floor(batchStart / BATCH_SIZE) + 1;
@@ -248,11 +265,18 @@ const AdminHealthCheck = () => {
 
       console.log(`[Batch ${batchNum}/${totalBatches}] Starting ${batch.length} sites...`);
 
-      // Fire all requests in this batch concurrently
+      let batchReceived = 0;
+      const threshold = Math.min(OVERLAP_THRESHOLD, batch.length);
+
+      // Create a promise that resolves when threshold responses are received
+      let resolveThreshold: (() => void) | null = null;
+      const thresholdPromise = new Promise<void>((resolve) => { resolveThreshold = resolve; });
+
+      // Fire all requests concurrently with stagger, stream results as they arrive
       const promises = batch.map(async (siteUrl, i) => {
-        // Small stagger (100ms apart) to avoid simultaneous cold starts
         await new Promise(r => setTimeout(r, i * 100));
-        if (stopRef.current) return null;
+        if (stopRef.current) return;
+
         const { data, error } = await invokeWithRetry(siteUrl);
 
         let result: SiteResult;
@@ -261,40 +285,31 @@ const AdminHealthCheck = () => {
         } else {
           result = data.results[0];
         }
-        return result;
+
+        // Display result immediately as it arrives
+        processResult(result);
+
+        batchReceived++;
+        if (batchReceived >= threshold && resolveThreshold) {
+          resolveThreshold();
+          resolveThreshold = null;
+        }
       });
 
-      // Wait for ALL 25 responses, then display them one by one
-      const batchResults = await Promise.all(promises);
+      const allDone = Promise.all(promises);
 
-      for (const result of batchResults) {
-        if (stopRef.current) break;
-        if (!result) continue;
+      // Wait until 20 responses are received, then allow next batch to start
+      await thresholdPromise;
 
-        completed++;
-        if (result.status === "live") liveCount++;
-        else if (result.status === "dead") deadCount++;
-        else errorCount++;
+      console.log(`[Batch ${batchNum}/${totalBatches}] ${threshold}/${batch.length} received — advancing to next batch`);
 
-        remainingSet.delete(result.url);
-        const remainingUrls = Array.from(remainingSet);
-        setUrls(remainingUrls);
-        setUrlInput(remainingUrls.join("\n"));
-
-        setResults((prev) => [...prev, result]);
-        setProgress(Math.round((completed / total) * 100));
-        setStats({ total, live: liveCount, dead: deadCount, errors: errorCount });
-
-        // Small delay between displaying each result (50ms) for visual streaming
-        await new Promise(r => setTimeout(r, 50));
+      // If this is the last batch, wait for all to finish
+      const nextBatchStart = batchStart + BATCH_SIZE;
+      if (nextBatchStart >= uniqueUrls.length) {
+        await allDone;
       }
 
-      console.log(`[Batch ${batchNum}/${totalBatches}] Complete. Live: ${liveCount}, Dead: ${deadCount}, Errors: ${errorCount}`);
-
-      // Brief pause between batches (500ms) for stability
-      if (batchStart + BATCH_SIZE < uniqueUrls.length && !stopRef.current) {
-        await new Promise(r => setTimeout(r, 500));
-      }
+      batchStart = nextBatchStart;
     }
 
     setProgress(100);
