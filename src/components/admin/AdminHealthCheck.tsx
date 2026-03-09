@@ -210,15 +210,15 @@ const AdminHealthCheck = () => {
 
     const remainingSet = new Set(uniqueUrls);
 
-    const invokeWithRetry = async (siteUrl: string, maxRetries = 3): Promise<{ data: any; error: any }> => {
+    const invokeWithRetry = async (batchUrls: string[], maxRetries = 3): Promise<{ data: any; error: any }> => {
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
           const { data, error } = await supabase.functions.invoke("health-check-sites", {
-            body: { urls: [siteUrl], threads: 1 },
+            body: { urls: batchUrls, threads: 1 },
           });
           if (error && (error.message?.includes("503") || error.message?.includes("BOOT_ERROR"))) {
             const backoff = 2000 * (attempt + 1);
-            console.log(`[Retry ${attempt + 1}/${maxRetries}] ${siteUrl} - waiting ${backoff}ms`);
+            console.log(`[Retry ${attempt + 1}/${maxRetries}] Batch of ${batchUrls.length} - waiting ${backoff}ms`);
             await new Promise(r => setTimeout(r, backoff));
             continue;
           }
@@ -226,7 +226,7 @@ const AdminHealthCheck = () => {
         } catch (e: any) {
           if (attempt < maxRetries - 1) {
             const backoff = 2000 * (attempt + 1);
-            console.log(`[Retry ${attempt + 1}/${maxRetries}] ${siteUrl} - ${e?.message} - waiting ${backoff}ms`);
+            console.log(`[Retry ${attempt + 1}/${maxRetries}] Batch - ${e?.message} - waiting ${backoff}ms`);
             await new Promise(r => setTimeout(r, backoff));
             continue;
           }
