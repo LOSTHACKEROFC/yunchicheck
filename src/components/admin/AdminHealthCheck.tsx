@@ -261,14 +261,14 @@ const AdminHealthCheck = () => {
         setProgress(Math.round((completed / total) * 100));
         setStats({ total, live: liveCount, dead: deadCount, errors: errorCount });
 
-        // Small delay between requests per worker to ensure stability
-        await new Promise(r => setTimeout(r, 300));
+        // Delay between requests per worker to prevent 503 overload
+        await new Promise(r => setTimeout(r, 1500));
       }
     };
 
-    // Launch N concurrent workers with staggered starts (200ms apart)
+    // Launch N concurrent workers with staggered starts (500ms apart) to avoid cold-start storms
     const concurrency = Math.min(threads, uniqueUrls.length);
-    const workers = Array.from({ length: concurrency }, (_, i) => processOne(i * 200));
+    const workers = Array.from({ length: concurrency }, (_, i) => processOne(i * 500));
     await Promise.all(workers);
 
     setProgress(100);
