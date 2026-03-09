@@ -281,6 +281,10 @@ const AdminPanel = () => {
         <TabsContent value="healthcheck">
           <AdminHealthCheck />
         </TabsContent>
+
+        <TabsContent value="razorpay">
+          <AdminRazorpaySites />
+        </TabsContent>
       </Tabs>
     </div>
   );
