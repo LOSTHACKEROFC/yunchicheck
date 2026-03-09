@@ -236,8 +236,8 @@ const AdminHealthCheck = () => {
       return { data: null, error: new Error("All retries exhausted") };
     };
 
-    const BATCH_SIZE = 25;
-    const OVERLAP_THRESHOLD = 20; // Start next batch after 20 responses received
+    const BATCH_SIZE = 50;
+    const OVERLAP_THRESHOLD = 48; // Start next batch after 48 responses received
 
     const processResult = (result: SiteResult) => {
       completed++;
