@@ -244,6 +244,10 @@ const AdminPanel = () => {
             <HeartPulse className="h-4 w-4" />
             <span className="hidden sm:inline">Health</span>
           </TabsTrigger>
+          <TabsTrigger value="razorpay" className="gap-2">
+            <Globe className="h-4 w-4" />
+            <span className="hidden sm:inline">Razorpay</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
