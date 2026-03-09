@@ -44,6 +44,7 @@ import {
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
+import UserDetailModal from "./UserDetailModal";
 
 interface UserProfile {
   id: string;
@@ -337,56 +338,13 @@ const AdminUserManagement = () => {
         </p>
       </CardContent>
 
-      {/* User Details Dialog */}
-      <Dialog open={showUserDialog} onOpenChange={setShowUserDialog}>
-        <DialogContent className="bg-card border-border max-w-md">
-          <DialogHeader>
-            <DialogTitle>User Details</DialogTitle>
-          </DialogHeader>
-          {selectedUser && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 p-4 bg-secondary rounded-lg">
-                <div>
-                  <p className="text-sm text-muted-foreground">Username</p>
-                  <p className="font-medium">{selectedUser.username || 'N/A'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Credits</p>
-                  <p className="font-medium text-primary">{selectedUser.credits.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Telegram</p>
-                  <p className="font-medium">
-                    {selectedUser.telegram_username ? `@${selectedUser.telegram_username}` : 'Not linked'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Status</p>
-                  <p className={`font-medium ${selectedUser.is_banned ? 'text-red-400' : 'text-green-400'}`}>
-                    {selectedUser.is_banned ? 'Banned' : 'Active'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Checks</p>
-                  <p className="font-medium">{userStats[selectedUser.user_id]?.total_checks?.toLocaleString() || '0'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Joined</p>
-                  <p className="font-medium">{format(new Date(selectedUser.created_at), 'MMM d, yyyy')}</p>
-                </div>
-              </div>
-              {selectedUser.is_banned && selectedUser.ban_reason && (
-                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                  <p className="text-sm text-red-400">Ban Reason: {selectedUser.ban_reason}</p>
-                </div>
-              )}
-              <div className="text-xs text-muted-foreground break-all">
-                User ID: {selectedUser.user_id}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* User Details Modal */}
+      <UserDetailModal
+        open={showUserDialog}
+        onOpenChange={setShowUserDialog}
+        userId={selectedUser?.user_id || null}
+        username={selectedUser?.username || null}
+      />
 
       {/* Ban Dialog */}
       <Dialog open={showBanDialog} onOpenChange={setShowBanDialog}>
