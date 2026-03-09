@@ -272,29 +272,38 @@ const AdminHealthCheck = () => {
       let resolveThreshold: (() => void) | null = null;
       const thresholdPromise = new Promise<void>((resolve) => { resolveThreshold = resolve; });
 
-      // Fire all requests concurrently with stagger, stream results as they arrive
-      const promises = batch.map(async (siteUrl, i) => {
-        await new Promise(r => setTimeout(r, i * 300));
-        if (stopRef.current) return;
+      // Fire requests in mini-waves of 5 to prevent cold-start overload
+      const WAVE_SIZE = 5;
+      const promises: Promise<void>[] = [];
 
-        const { data, error } = await invokeWithRetry(siteUrl);
+      for (let w = 0; w < batch.length; w += WAVE_SIZE) {
+        const wave = batch.slice(w, w + WAVE_SIZE);
+        const wavePromises = wave.map(async (siteUrl) => {
+          if (stopRef.current) return;
 
-        let result: SiteResult;
-        if (error || !data?.results?.[0]) {
-          result = { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: error?.message || "", error: "Request failed" };
-        } else {
-          result = data.results[0];
+          const { data, error } = await invokeWithRetry(siteUrl);
+
+          let result: SiteResult;
+          if (error || !data?.results?.[0]) {
+            result = { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: error?.message || "", error: "Request failed" };
+          } else {
+            result = data.results[0];
+          }
+
+          processResult(result);
+
+          batchReceived++;
+          if (batchReceived >= threshold && resolveThreshold) {
+            resolveThreshold();
+            resolveThreshold = null;
+          }
+        });
+        promises.push(...wavePromises);
+        // Wait 800ms between waves to let instances boot
+        if (w + WAVE_SIZE < batch.length) {
+          await new Promise(r => setTimeout(r, 800));
         }
-
-        // Display result immediately as it arrives
-        processResult(result);
-
-        batchReceived++;
-        if (batchReceived >= threshold && resolveThreshold) {
-          resolveThreshold();
-          resolveThreshold = null;
-        }
-      });
+      }
 
       const allDone = Promise.all(promises);
 
