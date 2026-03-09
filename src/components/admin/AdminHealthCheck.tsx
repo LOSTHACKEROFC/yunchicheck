@@ -459,6 +459,17 @@ const AdminHealthCheck = () => {
                   <AlertTriangle className="h-3 w-3" /> Errors
                 </p>
                 <p className="text-lg font-bold text-yellow-400">{stats.errors}</p>
+                {!isRunning && stats.errors > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 gap-1 h-6 text-[10px] border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10"
+                    onClick={handleRecheckErrors}
+                  >
+                    <Zap className="h-3 w-3" />
+                    Recheck Error Sites
+                  </Button>
+                )}
               </div>
             </div>
           </CardContent>
