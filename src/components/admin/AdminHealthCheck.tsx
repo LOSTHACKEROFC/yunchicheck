@@ -90,7 +90,9 @@ const AdminHealthCheck = () => {
   const parseUrls = (text: string): string[] => {
     const urlRegex = /https?:\/\/[^\s,<>"')\]]+/gi;
     const matches = text.match(urlRegex) || [];
-    return [...new Set(matches.map((u) => u.trim()))];
+    // Normalize: trim, lowercase, remove trailing slashes for dedup
+    const normalized = matches.map((u) => u.trim().replace(/\/+$/, ""));
+    return [...new Set(normalized)];
   };
 
   const handleTextInput = (text: string) => {
