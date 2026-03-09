@@ -182,6 +182,25 @@ const AdminHealthCheck = () => {
     setIsStopped(true);
   };
 
+  const handleRecheckErrors = useCallback(() => {
+    const errorUrls = results.filter((r) => r.status === "error").map((r) => r.url);
+    if (errorUrls.length === 0) {
+      toast.error("No error sites to recheck");
+      return;
+    }
+    // Remove error results, keep live/dead
+    setResults((prev) => prev.filter((r) => r.status !== "error"));
+    setStats((prev) => ({ ...prev, errors: 0, total: prev.total }));
+    // Load error URLs into input and trigger
+    const text = errorUrls.join("\n");
+    setUrlInput(text);
+    setUrls(errorUrls);
+    // Small delay to let state settle, then start
+    setTimeout(() => {
+      handleStart();
+    }, 100);
+  }, [results, handleStart]);
+
   const handleStart = useCallback(async () => {
     if (urls.length === 0) {
       toast.error("No valid URLs to check");
