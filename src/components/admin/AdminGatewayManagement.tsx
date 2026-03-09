@@ -438,7 +438,6 @@ const AdminGatewayManagement = () => {
               </div>
             </div>
           )}
-          )}
         </CardContent>
       </Card>
 
