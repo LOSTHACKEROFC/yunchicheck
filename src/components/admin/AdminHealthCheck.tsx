@@ -118,12 +118,8 @@ const AdminHealthCheck = () => {
   const handleLoadSaved = async () => {
     setLoadingSaved(true);
     try {
-      const { data, error } = await supabase
-        .from("gateway_urls")
-        .select("url")
-        .order("created_at", { ascending: false });
+      const data = await fetchAllRows("gateway_urls", "url", "created_at");
 
-      if (error) throw error;
       if (!data || data.length === 0) {
         toast.error("No saved sites found in database");
         return;
