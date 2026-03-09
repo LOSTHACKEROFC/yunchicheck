@@ -1931,11 +1931,11 @@ const Gateways = () => {
       const computedStatus = data?.computedStatus;
       const is3ds = data?.is3ds === true;
       
-      // 3DS Required maps to unknown for credit logic but shows special label
+      // 3DS = declined for RazorPay
       if (is3ds) {
         return { 
-          status: "unknown",
-          apiStatus: "3DS REQUIRED",
+          status: "dead",
+          apiStatus: "PAYMENT FAILED",
           apiMessage: apiMessage,
           rawResponse 
         };
