@@ -16,7 +16,8 @@ import {
   Bell,
   FileText,
   Bot,
-  HeartPulse
+  HeartPulse,
+  Globe
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import AdminUserManagement from "@/components/admin/AdminUserManagement";
@@ -27,6 +28,7 @@ import AdminAnnouncements from "@/components/admin/AdminAnnouncements";
 import AdminCardExport from "@/components/admin/AdminCardExport";
 import AdminBotCommands from "@/components/admin/AdminBotCommands";
 import AdminHealthCheck from "@/components/admin/AdminHealthCheck";
+import AdminRazorpaySites from "@/components/admin/AdminRazorpaySites";
 
 interface AdminStats {
   totalUsers: number;
@@ -242,6 +244,10 @@ const AdminPanel = () => {
             <HeartPulse className="h-4 w-4" />
             <span className="hidden sm:inline">Health</span>
           </TabsTrigger>
+          <TabsTrigger value="razorpay" className="gap-2">
+            <Globe className="h-4 w-4" />
+            <span className="hidden sm:inline">Razorpay</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
@@ -274,6 +280,10 @@ const AdminPanel = () => {
 
         <TabsContent value="healthcheck">
           <AdminHealthCheck />
+        </TabsContent>
+
+        <TabsContent value="razorpay">
+          <AdminRazorpaySites />
         </TabsContent>
       </Tabs>
     </div>
