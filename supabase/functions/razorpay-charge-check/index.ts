@@ -161,7 +161,7 @@ const callApi = async (cc: string, site: string): Promise<{ status: string; mess
   }
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
