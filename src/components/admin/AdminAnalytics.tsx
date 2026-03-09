@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
@@ -11,12 +11,13 @@ import {
   CheckCircle,
   XCircle,
   Zap,
-  Calendar
+  Calendar,
+  Wifi
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { format, subDays, startOfDay } from "date-fns";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 interface AnalyticsData {
   totalChecks: number;
@@ -27,90 +28,169 @@ interface AnalyticsData {
   todayChecks: number;
   weeklyChecks: number;
   uniqueUsersToday: number;
+  totalUsers: number;
   dailyStats: { date: string; checks: number; live: number; dead: number }[];
   gatewayStats: { name: string; count: number; color: string }[];
 }
 
 const CHART_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
+// Paginated fetch to bypass the 1000-row limit
+const fetchAllRows = async (table: string, select: string, filters?: { column: string; op: string; value: string }[]) => {
+  const PAGE_SIZE = 1000;
+  let allData: any[] = [];
+  let from = 0;
+  while (true) {
+    let query = supabase.from(table).select(select).range(from, from + PAGE_SIZE - 1);
+    if (filters) {
+      for (const f of filters) {
+        query = query.gte(f.column, f.value);
+      }
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allData = [...allData, ...data];
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return allData;
+};
+
 const AdminAnalytics = () => {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<AnalyticsData | null>(null);
+  const [isLive, setIsLive] = useState(true);
 
-  const fetchAnalytics = async () => {
+  const computeAnalytics = useCallback((checks: any[], totalUsers: number): AnalyticsData => {
+    const now = new Date();
+    const todayStart = startOfDay(now).toISOString();
+    const weekStart = subDays(startOfDay(now), 7).toISOString();
+
+    const totalChecks = checks.length;
+    const liveCards = checks.filter(c => c.result?.toLowerCase().includes('live') || c.result?.toLowerCase().includes('approved')).length;
+    const deadCards = checks.filter(c => c.result?.toLowerCase().includes('dead') || c.result?.toLowerCase().includes('declined')).length;
+    const chargedCards = checks.filter(c => c.result?.toLowerCase().includes('charged')).length;
+    const successRate = totalChecks > 0 ? (liveCards / totalChecks) * 100 : 0;
+
+    const todayChecks = checks.filter(c => c.created_at >= todayStart).length;
+    const weeklyChecks = checks.filter(c => c.created_at >= weekStart).length;
+    const uniqueUsersToday = new Set(checks.filter(c => c.created_at >= todayStart).map(c => c.user_id)).size;
+
+    const dailyStats: { date: string; checks: number; live: number; dead: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const dayStart = startOfDay(subDays(now, i)).toISOString();
+      const dayEnd = startOfDay(subDays(now, i - 1)).toISOString();
+      const dayChecks = checks.filter(c => c.created_at >= dayStart && c.created_at < dayEnd);
+      dailyStats.push({
+        date: format(subDays(now, i), 'MMM d'),
+        checks: dayChecks.length,
+        live: dayChecks.filter(c => c.result?.toLowerCase().includes('live') || c.result?.toLowerCase().includes('approved')).length,
+        dead: dayChecks.filter(c => c.result?.toLowerCase().includes('dead') || c.result?.toLowerCase().includes('declined')).length
+      });
+    }
+
+    const gatewayMap = new Map<string, number>();
+    checks.forEach(c => {
+      const gateway = c.gateway || 'Unknown';
+      gatewayMap.set(gateway, (gatewayMap.get(gateway) || 0) + 1);
+    });
+    const gatewayStats = Array.from(gatewayMap.entries())
+      .map(([name, count], idx) => ({ name, count, color: CHART_COLORS[idx % CHART_COLORS.length] }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6);
+
+    return {
+      totalChecks, liveCards, deadCards, chargedCards, successRate,
+      todayChecks, weeklyChecks, uniqueUsersToday, totalUsers, dailyStats, gatewayStats
+    };
+  }, []);
+
+  // Keep a ref to all checks for incremental updates
+  const [allChecks, setAllChecks] = useState<any[]>([]);
+  const [totalUsers, setTotalUsers] = useState(0);
+
+  const fetchAnalytics = useCallback(async () => {
     setLoading(true);
     try {
-      const now = new Date();
-      const todayStart = startOfDay(now).toISOString();
-      const weekStart = subDays(startOfDay(now), 7).toISOString();
+      const [checks, profiles] = await Promise.all([
+        fetchAllRows("card_checks", "id, status, result, gateway, created_at, user_id"),
+        fetchAllRows("profiles", "id"),
+      ]);
 
-      // Fetch all card checks
-      const { data: allChecks, error: checksError } = await supabase
-        .from('card_checks')
-        .select('id, status, result, gateway, created_at, user_id');
-
-      if (checksError) throw checksError;
-
-      const checks = allChecks || [];
-
-      // Calculate stats
-      const totalChecks = checks.length;
-      const liveCards = checks.filter(c => c.result?.toLowerCase().includes('live') || c.result?.toLowerCase().includes('approved')).length;
-      const deadCards = checks.filter(c => c.result?.toLowerCase().includes('dead') || c.result?.toLowerCase().includes('declined')).length;
-      const chargedCards = checks.filter(c => c.result?.toLowerCase().includes('charged')).length;
-      const successRate = totalChecks > 0 ? (liveCards / totalChecks) * 100 : 0;
-
-      const todayChecks = checks.filter(c => c.created_at >= todayStart).length;
-      const weeklyChecks = checks.filter(c => c.created_at >= weekStart).length;
-      const uniqueUsersToday = new Set(checks.filter(c => c.created_at >= todayStart).map(c => c.user_id)).size;
-
-      // Daily stats for last 7 days
-      const dailyStats: { date: string; checks: number; live: number; dead: number }[] = [];
-      for (let i = 6; i >= 0; i--) {
-        const dayStart = startOfDay(subDays(now, i)).toISOString();
-        const dayEnd = startOfDay(subDays(now, i - 1)).toISOString();
-        const dayChecks = checks.filter(c => c.created_at >= dayStart && c.created_at < dayEnd);
-        dailyStats.push({
-          date: format(subDays(now, i), 'MMM d'),
-          checks: dayChecks.length,
-          live: dayChecks.filter(c => c.result?.toLowerCase().includes('live') || c.result?.toLowerCase().includes('approved')).length,
-          dead: dayChecks.filter(c => c.result?.toLowerCase().includes('dead') || c.result?.toLowerCase().includes('declined')).length
-        });
-      }
-
-      // Gateway stats
-      const gatewayMap = new Map<string, number>();
-      checks.forEach(c => {
-        const gateway = c.gateway || 'Unknown';
-        gatewayMap.set(gateway, (gatewayMap.get(gateway) || 0) + 1);
-      });
-      const gatewayStats = Array.from(gatewayMap.entries())
-        .map(([name, count], idx) => ({ name, count, color: CHART_COLORS[idx % CHART_COLORS.length] }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 6);
-
-      setData({
-        totalChecks,
-        liveCards,
-        deadCards,
-        chargedCards,
-        successRate,
-        todayChecks,
-        weeklyChecks,
-        uniqueUsersToday,
-        dailyStats,
-        gatewayStats
-      });
+      setAllChecks(checks);
+      setTotalUsers(profiles.length);
+      setData(computeAnalytics(checks, profiles.length));
     } catch (error) {
       console.error('Error fetching analytics:', error);
       toast.error("Failed to fetch analytics");
     }
     setLoading(false);
-  };
+  }, [computeAnalytics]);
 
+  // Initial fetch
   useEffect(() => {
     fetchAnalytics();
-  }, []);
+  }, [fetchAnalytics]);
+
+  // Real-time subscriptions
+  useEffect(() => {
+    if (!isLive) return;
+
+    // Subscribe to card_checks for new inserts and updates
+    const checksChannel = supabase
+      .channel('admin-analytics-checks')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'card_checks' },
+        (payload) => {
+          const newCheck = payload.new;
+          setAllChecks(prev => {
+            const updated = [...prev, newCheck];
+            // Recompute with latest totalUsers
+            setData(prevData => computeAnalytics(updated, prevData?.totalUsers ?? totalUsers));
+            return updated;
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'card_checks' },
+        (payload) => {
+          const updatedCheck = payload.new;
+          setAllChecks(prev => {
+            const updated = prev.map(c => c.id === updatedCheck.id ? updatedCheck : c);
+            setData(prevData => computeAnalytics(updated, prevData?.totalUsers ?? totalUsers));
+            return updated;
+          });
+        }
+      )
+      .subscribe();
+
+    // Subscribe to profiles for new user registrations
+    const profilesChannel = supabase
+      .channel('admin-analytics-profiles')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'profiles' },
+        () => {
+          setTotalUsers(prev => {
+            const newTotal = prev + 1;
+            setAllChecks(currentChecks => {
+              setData(computeAnalytics(currentChecks, newTotal));
+              return currentChecks;
+            });
+            return newTotal;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(checksChannel);
+      supabase.removeChannel(profilesChannel);
+    };
+  }, [isLive, computeAnalytics, totalUsers]);
 
   if (loading) {
     return (
@@ -142,11 +222,28 @@ const AdminAnalytics = () => {
         <h3 className="text-lg font-medium flex items-center gap-2">
           <BarChart3 className="h-5 w-5 text-primary" />
           Platform Analytics
+          {isLive && (
+            <span className="flex items-center gap-1 text-xs font-normal text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">
+              <Wifi className="h-3 w-3" />
+              Live
+            </span>
+          )}
         </h3>
-        <Button variant="outline" size="sm" onClick={fetchAnalytics}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={isLive ? "default" : "outline"}
+            size="sm"
+            onClick={() => setIsLive(!isLive)}
+            className="gap-1"
+          >
+            <Wifi className="h-3.5 w-3.5" />
+            {isLive ? "Live" : "Paused"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={fetchAnalytics}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Summary Stats */}
@@ -201,7 +298,7 @@ const AdminAnalytics = () => {
       </div>
 
       {/* Today's Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="bg-card border-border">
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
@@ -237,11 +334,22 @@ const AdminAnalytics = () => {
             </div>
           </CardContent>
         </Card>
+
+        <Card className="bg-card border-border">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Users</p>
+                <p className="text-3xl font-bold text-primary">{data.totalUsers.toLocaleString()}</p>
+              </div>
+              <Users className="h-10 w-10 text-primary/50" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Daily Activity Chart */}
         <Card className="bg-card border-border">
           <CardHeader>
             <CardTitle className="text-sm">Daily Activity (Last 7 Days)</CardTitle>
@@ -266,7 +374,6 @@ const AdminAnalytics = () => {
           </CardContent>
         </Card>
 
-        {/* Card Results Pie Chart */}
         <Card className="bg-card border-border">
           <CardHeader>
             <CardTitle className="text-sm">Card Results Distribution</CardTitle>
@@ -311,7 +418,7 @@ const AdminAnalytics = () => {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {data.gatewayStats.map((gateway, idx) => (
+            {data.gatewayStats.map((gateway) => (
               <div 
                 key={gateway.name}
                 className="p-3 rounded-lg bg-secondary/50 border border-border"
