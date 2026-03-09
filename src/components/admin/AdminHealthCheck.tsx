@@ -274,7 +274,7 @@ const AdminHealthCheck = () => {
 
       // Fire all requests concurrently with stagger, stream results as they arrive
       const promises = batch.map(async (siteUrl, i) => {
-        await new Promise(r => setTimeout(r, i * 100));
+        await new Promise(r => setTimeout(r, i * 300));
         if (stopRef.current) return;
 
         const { data, error } = await invokeWithRetry(siteUrl);
