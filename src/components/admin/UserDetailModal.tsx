@@ -105,6 +105,7 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
   useEffect(() => {
     if (open && userId) {
       setTelegramPhoto(null);
+      setTelegramName(null);
       setIpGeo(null);
       fetchFullDetails();
     }
