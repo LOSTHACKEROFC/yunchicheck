@@ -62,7 +62,8 @@ const checkSingleSite = async (
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-      const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(DEMO_CC)}&site=${encodeURIComponent(siteUrl)}`;
+      const demoCC = getRandomItem(DEMO_CARDS);
+      const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(demoCC)}&site=${encodeURIComponent(siteUrl)}`;
       const userAgent = getRandomItem(userAgents);
 
       console.log(`[Attempt ${attempt + 1}] Checking: ${siteUrl}`);
