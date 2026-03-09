@@ -36,14 +36,16 @@ interface SiteResult {
   error?: string;
 }
 
-const fetchAllRows = async (table: string, select: string, orderBy?: string) => {
+const fetchAllGatewayUrls = async (fields: string) => {
   const PAGE_SIZE = 1000;
   let allData: any[] = [];
   let from = 0;
   while (true) {
-    let query = supabase.from(table).select(select).range(from, from + PAGE_SIZE - 1);
-    if (orderBy) query = query.order(orderBy, { ascending: false });
-    const { data, error } = await query;
+    const { data, error } = await supabase
+      .from("gateway_urls")
+      .select(fields)
+      .order("created_at", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;
     allData = [...allData, ...data];
