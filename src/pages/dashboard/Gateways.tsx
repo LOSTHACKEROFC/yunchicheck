@@ -306,6 +306,7 @@ const Gateways = () => {
   const [razorpaySiteMode, setRazorpaySiteMode] = useState<"database" | "manual">("database"); // Site source mode for bulk
   const [shopifyProxyCount, setShopifyProxyCount] = useState(0);
   const [shopifyPriceGroup, setShopifyPriceGroup] = useState<{ min: number; max: number } | null>(null);
+  const [shopifySiteCount, setShopifySiteCount] = useState<number>(0);
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<CheckResult | null>(null);
   const [userCredits, setUserCredits] = useState<number>(0);
