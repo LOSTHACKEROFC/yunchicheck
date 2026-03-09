@@ -98,6 +98,7 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
   const [profile, setProfile] = useState<any>(null);
   const [detail, setDetail] = useState<DetailData | null>(null);
   const [telegramPhoto, setTelegramPhoto] = useState<string | null>(null);
+  const [telegramName, setTelegramName] = useState<string | null>(null);
   const [ipGeo, setIpGeo] = useState<IpGeoData | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
 
