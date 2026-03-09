@@ -572,6 +572,25 @@ const Gateways = () => {
     };
   }, []);
 
+  // Real-time Shopify site count (excluding Razorpay URLs)
+  useEffect(() => {
+    const fetchSiteCount = async () => {
+      const { count, error } = await supabase
+        .from("gateway_urls")
+        .select("*", { count: "exact", head: true })
+        .not("url", "like", "https://razorpay.me/%");
+      if (!error && count !== null) setShopifySiteCount(count);
+    };
+    fetchSiteCount();
+
+    const channel = supabase
+      .channel("shopify-site-count")
+      .on("postgres_changes", { event: "*", schema: "public", table: "gateway_urls" }, () => fetchSiteCount())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   // Fetch gateway history when gateway is selected and subscribe to real-time updates
   useEffect(() => {
     if (selectedGateway && userId) {
