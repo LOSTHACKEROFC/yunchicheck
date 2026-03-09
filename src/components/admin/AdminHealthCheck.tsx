@@ -216,7 +216,10 @@ const AdminHealthCheck = () => {
     let queueIdx = 0;
     const resultsArr: SiteResult[] = [];
 
-    const processOne = async (): Promise<void> => {
+    const processOne = async (workerDelay: number): Promise<void> => {
+      // Stagger worker starts to avoid cold-start storms
+      if (workerDelay > 0) await new Promise(r => setTimeout(r, workerDelay));
+
       while (queueIdx < uniqueUrls.length) {
         if (stopRef.current) return;
 
@@ -231,7 +234,7 @@ const AdminHealthCheck = () => {
           });
 
           if (error || !data?.results?.[0]) {
-            result = { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: "", error: "Request failed" };
+            result = { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: error?.message || "", error: "Request failed" };
             errorCount++;
           } else {
             result = data.results[0];
@@ -239,8 +242,8 @@ const AdminHealthCheck = () => {
             else if (result.status === "dead") deadCount++;
             else errorCount++;
           }
-        } catch {
-          result = { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: "", error: "Network error" };
+        } catch (e: any) {
+          result = { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: "", error: e?.message || "Network error" };
           errorCount++;
         }
 
@@ -257,12 +260,15 @@ const AdminHealthCheck = () => {
         setResults((prev) => [...prev, result]);
         setProgress(Math.round((completed / total) * 100));
         setStats({ total, live: liveCount, dead: deadCount, errors: errorCount });
+
+        // Small delay between requests per worker to ensure stability
+        await new Promise(r => setTimeout(r, 300));
       }
     };
 
-    // Launch N concurrent workers
+    // Launch N concurrent workers with staggered starts (200ms apart)
     const concurrency = Math.min(threads, uniqueUrls.length);
-    const workers = Array.from({ length: concurrency }, () => processOne());
+    const workers = Array.from({ length: concurrency }, (_, i) => processOne(i * 200));
     await Promise.all(workers);
 
     setProgress(100);
