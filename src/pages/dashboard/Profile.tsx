@@ -86,10 +86,12 @@ const Profile = () => {
 
   useEffect(() => {
     let chatIdRef = "";
+    let currentUserId = "";
     
     const fetchProfile = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        currentUserId = user.id;
         setEmail(user.email || "");
         setCreatedAt(new Date(user.created_at).toLocaleDateString());
         const { data } = await supabase
@@ -98,30 +100,57 @@ const Profile = () => {
           .eq("user_id", user.id)
           .maybeSingle();
         
-        const profileData = {
-          username: data?.username || "",
-          name: data?.name || "",
-          telegramChatId: data?.telegram_chat_id || "",
-          telegramUsername: data?.telegram_username || "",
-        };
-        
-        setUsername(profileData.username);
-        setName(profileData.name);
-        setTelegramChatId(profileData.telegramChatId);
-        setTelegramUsername(profileData.telegramUsername);
-        setOriginalValues(profileData);
-        setCredits(data?.credits || 0);
-        setTelegramChangedAt(data?.telegram_changed_at || null);
-        
+        applyProfileData(data);
         chatIdRef = data?.telegram_chat_id || "";
         
-        // Fetch Telegram profile if chat ID exists
         if (data?.telegram_chat_id) {
           fetchTelegramProfile(data.telegram_chat_id);
         }
       }
     };
+
+    const applyProfileData = (data: any) => {
+      if (!data) return;
+      const profileData = {
+        username: data.username || "",
+        name: data.name || "",
+        telegramChatId: data.telegram_chat_id || "",
+        telegramUsername: data.telegram_username || "",
+      };
+      
+      setUsername(profileData.username);
+      setName(profileData.name);
+      setTelegramChatId(profileData.telegramChatId);
+      setTelegramUsername(profileData.telegramUsername);
+      setOriginalValues(profileData);
+      setCredits(data.credits || 0);
+      setTelegramChangedAt(data.telegram_changed_at || null);
+    };
+
     fetchProfile();
+
+    // Real-time subscription on profiles table
+    const channel = supabase
+      .channel('profile-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles' },
+        (payload) => {
+          const updated = payload.new as any;
+          if (updated.user_id === currentUserId) {
+            applyProfileData(updated);
+            // Re-fetch telegram profile if chat_id changed
+            if (updated.telegram_chat_id && updated.telegram_chat_id !== chatIdRef) {
+              chatIdRef = updated.telegram_chat_id;
+              fetchTelegramProfile(updated.telegram_chat_id);
+            } else if (!updated.telegram_chat_id) {
+              chatIdRef = "";
+              setTelegramProfile(null);
+            }
+          }
+        }
+      )
+      .subscribe();
 
     // Auto-refresh Telegram status every 30 seconds
     const intervalId = setInterval(() => {
@@ -130,7 +159,10 @@ const Profile = () => {
       }
     }, 30000);
 
-    return () => clearInterval(intervalId);
+    return () => {
+      clearInterval(intervalId);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleEdit = () => {
