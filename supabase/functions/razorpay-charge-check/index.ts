@@ -284,7 +284,7 @@ Deno.serve(async (req) => {
       displayStatus = 'CHARGED';
     } else if (result.status === '3ds') {
       computedStatus = 'dead';
-      displayStatus = 'PAYMENT FAILED';
+      displayStatus = '3DS REQUIRED';
     } else if (result.status === 'dead') {
       computedStatus = 'dead';
       displayStatus = 'PAYMENT FAILED';
