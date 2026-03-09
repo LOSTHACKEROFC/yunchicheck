@@ -68,6 +68,47 @@ const AdminRazorpaySites = () => {
 
   useEffect(() => {
     fetchSites();
+
+    // Realtime subscription for gateway_urls changes
+    const channel = supabase
+      .channel('razorpay-sites-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'gateway_urls',
+        },
+        (payload) => {
+          const { eventType, new: newRow, old: oldRow } = payload;
+
+          setSites((prev) => {
+            if (eventType === 'INSERT') {
+              const row = newRow as RazorpaySite;
+              if (!row.url?.startsWith(RAZORPAY_PREFIX)) return prev;
+              if (prev.some((s) => s.id === row.id)) return prev;
+              return [row, ...prev];
+            }
+            if (eventType === 'DELETE') {
+              const row = oldRow as RazorpaySite;
+              return prev.filter((s) => s.id !== row.id);
+            }
+            if (eventType === 'UPDATE') {
+              const row = newRow as RazorpaySite;
+              if (!row.url?.startsWith(RAZORPAY_PREFIX)) {
+                return prev.filter((s) => s.id !== row.id);
+              }
+              return prev.map((s) => (s.id === row.id ? row : s));
+            }
+            return prev;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchSites = async () => {
