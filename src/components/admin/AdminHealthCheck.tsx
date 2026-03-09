@@ -261,8 +261,8 @@ const AdminHealthCheck = () => {
         setProgress(Math.round((completed / total) * 100));
         setStats({ total, live: liveCount, dead: deadCount, errors: errorCount });
 
-        // Small delay between requests per worker to ensure stability
-        await new Promise(r => setTimeout(r, 300));
+        // Delay between requests per worker to prevent 503 overload
+        await new Promise(r => setTimeout(r, 1500));
       }
     };
 
