@@ -309,7 +309,7 @@ const AdminHealthCheck = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {[1, 2, 3, 5, 10, 15, 20].map((t) => (
+                  {[1, 2, 3, 5, 10, 20, 30, 50].map((t) => (
                     <SelectItem key={t} value={t.toString()}>
                       {t}
                     </SelectItem>
