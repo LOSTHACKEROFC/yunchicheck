@@ -40,6 +40,7 @@ interface UserDetailModalProps {
 interface DetailData {
   totalChecks: number;
   lastTopup: { amount: number; created_at: string; status: string } | null;
+  totalTopup: number;
   deviceLogs: {
     fingerprint: string;
     ip_address: string | null;
@@ -97,12 +98,14 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
   const [profile, setProfile] = useState<any>(null);
   const [detail, setDetail] = useState<DetailData | null>(null);
   const [telegramPhoto, setTelegramPhoto] = useState<string | null>(null);
+  const [telegramName, setTelegramName] = useState<string | null>(null);
   const [ipGeo, setIpGeo] = useState<IpGeoData | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
 
   useEffect(() => {
     if (open && userId) {
       setTelegramPhoto(null);
+      setTelegramName(null);
       setIpGeo(null);
       fetchFullDetails();
     }
@@ -112,10 +115,11 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
     if (!userId) return;
     setLoading(true);
 
-    const [profileRes, checksRes, topupRes, deviceRes, sessionRes] = await Promise.all([
+    const [profileRes, checksRes, topupRes, allTopupsRes, deviceRes, sessionRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('user_id', userId).maybeSingle(),
       supabase.from('card_checks').select('id', { count: 'exact', head: true }).eq('user_id', userId),
       supabase.from('topup_transactions').select('amount, created_at, status').eq('user_id', userId).order('created_at', { ascending: false }).limit(1),
+      supabase.from('topup_transactions').select('amount').eq('user_id', userId).eq('status', 'completed'),
       supabase.from('user_device_logs').select('fingerprint, ip_address, user_agent, last_seen').eq('user_id', userId).order('last_seen', { ascending: false }).limit(5),
       supabase.from('user_sessions').select('last_active, ip_address, browser, os, location').eq('user_id', userId).order('last_active', { ascending: false }).limit(1),
     ]);
@@ -125,9 +129,11 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
     const deviceData = deviceRes.data || [];
 
     setProfile(profileData);
+    const totalTopup = (allTopupsRes.data || []).reduce((sum, t) => sum + Number(t.amount), 0);
     setDetail({
       totalChecks: checksRes.count || 0,
       lastTopup: topupRes.data?.[0] || null,
+      totalTopup,
       deviceLogs: deviceData,
       lastSession: sessionData,
     });
@@ -150,8 +156,10 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
       const { data, error } = await supabase.functions.invoke('get-telegram-profile', {
         body: { chat_id: chatId },
       });
-      if (!error && data?.photo_url) {
-        setTelegramPhoto(data.photo_url);
+      if (!error) {
+        if (data?.photo_url) setTelegramPhoto(data.photo_url);
+        const nameParts = [data?.first_name, data?.last_name].filter(Boolean);
+        if (nameParts.length > 0) setTelegramName(nameParts.join(' '));
       }
     } catch (err) {
       console.error('Failed to fetch telegram photo:', err);
@@ -240,15 +248,20 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
                       <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-[10px]">Active</Badge>
                     )}
                   </div>
-                  {profile.name && (
-                    <p className="text-sm text-muted-foreground">{profile.name}</p>
+                  {(telegramName || profile.name) && (
+                    <p className="text-sm text-muted-foreground">
+                      {telegramName || profile.name}
+                      {telegramName && telegramName !== profile.name && (
+                        <span className="text-[10px] text-muted-foreground/60 ml-1.5">(Telegram)</span>
+                      )}
+                    </p>
                   )}
                   <p className="text-xs text-muted-foreground/70 font-mono mt-1 truncate">{userId}</p>
                 </div>
               </div>
 
               {/* Quick Stats Row */}
-              <div className="grid grid-cols-3 gap-3 mt-4">
+              <div className="grid grid-cols-4 gap-2 mt-4">
                 <div className="bg-card/60 backdrop-blur rounded-lg p-2.5 text-center border border-border/50">
                   <p className="text-lg font-bold text-primary">{profile.credits.toLocaleString()}</p>
                   <p className="text-[10px] text-muted-foreground uppercase">Credits</p>
@@ -256,6 +269,12 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
                 <div className="bg-card/60 backdrop-blur rounded-lg p-2.5 text-center border border-border/50">
                   <p className="text-lg font-bold text-foreground">{(detail?.totalChecks || 0).toLocaleString()}</p>
                   <p className="text-[10px] text-muted-foreground uppercase">Checks</p>
+                </div>
+                <div className="bg-card/60 backdrop-blur rounded-lg p-2.5 text-center border border-border/50">
+                  <p className="text-lg font-bold text-foreground">
+                    ${(detail?.totalTopup || 0).toLocaleString()}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground uppercase">Total Topup</p>
                 </div>
                 <div className="bg-card/60 backdrop-blur rounded-lg p-2.5 text-center border border-border/50">
                   <p className="text-lg font-bold text-foreground">
@@ -274,6 +293,9 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
                 {/* Account Info */}
                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold pt-1 pb-1">Account Information</p>
                 <InfoRow icon={User} label="Username" value={profile.username} color="text-primary" />
+                {telegramName && (
+                  <InfoRow icon={User} label="Name (Telegram)" value={telegramName} color="text-sky-400" />
+                )}
                 <InfoRow
                   icon={Hash}
                   label="Chat ID"
@@ -331,6 +353,7 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
                     ? `$${detail.lastTopup.amount} — ${format(new Date(detail.lastTopup.created_at), 'MMM d, yyyy')} (${detail.lastTopup.status})`
                     : 'No top-ups'
                 } color="text-emerald-400" />
+                <InfoRow icon={DollarSign} label="Total Top-ups" value={`$${(detail?.totalTopup || 0).toLocaleString()}`} color="text-green-400" />
                 <InfoRow icon={Activity} label="Total Checks" value={(detail?.totalChecks || 0).toLocaleString()} color="text-violet-400" />
 
                 {/* Ban Info */}
