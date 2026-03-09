@@ -76,7 +76,7 @@ const fetchWithRetry = async (url: string, maxRetries = 2, timeoutMs = 45000): P
   return { ok: false, text: "Max retries exceeded", status: 0 };
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
