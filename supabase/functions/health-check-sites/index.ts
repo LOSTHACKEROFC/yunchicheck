@@ -127,7 +127,7 @@ const checkSingleSite = async (
   return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: "", error: "All attempts failed" };
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
