@@ -276,6 +276,22 @@ const AdminHealthCheck = () => {
     toast.success(`Health check complete! ${liveCount} live sites saved.`);
   }, [urls, threads]);
 
+  const handleRecheckErrors = useCallback(() => {
+    const errorUrls = results.filter((r) => r.status === "error").map((r) => r.url);
+    if (errorUrls.length === 0) {
+      toast.error("No error sites to recheck");
+      return;
+    }
+    setResults((prev) => prev.filter((r) => r.status !== "error"));
+    setStats((prev) => ({ ...prev, errors: 0, total: prev.total }));
+    const text = errorUrls.join("\n");
+    setUrlInput(text);
+    setUrls(errorUrls);
+    setTimeout(() => {
+      handleStart();
+    }, 100);
+  }, [results, handleStart]);
+
   return (
     <div className="space-y-6">
       {/* Upload & Config */}
