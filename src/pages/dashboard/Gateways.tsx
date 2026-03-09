@@ -686,6 +686,15 @@ const Gateways = () => {
 
     setUserId(user.id);
     
+    // Check admin role
+    const { data: roleData } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('role', 'admin')
+      .maybeSingle();
+    setIsAdmin(!!roleData);
+    
     const { data: profile } = await supabase
       .from('profiles')
       .select('credits')
