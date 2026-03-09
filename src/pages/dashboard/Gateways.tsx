@@ -1923,7 +1923,7 @@ const Gateways = () => {
         .order('created_at', { ascending: true });
       
       if (!error && data && data.length > 0) {
-        const urls = data.map(d => d.url);
+        const urls = data.map(d => d.url).filter(url => url.startsWith('https://razorpay.me/'));
         setRazorpaySites(urls);
         if (!razorpaySite && urls.length > 0) {
           setRazorpaySite(urls[0]);
