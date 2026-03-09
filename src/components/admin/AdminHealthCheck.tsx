@@ -12,6 +12,7 @@ import {
   Upload,
   Play,
   Square,
+  Eraser,
   CheckCircle2,
   XCircle,
   AlertTriangle,
@@ -68,10 +69,9 @@ const AdminHealthCheck = () => {
   };
 
   const parseUrls = (text: string): string[] => {
-    return text
-      .split("\n")
-      .map((u) => u.trim())
-      .filter((u) => u.length > 0 && (u.startsWith("http://") || u.startsWith("https://")));
+    const urlRegex = /https?:\/\/[^\s,<>"')\]]+/gi;
+    const matches = text.match(urlRegex) || [];
+    return [...new Set(matches.map((u) => u.trim()))];
   };
 
   const handleTextInput = (text: string) => {
@@ -320,13 +320,26 @@ const AdminHealthCheck = () => {
           </div>
 
           {/* URL Input */}
-          <Textarea
-            placeholder={"Paste URLs here (one per line):\nhttps://example.com\nhttps://shop.example.com"}
-            value={urlInput}
-            onChange={(e) => handleTextInput(e.target.value)}
-            className="min-h-[120px] font-mono text-xs"
-            disabled={isRunning}
-          />
+          <div className="relative">
+            <Textarea
+              placeholder={"Paste URLs or mixed text here — URLs will be auto-extracted:\nhttps://example.com\nSome text https://shop.example.com more text"}
+              value={urlInput}
+              onChange={(e) => handleTextInput(e.target.value)}
+              className="min-h-[120px] font-mono text-xs pr-10"
+              disabled={isRunning}
+            />
+            {urlInput && !isRunning && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute top-2 right-2 h-7 w-7 text-muted-foreground hover:text-destructive"
+                onClick={() => { setUrlInput(""); setUrls([]); }}
+                title="Clear"
+              >
+                <Eraser className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
 
           <div className="flex items-center justify-between">
             <Badge variant="secondary" className="gap-1">
