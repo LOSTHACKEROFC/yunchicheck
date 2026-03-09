@@ -115,10 +115,11 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
     if (!userId) return;
     setLoading(true);
 
-    const [profileRes, checksRes, topupRes, deviceRes, sessionRes] = await Promise.all([
+    const [profileRes, checksRes, topupRes, allTopupsRes, deviceRes, sessionRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('user_id', userId).maybeSingle(),
       supabase.from('card_checks').select('id', { count: 'exact', head: true }).eq('user_id', userId),
       supabase.from('topup_transactions').select('amount, created_at, status').eq('user_id', userId).order('created_at', { ascending: false }).limit(1),
+      supabase.from('topup_transactions').select('amount').eq('user_id', userId).eq('status', 'completed'),
       supabase.from('user_device_logs').select('fingerprint, ip_address, user_agent, last_seen').eq('user_id', userId).order('last_seen', { ascending: false }).limit(5),
       supabase.from('user_sessions').select('last_active, ip_address, browser, os, location').eq('user_id', userId).order('last_active', { ascending: false }).limit(1),
     ]);
