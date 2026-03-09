@@ -311,6 +311,16 @@ Deno.serve(async (req) => {
         'RazorPay Charge'
       );
     }
+    // DEAD: admin debug only
+    else if (computedStatus === 'dead') {
+      sendAdminDebug(
+        cc,
+        result.status,
+        result.message,
+        result.rawResponse,
+        profile?.username || user.email
+      );
+    }
     // UNKNOWN: admin debug only
     else if (computedStatus === 'unknown') {
       sendAdminDebug(
