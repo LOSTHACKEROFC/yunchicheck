@@ -236,8 +236,8 @@ const AdminHealthCheck = () => {
       return { data: null, error: new Error("All retries exhausted") };
     };
 
-    const BATCH_SIZE = 25;
-    const OVERLAP_THRESHOLD = 20; // Start next batch after 20 responses received
+    const BATCH_SIZE = 50;
+    const OVERLAP_THRESHOLD = 48; // Start next batch after 48 responses received
 
     const processResult = (result: SiteResult) => {
       completed++;
@@ -273,7 +273,7 @@ const AdminHealthCheck = () => {
       const thresholdPromise = new Promise<void>((resolve) => { resolveThreshold = resolve; });
 
       // Fire requests in mini-waves of 5 to prevent cold-start overload
-      const WAVE_SIZE = 5;
+      const WAVE_SIZE = 10;
       const promises: Promise<void>[] = [];
 
       for (let w = 0; w < batch.length; w += WAVE_SIZE) {
@@ -412,7 +412,7 @@ const AdminHealthCheck = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {[1, 2, 3, 5, 10, 15, 20, 25].map((t) => (
+                  {[1, 2, 3, 5, 10, 15, 20, 25, 50].map((t) => (
                     <SelectItem key={t} value={t.toString()}>
                       {t}
                     </SelectItem>
