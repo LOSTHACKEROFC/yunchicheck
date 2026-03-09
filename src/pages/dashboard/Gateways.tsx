@@ -1955,10 +1955,11 @@ const Gateways = () => {
       const { data, error } = await supabase
         .from('gateway_urls')
         .select('url')
+        .like('url', 'https://razorpay.me/%')
         .order('created_at', { ascending: true });
       
       if (!error && data && data.length > 0) {
-        const urls = data.map(d => d.url).filter(url => url.startsWith('https://razorpay.me/'));
+        const urls = data.map(d => d.url);
         setRazorpaySites(urls);
         if (!razorpaySite && urls.length > 0) {
           setRazorpaySite(urls[0]);
