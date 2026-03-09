@@ -276,6 +276,22 @@ const AdminHealthCheck = () => {
     toast.success(`Health check complete! ${liveCount} live sites saved.`);
   }, [urls, threads]);
 
+  const handleRecheckErrors = useCallback(() => {
+    const errorUrls = results.filter((r) => r.status === "error").map((r) => r.url);
+    if (errorUrls.length === 0) {
+      toast.error("No error sites to recheck");
+      return;
+    }
+    setResults((prev) => prev.filter((r) => r.status !== "error"));
+    setStats((prev) => ({ ...prev, errors: 0, total: prev.total }));
+    const text = errorUrls.join("\n");
+    setUrlInput(text);
+    setUrls(errorUrls);
+    setTimeout(() => {
+      handleStart();
+    }, 100);
+  }, [results, handleStart]);
+
   return (
     <div className="space-y-6">
       {/* Upload & Config */}
@@ -443,6 +459,17 @@ const AdminHealthCheck = () => {
                   <AlertTriangle className="h-3 w-3" /> Errors
                 </p>
                 <p className="text-lg font-bold text-yellow-400">{stats.errors}</p>
+                {!isRunning && stats.errors > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 gap-1 h-6 text-[10px] border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10"
+                    onClick={handleRecheckErrors}
+                  >
+                    <Zap className="h-3 w-3" />
+                    Recheck Error Sites
+                  </Button>
+                )}
               </div>
             </div>
           </CardContent>
