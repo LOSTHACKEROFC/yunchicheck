@@ -295,6 +295,7 @@ serve(async (req) => {
     let sitesQuery = adminClient
       .from('gateway_urls')
       .select('url, price')
+      .not('url', 'like', 'https://razorpay.me/%')
       .lte('price', 100);
     
     if (priceGroup && typeof priceGroup.min === 'number' && typeof priceGroup.max === 'number') {
