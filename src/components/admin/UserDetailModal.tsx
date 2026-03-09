@@ -129,9 +129,11 @@ const UserDetailModal = ({ open, onOpenChange, userId, username }: UserDetailMod
     const deviceData = deviceRes.data || [];
 
     setProfile(profileData);
+    const totalTopup = (allTopupsRes.data || []).reduce((sum, t) => sum + Number(t.amount), 0);
     setDetail({
       totalChecks: checksRes.count || 0,
       lastTopup: topupRes.data?.[0] || null,
+      totalTopup,
       deviceLogs: deviceData,
       lastSession: sessionData,
     });
