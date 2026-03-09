@@ -339,6 +339,7 @@ const Gateways = () => {
   // Dynamic gateways state - merged from default config + database status
   const [gateways, setGateways] = useState<Gateway[]>(defaultGateways);
   const [loadingGateways, setLoadingGateways] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Sort gateways by status: online first, maintenance second, offline last
   const sortedGateways = useMemo(() => {
