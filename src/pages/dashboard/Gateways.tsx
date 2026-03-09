@@ -610,8 +610,43 @@ const Gateways = () => {
         )
         .subscribe();
 
+      // Real-time subscription for razorpay sites (gateway_urls)
+      let sitesChannel: ReturnType<typeof supabase.channel> | null = null;
+      if (selectedGateway.id === "razorpay_charge") {
+        sitesChannel = supabase
+          .channel('razorpay-sites-gateway')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'gateway_urls' },
+            (payload) => {
+              const RAZORPAY_PREFIX = 'https://razorpay.me/';
+              if (payload.eventType === 'INSERT') {
+                const newUrl = (payload.new as { url: string }).url;
+                if (newUrl.startsWith(RAZORPAY_PREFIX)) {
+                  setRazorpaySites(prev => prev.includes(newUrl) ? prev : [...prev, newUrl]);
+                }
+              } else if (payload.eventType === 'DELETE') {
+                const oldUrl = (payload.old as { url: string }).url;
+                if (oldUrl) {
+                  setRazorpaySites(prev => prev.filter(u => u !== oldUrl));
+                }
+              } else if (payload.eventType === 'UPDATE') {
+                const newUrl = (payload.new as { url: string }).url;
+                const oldUrl = (payload.old as { url?: string }).url;
+                if (oldUrl && !newUrl.startsWith(RAZORPAY_PREFIX)) {
+                  setRazorpaySites(prev => prev.filter(u => u !== oldUrl));
+                } else if (newUrl.startsWith(RAZORPAY_PREFIX)) {
+                  setRazorpaySites(prev => prev.includes(newUrl) ? prev : [...prev, newUrl]);
+                }
+              }
+            }
+          )
+          .subscribe();
+      }
+
       return () => {
         supabase.removeChannel(channel);
+        if (sitesChannel) supabase.removeChannel(sitesChannel);
       };
     }
   }, [selectedGateway, userId]);
