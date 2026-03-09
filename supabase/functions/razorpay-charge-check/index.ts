@@ -283,8 +283,8 @@ Deno.serve(async (req) => {
       computedStatus = 'live';
       displayStatus = 'CHARGED';
     } else if (result.status === '3ds') {
-      computedStatus = 'unknown'; // 3DS = unknown for credit purposes (no charge)
-      displayStatus = '3DS REQUIRED';
+      computedStatus = 'dead';
+      displayStatus = 'PAYMENT FAILED';
     } else if (result.status === 'dead') {
       computedStatus = 'dead';
       displayStatus = 'PAYMENT FAILED';
