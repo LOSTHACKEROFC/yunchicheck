@@ -33,42 +33,33 @@ const ShopifyPriceGroupSelector = ({ onGroupSelect, selectedGroup }: ShopifyPric
   const [loading, setLoading] = useState(true);
   const [carouselIndex, setCarouselIndex] = useState(0);
 
-  const fetchCounts = async () => {
-    setLoading(true);
+  const fetchCounts = async (showLoader = false) => {
+    if (showLoader) setLoading(true);
 
-    // Fetch counts per price group in parallel using head:true count queries (no row limit)
     const results = await Promise.all(
       PRICE_GROUPS.map((g) => {
-        let query = supabase
-          .from("gateway_urls")
-          .select("id", { count: "exact", head: true })
-          .not("url", "like", "https://razorpay.me/%")
-          .gt("price", g.min === 0 ? 0 : g.min);
-
         if (g.min === 0) {
-          query = supabase
+          return supabase
             .from("gateway_urls")
             .select("id", { count: "exact", head: true })
             .not("url", "like", "https://razorpay.me/%")
             .gt("price", 0)
             .lte("price", g.max);
         } else if (g.max >= 100) {
-          query = supabase
+          return supabase
             .from("gateway_urls")
             .select("id", { count: "exact", head: true })
             .not("url", "like", "https://razorpay.me/%")
             .gt("price", g.min)
             .lte("price", 100);
         } else {
-          query = supabase
+          return supabase
             .from("gateway_urls")
             .select("id", { count: "exact", head: true })
             .not("url", "like", "https://razorpay.me/%")
             .gt("price", g.min)
             .lte("price", g.max);
         }
-
-        return query;
       })
     );
 
