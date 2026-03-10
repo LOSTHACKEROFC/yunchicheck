@@ -273,13 +273,15 @@ const AdminHealthCheck = () => {
       // Create a promise for each URL and track completion
       let batchCompleted = 0;
       const batchDonePromise = new Promise<void>((resolve) => {
-        const promises = batch.map(async (siteUrl) => {
+        const promises = batch.map(async (siteUrl, idx) => {
+          if (stopRef.current) return;
+          // Stagger launches by 100ms each to avoid simultaneous cold-starts
+          if (idx > 0) await new Promise(r => setTimeout(r, idx * 100));
           if (stopRef.current) return;
           const result = await checkSingleUrl(siteUrl);
           if (!stopRef.current) {
             processResult(result);
             batchCompleted++;
-            // Resolve early when MIN_COMPLETE_BEFORE_NEXT are done (or all done)
             if (batchCompleted >= Math.min(MIN_COMPLETE_BEFORE_NEXT, batch.length)) {
               resolve();
             }
