@@ -36,6 +36,9 @@ interface SiteResult {
   error?: string;
 }
 
+const CONCURRENCY = 50;
+const MIN_COMPLETE_BEFORE_NEXT = 49;
+
 const fetchAllGatewayUrls = async (fields: string) => {
   const PAGE_SIZE = 1000;
   let allData: any[] = [];
@@ -58,7 +61,6 @@ const fetchAllGatewayUrls = async (fields: string) => {
 const AdminHealthCheck = () => {
   const [urls, setUrls] = useState<string[]>([]);
   const [urlInput, setUrlInput] = useState("");
-  const [threads, setThreads] = useState(5);
   const [isRunning, setIsRunning] = useState(false);
   const [isStopped, setIsStopped] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -90,7 +92,6 @@ const AdminHealthCheck = () => {
   const parseUrls = (text: string): string[] => {
     const urlRegex = /https?:\/\/[^\s,<>"')\]]+/gi;
     const matches = text.match(urlRegex) || [];
-    // Normalize: trim, lowercase, remove trailing slashes for dedup
     const normalized = matches.map((u) => u.trim().replace(/\/+$/, ""));
     return [...new Set(normalized)];
   };
@@ -123,12 +124,10 @@ const AdminHealthCheck = () => {
     setLoadingSaved(true);
     try {
       const data = await fetchAllGatewayUrls("url");
-
       if (!data || data.length === 0) {
         toast.error("No saved sites found in database");
         return;
       }
-
       const savedUrls = data.map((r) => r.url);
       const text = savedUrls.join("\n");
       setUrlInput(text);
@@ -144,15 +143,11 @@ const AdminHealthCheck = () => {
   const handleExportSaved = async () => {
     try {
       const data = await fetchAllGatewayUrls("url, created_at, price");
-
       if (!data || data.length === 0) {
         toast.error("No saved sites to export");
         return;
       }
-
-      // Check if we have scan results for these URLs
       const resultMap = new Map(results.map((r) => [r.url, r]));
-
       const lines = data.map((row) => {
         const scanResult = resultMap.get(row.url);
         const savedPrice = row.price ? `$${Number(row.price).toFixed(2)}` : "--";
@@ -161,7 +156,6 @@ const AdminHealthCheck = () => {
         }
         return `${row.url} | ${savedPrice} | SAVED`;
       });
-
       const header = `# Saved Sites Export - ${new Date().toISOString()}\n# Total: ${data.length}\n# Format: URL | Price | Status | API Response\n\n`;
       const content = header + lines.join("\n");
       const blob = new Blob([content], { type: "text/plain" });
@@ -180,6 +174,41 @@ const AdminHealthCheck = () => {
   const handleStop = () => {
     stopRef.current = true;
     setIsStopped(true);
+  };
+
+  const checkSingleUrl = async (siteUrl: string, maxRetries = 3): Promise<SiteResult> => {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const { data, error } = await supabase.functions.invoke("health-check-sites", {
+          body: { url: siteUrl },
+        });
+
+        if (error) {
+          const isBootError = error.message?.includes("503") || error.message?.includes("BOOT_ERROR");
+          if (isBootError && attempt < maxRetries - 1) {
+            await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+            continue;
+          }
+          return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: error.message };
+        }
+
+        return {
+          url: data.url || siteUrl,
+          status: data.status === "live" ? "live" : data.status === "dead" ? "dead" : "error",
+          price: data.price || 0,
+          priceStr: data.priceStr || "$0.00",
+          apiResponse: data.apiResponse || "",
+          error: data.error,
+        };
+      } catch (e: any) {
+        if (attempt < maxRetries - 1) {
+          await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+          continue;
+        }
+        return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: e?.message || "Request failed" };
+      }
+    }
+    return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: "All retries exhausted" };
   };
 
   const handleStart = useCallback(async () => {
@@ -210,34 +239,6 @@ const AdminHealthCheck = () => {
 
     const remainingSet = new Set(uniqueUrls);
 
-    const invokeWithRetry = async (batchUrls: string[], maxRetries = 3): Promise<{ data: any; error: any }> => {
-      for (let attempt = 0; attempt < maxRetries; attempt++) {
-        try {
-          const { data, error } = await supabase.functions.invoke("health-check-sites", {
-            body: { urls: batchUrls, threads },
-          });
-          if (error && (error.message?.includes("503") || error.message?.includes("BOOT_ERROR"))) {
-            const backoff = 2000 * (attempt + 1);
-            console.log(`[Retry ${attempt + 1}/${maxRetries}] Batch of ${batchUrls.length} - waiting ${backoff}ms`);
-            await new Promise(r => setTimeout(r, backoff));
-            continue;
-          }
-          return { data, error };
-        } catch (e: any) {
-          if (attempt < maxRetries - 1) {
-            const backoff = 2000 * (attempt + 1);
-            console.log(`[Retry ${attempt + 1}/${maxRetries}] Batch - ${e?.message} - waiting ${backoff}ms`);
-            await new Promise(r => setTimeout(r, backoff));
-            continue;
-          }
-          return { data: null, error: e };
-        }
-      }
-      return { data: null, error: new Error("All retries exhausted") };
-    };
-
-    const BATCH_SIZE = 50;
-
     const processResult = (result: SiteResult) => {
       completed++;
       if (result.status === "live") liveCount++;
@@ -245,59 +246,69 @@ const AdminHealthCheck = () => {
       else errorCount++;
 
       remainingSet.delete(result.url);
-      const remainingUrls = Array.from(remainingSet);
-      setUrls(remainingUrls);
-      setUrlInput(remainingUrls.join("\n"));
+
+      // Throttle textarea updates to every 10th result
+      if (completed % 10 === 0 || completed === total) {
+        const remainingUrls = Array.from(remainingSet);
+        setUrls(remainingUrls);
+        setUrlInput(remainingUrls.join("\n"));
+      }
 
       setResults((prev) => [...prev, result]);
       setProgress(Math.round((completed / total) * 100));
       setStats({ total, live: liveCount, dead: deadCount, errors: errorCount });
     };
 
-    for (let batchStart = 0; batchStart < uniqueUrls.length && !stopRef.current; batchStart += BATCH_SIZE) {
-      const batch = uniqueUrls.slice(batchStart, batchStart + BATCH_SIZE);
-      const batchNum = Math.floor(batchStart / BATCH_SIZE) + 1;
-      const totalBatches = Math.ceil(uniqueUrls.length / BATCH_SIZE);
+    // Process in batches of CONCURRENCY, waiting for MIN_COMPLETE_BEFORE_NEXT before next batch
+    let urlIndex = 0;
 
-      console.log(`[Batch ${batchNum}/${totalBatches}] Sending ${batch.length} sites in one request...`);
+    while (urlIndex < uniqueUrls.length && !stopRef.current) {
+      const batchEnd = Math.min(urlIndex + CONCURRENCY, uniqueUrls.length);
+      const batch = uniqueUrls.slice(urlIndex, batchEnd);
+      const batchNum = Math.floor(urlIndex / CONCURRENCY) + 1;
+      const totalBatches = Math.ceil(uniqueUrls.length / CONCURRENCY);
 
-      try {
-        const { data, error } = await invokeWithRetry(batch);
+      console.log(`[Batch ${batchNum}/${totalBatches}] Firing ${batch.length} concurrent requests...`);
 
-        if (error || !data?.results) {
-          // Mark all sites in batch as error
-          for (const siteUrl of batch) {
-            processResult({ url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: error?.message || "Batch request failed" });
-          }
-        } else {
-          // Process each result from the batch response
-          const returnedResults: SiteResult[] = data.results;
-          const returnedUrls = new Set(returnedResults.map((r: SiteResult) => r.url));
-
-          for (const result of returnedResults) {
+      // Create a promise for each URL and track completion
+      let batchCompleted = 0;
+      const batchDonePromise = new Promise<void>((resolve) => {
+        const promises = batch.map(async (siteUrl) => {
+          if (stopRef.current) return;
+          const result = await checkSingleUrl(siteUrl);
+          if (!stopRef.current) {
             processResult(result);
-          }
-
-          // Mark any URLs not in the response as errors
-          for (const siteUrl of batch) {
-            if (!returnedUrls.has(siteUrl)) {
-              processResult({ url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: "No response from server" });
+            batchCompleted++;
+            // Resolve early when MIN_COMPLETE_BEFORE_NEXT are done (or all done)
+            if (batchCompleted >= Math.min(MIN_COMPLETE_BEFORE_NEXT, batch.length)) {
+              resolve();
             }
           }
-        }
-      } catch (e: any) {
-        for (const siteUrl of batch) {
-          processResult({ url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: e?.message || "Request failed" });
-        }
-      }
+        });
 
-      console.log(`[Batch ${batchNum}/${totalBatches}] Complete`);
+        // Safety: resolve when ALL are done regardless
+        Promise.all(promises).then(() => resolve());
+      });
+
+      // Wait for 49/50 (or all) to complete before starting next batch
+      await batchDonePromise;
+
+      console.log(`[Batch ${batchNum}/${totalBatches}] ${batchCompleted}/${batch.length} complete, moving to next batch`);
+      urlIndex = batchEnd;
     }
+
+    // Wait a moment for any trailing results
+    await new Promise(r => setTimeout(r, 500));
+
+    // Final update of remaining URLs
+    const finalRemaining = Array.from(remainingSet);
+    setUrls(finalRemaining);
+    setUrlInput(finalRemaining.join("\n"));
 
     setProgress(100);
     setIsRunning(false);
     toast.success(`Health check complete! ${liveCount} live sites saved.`);
-  }, [urls, threads]);
+  }, [urls]);
 
   const handleRecheckErrors = useCallback(() => {
     const errorUrls = results.filter((r) => r.status === "error").map((r) => r.url);
@@ -325,7 +336,7 @@ const AdminHealthCheck = () => {
             Site Health Checker
           </CardTitle>
           <CardDescription>
-            Upload a .txt file, paste URLs, or load saved sites to check health. Live sites (price {">"} 0) are saved to the database.
+            Upload a .txt file, paste URLs, or load saved sites. Runs {CONCURRENCY} concurrent checks — live sites are saved to DB.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -374,25 +385,6 @@ const AdminHealthCheck = () => {
               {deletingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
               Delete All Saved
             </Button>
-            <div className="flex items-center gap-2 ml-auto">
-              <span className="text-sm text-muted-foreground">Threads:</span>
-              <Select
-                value={threads.toString()}
-                onValueChange={(v) => setThreads(parseInt(v))}
-                disabled={isRunning}
-              >
-                <SelectTrigger className="w-20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[1, 2, 3, 5, 10, 15, 20, 25, 50].map((t) => (
-                    <SelectItem key={t} value={t.toString()}>
-                      {t}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
 
           {/* URL Input */}
@@ -418,10 +410,16 @@ const AdminHealthCheck = () => {
           </div>
 
           <div className="flex items-center justify-between">
-            <Badge variant="secondary" className="gap-1">
-              <FileText className="h-3 w-3" />
-              {urls.length} URLs loaded
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="gap-1">
+                <FileText className="h-3 w-3" />
+                {urls.length} URLs loaded
+              </Badge>
+              <Badge variant="outline" className="gap-1 text-xs">
+                <Zap className="h-3 w-3" />
+                {CONCURRENCY} threads
+              </Badge>
+            </div>
             <div className="flex gap-2">
               {isRunning ? (
                 <Button variant="destructive" onClick={handleStop} className="gap-2">
@@ -448,7 +446,7 @@ const AdminHealthCheck = () => {
                 {isRunning ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Scanning...
+                    Scanning ({stats.live + stats.dead + stats.errors}/{stats.total})...
                   </>
                 ) : isStopped ? (
                   "Stopped"
@@ -556,7 +554,7 @@ const AdminHealthCheck = () => {
             <div className="max-h-[500px] overflow-y-auto space-y-1">
               {results.map((r, idx) => (
                 <Collapsible
-                  key={idx}
+                  key={`${r.url}-${idx}`}
                   open={expandedIdx === idx}
                   onOpenChange={(open) => setExpandedIdx(open ? idx : null)}
                 >
