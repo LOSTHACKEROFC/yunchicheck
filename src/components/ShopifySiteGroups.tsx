@@ -60,19 +60,19 @@ const ShopifySiteGroups = () => {
     const grouped = PRICE_GROUPS.map((g) => ({
       ...g,
       sites: data.filter(
-        (s) => (s.price ?? 0) >= g.min && (s.price ?? 0) < g.max
+        (s) => {
+          const p = Number(s.price ?? 0);
+          if (p <= 0) return false;
+          if (g.max >= 100) return p > g.min && p <= 100;
+          return p > g.min && p <= g.max;
+        }
       ).map((s) => ({ url: s.url, price: Number(s.price ?? 0) })),
     }));
 
-    // Handle edge case: $100 exactly goes into $35-$100 bucket
-    const exact100 = data.filter((s) => (s.price ?? 0) === 100);
-    if (exact100.length > 0) {
-      grouped[3].sites.push(
-        ...exact100
-          .filter((s) => !grouped[3].sites.some((gs) => gs.url === s.url))
-          .map((s) => ({ url: s.url, price: Number(s.price ?? 0) }))
-      );
-    }
+    // For the first group ($0-$10), include price > 0 && price <= 10
+    grouped[0].sites = data
+      .filter((s) => { const p = Number(s.price ?? 0); return p > 0 && p <= 10; })
+      .map((s) => ({ url: s.url, price: Number(s.price ?? 0) }));
 
     setGroups(grouped);
     setLoading(false);
