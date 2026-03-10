@@ -34,13 +34,13 @@ const ShopifySiteGroups = () => {
       const { data, error } = await supabase
         .from("gateway_urls")
         .select("url, price")
+        .gt("price", 0)
         .lte("price", 100)
+        .not("url", "like", "https://razorpay.me/%")
         .order("price", { ascending: true })
         .range(from, from + PAGE_SIZE - 1);
       if (error || !data || data.length === 0) break;
-      // Exclude Razorpay URLs
-      const filtered = data.filter((s) => !s.url.startsWith("https://razorpay.me/"));
-      allData = [...allData, ...filtered];
+      allData = [...allData, ...data];
       if (data.length < PAGE_SIZE) break;
       from += PAGE_SIZE;
     }

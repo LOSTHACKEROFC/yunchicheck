@@ -43,12 +43,29 @@ const ShopifyPriceGroupSelector = ({ onGroupSelect, selectedGroup }: ShopifyPric
           .from("gateway_urls")
           .select("id", { count: "exact", head: true })
           .not("url", "like", "https://razorpay.me/%")
-          .gte("price", g.min);
+          .gt("price", g.min === 0 ? 0 : g.min);
 
-        if (g.max < 100) {
-          query = query.lt("price", g.max);
+        if (g.min === 0) {
+          query = supabase
+            .from("gateway_urls")
+            .select("id", { count: "exact", head: true })
+            .not("url", "like", "https://razorpay.me/%")
+            .gt("price", 0)
+            .lte("price", g.max);
+        } else if (g.max >= 100) {
+          query = supabase
+            .from("gateway_urls")
+            .select("id", { count: "exact", head: true })
+            .not("url", "like", "https://razorpay.me/%")
+            .gt("price", g.min)
+            .lte("price", 100);
         } else {
-          query = query.lte("price", 100);
+          query = supabase
+            .from("gateway_urls")
+            .select("id", { count: "exact", head: true })
+            .not("url", "like", "https://razorpay.me/%")
+            .gt("price", g.min)
+            .lte("price", g.max);
         }
 
         return query;
