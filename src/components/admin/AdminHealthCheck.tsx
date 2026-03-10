@@ -214,7 +214,7 @@ const AdminHealthCheck = () => {
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
           const { data, error } = await supabase.functions.invoke("health-check-sites", {
-            body: { urls: batchUrls, threads: 1 },
+            body: { urls: batchUrls, threads },
           });
           if (error && (error.message?.includes("503") || error.message?.includes("BOOT_ERROR"))) {
             const backoff = 2000 * (attempt + 1);
