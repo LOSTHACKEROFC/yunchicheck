@@ -116,6 +116,13 @@ const checkSingleSite = async (
       let { price, priceStr } = extractPrice(rawText);
       let apiResponse = truncated;
 
+      // Cap: sites over $100 are not usable — purge and mark dead
+      if (price > 100) {
+        await supabase.from("gateway_urls").delete().eq("url", siteUrl);
+        console.log(`[Result] ${siteUrl} → DEAD (price too high: ${priceStr})`);
+        return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse: truncated, error: "Price exceeds $100" };
+      }
+
       try {
         const json = JSON.parse(rawText);
         
