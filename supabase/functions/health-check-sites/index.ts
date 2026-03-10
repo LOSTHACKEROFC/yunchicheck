@@ -164,7 +164,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { urls, threads = 1 } = await req.json();
+    const { urls, threads = 5 } = await req.json();
 
     if (!urls || !Array.isArray(urls) || urls.length === 0) {
       return new Response(JSON.stringify({ error: "No URLs provided" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -185,15 +185,24 @@ Deno.serve(async (req) => {
       return `${randomProxy.ip}:${randomProxy.port}`;
     };
 
-    // Process sites sequentially — each site gets a full dedicated request
+    // Process sites concurrently using threads parameter
+    const concurrency = Math.min(Math.max(threads, 1), 10);
     const results: Array<{ url: string; status: string; price: number; priceStr: string; apiResponse?: string; error?: string }> = [];
     let savedCount = 0;
 
-    for (const siteUrl of urls) {
-      const proxyStr = getProxyStr();
-      const result = await checkSingleSite(siteUrl, proxyStr, supabase);
-      results.push(result);
-      if (result.status === "live") savedCount++;
+    // Process in concurrent chunks
+    for (let i = 0; i < urls.length; i += concurrency) {
+      const chunk = urls.slice(i, i + concurrency);
+      const chunkResults = await Promise.all(
+        chunk.map((siteUrl: string) => {
+          const proxyStr = getProxyStr();
+          return checkSingleSite(siteUrl, proxyStr, supabase);
+        })
+      );
+      for (const result of chunkResults) {
+        results.push(result);
+        if (result.status === "live") savedCount++;
+      }
     }
 
     return new Response(
