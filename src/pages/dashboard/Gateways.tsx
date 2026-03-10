@@ -578,7 +578,9 @@ const Gateways = () => {
       const { count, error } = await supabase
         .from("gateway_urls")
         .select("*", { count: "exact", head: true })
-        .not("url", "like", "https://razorpay.me/%");
+        .not("url", "like", "https://razorpay.me/%")
+        .gt("price", 0)
+        .lte("price", 100);
       if (!error && count !== null) setShopifySiteCount(count);
     };
     fetchSiteCount();

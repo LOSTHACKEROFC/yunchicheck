@@ -47,6 +47,9 @@ const fetchAllGatewayUrls = async (fields: string) => {
     const { data, error } = await supabase
       .from("gateway_urls")
       .select(fields)
+      .not("url", "like", "https://razorpay.me/%")
+      .gt("price", 0)
+      .lte("price", 100)
       .order("created_at", { ascending: false })
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
