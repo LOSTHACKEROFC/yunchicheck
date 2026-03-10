@@ -73,14 +73,14 @@ const ShopifyPriceGroupSelector = ({ onGroupSelect, selectedGroup }: ShopifyPric
   };
 
   useEffect(() => {
-    fetchCounts();
+    fetchCounts(true);
 
     const channel = supabase
       .channel("price_group_counts")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "gateway_urls" },
-        () => fetchCounts()
+        () => fetchCounts(false)
       )
       .subscribe();
 
