@@ -1,0 +1,1 @@
+DELETE FROM gateway_urls WHERE price > 100 AND url NOT LIKE 'https://razorpay.me/%';
