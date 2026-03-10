@@ -116,6 +116,13 @@ const checkSingleSite = async (
       let { price, priceStr } = extractPrice(rawText);
       let apiResponse = truncated;
 
+      // Cap: sites over $100 are not usable — purge and mark dead
+      if (price > 100) {
+        await supabase.from("gateway_urls").delete().eq("url", siteUrl);
+        console.log(`[Result] ${siteUrl} → DEAD (price too high: ${priceStr})`);
+        return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse: truncated, error: "Price exceeds $100" };
+      }
+
       try {
         const json = JSON.parse(rawText);
         
@@ -179,7 +186,12 @@ const checkSingleSite = async (
         }
       }
 
-      // Price > 0 but no clear status — still save it
+      // Price > 0 and <= 100 — save it; purge sites over $100
+      if (price > 100) {
+        await supabase.from("gateway_urls").delete().eq("url", siteUrl);
+        console.log(`[Result] ${siteUrl} → DEAD (price too high: ${priceStr})`);
+        return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Price exceeds $100" };
+      }
       if (price > 0) {
         await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
         console.log(`[Result] ${siteUrl} → LIVE (price detected: ${priceStr})`);
