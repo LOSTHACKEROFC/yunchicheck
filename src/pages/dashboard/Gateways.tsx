@@ -2849,7 +2849,7 @@ const Gateways = () => {
     };
 
     // Start periodic flush timer
-    const flushInterval = setInterval(flushPendingResults, 300);
+    const flushInterval = setInterval(flushPendingResults, 150);
 
     // Worker function to process a single card
     const processCard = async (cardIndex: number): Promise<BulkResult | null> => {
