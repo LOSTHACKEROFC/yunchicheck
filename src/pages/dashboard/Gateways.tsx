@@ -3199,7 +3199,7 @@ const Gateways = () => {
     let completedCount = 0;
 
     if (isShopifyBulk) {
-      // HealthCheck-style batch model: 50 concurrent with 100ms stagger, advance when 49/50 done
+      // HealthCheck-style batch model: 50 concurrent, slight jittered stagger to avoid cold-start bursts
       const SHOPIFY_CONCURRENCY = 50;
       const MIN_COMPLETE_BEFORE_NEXT = 49;
       let cardIndex = 0;
@@ -3212,8 +3212,10 @@ const Gateways = () => {
         const batchDonePromise = new Promise<void>((resolve) => {
           const promises = batchIndices.map(async (idx, launchOrder) => {
             if (bulkAbortRef.current) return;
-            // Stagger launches by 100ms each to avoid simultaneous cold-starts
-            if (launchOrder > 0) await new Promise(r => setTimeout(r, launchOrder * 100));
+            if (launchOrder > 0) {
+              const launchDelay = launchOrder * 120 + Math.floor(Math.random() * 80);
+              await new Promise(r => setTimeout(r, launchDelay));
+            }
             if (bulkAbortRef.current) return;
 
             // Wait if paused
@@ -3243,6 +3245,11 @@ const Gateways = () => {
 
         await batchDonePromise;
         cardIndex = batchEnd;
+
+        // Small gap between batches so the backend can recycle workers cleanly
+        if (cardIndex < affordableCards.length && !bulkAbortRef.current) {
+          await new Promise(r => setTimeout(r, 250));
+        }
       }
     } else {
       // Other gateways: worker-pool model
