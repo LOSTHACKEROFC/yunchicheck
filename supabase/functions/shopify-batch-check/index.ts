@@ -303,10 +303,11 @@ const checkSingleCard = async (
 
   const allProxiesDead = failedProxyIds.length >= proxies.length;
 
-  // Auto-remove bad/empty sites
+  // Auto-remove bad/empty sites (but not strike responses — those are handled above)
   const rawLower = (result.rawResponse || '').toLowerCase();
   const isBadSite = badResponses.some(bad => rawLower.includes(bad.toLowerCase()));
-  if (isBadSite || (result.status === 'unknown' && (!result.rawResponse || rawLower === '' || rawLower.includes('empty response') || rawLower.includes('timeout')))) {
+  const isStrikeResponse = strikeResponses.some(s => rawLower.includes(s.toLowerCase()));
+  if (!isStrikeResponse && (isBadSite || (result.status === 'unknown' && (!result.rawResponse || rawLower === '' || rawLower.includes('empty response') || rawLower.includes('timeout'))))) {
     adminClient.from('gateway_urls').delete().eq('url', randomSite.url).then(() => {});
   }
 
