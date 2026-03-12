@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -12,14 +11,12 @@ const corsHeaders = {
 // Constant-time string comparison to prevent timing attacks
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) {
-    // Compare against self to maintain constant time
     let result = 0;
     for (let i = 0; i < a.length; i++) {
       result |= a.charCodeAt(i) ^ a.charCodeAt(i);
     }
     return false;
   }
-  
   let result = 0;
   for (let i = 0; i < a.length; i++) {
     result |= a.charCodeAt(i) ^ b.charCodeAt(i);
@@ -27,9 +24,7 @@ function timingSafeEqual(a: string, b: string): boolean {
   return result === 0;
 }
 
-const handler = async (req: Request): Promise<Response> => {
-  console.log("Received change-telegram-id request");
-
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -37,7 +32,6 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     const { verification_code, new_telegram_chat_id, user_id } = await req.json();
 
-    // Validate required fields
     if (!verification_code || !new_telegram_chat_id || !user_id) {
       return new Response(
         JSON.stringify({ success: false, error: "Missing required fields" }),
@@ -45,7 +39,6 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Validate verification code format (6 alphanumeric uppercase)
     if (!/^[A-Z0-9]{6}$/.test(verification_code)) {
       return new Response(
         JSON.stringify({ success: false, error: "Invalid verification code format" }),
@@ -53,7 +46,6 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Validate Telegram Chat ID format (numeric only)
     if (!/^\d+$/.test(new_telegram_chat_id)) {
       return new Response(
         JSON.stringify({ success: false, error: "Invalid Telegram Chat ID format" }),
@@ -63,7 +55,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // COOLDOWN CHECK: Get user's profile to check last change time
+    // COOLDOWN CHECK
     const { data: userProfile, error: profileError } = await supabase
       .from("profiles")
       .select("telegram_changed_at")
@@ -78,17 +70,15 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Check 48-hour cooldown
     if (userProfile?.telegram_changed_at) {
       const lastChange = new Date(userProfile.telegram_changed_at);
       const now = new Date();
       const hoursSinceChange = (now.getTime() - lastChange.getTime()) / (1000 * 60 * 60);
-      
       if (hoursSinceChange < 48) {
         const hoursRemaining = Math.ceil(48 - hoursSinceChange);
         return new Response(
-          JSON.stringify({ 
-            success: false, 
+          JSON.stringify({
+            success: false,
             error: `Cooldown active. You can change your Telegram ID again in ${hoursRemaining} hour${hoursRemaining !== 1 ? 's' : ''}.`,
             cooldownRemaining: hoursRemaining
           }),
@@ -97,7 +87,7 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Check if this Telegram ID is already linked to another account
+    // Check if Telegram ID already linked to another account
     const { data: existingProfile, error: existingError } = await supabase
       .from("profiles")
       .select("user_id")
@@ -120,32 +110,65 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Get all active (non-expired) verifications for this Telegram ID
-    const { data: verifications, error: verifyError } = await supabase
+    // Look for ALL verifications for this chat ID first (for debugging)
+    const { data: allVerifications } = await supabase
       .from("pending_verifications")
-      .select("*")
-      .eq("telegram_chat_id", new_telegram_chat_id)
-      .eq("verified", true)
-      .gt("expires_at", new Date().toISOString());
+      .select("id, telegram_chat_id, verified, expires_at, email")
+      .eq("telegram_chat_id", new_telegram_chat_id);
 
-    if (verifyError) {
-      console.error("Error fetching verifications:", verifyError);
-      return new Response(
-        JSON.stringify({ success: false, error: "Failed to verify code" }),
-        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
-    }
+    console.log(`[CHANGE-TG] All verifications for chat ${new_telegram_chat_id}:`, JSON.stringify(allVerifications));
 
-    if (!verifications || verifications.length === 0) {
+    // Now filter for valid ones
+    const now = new Date().toISOString();
+    const validVerifications = (allVerifications || []).filter(
+      (v) => v.verified === true && v.expires_at > now
+    );
+
+    console.log(`[CHANGE-TG] Valid (verified + not expired) verifications: ${validVerifications.length}`);
+
+    if (validVerifications.length === 0) {
+      // Provide more specific error based on what we found
+      if (!allVerifications || allVerifications.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, error: "No verification record found. Please send the verification code to @YunchiSupportbot on Telegram first." }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+
+      const hasUnverified = allVerifications.some((v) => v.verified === false);
+      const hasExpired = allVerifications.some((v) => v.expires_at <= now);
+
+      if (hasUnverified && !hasExpired) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Verification pending. Please send the code to @YunchiSupportbot on Telegram to complete verification." }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+
+      if (hasExpired) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Verification expired. Please request a new verification code and try again." }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+
       return new Response(
         JSON.stringify({ success: false, error: "No valid verification found. Please verify via Telegram first." }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
+    // Fetch full verification_code for matching (service role bypasses RLS)
+    const { data: fullVerifications } = await supabase
+      .from("pending_verifications")
+      .select("*")
+      .eq("telegram_chat_id", new_telegram_chat_id)
+      .eq("verified", true)
+      .gt("expires_at", now);
+
     // Use constant-time comparison to find matching verification code
     let matchedVerification = null;
-    for (const v of verifications) {
+    for (const v of (fullVerifications || [])) {
       if (timingSafeEqual(v.verification_code.toUpperCase(), verification_code.toUpperCase())) {
         matchedVerification = v;
         break;
@@ -159,13 +182,13 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Verification is valid - update the user's profile with new Telegram ID and set cooldown timestamp
+    // Update user profile
     const { error: updateError } = await supabase
       .from("profiles")
       .update({
         telegram_chat_id: new_telegram_chat_id,
-        telegram_username: null, // Will be updated by the bot on next interaction
-        telegram_changed_at: new Date().toISOString(), // Set cooldown timestamp
+        telegram_username: null,
+        telegram_changed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
       .eq("user_id", user_id);
@@ -178,19 +201,16 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Clean up the used verification
+    // Clean up used verification
     await supabase
       .from("pending_verifications")
       .delete()
       .eq("id", matchedVerification.id);
 
-    console.log(`Successfully changed Telegram ID for user ${user_id} to ${new_telegram_chat_id}`);
+    console.log(`[CHANGE-TG] Successfully changed Telegram ID for user ${user_id} to ${new_telegram_chat_id}`);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: "Telegram ID updated successfully" 
-      }),
+      JSON.stringify({ success: true, message: "Telegram ID updated successfully" }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   } catch (error) {
@@ -200,6 +220,4 @@ const handler = async (req: Request): Promise<Response> => {
       { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   }
-};
-
-serve(handler);
+});
