@@ -3113,8 +3113,8 @@ const Gateways = () => {
       }
     };
 
-    // Process cards - all gateways use 10 parallel workers for real-time per-card results
-    const CONCURRENT_WORKERS = 10;
+    // UI shows workerCount threads (3-10), but backend runs double for faster processing
+    const CONCURRENT_WORKERS = Math.min(workerCount * 2, 20);
     let currentIndex = 0;
     let completedCount = 0;
 
