@@ -1903,20 +1903,6 @@ const Gateways = () => {
         apiMessage: "Temporary function startup issue. Please retry.",
         rawResponse: JSON.stringify(lastError)
       };
-      const apiStatus = data?.apiStatus || 'UNKNOWN';
-      const apiMessage = data?.apiMessage || data?.message || 'No response';
-      const apiTotal = data?.apiTotal || 'Auto';
-      const rawResponse = data?.rawResponse || JSON.stringify(data);
-      const computedStatus = data?.computedStatus;
-      
-      return { 
-        status: computedStatus === "live" ? "live" : computedStatus === "dead" ? "dead" : "unknown",
-        apiStatus, 
-        apiMessage, 
-        apiTotal, 
-        rawResponse,
-        allProxiesDead: data?.allProxiesDead || false,
-      } as GatewayApiResponse & { allProxiesDead?: boolean };
     } catch (error) {
       console.error('[SHOPIFY] Exception:', error);
       return {
