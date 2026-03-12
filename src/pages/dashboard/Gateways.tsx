@@ -1836,23 +1836,73 @@ const Gateways = () => {
     
     try {
       console.log(`[SHOPIFY] Sending:`, cc, `Price group:`, shopifyPriceGroup);
-      
-      const { data, error } = await supabase.functions.invoke('shopify-charge-check', {
-        body: { cc, priceGroup: shopifyPriceGroup }
-      });
-      
-      if (error) {
-        console.error('[SHOPIFY] Error:', error);
+
+      const MAX_RETRIES = 3;
+      let lastError: unknown = null;
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        const { data, error } = await supabase.functions.invoke('shopify-charge-check', {
+          body: { cc, priceGroup: shopifyPriceGroup }
+        });
+
+        if (!error) {
+          console.log('[SHOPIFY] Response:', data);
+
+          const apiStatus = data?.apiStatus || 'UNKNOWN';
+          const apiMessage = data?.apiMessage || data?.message || 'No response';
+          const apiTotal = data?.apiTotal || 'Auto';
+          const rawResponse = data?.rawResponse || JSON.stringify(data);
+          const computedStatus = data?.computedStatus;
+
+          return {
+            status: computedStatus === "live" ? "live" : computedStatus === "dead" ? "dead" : "unknown",
+            apiStatus,
+            apiMessage,
+            apiTotal,
+            rawResponse,
+            allProxiesDead: data?.allProxiesDead || false,
+          } as GatewayApiResponse & { allProxiesDead?: boolean };
+        }
+
+        lastError = error;
+
+        const context = (error as { context?: Response })?.context;
+        const statusCode = context instanceof Response ? context.status : undefined;
+        let errorBody: any = null;
+        if (context instanceof Response) {
+          try {
+            errorBody = await context.clone().json();
+          } catch {
+            errorBody = null;
+          }
+        }
+
+        const isBootError = statusCode === 503 || errorBody?.code === 'BOOT_ERROR';
+        const isRetryable = isBootError || statusCode === 502 || statusCode === 504;
+
+        if (isRetryable && attempt < MAX_RETRIES) {
+          const backoffMs = 250 * attempt;
+          console.warn(`[SHOPIFY] Retry ${attempt}/${MAX_RETRIES} after ${statusCode ?? 'unknown'} (${errorBody?.code ?? 'no_code'})`);
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          continue;
+        }
+
+        console.error('[SHOPIFY] Error:', error, errorBody);
         return {
           status: "unknown",
           apiStatus: "ERROR",
-          apiMessage: error.message || "Connection error",
-          rawResponse: JSON.stringify(error)
+          apiMessage: errorBody?.message || error.message || "Connection error",
+          rawResponse: JSON.stringify(errorBody || error)
         };
       }
-      
-      console.log('[SHOPIFY] Response:', data);
-      
+
+      console.error('[SHOPIFY] Exhausted retries:', lastError);
+      return {
+        status: "unknown",
+        apiStatus: "ERROR",
+        apiMessage: "Temporary function startup issue. Please retry.",
+        rawResponse: JSON.stringify(lastError)
+      };
       const apiStatus = data?.apiStatus || 'UNKNOWN';
       const apiMessage = data?.apiMessage || data?.message || 'No response';
       const apiTotal = data?.apiTotal || 'Auto';
