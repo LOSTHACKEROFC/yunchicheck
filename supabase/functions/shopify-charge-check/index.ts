@@ -325,15 +325,16 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { cc, priceGroup } = body;
     
-    if (!cc) {
-      return new Response(JSON.stringify({ error: 'Card required', computedStatus: 'unknown' }), 
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    // Allow warmup calls to pass through without validation
+    if (!cc || cc === 'warmup') {
+      return new Response(JSON.stringify({ status: 'ok', warmup: true }), 
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // Quick format validation - CVC required
     const parts = cc.split('|');
     if (parts.length < 4 || !parts[3] || parts[3].length < 3 || !/^\d+$/.test(parts[3])) {
-      return new Response(JSON.stringify({ error: "Format: CardNumber|MM|YY|CVC", computedStatus: 'unknown' }), 
+      return new Response(JSON.stringify({ error: "Format: CardNumber|MM|YY|CVC", computedStatus: 'dead' }), 
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
