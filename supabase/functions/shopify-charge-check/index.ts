@@ -278,9 +278,36 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ s
   } catch (error) {
     clearTimeout(timeoutId);
     const errMsg = error instanceof Error ? error.message : 'Error';
-    console.error(`[SHOPIFY-CHARGE] Error: ${errMsg}`);
-    return { status: 'unknown', message: 'Timeout', apiResponse: '', rawResponse: errMsg, price: 0, priceStr: '$0.00' };
+    return { status: 'unknown', message: errMsg.includes('abort') ? 'Timeout' : errMsg, apiResponse: '', rawResponse: errMsg, price: 0, priceStr: '$0.00' };
   }
+};
+
+// Wrapper with automatic retry for transient failures (timeout, empty response)
+const callApi = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string }> => {
+  console.log(`[SHOPIFY-CHARGE] Calling: site=${site} proxy=${proxy ? 'yes' : 'none'}`);
+  
+  const result = await callApiOnce(cc, site, proxy);
+  
+  // If result is a definitive live/dead, return immediately
+  if (result.status === 'live' || result.status === 'dead') {
+    console.log(`[SHOPIFY-CHARGE] Result: ${result.status}`);
+    return result;
+  }
+  
+  // For unknown results caused by timeout/empty/transient errors, retry once after a short delay
+  const msg = (result.message || '').toLowerCase();
+  const isRetryable = msg.includes('timeout') || msg.includes('empty') || msg.includes('abort') || 
+                      msg.includes('request failed') || result.rawResponse === '';
+  
+  if (isRetryable) {
+    console.log(`[SHOPIFY-CHARGE] Retrying once after transient failure: ${result.message}`);
+    await new Promise(r => setTimeout(r, 800 + Math.random() * 400));
+    const retryResult = await callApiOnce(cc, site, proxy);
+    console.log(`[SHOPIFY-CHARGE] Retry result: ${retryResult.status}`);
+    return retryResult;
+  }
+  
+  return result;
 };
 
 Deno.serve(async (req) => {
