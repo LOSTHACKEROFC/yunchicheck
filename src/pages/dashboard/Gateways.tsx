@@ -1915,7 +1915,6 @@ const Gateways = () => {
       apiMessage: "All retries exhausted",
       rawResponse: ""
     };
-    }
   };
 
   // AuthNet Charge API check via edge function - $1 charge
