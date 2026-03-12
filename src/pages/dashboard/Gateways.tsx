@@ -4842,6 +4842,20 @@ const Gateways = () => {
                               <span className="font-mono text-xs text-foreground font-bold italic flex-1 break-all">
                                 {r.fullCard}
                               </span>
+                              {r.status === "unknown" && !bulkChecking && (
+                                <button
+                                  onClick={() => {
+                                    // Remove this result and recheck just this card
+                                    setBulkResults(prev => prev.filter(p => p._id !== r._id));
+                                    setBulkInput(r.fullCard);
+                                    setTimeout(() => startBulkCheck(), 100);
+                                  }}
+                                  className="p-1 hover:bg-yellow-500/20 rounded shrink-0"
+                                  title="Recheck this card"
+                                >
+                                  <RefreshCw className="h-3 w-3 text-yellow-500" />
+                                </button>
+                              )}
                               <button
                                 onClick={() => {
                                   navigator.clipboard.writeText(r.fullCard || '');
