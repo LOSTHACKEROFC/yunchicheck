@@ -3119,72 +3119,21 @@ const Gateways = () => {
     let completedCount = 0;
 
     if (selectedGateway.id === "shopify_charge") {
-      // SHOPIFY BATCH MODE: Send batches of 10 cards to the batch edge function
-      // This is significantly faster because auth, sites, and proxies are fetched ONCE per batch
+      // SHOPIFY BATCH MODE: 5 concurrent batch workers × 10 cards each = 50 cards in flight
+      // Auth, sites, and proxies are fetched ONCE per batch on the server — massive speedup
       const BATCH_SIZE = 10;
-      
-      while (currentIndex < affordableCards.length && !bulkAbortRef.current) {
-        // Wait if paused
-        while (bulkPauseRef.current && !bulkAbortRef.current) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        if (bulkAbortRef.current) break;
+      const CONCURRENT_BATCHES = 5;
 
-        // Grab next batch of cards
-        const batchEnd = Math.min(currentIndex + BATCH_SIZE, affordableCards.length);
-        const batchCards = affordableCards.slice(currentIndex, batchEnd);
-        const batchStartIndices = Array.from({ length: batchCards.length }, (_, i) => currentIndex + i);
-        currentIndex = batchEnd;
-
-        // Deduct credits upfront for entire batch
-        let batchCreditsOk = true;
-        for (let i = 0; i < batchCards.length; i++) {
-          if (remainingCredits < 1) {
-            bulkAbortRef.current = true;
-            toast.warning("Credits exhausted — remaining cards skipped.");
-            batchCreditsOk = false;
-            break;
-          }
-          let upfrontSuccess = false;
-          for (let deductAttempt = 0; deductAttempt < 3; deductAttempt++) {
-            try {
-              const { data, error } = await supabase.functions.invoke('deduct-credits', { body: { amount: 1 } });
-              if (!error && data?.success) {
-                remainingCredits = data.newCredits;
-                totalCreditsDeducted += 1;
-                setUserCredits(data.newCredits);
-                upfrontSuccess = true;
-                break;
-              }
-              if (data?.error?.includes?.('insufficient') || data?.newCredits === 0) break;
-              if (deductAttempt < 2) await new Promise(r => setTimeout(r, 500 + deductAttempt * 300));
-            } catch (e) {
-              if (deductAttempt < 2) await new Promise(r => setTimeout(r, 500 + deductAttempt * 300));
-            }
-          }
-          if (!upfrontSuccess) {
-            if (remainingCredits <= 1) {
-              bulkAbortRef.current = true;
-              toast.warning("Credits exhausted — remaining cards skipped.");
-              batchCreditsOk = false;
-            }
-            break;
-          }
-        }
-
-        if (!batchCreditsOk || bulkAbortRef.current) break;
-
-        // Build CC strings for the batch
-        const ccStrings = batchCards.map(c => `${c.card}|${c.month}|${c.year}|${c.cvv}`);
+      // Helper to process a single batch of cards
+      const processBatch = async (batchCards: typeof affordableCards, ccStrings: string[]): Promise<void> => {
+        if (bulkAbortRef.current) return;
 
         try {
-          // Single edge function call processes all 10 cards in parallel on the server
           const { data, error } = await supabase.functions.invoke('shopify-batch-check', {
             body: { cards: ccStrings, priceGroup: shopifyPriceGroup }
           });
 
           if (error || !data?.results) {
-            // On error, mark all batch cards as unknown
             for (let i = 0; i < batchCards.length; i++) {
               const cardData = batchCards[i];
               const { brand, brandColor } = detectCardBrandLocal(cardData.card);
@@ -3209,12 +3158,11 @@ const Gateways = () => {
               processedCount++;
               bulkStatsRef.current.completed = completedCount;
             }
-            continue;
+            return;
           }
 
           const results: { cc: string; computedStatus: string; apiStatus: string; apiMessage: string; apiTotal: string; rawResponse: string; usedSite: string; allProxiesDead?: boolean }[] = data.results;
 
-          // Process each result from the batch
           for (let i = 0; i < results.length; i++) {
             const r = results[i];
             const cardData = batchCards[i];
@@ -3247,14 +3195,14 @@ const Gateways = () => {
               }
             }
 
-            // Log check
-            await supabase.from('card_checks').insert({
+            // Log check (fire and forget for speed)
+            supabase.from('card_checks').insert({
               user_id: userId,
               gateway: selectedGateway.id,
               status: 'completed',
               result: checkStatus,
               card_details: fullCardStr
-            });
+            }).then(() => {});
 
             const { brand, brandColor } = detectCardBrandLocal(cardData.card);
 
@@ -3313,7 +3261,74 @@ const Gateways = () => {
         } catch (batchError) {
           console.error('[SHOPIFY-BATCH] Batch error:', batchError);
         }
-      }
+      };
+
+      // Batch worker: keeps grabbing batches of 10 until all cards are processed
+      const batchWorker = async (): Promise<void> => {
+        while (!bulkAbortRef.current) {
+          // Wait if paused
+          while (bulkPauseRef.current && !bulkAbortRef.current) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          if (bulkAbortRef.current) return;
+
+          // Grab next batch atomically
+          const batchStart = currentIndex;
+          if (batchStart >= affordableCards.length) return;
+          const batchEnd = Math.min(batchStart + BATCH_SIZE, affordableCards.length);
+          currentIndex = batchEnd;
+
+          const batchCards = affordableCards.slice(batchStart, batchEnd);
+
+          // Deduct credits for this batch
+          let batchCreditsOk = true;
+          for (let i = 0; i < batchCards.length; i++) {
+            if (remainingCredits < 1) {
+              bulkAbortRef.current = true;
+              toast.warning("Credits exhausted — remaining cards skipped.");
+              batchCreditsOk = false;
+              break;
+            }
+            let upfrontSuccess = false;
+            for (let deductAttempt = 0; deductAttempt < 3; deductAttempt++) {
+              try {
+                const { data, error } = await supabase.functions.invoke('deduct-credits', { body: { amount: 1 } });
+                if (!error && data?.success) {
+                  remainingCredits = data.newCredits;
+                  totalCreditsDeducted += 1;
+                  setUserCredits(data.newCredits);
+                  upfrontSuccess = true;
+                  break;
+                }
+                if (data?.error?.includes?.('insufficient') || data?.newCredits === 0) break;
+                if (deductAttempt < 2) await new Promise(r => setTimeout(r, 500 + deductAttempt * 300));
+              } catch (e) {
+                if (deductAttempt < 2) await new Promise(r => setTimeout(r, 500 + deductAttempt * 300));
+              }
+            }
+            if (!upfrontSuccess) {
+              if (remainingCredits <= 1) {
+                bulkAbortRef.current = true;
+                toast.warning("Credits exhausted — remaining cards skipped.");
+              }
+              batchCreditsOk = false;
+              break;
+            }
+          }
+
+          if (!batchCreditsOk || bulkAbortRef.current) return;
+
+          const ccStrings = batchCards.map(c => `${c.card}|${c.month}|${c.year}|${c.cvv}`);
+          await processBatch(batchCards, ccStrings);
+        }
+      };
+
+      // Launch 5 concurrent batch workers (5 × 10 = 50 cards in flight)
+      const batchWorkers = Array(Math.min(CONCURRENT_BATCHES, Math.ceil(affordableCards.length / BATCH_SIZE)))
+        .fill(null)
+        .map(() => batchWorker());
+
+      await Promise.all(batchWorkers);
     } else {
       // STANDARD MODE: 10 parallel workers for all other gateways
       const processNextCard = async (): Promise<void> => {
