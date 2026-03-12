@@ -170,6 +170,18 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
 
     // Check for bad responses
     const isBadResponse = badResponses.some(bad => rawText.toLowerCase().includes(bad.toLowerCase()));
+    // Check for DELIVERY_ADDRESS — classify as DECLINED
+    if (rawText.includes('DELIVERY_ADDRESS')) {
+      return { status: 'dead', message: 'DELIVERY_ADDRESS error - Declined', apiResponse: 'DELIVERY_ADDRESS', rawResponse: rawText, price: 0, priceStr: '$0.00' };
+    }
+
+    // Check for strike responses (e.g. MERCHANDISE_EXPECTED_PRICE_MISMATCH) — track per site, remove after 3 consecutive
+    const matchedStrike = strikeResponses.find(s => rawText.toLowerCase().includes(s.toLowerCase()));
+    if (matchedStrike) {
+      // This is still a dead result for the card
+      return { status: 'dead', message: `${matchedStrike} - site issue`, apiResponse: matchedStrike, rawResponse: rawText, price: 0, priceStr: '$0.00' };
+    }
+
     if (isBadResponse) {
       return { status: 'dead', message: 'Bad response - site issue', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
     }
