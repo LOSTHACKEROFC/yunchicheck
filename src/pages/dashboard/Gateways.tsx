@@ -3165,32 +3165,75 @@ const Gateways = () => {
 
     // Keep Shopify concurrency lower to avoid edge function cold-start bursts
     const isShopifyBulk = selectedGateway.id === "shopify_charge";
-    const workerMultiplier = isShopifyBulk ? 2 : 4;
-    const maxWorkers = isShopifyBulk ? 20 : 40;
-    const CONCURRENT_WORKERS = Math.min(workerCount * workerMultiplier, maxWorkers);
-    let currentIndex = 0;
     let completedCount = 0;
 
-    {
+    if (isShopifyBulk) {
+      // HealthCheck-style batch model: 50 concurrent with 100ms stagger, advance when 49/50 done
+      const SHOPIFY_CONCURRENCY = 50;
+      const MIN_COMPLETE_BEFORE_NEXT = 49;
+      let cardIndex = 0;
+
+      while (cardIndex < affordableCards.length && !bulkAbortRef.current) {
+        const batchEnd = Math.min(cardIndex + SHOPIFY_CONCURRENCY, affordableCards.length);
+        const batchIndices = Array.from({ length: batchEnd - cardIndex }, (_, i) => cardIndex + i);
+
+        let batchCompleted = 0;
+        const batchDonePromise = new Promise<void>((resolve) => {
+          const promises = batchIndices.map(async (idx, launchOrder) => {
+            if (bulkAbortRef.current) return;
+            // Stagger launches by 100ms each to avoid simultaneous cold-starts
+            if (launchOrder > 0) await new Promise(r => setTimeout(r, launchOrder * 100));
+            if (bulkAbortRef.current) return;
+
+            // Wait if paused
+            while (bulkPauseRef.current && !bulkAbortRef.current) {
+              await new Promise(r => setTimeout(r, 100));
+            }
+            if (bulkAbortRef.current) return;
+
+            const result = await processCard(idx);
+            if (result && !bulkAbortRef.current) {
+              allResults.push(result);
+              completedCount++;
+              processedCount++;
+              pendingResultsRef.current.push(result);
+              bulkStatsRef.current.completed = completedCount;
+              scheduleFlush();
+
+              batchCompleted++;
+              if (batchCompleted >= Math.min(MIN_COMPLETE_BEFORE_NEXT, batchIndices.length)) {
+                resolve();
+              }
+            }
+          });
+          // Safety: resolve when ALL are done regardless
+          Promise.all(promises).then(() => resolve());
+        });
+
+        await batchDonePromise;
+        cardIndex = batchEnd;
+      }
+    } else {
+      // Other gateways: worker-pool model
+      const workerMultiplier = 4;
+      const maxWorkers = 40;
+      const CONCURRENT_WORKERS = Math.min(workerCount * workerMultiplier, maxWorkers);
+      let currentIndex = 0;
+
       const processNextCard = async (): Promise<void> => {
         while (currentIndex < affordableCards.length && !bulkAbortRef.current) {
           const myIndex = currentIndex++;
           
-          // Wait if paused
           while (bulkPauseRef.current && !bulkAbortRef.current) {
             await new Promise(resolve => setTimeout(resolve, 100));
           }
-          
           if (bulkAbortRef.current) return;
           
           const result = await processCard(myIndex);
-          
           if (result) {
             allResults.push(result);
             completedCount++;
             processedCount++;
-            
-            // Push to pending batch and trigger immediate rAF flush
             pendingResultsRef.current.push(result);
             bulkStatsRef.current.completed = completedCount;
             scheduleFlush();
@@ -3198,15 +3241,9 @@ const Gateways = () => {
         }
       };
 
-      // Start concurrent workers (small stagger for Shopify to prevent startup storms)
       const workers = Array(Math.min(CONCURRENT_WORKERS, affordableCards.length))
         .fill(null)
-        .map((_, workerIndex) => (async () => {
-          if (isShopifyBulk && workerIndex > 0) {
-            await new Promise((resolve) => setTimeout(resolve, workerIndex * 75));
-          }
-          await processNextCard();
-        })());
+        .map(() => processNextCard());
       
       await Promise.all(workers);
     }
