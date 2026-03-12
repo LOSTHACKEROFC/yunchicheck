@@ -66,7 +66,7 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
   // Email availability state
   const [emailStatus, setEmailStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
   const [emailError, setEmailError] = useState<string>("");
-  const emailCheckTimeout = useRef<NodeJS.Timeout | null>(null);
+  const emailCheckTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Password strength state
   const [passwordStrength, setPasswordStrength] = useState<"weak" | "medium" | "strong" | null>(null);
