@@ -61,12 +61,12 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
   // Username availability state
   const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
   const [usernameError, setUsernameError] = useState<string>("");
-  const usernameCheckTimeout = useRef<NodeJS.Timeout | null>(null);
+  const usernameCheckTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Email availability state
   const [emailStatus, setEmailStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
   const [emailError, setEmailError] = useState<string>("");
-  const emailCheckTimeout = useRef<NodeJS.Timeout | null>(null);
+  const emailCheckTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Password strength state
   const [passwordStrength, setPasswordStrength] = useState<"weak" | "medium" | "strong" | null>(null);
@@ -75,7 +75,7 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
   // Telegram ID availability state
   const [telegramIdStatus, setTelegramIdStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
   const [telegramIdError, setTelegramIdError] = useState<string>("");
-  const telegramIdCheckTimeout = useRef<NodeJS.Timeout | null>(null);
+  const telegramIdCheckTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Telegram profile state
   const [telegramProfile, setTelegramProfile] = useState<{
