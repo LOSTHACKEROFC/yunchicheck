@@ -160,7 +160,7 @@ const checkSingleCard = async (
       if (isBadResponse) {
         result = { status: 'dead', message: 'Bad response - site issue', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
         // Remove bad site
-        adminClient.from('gateway_urls').delete().eq('url', randomSite.url).catch(() => {});
+        adminClient.from('gateway_urls').delete().eq('url', randomSite.url).then(() => {});
         break;
       }
 
