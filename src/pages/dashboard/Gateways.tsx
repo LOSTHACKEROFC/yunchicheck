@@ -332,6 +332,10 @@ const Gateways = () => {
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bulkStatsRef = useRef({ completed: 0, total: 0, startTime: 0 });
 
+  // Shopify startup-pressure controls (mitigates transient 503 BOOT_ERROR spikes)
+  const shopifyInflightRef = useRef(0);
+  const shopifyCooldownUntilRef = useRef(0);
+
   // Gateway history state
   const [gatewayHistory, setGatewayHistory] = useState<GatewayCheck[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -1833,7 +1837,22 @@ const Gateways = () => {
   // Shopify Charge API check via edge function - uses user proxies + auto-rotating sites
   const checkCardViaShopify = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
-    
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    const acquireShopifySlot = async () => {
+      const MAX_SHOPIFY_INFLIGHT = 8;
+      while (shopifyInflightRef.current >= MAX_SHOPIFY_INFLIGHT) {
+        await sleep(35);
+      }
+      shopifyInflightRef.current += 1;
+    };
+
+    const releaseShopifySlot = () => {
+      shopifyInflightRef.current = Math.max(0, shopifyInflightRef.current - 1);
+    };
+
+    await acquireShopifySlot();
+
     try {
       console.log(`[SHOPIFY] Sending:`, cc, `Price group:`, shopifyPriceGroup);
 
@@ -1841,6 +1860,11 @@ const Gateways = () => {
       let lastError: unknown = null;
 
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        const now = Date.now();
+        if (shopifyCooldownUntilRef.current > now) {
+          await sleep(shopifyCooldownUntilRef.current - now);
+        }
+
         const { data, error } = await supabase.functions.invoke('shopify-charge-check', {
           body: { cc, priceGroup: shopifyPriceGroup }
         });
@@ -1905,11 +1929,21 @@ const Gateways = () => {
           isRetryableHttpStartupError;
 
         if (isRetryable && attempt < MAX_RETRIES) {
-          const baseBackoff = Math.min(300 * (2 ** (attempt - 1)), 2000);
-          const jitter = Math.floor(Math.random() * 150);
+          const baseBackoff = Math.min(300 * (2 ** (attempt - 1)), 2200);
+          const jitter = Math.floor(Math.random() * 180);
           const backoffMs = baseBackoff + jitter;
+
+          // Shared cooldown throttles all concurrent Shopify callers after startup failures
+          if (isBootError) {
+            const startupCooldownMs = Math.min(900 + attempt * 350, 2600);
+            shopifyCooldownUntilRef.current = Math.max(
+              shopifyCooldownUntilRef.current,
+              Date.now() + startupCooldownMs,
+            );
+          }
+
           console.warn(`[SHOPIFY] Retry ${attempt}/${MAX_RETRIES} after ${statusCode ?? 'unknown'} (${bodyCode || 'no_code'}) in ${backoffMs}ms`);
-          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          await sleep(backoffMs);
           continue;
         }
 
@@ -1937,6 +1971,8 @@ const Gateways = () => {
         apiMessage: error instanceof Error ? error.message : "Unknown error",
         rawResponse: String(error)
       };
+    } finally {
+      releaseShopifySlot();
     }
   };
 
