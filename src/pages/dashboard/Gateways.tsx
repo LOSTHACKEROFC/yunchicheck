@@ -1834,10 +1834,25 @@ const Gateways = () => {
   };
 
   // Shopify Charge API check via edge function - uses user proxies + auto-rotating sites
-  // Uses same retry pattern as HealthCheck: 3 retries with exponential backoff
+  const warmupShopifyFunction = async () => {
+    const now = Date.now();
+    if (now - shopifyWarmupAtRef.current < SHOPIFY_WARMUP_TTL_MS) return;
+
+    shopifyWarmupAtRef.current = now;
+    try {
+      await supabase.functions.invoke('shopify-charge-check', {
+        body: { cc: 'warmup' },
+      });
+    } catch {
+      // Warmup is best-effort only
+    }
+  };
+
   const checkCardViaShopify = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
-    const MAX_RETRIES = 3;
+    const MAX_RETRIES = 5;
+
+    await warmupShopifyFunction();
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
@@ -1863,28 +1878,40 @@ const Gateways = () => {
           } as GatewayApiResponse & { allProxiesDead?: boolean };
         }
 
-        // Check if retryable (503, BOOT_ERROR, network issues)
         const context = (error as { context?: Response })?.context;
         const statusCode = context instanceof Response ? context.status : undefined;
+
         let errorBody: any = null;
         if (context instanceof Response) {
-          try { errorBody = await context.clone().json(); } catch { errorBody = null; }
+          try {
+            errorBody = await context.clone().json();
+          } catch {
+            errorBody = null;
+          }
         }
 
         const sdkMessage = typeof error?.message === 'string' ? error.message.toLowerCase() : '';
-        const bodyCode = typeof errorBody?.code === 'string' ? errorBody.code : '';
+        const bodyCode = typeof errorBody?.code === 'string' ? errorBody.code.toLowerCase() : '';
         const bodyMessage = typeof errorBody?.message === 'string' ? errorBody.message.toLowerCase() : '';
 
-        const isBootError = statusCode === 503 || bodyCode === 'BOOT_ERROR' || bodyMessage.includes('failed to start');
+        const isBootError = statusCode === 503 || bodyCode === 'boot_error' || bodyMessage.includes('failed to start') || bodyMessage.includes('function failed to start');
         const isRetryable = isBootError || statusCode === 502 || statusCode === 504 ||
           sdkMessage.includes('failed to send') || sdkMessage.includes('network') ||
           sdkMessage.includes('edge function returned 503') || sdkMessage.includes('boot_error');
 
         if (isRetryable && attempt < MAX_RETRIES) {
-          const backoffMs = 2000 * attempt + Math.floor(Math.random() * 500);
-          console.warn(`[SHOPIFY] Retry ${attempt}/${MAX_RETRIES} after ${statusCode ?? 'unknown'} in ${backoffMs}ms`);
+          const baseDelay = isBootError ? 1200 : 900;
+          const backoffMs = Math.min(12000, baseDelay * (2 ** (attempt - 1)) + Math.floor(Math.random() * 500));
+          console.warn(`[SHOPIFY] Retry ${attempt}/${MAX_RETRIES} after ${statusCode ?? 'unknown'} (${isBootError ? 'BOOT_ERROR' : 'transient'}) in ${backoffMs}ms`);
           await new Promise(r => setTimeout(r, backoffMs));
           continue;
+        }
+
+        let rawError = '';
+        try {
+          rawError = JSON.stringify(errorBody || error);
+        } catch {
+          rawError = String(errorBody?.message || error?.message || 'Unknown error');
         }
 
         console.error('[SHOPIFY] Error:', error, errorBody);
@@ -1892,13 +1919,18 @@ const Gateways = () => {
           status: "unknown",
           apiStatus: "ERROR",
           apiMessage: errorBody?.message || error.message || "Connection error",
-          rawResponse: JSON.stringify(errorBody || error)
+          rawResponse: rawError,
         };
       } catch (e: any) {
-        if (attempt < MAX_RETRIES) {
-          await new Promise(r => setTimeout(r, 2000 * attempt));
+        const msg = typeof e?.message === 'string' ? e.message.toLowerCase() : '';
+        const isRetryableException = msg.includes('network') || msg.includes('failed to fetch') || msg.includes('503') || msg.includes('boot_error');
+
+        if (isRetryableException && attempt < MAX_RETRIES) {
+          const backoffMs = Math.min(12000, 1000 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 500));
+          await new Promise(r => setTimeout(r, backoffMs));
           continue;
         }
+
         return {
           status: "unknown",
           apiStatus: "ERROR",
