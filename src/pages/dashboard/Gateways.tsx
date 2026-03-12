@@ -1837,7 +1837,7 @@ const Gateways = () => {
     try {
       console.log(`[SHOPIFY] Sending:`, cc, `Price group:`, shopifyPriceGroup);
 
-      const MAX_RETRIES = 3;
+      const MAX_RETRIES = 5;
       let lastError: unknown = null;
 
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -1877,12 +1877,27 @@ const Gateways = () => {
           }
         }
 
-        const isBootError = statusCode === 503 || errorBody?.code === 'BOOT_ERROR';
-        const isRetryable = isBootError || statusCode === 502 || statusCode === 504;
+        const sdkMessage = typeof error?.message === 'string' ? error.message.toLowerCase() : '';
+        const bodyCode = typeof errorBody?.code === 'string' ? errorBody.code : '';
+        const bodyMessage = typeof errorBody?.message === 'string' ? errorBody.message.toLowerCase() : '';
+
+        const isBootError =
+          statusCode === 503 ||
+          bodyCode === 'BOOT_ERROR' ||
+          bodyMessage.includes('failed to start');
+
+        const isRetryableNetworkError =
+          sdkMessage.includes('failed to send a request to the edge function') ||
+          sdkMessage.includes('signal is aborted without reason') ||
+          sdkMessage.includes('network');
+
+        const isRetryable = isBootError || statusCode === 502 || statusCode === 504 || isRetryableNetworkError;
 
         if (isRetryable && attempt < MAX_RETRIES) {
-          const backoffMs = 250 * attempt;
-          console.warn(`[SHOPIFY] Retry ${attempt}/${MAX_RETRIES} after ${statusCode ?? 'unknown'} (${errorBody?.code ?? 'no_code'})`);
+          const baseBackoff = Math.min(300 * (2 ** (attempt - 1)), 2000);
+          const jitter = Math.floor(Math.random() * 150);
+          const backoffMs = baseBackoff + jitter;
+          console.warn(`[SHOPIFY] Retry ${attempt}/${MAX_RETRIES} after ${statusCode ?? 'unknown'} (${bodyCode || 'no_code'}) in ${backoffMs}ms`);
           await new Promise((resolve) => setTimeout(resolve, backoffMs));
           continue;
         }
