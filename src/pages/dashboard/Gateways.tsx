@@ -1891,7 +1891,18 @@ const Gateways = () => {
           sdkMessage.includes('signal is aborted without reason') ||
           sdkMessage.includes('network');
 
-        const isRetryable = isBootError || statusCode === 502 || statusCode === 504 || isRetryableNetworkError;
+        const isRetryableHttpStartupError =
+          sdkMessage.includes('edge function returned 503') ||
+          sdkMessage.includes('boot_error') ||
+          sdkMessage.includes('function failed to start') ||
+          (sdkMessage.includes('non-2xx status code') && (bodyCode === 'BOOT_ERROR' || bodyMessage.includes('failed to start')));
+
+        const isRetryable =
+          isBootError ||
+          statusCode === 502 ||
+          statusCode === 504 ||
+          isRetryableNetworkError ||
+          isRetryableHttpStartupError;
 
         if (isRetryable && attempt < MAX_RETRIES) {
           const baseBackoff = Math.min(300 * (2 ** (attempt - 1)), 2000);
