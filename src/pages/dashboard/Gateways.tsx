@@ -1894,6 +1894,17 @@ const Gateways = () => {
         const bodyCode = typeof errorBody?.code === 'string' ? errorBody.code.toLowerCase() : '';
         const bodyMessage = typeof errorBody?.message === 'string' ? errorBody.message.toLowerCase() : '';
 
+        // 400 = card format/validation error — not retryable, mark as dead
+        if (statusCode === 400) {
+          const errMsg = errorBody?.error || errorBody?.message || error.message || 'Invalid card format';
+          return {
+            status: "dead",
+            apiStatus: "DECLINED",
+            apiMessage: errMsg,
+            rawResponse: JSON.stringify(errorBody || error),
+          };
+        }
+
         const isBootError = statusCode === 503 || bodyCode === 'boot_error' || bodyMessage.includes('failed to start') || bodyMessage.includes('function failed to start');
         const isRetryable = isBootError || statusCode === 502 || statusCode === 504 ||
           sdkMessage.includes('failed to send') || sdkMessage.includes('network') ||
