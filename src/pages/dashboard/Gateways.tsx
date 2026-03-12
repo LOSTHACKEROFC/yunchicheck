@@ -332,9 +332,6 @@ const Gateways = () => {
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bulkStatsRef = useRef({ completed: 0, total: 0, startTime: 0 });
 
-  // Shopify startup-pressure controls (mitigates transient 503 BOOT_ERROR spikes)
-  const shopifyInflightRef = useRef(0);
-  const shopifyCooldownUntilRef = useRef(0);
 
   // Gateway history state
   const [gatewayHistory, setGatewayHistory] = useState<GatewayCheck[]>([]);
@@ -1835,43 +1832,19 @@ const Gateways = () => {
   };
 
   // Shopify Charge API check via edge function - uses user proxies + auto-rotating sites
+  // Uses same retry pattern as HealthCheck: 3 retries with exponential backoff
   const checkCardViaShopify = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
-    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const MAX_RETRIES = 3;
 
-    const acquireShopifySlot = async () => {
-      const MAX_SHOPIFY_INFLIGHT = 8;
-      while (shopifyInflightRef.current >= MAX_SHOPIFY_INFLIGHT) {
-        await sleep(35);
-      }
-      shopifyInflightRef.current += 1;
-    };
-
-    const releaseShopifySlot = () => {
-      shopifyInflightRef.current = Math.max(0, shopifyInflightRef.current - 1);
-    };
-
-    await acquireShopifySlot();
-
-    try {
-      console.log(`[SHOPIFY] Sending:`, cc, `Price group:`, shopifyPriceGroup);
-
-      const MAX_RETRIES = 5;
-      let lastError: unknown = null;
-
-      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        const now = Date.now();
-        if (shopifyCooldownUntilRef.current > now) {
-          await sleep(shopifyCooldownUntilRef.current - now);
-        }
-
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
         const { data, error } = await supabase.functions.invoke('shopify-charge-check', {
           body: { cc, priceGroup: shopifyPriceGroup }
         });
 
         if (!error) {
           console.log('[SHOPIFY] Response:', data);
-
           const apiStatus = data?.apiStatus || 'UNKNOWN';
           const apiMessage = data?.apiMessage || data?.message || 'No response';
           const apiTotal = data?.apiTotal || 'Auto';
@@ -1888,62 +1861,27 @@ const Gateways = () => {
           } as GatewayApiResponse & { allProxiesDead?: boolean };
         }
 
-        lastError = error;
-
+        // Check if retryable (503, BOOT_ERROR, network issues)
         const context = (error as { context?: Response })?.context;
         const statusCode = context instanceof Response ? context.status : undefined;
         let errorBody: any = null;
         if (context instanceof Response) {
-          try {
-            errorBody = await context.clone().json();
-          } catch {
-            errorBody = null;
-          }
+          try { errorBody = await context.clone().json(); } catch { errorBody = null; }
         }
 
         const sdkMessage = typeof error?.message === 'string' ? error.message.toLowerCase() : '';
         const bodyCode = typeof errorBody?.code === 'string' ? errorBody.code : '';
         const bodyMessage = typeof errorBody?.message === 'string' ? errorBody.message.toLowerCase() : '';
 
-        const isBootError =
-          statusCode === 503 ||
-          bodyCode === 'BOOT_ERROR' ||
-          bodyMessage.includes('failed to start');
-
-        const isRetryableNetworkError =
-          sdkMessage.includes('failed to send a request to the edge function') ||
-          sdkMessage.includes('signal is aborted without reason') ||
-          sdkMessage.includes('network');
-
-        const isRetryableHttpStartupError =
-          sdkMessage.includes('edge function returned 503') ||
-          sdkMessage.includes('boot_error') ||
-          sdkMessage.includes('function failed to start') ||
-          (sdkMessage.includes('non-2xx status code') && (bodyCode === 'BOOT_ERROR' || bodyMessage.includes('failed to start')));
-
-        const isRetryable =
-          isBootError ||
-          statusCode === 502 ||
-          statusCode === 504 ||
-          isRetryableNetworkError ||
-          isRetryableHttpStartupError;
+        const isBootError = statusCode === 503 || bodyCode === 'BOOT_ERROR' || bodyMessage.includes('failed to start');
+        const isRetryable = isBootError || statusCode === 502 || statusCode === 504 ||
+          sdkMessage.includes('failed to send') || sdkMessage.includes('network') ||
+          sdkMessage.includes('edge function returned 503') || sdkMessage.includes('boot_error');
 
         if (isRetryable && attempt < MAX_RETRIES) {
-          const baseBackoff = Math.min(300 * (2 ** (attempt - 1)), 2200);
-          const jitter = Math.floor(Math.random() * 180);
-          const backoffMs = baseBackoff + jitter;
-
-          // Shared cooldown throttles all concurrent Shopify callers after startup failures
-          if (isBootError) {
-            const startupCooldownMs = Math.min(900 + attempt * 350, 2600);
-            shopifyCooldownUntilRef.current = Math.max(
-              shopifyCooldownUntilRef.current,
-              Date.now() + startupCooldownMs,
-            );
-          }
-
-          console.warn(`[SHOPIFY] Retry ${attempt}/${MAX_RETRIES} after ${statusCode ?? 'unknown'} (${bodyCode || 'no_code'}) in ${backoffMs}ms`);
-          await sleep(backoffMs);
+          const backoffMs = 2000 * attempt + Math.floor(Math.random() * 500);
+          console.warn(`[SHOPIFY] Retry ${attempt}/${MAX_RETRIES} after ${statusCode ?? 'unknown'} in ${backoffMs}ms`);
+          await new Promise(r => setTimeout(r, backoffMs));
           continue;
         }
 
@@ -1954,26 +1892,26 @@ const Gateways = () => {
           apiMessage: errorBody?.message || error.message || "Connection error",
           rawResponse: JSON.stringify(errorBody || error)
         };
+      } catch (e: any) {
+        if (attempt < MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, 2000 * attempt));
+          continue;
+        }
+        return {
+          status: "unknown",
+          apiStatus: "ERROR",
+          apiMessage: e?.message || "Request failed",
+          rawResponse: String(e)
+        };
       }
-
-      console.error('[SHOPIFY] Exhausted retries:', lastError);
-      return {
-        status: "unknown",
-        apiStatus: "ERROR",
-        apiMessage: "Temporary function startup issue. Please retry.",
-        rawResponse: JSON.stringify(lastError)
-      };
-    } catch (error) {
-      console.error('[SHOPIFY] Exception:', error);
-      return {
-        status: "unknown",
-        apiStatus: "ERROR",
-        apiMessage: error instanceof Error ? error.message : "Unknown error",
-        rawResponse: String(error)
-      };
-    } finally {
-      releaseShopifySlot();
     }
+
+    return {
+      status: "unknown",
+      apiStatus: "ERROR",
+      apiMessage: "All retries exhausted",
+      rawResponse: ""
+    };
   };
 
   // AuthNet Charge API check via edge function - $1 charge
@@ -3224,32 +3162,75 @@ const Gateways = () => {
 
     // Keep Shopify concurrency lower to avoid edge function cold-start bursts
     const isShopifyBulk = selectedGateway.id === "shopify_charge";
-    const workerMultiplier = isShopifyBulk ? 2 : 4;
-    const maxWorkers = isShopifyBulk ? 20 : 40;
-    const CONCURRENT_WORKERS = Math.min(workerCount * workerMultiplier, maxWorkers);
-    let currentIndex = 0;
     let completedCount = 0;
 
-    {
+    if (isShopifyBulk) {
+      // HealthCheck-style batch model: 50 concurrent with 100ms stagger, advance when 49/50 done
+      const SHOPIFY_CONCURRENCY = 50;
+      const MIN_COMPLETE_BEFORE_NEXT = 49;
+      let cardIndex = 0;
+
+      while (cardIndex < affordableCards.length && !bulkAbortRef.current) {
+        const batchEnd = Math.min(cardIndex + SHOPIFY_CONCURRENCY, affordableCards.length);
+        const batchIndices = Array.from({ length: batchEnd - cardIndex }, (_, i) => cardIndex + i);
+
+        let batchCompleted = 0;
+        const batchDonePromise = new Promise<void>((resolve) => {
+          const promises = batchIndices.map(async (idx, launchOrder) => {
+            if (bulkAbortRef.current) return;
+            // Stagger launches by 100ms each to avoid simultaneous cold-starts
+            if (launchOrder > 0) await new Promise(r => setTimeout(r, launchOrder * 100));
+            if (bulkAbortRef.current) return;
+
+            // Wait if paused
+            while (bulkPauseRef.current && !bulkAbortRef.current) {
+              await new Promise(r => setTimeout(r, 100));
+            }
+            if (bulkAbortRef.current) return;
+
+            const result = await processCard(idx);
+            if (result && !bulkAbortRef.current) {
+              allResults.push(result);
+              completedCount++;
+              processedCount++;
+              pendingResultsRef.current.push(result);
+              bulkStatsRef.current.completed = completedCount;
+              scheduleFlush();
+
+              batchCompleted++;
+              if (batchCompleted >= Math.min(MIN_COMPLETE_BEFORE_NEXT, batchIndices.length)) {
+                resolve();
+              }
+            }
+          });
+          // Safety: resolve when ALL are done regardless
+          Promise.all(promises).then(() => resolve());
+        });
+
+        await batchDonePromise;
+        cardIndex = batchEnd;
+      }
+    } else {
+      // Other gateways: worker-pool model
+      const workerMultiplier = 4;
+      const maxWorkers = 40;
+      const CONCURRENT_WORKERS = Math.min(workerCount * workerMultiplier, maxWorkers);
+      let currentIndex = 0;
+
       const processNextCard = async (): Promise<void> => {
         while (currentIndex < affordableCards.length && !bulkAbortRef.current) {
           const myIndex = currentIndex++;
           
-          // Wait if paused
           while (bulkPauseRef.current && !bulkAbortRef.current) {
             await new Promise(resolve => setTimeout(resolve, 100));
           }
-          
           if (bulkAbortRef.current) return;
           
           const result = await processCard(myIndex);
-          
           if (result) {
             allResults.push(result);
             completedCount++;
             processedCount++;
-            
-            // Push to pending batch and trigger immediate rAF flush
             pendingResultsRef.current.push(result);
             bulkStatsRef.current.completed = completedCount;
             scheduleFlush();
@@ -3257,15 +3238,9 @@ const Gateways = () => {
         }
       };
 
-      // Start concurrent workers (small stagger for Shopify to prevent startup storms)
       const workers = Array(Math.min(CONCURRENT_WORKERS, affordableCards.length))
         .fill(null)
-        .map((_, workerIndex) => (async () => {
-          if (isShopifyBulk && workerIndex > 0) {
-            await new Promise((resolve) => setTimeout(resolve, workerIndex * 75));
-          }
-          await processNextCard();
-        })());
+        .map(() => processNextCard());
       
       await Promise.all(workers);
     }
