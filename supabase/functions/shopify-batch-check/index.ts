@@ -256,7 +256,7 @@ const checkSingleCard = async (
   // Update site price if valid
   if (result.price > 0 && !isBadSite) {
     if (result.price > 100) {
-      adminClient.from('gateway_urls').delete().eq('url', randomSite.url).catch(() => {});
+      adminClient.from('gateway_urls').delete().eq('url', randomSite.url).then(() => {});
     } else if (result.price !== Number(randomSite.price)) {
       adminClient.from('gateway_urls').update({ price: result.price }).eq('url', randomSite.url).catch(() => {});
     }
