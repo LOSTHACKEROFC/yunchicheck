@@ -3512,6 +3512,24 @@ const Gateways = () => {
     stopBackgroundMode();
   };
 
+  // Recheck only UNKNOWN cards
+  const recheckUnknowns = () => {
+    const unknownCards = bulkResults.filter(r => r.status === "unknown");
+    if (unknownCards.length === 0) {
+      toast.info("No unknown results to recheck");
+      return;
+    }
+    // Remove unknown results from current results, keep live/dead
+    setBulkResults(prev => prev.filter(r => r.status !== "unknown"));
+    // Feed unknown cards back into the input and start
+    const unknownCardLines = unknownCards.map(r => r.fullCard).join('\n');
+    setBulkInput(unknownCardLines);
+    // Use a small delay so state updates propagate before starting
+    setTimeout(() => {
+      startBulkCheck();
+    }, 100);
+  };
+
   // Auto-stop bulk check when user navigates away or component unmounts
   useEffect(() => {
     return () => {
