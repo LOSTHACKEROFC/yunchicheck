@@ -3113,42 +3113,241 @@ const Gateways = () => {
       }
     };
 
-    // Process cards with 10 parallel workers (fixed, hidden from UI)
+    // Process cards - Shopify uses server-side batching for speed, others use 10 parallel workers
     const CONCURRENT_WORKERS = 10;
     let currentIndex = 0;
     let completedCount = 0;
 
-    const processNextCard = async (): Promise<void> => {
+    if (selectedGateway.id === "shopify_charge") {
+      // SHOPIFY BATCH MODE: Send batches of 10 cards to the batch edge function
+      // This is significantly faster because auth, sites, and proxies are fetched ONCE per batch
+      const BATCH_SIZE = 10;
+      
       while (currentIndex < affordableCards.length && !bulkAbortRef.current) {
-        const myIndex = currentIndex++;
-        
         // Wait if paused
         while (bulkPauseRef.current && !bulkAbortRef.current) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
-        
-        if (bulkAbortRef.current) return;
-        
-        const result = await processCard(myIndex);
-        
-        if (result) {
-          allResults.push(result);
-          completedCount++;
-          processedCount++;
-          
-          // Push to pending batch instead of immediate setState
-          pendingResultsRef.current.push(result);
-          bulkStatsRef.current.completed = completedCount;
+        if (bulkAbortRef.current) break;
+
+        // Grab next batch of cards
+        const batchEnd = Math.min(currentIndex + BATCH_SIZE, affordableCards.length);
+        const batchCards = affordableCards.slice(currentIndex, batchEnd);
+        const batchStartIndices = Array.from({ length: batchCards.length }, (_, i) => currentIndex + i);
+        currentIndex = batchEnd;
+
+        // Deduct credits upfront for entire batch
+        let batchCreditsOk = true;
+        for (let i = 0; i < batchCards.length; i++) {
+          if (remainingCredits < 1) {
+            bulkAbortRef.current = true;
+            toast.warning("Credits exhausted — remaining cards skipped.");
+            batchCreditsOk = false;
+            break;
+          }
+          let upfrontSuccess = false;
+          for (let deductAttempt = 0; deductAttempt < 3; deductAttempt++) {
+            try {
+              const { data, error } = await supabase.functions.invoke('deduct-credits', { body: { amount: 1 } });
+              if (!error && data?.success) {
+                remainingCredits = data.newCredits;
+                totalCreditsDeducted += 1;
+                setUserCredits(data.newCredits);
+                upfrontSuccess = true;
+                break;
+              }
+              if (data?.error?.includes?.('insufficient') || data?.newCredits === 0) break;
+              if (deductAttempt < 2) await new Promise(r => setTimeout(r, 500 + deductAttempt * 300));
+            } catch (e) {
+              if (deductAttempt < 2) await new Promise(r => setTimeout(r, 500 + deductAttempt * 300));
+            }
+          }
+          if (!upfrontSuccess) {
+            if (remainingCredits <= 1) {
+              bulkAbortRef.current = true;
+              toast.warning("Credits exhausted — remaining cards skipped.");
+              batchCreditsOk = false;
+            }
+            break;
+          }
+        }
+
+        if (!batchCreditsOk || bulkAbortRef.current) break;
+
+        // Build CC strings for the batch
+        const ccStrings = batchCards.map(c => `${c.card}|${c.month}|${c.year}|${c.cvv}`);
+
+        try {
+          // Single edge function call processes all 10 cards in parallel on the server
+          const { data, error } = await supabase.functions.invoke('shopify-batch-check', {
+            body: { cards: ccStrings, priceGroup: shopifyPriceGroup }
+          });
+
+          if (error || !data?.results) {
+            // On error, mark all batch cards as unknown
+            for (let i = 0; i < batchCards.length; i++) {
+              const cardData = batchCards[i];
+              const { brand, brandColor } = detectCardBrandLocal(cardData.card);
+              const displayCardStr = cardData.originalCvv
+                ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
+                : `${cardData.card}|${cardData.month}|${cardData.year}`;
+              const bulkResult: BulkResult = {
+                _id: crypto.randomUUID(),
+                status: "unknown",
+                message: "Error",
+                gateway: selectedGateway.name,
+                cardMasked: maskCard(cardData.card),
+                fullCard: ccStrings[i],
+                displayCard: displayCardStr,
+                brand,
+                brandColor,
+                apiResponse: error?.message || "Batch error",
+              };
+              allResults.push(bulkResult);
+              pendingResultsRef.current.push(bulkResult);
+              completedCount++;
+              processedCount++;
+              bulkStatsRef.current.completed = completedCount;
+            }
+            continue;
+          }
+
+          const results: CardResult[] = data.results;
+
+          // Process each result from the batch
+          for (let i = 0; i < results.length; i++) {
+            const r = results[i];
+            const cardData = batchCards[i];
+            if (!cardData) continue;
+
+            const checkStatus = r.computedStatus === 'live' ? 'live' as const
+              : r.computedStatus === 'dead' ? 'dead' as const
+              : 'unknown' as const;
+
+            const fullCardStr = ccStrings[i];
+            const displayCardStr = cardData.originalCvv
+              ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
+              : `${cardData.card}|${cardData.month}|${cardData.year}`;
+
+            // Extra credit for live cards
+            if (checkStatus === "live") {
+              for (let extraAttempt = 0; extraAttempt < 3; extraAttempt++) {
+                try {
+                  const { data: extraDeduct, error: extraError } = await supabase.functions.invoke('deduct-credits', { body: { amount: 1 } });
+                  if (!extraError && extraDeduct?.success) {
+                    remainingCredits = extraDeduct.newCredits;
+                    totalCreditsDeducted += 1;
+                    setUserCredits(extraDeduct.newCredits);
+                    break;
+                  }
+                  if (extraAttempt < 2) await new Promise(resolve => setTimeout(resolve, 500));
+                } catch (e) {
+                  if (extraAttempt < 2) await new Promise(resolve => setTimeout(resolve, 500));
+                }
+              }
+            }
+
+            // Log check
+            await supabase.from('card_checks').insert({
+              user_id: userId,
+              gateway: selectedGateway.id,
+              status: 'completed',
+              result: checkStatus,
+              card_details: fullCardStr
+            });
+
+            const { brand, brandColor } = detectCardBrandLocal(cardData.card);
+
+            const isOrderPlaced = (r.apiMessage || '').toUpperCase().includes('ORDER_PLACED') ||
+              (r.apiMessage || '').toUpperCase().includes('ORDER PLACED');
+            const apiResponseDisplay = isOrderPlaced
+              ? '💎 ORDER PLACED'
+              : `${r.apiStatus}: ${r.apiMessage}${r.apiTotal ? ` (${r.apiTotal})` : ''}`;
+
+            const bulkResult: BulkResult = {
+              _id: crypto.randomUUID(),
+              status: checkStatus,
+              message: checkStatus === "live" ? "Valid" : checkStatus === "dead" ? "Declined" : "Unknown",
+              gateway: selectedGateway.name,
+              cardMasked: maskCard(cardData.card),
+              fullCard: fullCardStr,
+              displayCard: displayCardStr,
+              brand,
+              brandColor,
+              apiResponse: apiResponseDisplay,
+              rawResponse: r.rawResponse
+            };
+
+            if (checkStatus === "live") {
+              playLiveSoundIfEnabled();
+              const bloodRedColors = ['#dc2626', '#ef4444', '#b91c1c', '#991b1b', '#7f1d1d', '#fca5a5'];
+              confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 }, colors: bloodRedColors, gravity: 1, scalar: 1.1 });
+            }
+
+            const newCheck: GatewayCheck = {
+              id: crypto.randomUUID(),
+              created_at: new Date().toISOString(),
+              gateway: selectedGateway.id,
+              status: 'completed',
+              result: checkStatus,
+              fullCard: bulkResult.fullCard,
+              displayCard: bulkResult.displayCard
+            };
+            setGatewayHistory(prev => [newCheck, ...prev].slice(0, 50));
+
+            allResults.push(bulkResult);
+            pendingResultsRef.current.push(bulkResult);
+            completedCount++;
+            processedCount++;
+            bulkStatsRef.current.completed = completedCount;
+          }
+
+          // Check if all proxies died
+          if (results.some(r => r.allProxiesDead)) {
+            bulkAbortRef.current = true;
+            toast.error("⚠️ All proxies are dead! Add new valid proxies to restart checking.", {
+              duration: 10000,
+              description: "Go to Proxy Manager and add working proxies before continuing.",
+            });
+          }
+        } catch (batchError) {
+          console.error('[SHOPIFY-BATCH] Batch error:', batchError);
         }
       }
-    };
+    } else {
+      // STANDARD MODE: 10 parallel workers for all other gateways
+      const processNextCard = async (): Promise<void> => {
+        while (currentIndex < affordableCards.length && !bulkAbortRef.current) {
+          const myIndex = currentIndex++;
+          
+          // Wait if paused
+          while (bulkPauseRef.current && !bulkAbortRef.current) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          
+          if (bulkAbortRef.current) return;
+          
+          const result = await processCard(myIndex);
+          
+          if (result) {
+            allResults.push(result);
+            completedCount++;
+            processedCount++;
+            
+            // Push to pending batch instead of immediate setState
+            pendingResultsRef.current.push(result);
+            bulkStatsRef.current.completed = completedCount;
+          }
+        }
+      };
 
-    // Start concurrent workers
-    const workers = Array(Math.min(CONCURRENT_WORKERS, affordableCards.length))
-      .fill(null)
-      .map(() => processNextCard());
-    
-    await Promise.all(workers);
+      // Start concurrent workers
+      const workers = Array(Math.min(CONCURRENT_WORKERS, affordableCards.length))
+        .fill(null)
+        .map(() => processNextCard());
+      
+      await Promise.all(workers);
+    }
 
     // Final flush to ensure all remaining results are shown
     clearInterval(flushInterval);
