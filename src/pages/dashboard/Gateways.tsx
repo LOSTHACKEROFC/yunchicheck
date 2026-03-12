@@ -332,9 +332,6 @@ const Gateways = () => {
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bulkStatsRef = useRef({ completed: 0, total: 0, startTime: 0 });
 
-  // Shopify startup-pressure controls (mitigates transient 503 BOOT_ERROR spikes)
-  const shopifyInflightRef = useRef(0);
-  const shopifyCooldownUntilRef = useRef(0);
 
   // Gateway history state
   const [gatewayHistory, setGatewayHistory] = useState<GatewayCheck[]>([]);
