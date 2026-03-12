@@ -3164,8 +3164,11 @@ const Gateways = () => {
       }
     };
 
-    // UI shows workerCount threads (3-10), but backend runs 4x for faster processing (max 40)
-    const CONCURRENT_WORKERS = Math.min(workerCount * 4, 40);
+    // Keep Shopify concurrency lower to avoid edge function cold-start bursts
+    const isShopifyBulk = selectedGateway.id === "shopify_charge";
+    const workerMultiplier = isShopifyBulk ? 2 : 4;
+    const maxWorkers = isShopifyBulk ? 20 : 40;
+    const CONCURRENT_WORKERS = Math.min(workerCount * workerMultiplier, maxWorkers);
     let currentIndex = 0;
     let completedCount = 0;
 
@@ -3195,10 +3198,15 @@ const Gateways = () => {
         }
       };
 
-      // Start concurrent workers
+      // Start concurrent workers (small stagger for Shopify to prevent startup storms)
       const workers = Array(Math.min(CONCURRENT_WORKERS, affordableCards.length))
         .fill(null)
-        .map(() => processNextCard());
+        .map((_, workerIndex) => (async () => {
+          if (isShopifyBulk && workerIndex > 0) {
+            await new Promise((resolve) => setTimeout(resolve, workerIndex * 75));
+          }
+          await processNextCard();
+        })());
       
       await Promise.all(workers);
     }
