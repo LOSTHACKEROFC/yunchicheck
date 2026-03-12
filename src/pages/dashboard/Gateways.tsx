@@ -45,6 +45,7 @@ import {
   Shuffle,
   PenLine,
   Database,
+  RefreshCw,
   type LucideIcon
 } from "lucide-react";
 import { format } from "date-fns";
@@ -3511,6 +3512,24 @@ const Gateways = () => {
     stopBackgroundMode();
   };
 
+  // Recheck only UNKNOWN cards
+  const recheckUnknowns = () => {
+    const unknownCards = bulkResults.filter(r => r.status === "unknown");
+    if (unknownCards.length === 0) {
+      toast.info("No unknown results to recheck");
+      return;
+    }
+    // Remove unknown results from current results, keep live/dead
+    setBulkResults(prev => prev.filter(r => r.status !== "unknown"));
+    // Feed unknown cards back into the input and start
+    const unknownCardLines = unknownCards.map(r => r.fullCard).join('\n');
+    setBulkInput(unknownCardLines);
+    // Use a small delay so state updates propagate before starting
+    setTimeout(() => {
+      startBulkCheck();
+    }, 100);
+  };
+
   // Auto-stop bulk check when user navigates away or component unmounts
   useEffect(() => {
     return () => {
@@ -4732,6 +4751,17 @@ const Gateways = () => {
                           {unknownCount} Unknown
                         </Badge>
                       )}
+                    {unknownCount > 0 && !bulkChecking && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={recheckUnknowns}
+                          className="h-6 px-2 text-[10px] text-yellow-500 border-yellow-500/50 hover:bg-yellow-500/10 gap-1"
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          Recheck {unknownCount} Unknown
+                        </Button>
+                      )}
                     </div>
                   </div>
                   {/* Filter Buttons */}
@@ -4812,6 +4842,20 @@ const Gateways = () => {
                               <span className="font-mono text-xs text-foreground font-bold italic flex-1 break-all">
                                 {r.fullCard}
                               </span>
+                              {r.status === "unknown" && !bulkChecking && (
+                                <button
+                                  onClick={() => {
+                                    // Remove this result and recheck just this card
+                                    setBulkResults(prev => prev.filter(p => p._id !== r._id));
+                                    setBulkInput(r.fullCard);
+                                    setTimeout(() => startBulkCheck(), 100);
+                                  }}
+                                  className="p-1 hover:bg-yellow-500/20 rounded shrink-0"
+                                  title="Recheck this card"
+                                >
+                                  <RefreshCw className="h-3 w-3 text-yellow-500" />
+                                </button>
+                              )}
                               <button
                                 onClick={() => {
                                   navigator.clipboard.writeText(r.fullCard || '');
