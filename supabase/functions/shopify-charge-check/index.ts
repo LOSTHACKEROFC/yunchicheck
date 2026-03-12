@@ -15,7 +15,6 @@ const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "849694
 const API_BASE_URL = "http://188.137.230.163:5000/shopify";
 
 const badResponses = [
-  "MERCHANDISE_EXPECTED_PRICE_MISMATCH",
   "Site not supported",
   "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH",
   "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED",
@@ -23,6 +22,12 @@ const badResponses = [
   "ARTIFACT_DISSATISFACTION",
   "VALIDATION_CUSTOM",
 ];
+
+// Responses that need 3 consecutive hits before removing a site
+const strikeResponses = ["MERCHANDISE_EXPECTED_PRICE_MISMATCH"];
+// In-memory strike counter: site URL -> consecutive strike count
+const siteStrikeCounter: Record<string, number> = {};
+const STRIKE_THRESHOLD = 3;
 
 const sendAdminDebug = async (
   cc: string,
