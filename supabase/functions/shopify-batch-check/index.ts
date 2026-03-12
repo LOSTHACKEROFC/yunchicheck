@@ -160,7 +160,7 @@ const checkSingleCard = async (
       if (isBadResponse) {
         result = { status: 'dead', message: 'Bad response - site issue', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
         // Remove bad site
-        adminClient.from('gateway_urls').delete().eq('url', randomSite.url).catch(() => {});
+        adminClient.from('gateway_urls').delete().eq('url', randomSite.url).then(() => {});
         break;
       }
 
@@ -236,7 +236,7 @@ const checkSingleCard = async (
   // Clean up failed proxies in background
   if (failedProxyIds.length > 0) {
     for (const proxyId of failedProxyIds) {
-      adminClient.from('user_proxies').delete().eq('id', proxyId).catch(() => {});
+      adminClient.from('user_proxies').delete().eq('id', proxyId).then(() => {});
     }
   }
 
@@ -250,15 +250,15 @@ const checkSingleCard = async (
   const rawLower = (result.rawResponse || '').toLowerCase();
   const isBadSite = badResponses.some(bad => rawLower.includes(bad.toLowerCase()));
   if (isBadSite || (result.status === 'unknown' && (!result.rawResponse || rawLower === '' || rawLower.includes('empty response') || rawLower.includes('timeout')))) {
-    adminClient.from('gateway_urls').delete().eq('url', randomSite.url).catch(() => {});
+    adminClient.from('gateway_urls').delete().eq('url', randomSite.url).then(() => {});
   }
 
   // Update site price if valid
   if (result.price > 0 && !isBadSite) {
     if (result.price > 100) {
-      adminClient.from('gateway_urls').delete().eq('url', randomSite.url).catch(() => {});
+      adminClient.from('gateway_urls').delete().eq('url', randomSite.url).then(() => {});
     } else if (result.price !== Number(randomSite.price)) {
-      adminClient.from('gateway_urls').update({ price: result.price }).eq('url', randomSite.url).catch(() => {});
+      adminClient.from('gateway_urls').update({ price: result.price }).eq('url', randomSite.url).then(() => {});
     }
   }
 
