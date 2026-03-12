@@ -236,7 +236,7 @@ const checkSingleCard = async (
   // Clean up failed proxies in background
   if (failedProxyIds.length > 0) {
     for (const proxyId of failedProxyIds) {
-      adminClient.from('user_proxies').delete().eq('id', proxyId).catch(() => {});
+      adminClient.from('user_proxies').delete().eq('id', proxyId).then(() => {});
     }
   }
 
