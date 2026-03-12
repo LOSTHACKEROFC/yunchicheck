@@ -3113,8 +3113,8 @@ const Gateways = () => {
       }
     };
 
-    // UI shows workerCount threads (3-10), but backend runs double for faster processing
-    const CONCURRENT_WORKERS = Math.min(workerCount * 2, 20);
+    // UI shows workerCount threads (3-10), but backend runs 4x for faster processing (max 40)
+    const CONCURRENT_WORKERS = Math.min(workerCount * 4, 40);
     let currentIndex = 0;
     let completedCount = 0;
 
