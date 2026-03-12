@@ -3213,9 +3213,10 @@ const Gateways = () => {
             completedCount++;
             processedCount++;
             
-            // Push to pending batch instead of immediate setState
+            // Push to pending batch and trigger immediate rAF flush
             pendingResultsRef.current.push(result);
             bulkStatsRef.current.completed = completedCount;
+            scheduleFlush();
           }
         }
       };
