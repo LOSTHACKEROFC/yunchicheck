@@ -468,8 +468,23 @@ Deno.serve(async (req) => {
       result = { status: 'unknown', message: 'All proxies failed', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
     }
 
-    // Check if all proxies failed — signal frontend to stop bulk
+    // If result is still UNKNOWN (not proxy error) and we have other sites, retry with a different site
     const allProxiesDead = failedProxyIds.length >= userProxies.length;
+    if (result.status === 'unknown' && !allProxiesDead && sites.length > 1) {
+      const otherSites = sites.filter(s => s.url !== randomSite.url);
+      if (otherSites.length > 0) {
+        const retrySite = getRandomItem(otherSites);
+        const retryProxy = formatProxy(getRandomItem(shuffledProxies.filter(p => !failedProxyIds.includes(p.id))));
+        console.log(`[SHOPIFY-CHARGE] Site-level retry with ${retrySite.url}`);
+        await new Promise(r => setTimeout(r, 500));
+        const retryResult = await callApi(cc, retrySite.url, retryProxy);
+        if (retryResult.status === 'live' || retryResult.status === 'dead') {
+          result = retryResult;
+          // Update randomSite reference for price/site-removal logic below
+          Object.assign(randomSite, retrySite);
+        }
+      }
+    }
 
     // Auto-remove bad sites from gateway_urls
     const rawLower = (result.rawResponse || '').toLowerCase();
