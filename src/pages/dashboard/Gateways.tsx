@@ -2849,7 +2849,7 @@ const Gateways = () => {
     };
 
     // Start periodic flush timer
-    const flushInterval = setInterval(flushPendingResults, 300);
+    const flushInterval = setInterval(flushPendingResults, 150);
 
     // Worker function to process a single card
     const processCard = async (cardIndex: number): Promise<BulkResult | null> => {
@@ -3261,6 +3261,8 @@ const Gateways = () => {
         } catch (batchError) {
           console.error('[SHOPIFY-BATCH] Batch error:', batchError);
         }
+        // Immediately flush after each batch so results appear in real time
+        flushPendingResults();
       };
 
       // Batch worker: keeps grabbing batches of 10 until all cards are processed
