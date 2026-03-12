@@ -169,32 +169,65 @@ const checkSingleCard = async (
       let apiMessage = rawText;
       let apiResponse = '';
 
+      // Helper: check if a response is essentially empty/meaningless (should be UNKNOWN, not DEAD)
+      const isEmptyOrErrorOnly = (text: string): boolean => {
+        const trimmed = text.trim().toLowerCase();
+        return !trimmed || trimmed === 'error:' || trimmed === 'error' || trimmed === 'error: ' || trimmed.length < 3;
+      };
+
       try {
         const json = JSON.parse(rawText);
         if (json.Price !== undefined && json.Price > 0) { price = json.Price; priceStr = `$${Number(json.Price).toFixed(2)}`; }
         if (json.Response) { apiResponse = String(json.Response).replace(/<[^>]*>/g, ''); }
         apiMessage = json.message || json.msg || json.error || rawText;
 
-        if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true) {
+        // If the API returned an empty/meaningless response, treat as unknown
+        const responseText = (apiResponse || apiMessage || '').trim();
+        if (isEmptyOrErrorOnly(responseText) && price === 0) {
+          apiStatus = 'unknown';
+        } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true) {
           apiStatus = 'live'; apiMessage = json.message || 'Charged';
-        } else if (json.status === 'DECLINED' || json.status === 'failed' || json.status === 'error' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED') {
+        } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED') {
           apiStatus = 'dead'; apiMessage = json.message || json.error || 'Declined';
+        } else if (json.status === 'error') {
+          // Only mark as dead if there's a meaningful error message (not just "error:")
+          const errMsg = (json.message || json.error || '').trim().toLowerCase();
+          if (errMsg && errMsg !== 'error:' && errMsg !== 'error' && errMsg.length > 5) {
+            apiStatus = 'dead'; apiMessage = json.message || json.error || 'Declined';
+          } else {
+            apiStatus = 'unknown'; apiMessage = 'Request failed';
+          }
         } else {
           const lower = String(apiMessage).toLowerCase();
           const responseLower = (apiResponse || '').toLowerCase();
           const combinedText = lower + ' ' + responseLower;
           if (combinedText.includes('order_placed') || combinedText.includes('order placed') || combinedText.includes('thank you') || combinedText.includes('charged') || combinedText.includes('success') || combinedText.includes('approved')) {
             apiStatus = 'live';
-          } else if (combinedText.includes('declined') || combinedText.includes('invalid') || combinedText.includes('expired') || combinedText.includes('insufficient') || combinedText.includes('card_declined') || combinedText.includes('incorrect') || combinedText.includes('do_not_honor') || combinedText.includes('fraud') || combinedText.includes('not accepted') || combinedText.includes('ds_required') || combinedText.includes('3ds') || combinedText.includes('3d_secure') || combinedText.includes('failed') || combinedText.includes('error') || combinedText.includes('rejected') || combinedText.includes('pickup_card') || combinedText.includes('lost_card') || combinedText.includes('stolen_card') || combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline')) {
+          } else if (combinedText.includes('declined') || combinedText.includes('invalid') || combinedText.includes('expired') || combinedText.includes('insufficient') || combinedText.includes('card_declined') || combinedText.includes('incorrect') || combinedText.includes('do_not_honor') || combinedText.includes('fraud') || combinedText.includes('not accepted') || combinedText.includes('ds_required') || combinedText.includes('3ds') || combinedText.includes('3d_secure') || combinedText.includes('rejected') || combinedText.includes('pickup_card') || combinedText.includes('lost_card') || combinedText.includes('stolen_card') || combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline')) {
             apiStatus = 'dead';
+          } else if (combinedText.includes('failed') || combinedText.includes('error')) {
+            // Only dead if there's a substantive message, not just "error:" or "failed"
+            const substantive = combinedText.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
+            if (substantive.length > 3) {
+              apiStatus = 'dead';
+            }
+            // else stays unknown
           }
         }
       } catch {
+        // JSON parse failed — could be HTML, empty, or malformed
         const lower = rawText.toLowerCase();
-        if (lower.includes('order_placed') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
+        if (isEmptyOrErrorOnly(lower)) {
+          apiStatus = 'unknown';
+        } else if (lower.includes('order_placed') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
           apiStatus = 'live';
-        } else if (lower.includes('declined') || lower.includes('error') || lower.includes('failed') || lower.includes('invalid') || lower.includes('expired') || lower.includes('insufficient') || lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) {
+        } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('insufficient') || lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) {
           apiStatus = 'dead';
+        } else if (lower.includes('failed') || lower.includes('error')) {
+          const substantive = lower.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
+          if (substantive.length > 3) {
+            apiStatus = 'dead';
+          }
         }
       }
 

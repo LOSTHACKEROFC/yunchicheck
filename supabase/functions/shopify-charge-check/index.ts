@@ -175,6 +175,12 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
     let apiStatus = 'unknown';
     let apiMessage = rawText;
     let apiResponse = '';
+
+    // Helper: check if a response is essentially empty/meaningless (should be UNKNOWN, not DEAD)
+    const isEmptyOrErrorOnly = (text: string): boolean => {
+      const trimmed = text.trim().toLowerCase();
+      return !trimmed || trimmed === 'error:' || trimmed === 'error' || trimmed === 'error: ' || trimmed.length < 3;
+    };
     
     try {
       const json = JSON.parse(rawText);
@@ -189,13 +195,27 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
       }
       
       apiMessage = json.message || json.msg || json.error || rawText;
-      
-      if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true) {
+
+      // If the API returned an empty/meaningless response, treat as unknown
+      const responseText = (apiResponse || apiMessage || '').trim();
+      if (isEmptyOrErrorOnly(responseText) && price === 0) {
+        apiStatus = 'unknown';
+      } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true) {
         apiStatus = 'live';
         apiMessage = json.message || 'Charged';
-      } else if (json.status === 'DECLINED' || json.status === 'failed' || json.status === 'error' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED') {
+      } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED') {
         apiStatus = 'dead';
         apiMessage = json.message || json.error || 'Declined';
+      } else if (json.status === 'error') {
+        // Only mark as dead if there's a meaningful error message
+        const errMsg = (json.message || json.error || '').trim().toLowerCase();
+        if (errMsg && errMsg !== 'error:' && errMsg !== 'error' && errMsg.length > 5) {
+          apiStatus = 'dead';
+          apiMessage = json.message || json.error || 'Declined';
+        } else {
+          apiStatus = 'unknown';
+          apiMessage = 'Request failed';
+        }
       } else {
         const lower = String(apiMessage).toLowerCase();
         const responseLower = (apiResponse || '').toLowerCase();
@@ -210,21 +230,33 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
                    combinedText.includes('insufficient') || combinedText.includes('card_declined') || combinedText.includes('incorrect') ||
                    combinedText.includes('do_not_honor') || combinedText.includes('fraud') || combinedText.includes('not accepted') ||
                    combinedText.includes('ds_required') || combinedText.includes('3ds') || combinedText.includes('3d_secure') ||
-                   combinedText.includes('failed') || combinedText.includes('error') || combinedText.includes('rejected') ||
+                   combinedText.includes('rejected') ||
                    combinedText.includes('pickup_card') || combinedText.includes('lost_card') || combinedText.includes('stolen_card') ||
                    combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline')) {
           apiStatus = 'dead';
+        } else if (combinedText.includes('failed') || combinedText.includes('error')) {
+          const substantive = combinedText.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
+          if (substantive.length > 3) {
+            apiStatus = 'dead';
+          }
         }
       }
     } catch {
       const lower = rawText.toLowerCase();
-      if (lower.includes('order_placed') || lower.includes('order placed') || lower.includes('thank you') || 
+      if (isEmptyOrErrorOnly(lower)) {
+        apiStatus = 'unknown';
+      } else if (lower.includes('order_placed') || lower.includes('order placed') || lower.includes('thank you') || 
           lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
         apiStatus = 'live';
-      } else if (lower.includes('declined') || lower.includes('error') || lower.includes('failed') || 
-                 lower.includes('invalid') || lower.includes('expired') || lower.includes('insufficient') ||
+      } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || 
+                 lower.includes('insufficient') ||
                  lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) {
         apiStatus = 'dead';
+      } else if (lower.includes('failed') || lower.includes('error')) {
+        const substantive = lower.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
+        if (substantive.length > 3) {
+          apiStatus = 'dead';
+        }
       }
     }
     
