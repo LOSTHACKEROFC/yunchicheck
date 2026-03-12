@@ -3212,7 +3212,7 @@ const Gateways = () => {
             continue;
           }
 
-          const results: CardResult[] = data.results;
+          const results: { cc: string; computedStatus: string; apiStatus: string; apiMessage: string; apiTotal: string; rawResponse: string; usedSite: string; allProxiesDead?: boolean }[] = data.results;
 
           // Process each result from the batch
           for (let i = 0; i < results.length; i++) {
