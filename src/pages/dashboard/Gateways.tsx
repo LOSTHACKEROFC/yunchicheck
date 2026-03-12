@@ -331,6 +331,8 @@ const Gateways = () => {
   const pendingResultsRef = useRef<BulkResult[]>([]);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bulkStatsRef = useRef({ completed: 0, total: 0, startTime: 0 });
+  const shopifyWarmupAtRef = useRef(0);
+  const SHOPIFY_WARMUP_TTL_MS = 2 * 60 * 1000;
 
 
   // Gateway history state
