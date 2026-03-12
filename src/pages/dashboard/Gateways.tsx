@@ -3261,6 +3261,8 @@ const Gateways = () => {
         } catch (batchError) {
           console.error('[SHOPIFY-BATCH] Batch error:', batchError);
         }
+        // Immediately flush after each batch so results appear in real time
+        flushPendingResults();
       };
 
       // Batch worker: keeps grabbing batches of 10 until all cards are processed
