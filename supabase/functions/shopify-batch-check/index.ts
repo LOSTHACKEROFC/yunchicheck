@@ -309,6 +309,11 @@ const checkSingleCard = async (
   const isStrikeResponse = strikeResponses.some(s => rawLower.includes(s.toLowerCase()));
   if (!isStrikeResponse && (isBadSite || (result.status === 'unknown' && (!result.rawResponse || rawLower === '' || rawLower.includes('empty response') || rawLower.includes('timeout'))))) {
     adminClient.from('gateway_urls').delete().eq('url', randomSite.url).then(() => {});
+  } else if (!isStrikeResponse) {
+    // Normal response — reset strike counter for this site
+    if (siteStrikeCounter[randomSite.url]) {
+      delete siteStrikeCounter[randomSite.url];
+    }
   }
 
   // Update site price if valid
