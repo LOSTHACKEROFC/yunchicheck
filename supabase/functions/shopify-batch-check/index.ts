@@ -16,7 +16,6 @@ const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "849694
 const API_BASE_URL = "http://188.137.230.163:5000/shopify";
 
 const badResponses = [
-  "MERCHANDISE_EXPECTED_PRICE_MISMATCH",
   "Site not supported",
   "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH",
   "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED",
@@ -24,6 +23,11 @@ const badResponses = [
   "ARTIFACT_DISSATISFACTION",
   "VALIDATION_CUSTOM",
 ];
+
+// Responses that need 3 consecutive hits before removing a site
+const strikeResponses = ["MERCHANDISE_EXPECTED_PRICE_MISMATCH"];
+const siteStrikeCounter: Record<string, number> = {};
+const STRIKE_THRESHOLD = 3;
 
 const userAgents = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -156,6 +160,26 @@ const checkSingleCard = async (
         break;
       }
 
+      // Check for DELIVERY_ADDRESS — classify as DECLINED
+      if (rawText.includes('DELIVERY_ADDRESS')) {
+        result = { status: 'dead', message: 'DELIVERY_ADDRESS error - Declined', apiResponse: 'DELIVERY_ADDRESS', rawResponse: rawText, price: 0, priceStr: '$0.00' };
+        break;
+      }
+
+      // Check for strike responses (e.g. MERCHANDISE_EXPECTED_PRICE_MISMATCH) — track per site
+      const matchedStrike = strikeResponses.find(s => rawText.toLowerCase().includes(s.toLowerCase()));
+      if (matchedStrike) {
+        const key = randomSite.url;
+        siteStrikeCounter[key] = (siteStrikeCounter[key] || 0) + 1;
+        console.log(`[SHOPIFY-BATCH] Strike ${siteStrikeCounter[key]}/${STRIKE_THRESHOLD} for site: ${key}`);
+        if (siteStrikeCounter[key] >= STRIKE_THRESHOLD) {
+          adminClient.from('gateway_urls').delete().eq('url', key).then(() => {});
+          delete siteStrikeCounter[key];
+        }
+        result = { status: 'dead', message: `${matchedStrike} - site issue`, apiResponse: matchedStrike, rawResponse: rawText, price: 0, priceStr: '$0.00' };
+        break;
+      }
+
       const isBadResponse = badResponses.some(bad => rawText.toLowerCase().includes(bad.toLowerCase()));
       if (isBadResponse) {
         result = { status: 'dead', message: 'Bad response - site issue', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
@@ -279,11 +303,17 @@ const checkSingleCard = async (
 
   const allProxiesDead = failedProxyIds.length >= proxies.length;
 
-  // Auto-remove bad/empty sites
+  // Auto-remove bad/empty sites (but not strike responses — those are handled above)
   const rawLower = (result.rawResponse || '').toLowerCase();
   const isBadSite = badResponses.some(bad => rawLower.includes(bad.toLowerCase()));
-  if (isBadSite || (result.status === 'unknown' && (!result.rawResponse || rawLower === '' || rawLower.includes('empty response') || rawLower.includes('timeout')))) {
+  const isStrikeResponse = strikeResponses.some(s => rawLower.includes(s.toLowerCase()));
+  if (!isStrikeResponse && (isBadSite || (result.status === 'unknown' && (!result.rawResponse || rawLower === '' || rawLower.includes('empty response') || rawLower.includes('timeout'))))) {
     adminClient.from('gateway_urls').delete().eq('url', randomSite.url).then(() => {});
+  } else if (!isStrikeResponse) {
+    // Normal response — reset strike counter for this site
+    if (siteStrikeCounter[randomSite.url]) {
+      delete siteStrikeCounter[randomSite.url];
+    }
   }
 
   // Update site price if valid

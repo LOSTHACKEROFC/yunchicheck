@@ -15,7 +15,6 @@ const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "849694
 const API_BASE_URL = "http://188.137.230.163:5000/shopify";
 
 const badResponses = [
-  "MERCHANDISE_EXPECTED_PRICE_MISMATCH",
   "Site not supported",
   "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH",
   "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED",
@@ -23,6 +22,12 @@ const badResponses = [
   "ARTIFACT_DISSATISFACTION",
   "VALIDATION_CUSTOM",
 ];
+
+// Responses that need 3 consecutive hits before removing a site
+const strikeResponses = ["MERCHANDISE_EXPECTED_PRICE_MISMATCH"];
+// In-memory strike counter: site URL -> consecutive strike count
+const siteStrikeCounter: Record<string, number> = {};
+const STRIKE_THRESHOLD = 3;
 
 const sendAdminDebug = async (
   cc: string,
@@ -165,6 +170,18 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
 
     // Check for bad responses
     const isBadResponse = badResponses.some(bad => rawText.toLowerCase().includes(bad.toLowerCase()));
+    // Check for DELIVERY_ADDRESS — classify as DECLINED
+    if (rawText.includes('DELIVERY_ADDRESS')) {
+      return { status: 'dead', message: 'DELIVERY_ADDRESS error - Declined', apiResponse: 'DELIVERY_ADDRESS', rawResponse: rawText, price: 0, priceStr: '$0.00' };
+    }
+
+    // Check for strike responses (e.g. MERCHANDISE_EXPECTED_PRICE_MISMATCH) — track per site, remove after 3 consecutive
+    const matchedStrike = strikeResponses.find(s => rawText.toLowerCase().includes(s.toLowerCase()));
+    if (matchedStrike) {
+      // This is still a dead result for the card
+      return { status: 'dead', message: `${matchedStrike} - site issue`, apiResponse: matchedStrike, rawResponse: rawText, price: 0, priceStr: '$0.00' };
+    }
+
     if (isBadResponse) {
       return { status: 'dead', message: 'Bad response - site issue', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
     }
@@ -434,13 +451,43 @@ Deno.serve(async (req) => {
     const rawLower = (result.rawResponse || '').toLowerCase();
     const isBadSite = badResponses.some(bad => rawLower.includes(bad.toLowerCase()));
     
-    if (isBadSite || (result.status === 'unknown' && (!result.rawResponse || rawLower === '' || rawLower.includes('empty response') || rawLower.includes('timeout')))) {
+    // Check for strike responses — track per site, only remove after 3 consecutive
+    const matchedStrikeResponse = strikeResponses.find(s => rawLower.includes(s.toLowerCase()));
+    if (matchedStrikeResponse) {
+      const key = randomSite.url;
+      siteStrikeCounter[key] = (siteStrikeCounter[key] || 0) + 1;
+      console.log(`[SHOPIFY-CHARGE] Strike ${siteStrikeCounter[key]}/${STRIKE_THRESHOLD} for site: ${key} (${matchedStrikeResponse})`);
+      
+      if (siteStrikeCounter[key] >= STRIKE_THRESHOLD) {
+        console.log(`[SHOPIFY-CHARGE] Removing site after ${STRIKE_THRESHOLD} consecutive strikes: ${key}`);
+        adminClient.from('gateway_urls').delete().eq('url', key).then(({ error: delErr }) => {
+          if (delErr) console.error('[SHOPIFY-CHARGE] Failed to remove strike site:', delErr);
+          else console.log(`[SHOPIFY-CHARGE] Strike site removed: ${key}`);
+        });
+        delete siteStrikeCounter[key];
+
+        if (TELEGRAM_BOT_TOKEN) {
+          fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: ADMIN_TELEGRAM_CHAT_ID,
+              text: `🗑️ <b>SHOPIFY SITE AUTO-REMOVED (3 STRIKES)</b>\n\n<code>${key}</code>\n\n<i>Reason: ${matchedStrikeResponse} x${STRIKE_THRESHOLD}</i>`,
+              parse_mode: "HTML",
+            }),
+          }).catch(() => {});
+        }
+      }
+      // Don't remove site yet if under threshold
+    } else if (isBadSite || (result.status === 'unknown' && (!result.rawResponse || rawLower === '' || rawLower.includes('empty response') || rawLower.includes('timeout')))) {
       const removalReason = isBadSite ? 'Bad Shopify response' : 'Empty/Timeout response';
       console.log(`[SHOPIFY-CHARGE] Removing site: ${randomSite.url} - ${removalReason}`);
       adminClient.from('gateway_urls').delete().eq('url', randomSite.url).then(({ error: delErr }) => {
         if (delErr) console.error('[SHOPIFY-CHARGE] Failed to remove site:', delErr);
         else console.log(`[SHOPIFY-CHARGE] Site removed: ${randomSite.url}`);
       });
+      // Reset strike counter for this site since it's removed
+      delete siteStrikeCounter[randomSite.url];
 
       if (TELEGRAM_BOT_TOKEN) {
         fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -452,6 +499,11 @@ Deno.serve(async (req) => {
             parse_mode: "HTML",
           }),
         }).catch(() => {});
+      }
+    } else {
+      // Successful response — reset strike counter for this site
+      if (siteStrikeCounter[randomSite.url]) {
+        delete siteStrikeCounter[randomSite.url];
       }
     }
 
