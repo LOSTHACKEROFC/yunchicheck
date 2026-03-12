@@ -45,6 +45,7 @@ import {
   Shuffle,
   PenLine,
   Database,
+  RefreshCw,
   type LucideIcon
 } from "lucide-react";
 import { format } from "date-fns";
