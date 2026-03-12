@@ -2874,7 +2874,8 @@ const Gateways = () => {
     let processedCount = 0;
     const allResults: BulkResult[] = [];
 
-    // Throttled flush: batch pending results into state every 150ms
+    // Immediate flush: push results to UI as soon as they arrive
+    let rafPending = false;
     const flushPendingResults = () => {
       if (pendingResultsRef.current.length === 0) return;
       const batch = pendingResultsRef.current.splice(0);
@@ -2910,8 +2911,18 @@ const Gateways = () => {
       }
     };
 
-    // Start periodic flush timer
-    const flushInterval = setInterval(flushPendingResults, 150);
+    // Schedule a micro-flush via rAF so each result renders on the next paint frame
+    const scheduleFlush = () => {
+      if (rafPending) return;
+      rafPending = true;
+      requestAnimationFrame(() => {
+        rafPending = false;
+        flushPendingResults();
+      });
+    };
+
+    // Safety-net interval (50ms) in case rAF is throttled (background tab)
+    const flushInterval = setInterval(flushPendingResults, 50);
 
     // Worker function to process a single card
     const processCard = async (cardIndex: number): Promise<BulkResult | null> => {
