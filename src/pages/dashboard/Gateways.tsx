@@ -4751,6 +4751,17 @@ const Gateways = () => {
                           {unknownCount} Unknown
                         </Badge>
                       )}
+                    {unknownCount > 0 && !bulkChecking && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={recheckUnknowns}
+                          className="h-6 px-2 text-[10px] text-yellow-500 border-yellow-500/50 hover:bg-yellow-500/10 gap-1"
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          Recheck {unknownCount} Unknown
+                        </Button>
+                      )}
                     </div>
                   </div>
                   {/* Filter Buttons */}
