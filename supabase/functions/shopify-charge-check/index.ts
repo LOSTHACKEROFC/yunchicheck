@@ -388,9 +388,11 @@ Deno.serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Pick a random site
-    const randomSite = getRandomItem(sites);
-    console.log(`[SHOPIFY-CHARGE] Using site: ${randomSite.url} (price: ${randomSite.price})`);
+    // Multi-site retry loop: try up to 3 different sites on site-level errors
+    const MAX_SITE_ATTEMPTS = Math.min(3, sites.length);
+    const shuffledSites = [...sites].sort(() => Math.random() - 0.5);
+    const triedSiteUrls: string[] = [];
+    const badSiteUrls: { url: string; reason: string }[] = [];
 
     // Get user's own proxies (required, 1-10)
     const { data: userProxies, error: proxyError } = await adminClient
@@ -411,81 +413,98 @@ Deno.serve(async (req) => {
     const formatProxy = (p: typeof userProxies[0]) => 
       p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
 
-    // Try proxies with rotation - retry on 407/proxy errors
     let result: { status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string } | null = null;
-    const maxRetries = shuffledProxies.length; // Try ALL proxies before giving up
+    let usedSite = shuffledSites[0];
     const failedProxyIds: string[] = [];
-    
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const currentProxy = shuffledProxies[attempt];
-      const proxyStr = formatProxy(currentProxy);
-      console.log(`[SHOPIFY-CHARGE] Attempt ${attempt + 1}/${maxRetries} with proxy ${currentProxy.ip}:${currentProxy.port}`);
-      
-      result = await callApi(cc, randomSite.url, proxyStr);
-      
-      // Check if it's a proxy-related error (407, proxy auth, connection refused)
-      // BUT only if the response is NOT a valid API JSON (valid API responses mean proxy worked fine)
-      const rawLower = (result.rawResponse || '').toLowerCase();
-      let isValidApiResponse = false;
-      try {
-        const parsed = JSON.parse(result.rawResponse || '');
-        if (parsed && (parsed.Gateway || parsed.Response || parsed.Price !== undefined || parsed.status || parsed.message)) {
-          isValidApiResponse = true;
-        }
-      } catch { /* not valid JSON */ }
-      
-      const isProxyError = !isValidApiResponse && (
-        rawLower.includes('407') || rawLower.includes('proxy error') || 
-        rawLower.includes('proxy authentication') || rawLower.includes('connection refused') ||
-        rawLower.includes('proxy connect') || rawLower.includes('tunneling socket')
-      );
-      
-      if (isProxyError) {
-        console.log(`[SHOPIFY-CHARGE] Proxy error on attempt ${attempt + 1}, removing proxy ${currentProxy.ip}:${currentProxy.port}`);
-        failedProxyIds.push(currentProxy.id);
-        
-        if (attempt + 1 >= maxRetries) {
-          // All retries exhausted due to proxy errors - mark as unknown
-          result.status = 'unknown';
-          result.message = 'All proxies failed (407)';
-        }
-      } else {
-        console.log(`[SHOPIFY-CHARGE] Success on attempt ${attempt + 1}`);
+    let allProxiesDeadFlag = false;
+
+    for (let siteAttempt = 0; siteAttempt < MAX_SITE_ATTEMPTS; siteAttempt++) {
+      const currentSite = shuffledSites[siteAttempt];
+      usedSite = currentSite;
+      triedSiteUrls.push(currentSite.url);
+      console.log(`[SHOPIFY-CHARGE] Site attempt ${siteAttempt + 1}/${MAX_SITE_ATTEMPTS}: ${currentSite.url} (price: ${currentSite.price})`);
+
+      // Try proxies with rotation for this site
+      const availableProxies = shuffledProxies.filter(p => !failedProxyIds.includes(p.id));
+      if (availableProxies.length === 0) {
+        allProxiesDeadFlag = true;
+        result = { status: 'unknown', message: 'All proxies failed (407)', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
         break;
       }
-    }
-    
-    // Delete failed proxies from DB
-    if (failedProxyIds.length > 0) {
-      for (const proxyId of failedProxyIds) {
-        adminClient.from('user_proxies').delete().eq('id', proxyId).then(({ error: delErr }) => {
-          if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove proxy ${proxyId}:`, delErr);
-          else console.log(`[SHOPIFY-CHARGE] Removed dead proxy: ${proxyId}`);
-        });
+
+      let siteResult: typeof result = null;
+      for (let proxyAttempt = 0; proxyAttempt < availableProxies.length; proxyAttempt++) {
+        const currentProxy = availableProxies[proxyAttempt];
+        const proxyStr = formatProxy(currentProxy);
+        console.log(`[SHOPIFY-CHARGE] Proxy ${proxyAttempt + 1}/${availableProxies.length}: ${currentProxy.ip}:${currentProxy.port}`);
+        
+        siteResult = await callApi(cc, currentSite.url, proxyStr);
+        
+        // Check if proxy error
+        const rawLower = (siteResult.rawResponse || '').toLowerCase();
+        let isValidApiResponse = false;
+        try {
+          const parsed = JSON.parse(siteResult.rawResponse || '');
+          if (parsed && (parsed.Gateway || parsed.Response || parsed.Price !== undefined || parsed.status || parsed.message)) {
+            isValidApiResponse = true;
+          }
+        } catch { /* not valid JSON */ }
+        
+        const isProxyError = !isValidApiResponse && (
+          rawLower.includes('407') || rawLower.includes('proxy error') || 
+          rawLower.includes('proxy authentication') || rawLower.includes('connection refused') ||
+          rawLower.includes('proxy connect') || rawLower.includes('tunneling socket')
+        );
+        
+        if (isProxyError) {
+          console.log(`[SHOPIFY-CHARGE] Proxy error, removing proxy ${currentProxy.ip}:${currentProxy.port}`);
+          failedProxyIds.push(currentProxy.id);
+          continue; // try next proxy
+        }
+        
+        // Proxy worked (or non-proxy error), stop proxy loop
+        break;
       }
-    }
-    
-    if (!result) {
-      result = { status: 'unknown', message: 'All proxies failed', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
+
+      if (!siteResult) {
+        siteResult = { status: 'unknown', message: 'All proxies failed', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
+      }
+
+      // If we got a definitive live/dead result, use it and stop
+      if (siteResult.status === 'live' || siteResult.status === 'dead') {
+        result = siteResult;
+        console.log(`[SHOPIFY-CHARGE] Definitive result from site ${currentSite.url}: ${siteResult.status}`);
+        break;
+      }
+
+      // Site returned unknown/error — mark this site as bad and try next
+      const rawLower = (siteResult.rawResponse || '').toLowerCase();
+      const isBadSiteResponse = badResponses.some(bad => rawLower.includes(bad.toLowerCase()));
+      const isSiteError = !siteResult.rawResponse || rawLower === '' || rawLower.includes('empty response') || rawLower.includes('timeout') || isBadSiteResponse;
+
+      if (isSiteError) {
+        const reason = isBadSiteResponse ? 'Bad Shopify response' : (rawLower.includes('timeout') ? 'Timeout' : 'Empty/Error response');
+        badSiteUrls.push({ url: currentSite.url, reason });
+        console.log(`[SHOPIFY-CHARGE] Site error (${reason}), marking ${currentSite.url} and trying next site...`);
+        result = siteResult; // keep as fallback
+        
+        if (siteAttempt + 1 < MAX_SITE_ATTEMPTS) {
+          await new Promise(r => setTimeout(r, 300 + Math.random() * 300));
+        }
+        continue; // try next site
+      }
+
+      // Unknown but not a site error — keep result and stop
+      result = siteResult;
+      break;
     }
 
-    // If result is still UNKNOWN (not proxy error) and we have other sites, retry with a different site
-    const allProxiesDead = failedProxyIds.length >= userProxies.length;
-    if (result.status === 'unknown' && !allProxiesDead && sites.length > 1) {
-      const otherSites = sites.filter(s => s.url !== randomSite.url);
-      if (otherSites.length > 0) {
-        const retrySite = getRandomItem(otherSites);
-        const retryProxy = formatProxy(getRandomItem(shuffledProxies.filter(p => !failedProxyIds.includes(p.id))));
-        console.log(`[SHOPIFY-CHARGE] Site-level retry with ${retrySite.url}`);
-        await new Promise(r => setTimeout(r, 500));
-        const retryResult = await callApi(cc, retrySite.url, retryProxy);
-        if (retryResult.status === 'live' || retryResult.status === 'dead') {
-          result = retryResult;
-          // Update randomSite reference for price/site-removal logic below
-          Object.assign(randomSite, retrySite);
-        }
-      }
+    if (!result) {
+      result = { status: 'unknown', message: 'All site attempts failed', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
     }
+
+    const allProxiesDead = allProxiesDeadFlag || failedProxyIds.length >= userProxies.length;
+    const randomSite = usedSite;
 
     // Auto-remove bad sites from gateway_urls
     const rawLower = (result.rawResponse || '').toLowerCase();
