@@ -21,6 +21,7 @@ const badResponses = [
   "Payment method not available",
   "ARTIFACT_DISSATISFACTION",
   "VALIDATION_CUSTOM",
+  '"Gateway":"Authorize.net"',
 ];
 
 // Responses that need 3 consecutive hits before removing a site

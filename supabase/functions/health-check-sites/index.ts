@@ -28,6 +28,7 @@ const badResponses = [
   "Payment method not available",
   "ARTIFACT_DISSATISFACTION",
   "VALIDATION_CUSTOM",
+  '"Gateway":"Authorize.net"',
 ];
 
 const extractPrice = (response: string): { price: number; priceStr: string } => {
