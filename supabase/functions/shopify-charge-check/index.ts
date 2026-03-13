@@ -506,6 +506,38 @@ Deno.serve(async (req) => {
     const allProxiesDead = allProxiesDeadFlag || failedProxyIds.length >= userProxies.length;
     const randomSite = usedSite;
 
+    // Delete failed proxies from DB
+    if (failedProxyIds.length > 0) {
+      for (const proxyId of failedProxyIds) {
+        adminClient.from('user_proxies').delete().eq('id', proxyId).then(({ error: delErr }) => {
+          if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove proxy ${proxyId}:`, delErr);
+          else console.log(`[SHOPIFY-CHARGE] Removed dead proxy: ${proxyId}`);
+        });
+      }
+    }
+
+    // Auto-remove all bad sites discovered during the multi-site retry loop
+    for (const badSite of badSiteUrls) {
+      console.log(`[SHOPIFY-CHARGE] Removing bad site from retry loop: ${badSite.url} (${badSite.reason})`);
+      adminClient.from('gateway_urls').delete().eq('url', badSite.url).then(({ error: delErr }) => {
+        if (delErr) console.error('[SHOPIFY-CHARGE] Failed to remove bad site:', delErr);
+        else console.log(`[SHOPIFY-CHARGE] Bad site removed: ${badSite.url}`);
+      });
+      delete siteStrikeCounter[badSite.url];
+
+      if (TELEGRAM_BOT_TOKEN) {
+        fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: ADMIN_TELEGRAM_CHAT_ID,
+            text: `🗑️ <b>SHOPIFY SITE AUTO-REMOVED</b>\n\n<code>${badSite.url}</code>\n\n<i>Reason: ${badSite.reason} (during multi-site retry)</i>`,
+            parse_mode: "HTML",
+          }),
+        }).catch(() => {});
+      }
+    }
+
     // Auto-remove bad sites from gateway_urls
     const rawLower = (result.rawResponse || '').toLowerCase();
     const isBadSite = badResponses.some(bad => rawLower.includes(bad.toLowerCase()));
