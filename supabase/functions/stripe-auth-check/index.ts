@@ -91,7 +91,7 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
 // Perform API check with retry logic for UNKNOWN responses
 const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown>> => {
   const maxRetries = 3;
-  const apiUrl = `http://web-production-a3b94.up.railway.app/api?cc=${cc}`;
+  const apiUrl = `https://stripe-auth-production-e53f.up.railway.app/api?cc=${cc}`;
   
   console.log(`[STRIPE-AUTH] Attempt ${attempt}/${maxRetries} - Calling API:`, apiUrl);
 
