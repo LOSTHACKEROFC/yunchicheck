@@ -69,7 +69,7 @@ const checkSingleSite = async (
   supabase: ReturnType<typeof createClient>,
 ): Promise<{ url: string; status: string; price: number; priceStr: string; apiResponse?: string; error?: string }> => {
   const maxAttempts = 1;
-  const timeoutMs = 30000;
+  const timeoutMs = 45000;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {

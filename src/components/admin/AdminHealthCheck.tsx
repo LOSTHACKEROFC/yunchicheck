@@ -49,9 +49,11 @@ interface SiteResult {
   error?: string;
 }
 
-const CONCURRENCY = 80;
-const MIN_COMPLETE_BEFORE_NEXT = 65;
-const STAGGER_MS = 25;
+const CONCURRENCY = 40;
+const WORKER_STAGGER_MS = 40;
+const WARMUP_DELAY_MS = 400;
+const BOOT_RETRY_LIMIT = 4;
+const BOOT_RETRY_BASE_DELAY_MS = 1200;
 
 const fetchAllGatewayUrls = async (fields: string) => {
   const PAGE_SIZE = 1000;
@@ -270,11 +272,14 @@ const AdminHealthCheck = () => {
     setIsStopped(true);
   };
 
-  const checkSingleUrl = async (siteUrl: string, proxyOverride?: string): Promise<SiteResult> => {
-    const maxRetries = 2;
+  const checkSingleUrl = async (
+    siteUrl: string,
+    proxyOverride?: string,
+    maxRetries = BOOT_RETRY_LIMIT,
+  ): Promise<SiteResult> => {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const body: any = { url: siteUrl };
+        const body: Record<string, string> = { url: siteUrl };
         if (proxyOverride) body.proxy = proxyOverride;
 
         const { data, error } = await supabase.functions.invoke("health-check-sites", {
@@ -284,7 +289,8 @@ const AdminHealthCheck = () => {
         if (error) {
           const isBootError = error.message?.includes("503") || error.message?.includes("BOOT_ERROR");
           if (isBootError && attempt < maxRetries - 1) {
-            await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000));
+            const delay = BOOT_RETRY_BASE_DELAY_MS * (attempt + 1) + Math.random() * 600;
+            await new Promise((resolve) => setTimeout(resolve, delay));
             continue;
           }
           return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: error.message };
@@ -293,19 +299,21 @@ const AdminHealthCheck = () => {
         return {
           url: data.url || siteUrl,
           status: data.status === "live" ? "live" : data.status === "dead" ? "dead" : "error",
-          price: data.price || 0,
+          price: Number(data.price) || 0,
           priceStr: data.priceStr || "$0.00",
           apiResponse: data.apiResponse || "",
           error: data.error,
         };
       } catch (e: any) {
         if (attempt < maxRetries - 1) {
-          await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000));
+          const delay = BOOT_RETRY_BASE_DELAY_MS * (attempt + 1) + Math.random() * 600;
+          await new Promise((resolve) => setTimeout(resolve, delay));
           continue;
         }
         return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: e?.message || "Request failed" };
       }
     }
+
     return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: "All retries exhausted" };
   };
 
@@ -329,15 +337,14 @@ const AdminHealthCheck = () => {
     }
 
     const proxyOverride = getProxyString();
-
     const total = uniqueUrls.length;
     let completed = 0;
     let liveCount = 0;
     let deadCount = 0;
     let errorCount = 0;
-    setStats({ total, live: 0, dead: 0, errors: 0 });
-
     const remainingSet = new Set(uniqueUrls);
+
+    setStats({ total, live: 0, dead: 0, errors: 0 });
 
     const pendingResults: SiteResult[] = [];
     let rafScheduled = false;
@@ -358,7 +365,6 @@ const AdminHealthCheck = () => {
       remainingSet.delete(result.url);
       pendingResults.push(result);
 
-      // Batch UI updates via rAF for smoothness
       if (!rafScheduled) {
         rafScheduled = true;
         requestAnimationFrame(flushResults);
@@ -367,60 +373,63 @@ const AdminHealthCheck = () => {
       setProgress(Math.round((completed / total) * 100));
       setStats({ total, live: liveCount, dead: deadCount, errors: errorCount });
 
-      // Throttle textarea updates to every 20th result
-      if (completed % 20 === 0 || completed === total) {
+      if (completed % 25 === 0 || completed === total) {
         const remainingUrls = Array.from(remainingSet);
         setUrls(remainingUrls);
         setUrlInput(remainingUrls.join("\n"));
       }
     };
 
-    // Process in batches of CONCURRENCY with minimal stagger
-    let urlIndex = 0;
+    let nextUrlIndex = 0;
 
-    while (urlIndex < uniqueUrls.length && !stopRef.current) {
-      const batchEnd = Math.min(urlIndex + CONCURRENCY, uniqueUrls.length);
-      const batch = uniqueUrls.slice(urlIndex, batchEnd);
-      const batchNum = Math.floor(urlIndex / CONCURRENCY) + 1;
-      const totalBatches = Math.ceil(uniqueUrls.length / CONCURRENCY);
+    if (!stopRef.current && uniqueUrls.length > 0) {
+      const warmupResult = await checkSingleUrl(uniqueUrls[0], proxyOverride, BOOT_RETRY_LIMIT);
+      if (!stopRef.current) {
+        processResult(warmupResult);
+        nextUrlIndex = 1;
+        if (uniqueUrls.length > 1) {
+          await new Promise((resolve) => setTimeout(resolve, WARMUP_DELAY_MS));
+        }
+      }
+    }
 
-      console.log(`[Batch ${batchNum}/${totalBatches}] Firing ${batch.length} concurrent requests...`);
+    const workerCount = Math.min(CONCURRENCY, Math.max(uniqueUrls.length - nextUrlIndex, 0));
+    console.log(`[Workers] Starting ${workerCount} workers for ${Math.max(uniqueUrls.length - nextUrlIndex, 0)} remaining URLs`);
 
-      let batchCompleted = 0;
-      const batchDonePromise = new Promise<void>((resolve) => {
-        const promises = batch.map(async (siteUrl, idx) => {
-          if (stopRef.current) return;
-          // Fast stagger - 25ms between launches
-          if (idx > 0) await new Promise(r => setTimeout(r, idx * STAGGER_MS));
-          if (stopRef.current) return;
+    const workers = Array.from({ length: workerCount }, (_, workerIndex) =>
+      (async () => {
+        if (workerIndex > 0) {
+          await new Promise((resolve) => setTimeout(resolve, workerIndex * WORKER_STAGGER_MS));
+        }
+
+        while (!stopRef.current) {
+          if (nextUrlIndex >= uniqueUrls.length) break;
+          const siteUrl = uniqueUrls[nextUrlIndex++];
           const result = await checkSingleUrl(siteUrl, proxyOverride);
           if (!stopRef.current) {
             processResult(result);
-            batchCompleted++;
-            if (batchCompleted >= Math.min(MIN_COMPLETE_BEFORE_NEXT, batch.length)) {
-              resolve();
-            }
           }
-        });
+        }
+      })(),
+    );
 
-        Promise.all(promises).then(() => resolve());
-      });
+    await Promise.all(workers);
 
-      await batchDonePromise;
-      console.log(`[Batch ${batchNum}/${totalBatches}] ${batchCompleted}/${batch.length} complete`);
-      urlIndex = batchEnd;
-    }
-
-    // Flush any remaining results
     flushResults();
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
     const finalRemaining = Array.from(remainingSet);
     setUrls(finalRemaining);
     setUrlInput(finalRemaining.join("\n"));
 
-    setProgress(100);
+    setProgress(stopRef.current ? Math.round((completed / total) * 100) : 100);
     setIsRunning(false);
+
+    if (stopRef.current) {
+      toast.info(`Health check stopped after ${completed}/${total} sites.`);
+      return;
+    }
+
     toast.success(`Health check complete! ${liveCount} live sites saved.`);
   }, [urls]);
 
