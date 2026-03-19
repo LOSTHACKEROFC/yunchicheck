@@ -89,6 +89,83 @@ const AdminHealthCheck = () => {
   const stopRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Proxy config state
+  const [systemProxies, setSystemProxies] = useState<ProxyItem[]>([]);
+  const [loadingProxies, setLoadingProxies] = useState(false);
+  const [proxyMode, setProxyMode] = useState<"random" | "specific" | "custom">("random");
+  const [selectedProxyId, setSelectedProxyId] = useState<string>("");
+  const [customProxy, setCustomProxy] = useState("");
+  const [checkingProxy, setCheckingProxy] = useState(false);
+
+  // Load system proxies
+  const loadProxies = async () => {
+    setLoadingProxies(true);
+    try {
+      const { data, error } = await supabase
+        .from("proxies")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setSystemProxies(data || []);
+    } catch {
+      toast.error("Failed to load proxies");
+    } finally {
+      setLoadingProxies(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProxies();
+  }, []);
+
+  const getProxyString = (): string | undefined => {
+    if (proxyMode === "random") return undefined; // let edge function pick randomly
+    if (proxyMode === "specific" && selectedProxyId) {
+      const p = systemProxies.find((px) => px.id === selectedProxyId);
+      if (p) {
+        return p.username && p.password
+          ? `${p.ip}:${p.port}:${p.username}:${p.password}`
+          : `${p.ip}:${p.port}`;
+      }
+    }
+    if (proxyMode === "custom" && customProxy.trim()) {
+      return customProxy.trim();
+    }
+    return undefined;
+  };
+
+  const handleCheckProxy = async () => {
+    const proxyStr = getProxyString();
+    if (!proxyStr) {
+      toast.error("No proxy selected to test");
+      return;
+    }
+    setCheckingProxy(true);
+    try {
+      const parts = proxyStr.split(":");
+      const proxyObj = {
+        ip: parts[0],
+        port: parts[1],
+        username: parts[2] || undefined,
+        password: parts[3] || undefined,
+      };
+      const { data, error } = await supabase.functions.invoke("check-proxy", {
+        body: { proxies: [proxyObj] },
+      });
+      if (error) throw error;
+      const result = data?.results?.[0];
+      if (result?.status === "live") {
+        toast.success(`Proxy is LIVE${result.response_time ? ` (${result.response_time}ms)` : ""}`);
+      } else {
+        toast.error("Proxy is DEAD");
+      }
+    } catch {
+      toast.error("Proxy check failed");
+    } finally {
+      setCheckingProxy(false);
+    }
+  };
+
   const handleDeleteAllSaved = async () => {
     if (!confirm("Are you sure you want to delete ALL saved URLs? This cannot be undone.")) return;
     setDeletingAll(true);
