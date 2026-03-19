@@ -253,24 +253,30 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { url } = await req.json();
+    const { url, proxy: proxyOverride } = await req.json();
 
     if (!url || typeof url !== "string") {
       return new Response(JSON.stringify({ error: "No URL provided" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Fetch a random live proxy
-    const { data: liveProxies } = await supabase
-      .from("proxies")
-      .select("*")
-      .eq("status", "live");
-
     let proxyStr = "";
-    if (liveProxies && liveProxies.length > 0) {
-      const randomProxy = getRandomItem(liveProxies);
-      proxyStr = randomProxy.username && randomProxy.password
-        ? `${randomProxy.ip}:${randomProxy.port}:${randomProxy.username}:${randomProxy.password}`
-        : `${randomProxy.ip}:${randomProxy.port}`;
+    
+    if (proxyOverride && typeof proxyOverride === "string") {
+      // Use the proxy provided by the caller
+      proxyStr = proxyOverride;
+    } else {
+      // Fetch a random live proxy
+      const { data: liveProxies } = await supabase
+        .from("proxies")
+        .select("*")
+        .eq("status", "live");
+
+      if (liveProxies && liveProxies.length > 0) {
+        const randomProxy = getRandomItem(liveProxies);
+        proxyStr = randomProxy.username && randomProxy.password
+          ? `${randomProxy.ip}:${randomProxy.port}:${randomProxy.username}:${randomProxy.password}`
+          : `${randomProxy.ip}:${randomProxy.port}`;
+      }
     }
 
     const result = await checkSingleSite(url, proxyStr, supabase);
