@@ -428,6 +428,105 @@ const AdminHealthCheck = () => {
 
   return (
     <div className="space-y-6">
+      {/* Proxy Configuration */}
+      <Card className="border-border">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Shield className="h-5 w-5 text-primary" />
+            Proxy Configuration
+          </CardTitle>
+          <CardDescription>
+            Configure which proxy to use for health checks
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Select value={proxyMode} onValueChange={(v) => setProxyMode(v as any)} disabled={isRunning}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="random">Random (Auto)</SelectItem>
+                <SelectItem value="specific">Select Proxy</SelectItem>
+                <SelectItem value="custom">Custom Proxy</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {proxyMode === "random" && (
+              <Badge variant="secondary" className="gap-1">
+                <RefreshCw className="h-3 w-3" />
+                {systemProxies.filter(p => p.status === "live").length} live proxies in pool
+              </Badge>
+            )}
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={loadProxies}
+              disabled={loadingProxies}
+              title="Refresh proxies"
+            >
+              {loadingProxies ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            </Button>
+          </div>
+
+          {proxyMode === "specific" && (
+            <div className="flex items-center gap-3">
+              <Select value={selectedProxyId} onValueChange={setSelectedProxyId} disabled={isRunning}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="Select a proxy..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {systemProxies.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      <span className="font-mono text-xs">
+                        {p.ip}:{p.port}
+                        {p.username ? ` (${p.username})` : ""}
+                      </span>
+                      <Badge variant={p.status === "live" ? "default" : "destructive"} className="ml-2 text-[10px] px-1 py-0">
+                        {p.status}
+                      </Badge>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCheckProxy}
+                disabled={!selectedProxyId || checkingProxy || isRunning}
+                className="gap-1"
+              >
+                {checkingProxy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                Test
+              </Button>
+            </div>
+          )}
+
+          {proxyMode === "custom" && (
+            <div className="flex items-center gap-3">
+              <Input
+                placeholder="ip:port:username:password"
+                value={customProxy}
+                onChange={(e) => setCustomProxy(e.target.value)}
+                className="flex-1 font-mono text-xs"
+                disabled={isRunning}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCheckProxy}
+                disabled={!customProxy.trim() || checkingProxy || isRunning}
+                className="gap-1"
+              >
+                {checkingProxy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                Test
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Upload & Config */}
       <Card className="border-border">
         <CardHeader>
