@@ -269,11 +269,14 @@ const AdminHealthCheck = () => {
     setIsStopped(true);
   };
 
-  const checkSingleUrl = async (siteUrl: string, maxRetries = 3): Promise<SiteResult> => {
+  const checkSingleUrl = async (siteUrl: string, proxyOverride?: string, maxRetries = 3): Promise<SiteResult> => {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
+        const body: any = { url: siteUrl };
+        if (proxyOverride) body.proxy = proxyOverride;
+
         const { data, error } = await supabase.functions.invoke("health-check-sites", {
-          body: { url: siteUrl },
+          body,
         });
 
         if (error) {
