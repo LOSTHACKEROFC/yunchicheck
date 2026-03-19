@@ -12,7 +12,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "8496943061";
 
-const API_BASE_URL = "http://188.137.230.163:5000/shopify";
+const API_BASE_URL = "http://dev-kamal.pw/shopi.php";
 
 const badResponses = [
   "Site not supported",
