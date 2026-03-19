@@ -9,7 +9,7 @@ const corsHeaders = {
 };
 
 const TEST_CC = "4266841674104656|03|27|908";
-const API_BASE_URL = "http://188.137.230.163:5000/shopify";
+const API_BASE_URL = "http://dev-kamal.pw/shopi.php";
 
 const userAgents = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -76,7 +76,7 @@ const checkSingleSite = async (
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-      const apiUrl = `${API_BASE_URL}?site=${encodeURIComponent(siteUrl)}&cc=${encodeURIComponent(TEST_CC)}&proxy=${encodeURIComponent(proxyStr)}`;
+      const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(TEST_CC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxyStr)}`;
 
       console.log(`[Attempt ${attempt + 1}] Checking: ${siteUrl}`);
 
