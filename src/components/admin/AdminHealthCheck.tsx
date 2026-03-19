@@ -49,8 +49,9 @@ interface SiteResult {
   error?: string;
 }
 
-const CONCURRENCY = 50;
-const MIN_COMPLETE_BEFORE_NEXT = 49;
+const CONCURRENCY = 80;
+const MIN_COMPLETE_BEFORE_NEXT = 65;
+const STAGGER_MS = 25;
 
 const fetchAllGatewayUrls = async (fields: string) => {
   const PAGE_SIZE = 1000;
@@ -269,7 +270,8 @@ const AdminHealthCheck = () => {
     setIsStopped(true);
   };
 
-  const checkSingleUrl = async (siteUrl: string, proxyOverride?: string, maxRetries = 3): Promise<SiteResult> => {
+  const checkSingleUrl = async (siteUrl: string, proxyOverride?: string): Promise<SiteResult> => {
+    const maxRetries = 2;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const body: any = { url: siteUrl };
@@ -282,7 +284,7 @@ const AdminHealthCheck = () => {
         if (error) {
           const isBootError = error.message?.includes("503") || error.message?.includes("BOOT_ERROR");
           if (isBootError && attempt < maxRetries - 1) {
-            await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+            await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000));
             continue;
           }
           return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: error.message };
@@ -298,7 +300,7 @@ const AdminHealthCheck = () => {
         };
       } catch (e: any) {
         if (attempt < maxRetries - 1) {
-          await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+          await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000));
           continue;
         }
         return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: e?.message || "Request failed" };
@@ -337,6 +339,16 @@ const AdminHealthCheck = () => {
 
     const remainingSet = new Set(uniqueUrls);
 
+    const pendingResults: SiteResult[] = [];
+    let rafScheduled = false;
+
+    const flushResults = () => {
+      rafScheduled = false;
+      if (pendingResults.length === 0) return;
+      const batch = pendingResults.splice(0);
+      setResults((prev) => [...prev, ...batch]);
+    };
+
     const processResult = (result: SiteResult) => {
       completed++;
       if (result.status === "live") liveCount++;
@@ -344,20 +356,26 @@ const AdminHealthCheck = () => {
       else errorCount++;
 
       remainingSet.delete(result.url);
+      pendingResults.push(result);
 
-      // Throttle textarea updates to every 10th result
-      if (completed % 10 === 0 || completed === total) {
+      // Batch UI updates via rAF for smoothness
+      if (!rafScheduled) {
+        rafScheduled = true;
+        requestAnimationFrame(flushResults);
+      }
+
+      setProgress(Math.round((completed / total) * 100));
+      setStats({ total, live: liveCount, dead: deadCount, errors: errorCount });
+
+      // Throttle textarea updates to every 20th result
+      if (completed % 20 === 0 || completed === total) {
         const remainingUrls = Array.from(remainingSet);
         setUrls(remainingUrls);
         setUrlInput(remainingUrls.join("\n"));
       }
-
-      setResults((prev) => [...prev, result]);
-      setProgress(Math.round((completed / total) * 100));
-      setStats({ total, live: liveCount, dead: deadCount, errors: errorCount });
     };
 
-    // Process in batches of CONCURRENCY, waiting for MIN_COMPLETE_BEFORE_NEXT before next batch
+    // Process in batches of CONCURRENCY with minimal stagger
     let urlIndex = 0;
 
     while (urlIndex < uniqueUrls.length && !stopRef.current) {
@@ -368,13 +386,12 @@ const AdminHealthCheck = () => {
 
       console.log(`[Batch ${batchNum}/${totalBatches}] Firing ${batch.length} concurrent requests...`);
 
-      // Create a promise for each URL and track completion
       let batchCompleted = 0;
       const batchDonePromise = new Promise<void>((resolve) => {
         const promises = batch.map(async (siteUrl, idx) => {
           if (stopRef.current) return;
-          // Stagger launches by 100ms each to avoid simultaneous cold-starts
-          if (idx > 0) await new Promise(r => setTimeout(r, idx * 100));
+          // Fast stagger - 25ms between launches
+          if (idx > 0) await new Promise(r => setTimeout(r, idx * STAGGER_MS));
           if (stopRef.current) return;
           const result = await checkSingleUrl(siteUrl, proxyOverride);
           if (!stopRef.current) {
@@ -386,21 +403,18 @@ const AdminHealthCheck = () => {
           }
         });
 
-        // Safety: resolve when ALL are done regardless
         Promise.all(promises).then(() => resolve());
       });
 
-      // Wait for 49/50 (or all) to complete before starting next batch
       await batchDonePromise;
-
-      console.log(`[Batch ${batchNum}/${totalBatches}] ${batchCompleted}/${batch.length} complete, moving to next batch`);
+      console.log(`[Batch ${batchNum}/${totalBatches}] ${batchCompleted}/${batch.length} complete`);
       urlIndex = batchEnd;
     }
 
-    // Wait a moment for any trailing results
-    await new Promise(r => setTimeout(r, 500));
+    // Flush any remaining results
+    flushResults();
+    await new Promise(r => setTimeout(r, 300));
 
-    // Final update of remaining URLs
     const finalRemaining = Array.from(remainingSet);
     setUrls(finalRemaining);
     setUrlInput(finalRemaining.join("\n"));

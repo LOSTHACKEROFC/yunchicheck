@@ -68,8 +68,8 @@ const checkSingleSite = async (
   proxyStr: string,
   supabase: ReturnType<typeof createClient>,
 ): Promise<{ url: string; status: string; price: number; priceStr: string; apiResponse?: string; error?: string }> => {
-  const maxAttempts = 2;
-  const timeoutMs = 60000;
+  const maxAttempts = 1;
+  const timeoutMs = 30000;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
