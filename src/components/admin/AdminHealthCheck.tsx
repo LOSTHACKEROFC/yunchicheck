@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -6,6 +6,8 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -25,7 +27,18 @@ import {
   Code,
   Download,
   Filter,
+  Shield,
+  RefreshCw,
 } from "lucide-react";
+
+interface ProxyItem {
+  id: string;
+  ip: string;
+  port: string;
+  username: string | null;
+  password: string | null;
+  status: string;
+}
 
 interface SiteResult {
   url: string;
@@ -75,6 +88,83 @@ const AdminHealthCheck = () => {
   const [deletingAll, setDeletingAll] = useState(false);
   const stopRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Proxy config state
+  const [systemProxies, setSystemProxies] = useState<ProxyItem[]>([]);
+  const [loadingProxies, setLoadingProxies] = useState(false);
+  const [proxyMode, setProxyMode] = useState<"random" | "specific" | "custom">("random");
+  const [selectedProxyId, setSelectedProxyId] = useState<string>("");
+  const [customProxy, setCustomProxy] = useState("");
+  const [checkingProxy, setCheckingProxy] = useState(false);
+
+  // Load system proxies
+  const loadProxies = async () => {
+    setLoadingProxies(true);
+    try {
+      const { data, error } = await supabase
+        .from("proxies")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setSystemProxies(data || []);
+    } catch {
+      toast.error("Failed to load proxies");
+    } finally {
+      setLoadingProxies(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProxies();
+  }, []);
+
+  const getProxyString = (): string | undefined => {
+    if (proxyMode === "random") return undefined; // let edge function pick randomly
+    if (proxyMode === "specific" && selectedProxyId) {
+      const p = systemProxies.find((px) => px.id === selectedProxyId);
+      if (p) {
+        return p.username && p.password
+          ? `${p.ip}:${p.port}:${p.username}:${p.password}`
+          : `${p.ip}:${p.port}`;
+      }
+    }
+    if (proxyMode === "custom" && customProxy.trim()) {
+      return customProxy.trim();
+    }
+    return undefined;
+  };
+
+  const handleCheckProxy = async () => {
+    const proxyStr = getProxyString();
+    if (!proxyStr) {
+      toast.error("No proxy selected to test");
+      return;
+    }
+    setCheckingProxy(true);
+    try {
+      const parts = proxyStr.split(":");
+      const proxyObj = {
+        ip: parts[0],
+        port: parts[1],
+        username: parts[2] || undefined,
+        password: parts[3] || undefined,
+      };
+      const { data, error } = await supabase.functions.invoke("check-proxy", {
+        body: { proxies: [proxyObj] },
+      });
+      if (error) throw error;
+      const result = data?.results?.[0];
+      if (result?.status === "live") {
+        toast.success(`Proxy is LIVE${result.response_time ? ` (${result.response_time}ms)` : ""}`);
+      } else {
+        toast.error("Proxy is DEAD");
+      }
+    } catch {
+      toast.error("Proxy check failed");
+    } finally {
+      setCheckingProxy(false);
+    }
+  };
 
   const handleDeleteAllSaved = async () => {
     if (!confirm("Are you sure you want to delete ALL saved URLs? This cannot be undone.")) return;
@@ -179,11 +269,14 @@ const AdminHealthCheck = () => {
     setIsStopped(true);
   };
 
-  const checkSingleUrl = async (siteUrl: string, maxRetries = 3): Promise<SiteResult> => {
+  const checkSingleUrl = async (siteUrl: string, proxyOverride?: string, maxRetries = 3): Promise<SiteResult> => {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
+        const body: any = { url: siteUrl };
+        if (proxyOverride) body.proxy = proxyOverride;
+
         const { data, error } = await supabase.functions.invoke("health-check-sites", {
-          body: { url: siteUrl },
+          body,
         });
 
         if (error) {
@@ -233,6 +326,8 @@ const AdminHealthCheck = () => {
       toast.info(`Skipped ${skipped} duplicate URL${skipped > 1 ? "s" : ""}`);
     }
 
+    const proxyOverride = getProxyString();
+
     const total = uniqueUrls.length;
     let completed = 0;
     let liveCount = 0;
@@ -281,7 +376,7 @@ const AdminHealthCheck = () => {
           // Stagger launches by 100ms each to avoid simultaneous cold-starts
           if (idx > 0) await new Promise(r => setTimeout(r, idx * 100));
           if (stopRef.current) return;
-          const result = await checkSingleUrl(siteUrl);
+          const result = await checkSingleUrl(siteUrl, proxyOverride);
           if (!stopRef.current) {
             processResult(result);
             batchCompleted++;
@@ -333,6 +428,105 @@ const AdminHealthCheck = () => {
 
   return (
     <div className="space-y-6">
+      {/* Proxy Configuration */}
+      <Card className="border-border">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Shield className="h-5 w-5 text-primary" />
+            Proxy Configuration
+          </CardTitle>
+          <CardDescription>
+            Configure which proxy to use for health checks
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Select value={proxyMode} onValueChange={(v) => setProxyMode(v as any)} disabled={isRunning}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="random">Random (Auto)</SelectItem>
+                <SelectItem value="specific">Select Proxy</SelectItem>
+                <SelectItem value="custom">Custom Proxy</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {proxyMode === "random" && (
+              <Badge variant="secondary" className="gap-1">
+                <RefreshCw className="h-3 w-3" />
+                {systemProxies.filter(p => p.status === "live").length} live proxies in pool
+              </Badge>
+            )}
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={loadProxies}
+              disabled={loadingProxies}
+              title="Refresh proxies"
+            >
+              {loadingProxies ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            </Button>
+          </div>
+
+          {proxyMode === "specific" && (
+            <div className="flex items-center gap-3">
+              <Select value={selectedProxyId} onValueChange={setSelectedProxyId} disabled={isRunning}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="Select a proxy..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {systemProxies.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      <span className="font-mono text-xs">
+                        {p.ip}:{p.port}
+                        {p.username ? ` (${p.username})` : ""}
+                      </span>
+                      <Badge variant={p.status === "live" ? "default" : "destructive"} className="ml-2 text-[10px] px-1 py-0">
+                        {p.status}
+                      </Badge>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCheckProxy}
+                disabled={!selectedProxyId || checkingProxy || isRunning}
+                className="gap-1"
+              >
+                {checkingProxy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                Test
+              </Button>
+            </div>
+          )}
+
+          {proxyMode === "custom" && (
+            <div className="flex items-center gap-3">
+              <Input
+                placeholder="ip:port:username:password"
+                value={customProxy}
+                onChange={(e) => setCustomProxy(e.target.value)}
+                className="flex-1 font-mono text-xs"
+                disabled={isRunning}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCheckProxy}
+                disabled={!customProxy.trim() || checkingProxy || isRunning}
+                className="gap-1"
+              >
+                {checkingProxy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                Test
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Upload & Config */}
       <Card className="border-border">
         <CardHeader>
