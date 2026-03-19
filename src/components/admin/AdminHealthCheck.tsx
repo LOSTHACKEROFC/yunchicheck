@@ -376,7 +376,7 @@ const AdminHealthCheck = () => {
           // Stagger launches by 100ms each to avoid simultaneous cold-starts
           if (idx > 0) await new Promise(r => setTimeout(r, idx * 100));
           if (stopRef.current) return;
-          const result = await checkSingleUrl(siteUrl);
+          const result = await checkSingleUrl(siteUrl, proxyOverride);
           if (!stopRef.current) {
             processResult(result);
             batchCompleted++;
