@@ -270,7 +270,8 @@ const AdminHealthCheck = () => {
     setIsStopped(true);
   };
 
-  const checkSingleUrl = async (siteUrl: string, proxyOverride?: string, maxRetries = 3): Promise<SiteResult> => {
+  const checkSingleUrl = async (siteUrl: string, proxyOverride?: string): Promise<SiteResult> => {
+    const maxRetries = 2;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const body: any = { url: siteUrl };
@@ -283,7 +284,7 @@ const AdminHealthCheck = () => {
         if (error) {
           const isBootError = error.message?.includes("503") || error.message?.includes("BOOT_ERROR");
           if (isBootError && attempt < maxRetries - 1) {
-            await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+            await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000));
             continue;
           }
           return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: error.message };
@@ -299,7 +300,7 @@ const AdminHealthCheck = () => {
         };
       } catch (e: any) {
         if (attempt < maxRetries - 1) {
-          await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+          await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000));
           continue;
         }
         return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: e?.message || "Request failed" };
