@@ -49,8 +49,9 @@ interface SiteResult {
   error?: string;
 }
 
-const CONCURRENCY = 50;
-const MIN_COMPLETE_BEFORE_NEXT = 49;
+const CONCURRENCY = 80;
+const MIN_COMPLETE_BEFORE_NEXT = 65;
+const STAGGER_MS = 25;
 
 const fetchAllGatewayUrls = async (fields: string) => {
   const PAGE_SIZE = 1000;
