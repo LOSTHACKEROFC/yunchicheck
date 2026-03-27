@@ -121,21 +121,25 @@ const AdminHealthCheck = () => {
     loadProxies();
   }, []);
 
-  const getProxyString = (): string | undefined => {
-    if (proxyMode === "random") return undefined; // let edge function pick randomly
+  const getProxyInfo = (): { proxy?: string; proxyId?: string } => {
+    if (proxyMode === "random") return {}; // let edge function pick randomly
     if (proxyMode === "specific" && selectedProxyId) {
       const p = systemProxies.find((px) => px.id === selectedProxyId);
       if (p) {
-        return p.username && p.password
+        const proxyStr = p.username && p.password
           ? `${p.ip}:${p.port}:${p.username}:${p.password}`
           : `${p.ip}:${p.port}`;
+        return { proxy: proxyStr, proxyId: p.id };
       }
     }
     if (proxyMode === "custom" && customProxy.trim()) {
-      return customProxy.trim();
+      return { proxy: customProxy.trim() };
     }
-    return undefined;
+    return {};
   };
+  
+  // Keep backward compat helper
+  const getProxyString = (): string | undefined => getProxyInfo().proxy;
 
   const handleCheckProxy = async () => {
     const proxyStr = getProxyString();
