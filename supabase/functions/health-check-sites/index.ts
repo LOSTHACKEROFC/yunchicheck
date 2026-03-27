@@ -265,7 +265,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { url, proxy: proxyOverride } = await req.json();
+    const { url, proxy: proxyOverride, proxyId: proxyIdOverride } = await req.json();
 
     if (!url || typeof url !== "string") {
       return new Response(JSON.stringify({ error: "No URL provided" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -276,6 +276,10 @@ Deno.serve(async (req) => {
     
     if (proxyOverride && typeof proxyOverride === "string") {
       proxyStr = proxyOverride;
+      // Use proxyId from request if provided (for specific proxy mode)
+      if (proxyIdOverride && typeof proxyIdOverride === "string") {
+        proxyId = proxyIdOverride;
+      }
     } else {
       const { data: liveProxies } = await supabase
         .from("proxies")

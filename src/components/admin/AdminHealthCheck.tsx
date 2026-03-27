@@ -121,21 +121,25 @@ const AdminHealthCheck = () => {
     loadProxies();
   }, []);
 
-  const getProxyString = (): string | undefined => {
-    if (proxyMode === "random") return undefined; // let edge function pick randomly
+  const getProxyInfo = (): { proxy?: string; proxyId?: string } => {
+    if (proxyMode === "random") return {}; // let edge function pick randomly
     if (proxyMode === "specific" && selectedProxyId) {
       const p = systemProxies.find((px) => px.id === selectedProxyId);
       if (p) {
-        return p.username && p.password
+        const proxyStr = p.username && p.password
           ? `${p.ip}:${p.port}:${p.username}:${p.password}`
           : `${p.ip}:${p.port}`;
+        return { proxy: proxyStr, proxyId: p.id };
       }
     }
     if (proxyMode === "custom" && customProxy.trim()) {
-      return customProxy.trim();
+      return { proxy: customProxy.trim() };
     }
-    return undefined;
+    return {};
   };
+  
+  // Keep backward compat helper
+  const getProxyString = (): string | undefined => getProxyInfo().proxy;
 
   const handleCheckProxy = async () => {
     const proxyStr = getProxyString();
@@ -276,11 +280,13 @@ const AdminHealthCheck = () => {
     siteUrl: string,
     proxyOverride?: string,
     maxRetries = BOOT_RETRY_LIMIT,
+    proxyIdOverride?: string,
   ): Promise<SiteResult> => {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const body: Record<string, string> = { url: siteUrl };
         if (proxyOverride) body.proxy = proxyOverride;
+        if (proxyIdOverride) body.proxyId = proxyIdOverride;
 
         const { data, error } = await supabase.functions.invoke("health-check-sites", {
           body,
@@ -294,6 +300,14 @@ const AdminHealthCheck = () => {
             continue;
           }
           return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: error.message };
+        }
+
+        // If proxy was detected as dead, notify and refresh proxy list
+        if (data.proxyDead) {
+          toast.error(`Dead proxy removed: ${proxyOverride?.split(':').slice(0, 2).join(':') || 'system proxy'}`);
+          // Refresh system proxies list
+          const { data: freshProxies } = await supabase.from("proxies").select("*").eq("status", "live");
+          if (freshProxies) setSystemProxies(freshProxies);
         }
 
         return {
@@ -336,7 +350,7 @@ const AdminHealthCheck = () => {
       toast.info(`Skipped ${skipped} duplicate URL${skipped > 1 ? "s" : ""}`);
     }
 
-    const proxyOverride = getProxyString();
+    const { proxy: proxyOverride, proxyId: proxyIdOverride } = getProxyInfo();
     const total = uniqueUrls.length;
     let completed = 0;
     let liveCount = 0;
@@ -383,7 +397,7 @@ const AdminHealthCheck = () => {
     let nextUrlIndex = 0;
 
     if (!stopRef.current && uniqueUrls.length > 0) {
-      const warmupResult = await checkSingleUrl(uniqueUrls[0], proxyOverride, BOOT_RETRY_LIMIT);
+      const warmupResult = await checkSingleUrl(uniqueUrls[0], proxyOverride, BOOT_RETRY_LIMIT, proxyIdOverride);
       if (!stopRef.current) {
         processResult(warmupResult);
         nextUrlIndex = 1;
@@ -405,7 +419,7 @@ const AdminHealthCheck = () => {
         while (!stopRef.current) {
           if (nextUrlIndex >= uniqueUrls.length) break;
           const siteUrl = uniqueUrls[nextUrlIndex++];
-          const result = await checkSingleUrl(siteUrl, proxyOverride);
+          const result = await checkSingleUrl(siteUrl, proxyOverride, BOOT_RETRY_LIMIT, proxyIdOverride);
           if (!stopRef.current) {
             processResult(result);
           }
