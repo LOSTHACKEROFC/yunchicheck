@@ -272,12 +272,11 @@ Deno.serve(async (req) => {
     }
 
     let proxyStr = "";
+    let proxyId: string | null = null;
     
     if (proxyOverride && typeof proxyOverride === "string") {
-      // Use the proxy provided by the caller
       proxyStr = proxyOverride;
     } else {
-      // Fetch a random live proxy
       const { data: liveProxies } = await supabase
         .from("proxies")
         .select("*")
@@ -285,13 +284,14 @@ Deno.serve(async (req) => {
 
       if (liveProxies && liveProxies.length > 0) {
         const randomProxy = getRandomItem(liveProxies);
+        proxyId = randomProxy.id;
         proxyStr = randomProxy.username && randomProxy.password
           ? `${randomProxy.ip}:${randomProxy.port}:${randomProxy.username}:${randomProxy.password}`
           : `${randomProxy.ip}:${randomProxy.port}`;
       }
     }
 
-    const result = await checkSingleSite(url, proxyStr, supabase);
+    const result = await checkSingleSite(url, proxyStr, proxyId, supabase);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
