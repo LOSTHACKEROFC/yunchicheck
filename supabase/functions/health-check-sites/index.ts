@@ -229,18 +229,14 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
-    // Fast local JWT verification
-    const anonClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY") || "", {
-      global: { headers: { Authorization: authHeader } },
-    });
     const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: authError } = await anonClient.auth.getClaims(token);
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
-    if (authError || !claimsData?.claims?.sub) {
+    if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const userId = claimsData.claims.sub as string;
+    const userId = user.id;
 
     const { data: roleData } = await supabase
       .from("user_roles")
