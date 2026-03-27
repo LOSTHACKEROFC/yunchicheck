@@ -100,6 +100,15 @@ const checkSingleSite = async (
       clearTimeout(timeoutId);
       const rawText = await response.text();
 
+      // Check if proxy is dead based on API response
+      const rawLower = (rawText || '').toLowerCase();
+      const isProxyDead = PROXY_DEAD_INDICATORS.some(ind => rawLower.includes(ind));
+      if (isProxyDead && proxyId) {
+        console.log(`[Result] Proxy dead detected for ${siteUrl}, removing proxy ${proxyId}`);
+        await supabase.from("proxies").delete().eq("id", proxyId);
+        return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: rawText, error: "Dead proxy removed", proxyDead: true };
+      }
+
       if (!rawText || rawText.trim() === "") {
         console.log(`[Attempt ${attempt + 1}] Empty response for ${siteUrl}`);
         if (attempt < maxAttempts - 1) {
