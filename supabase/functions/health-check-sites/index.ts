@@ -276,6 +276,10 @@ Deno.serve(async (req) => {
     
     if (proxyOverride && typeof proxyOverride === "string") {
       proxyStr = proxyOverride;
+      // Use proxyId from request if provided (for specific proxy mode)
+      if (proxyIdOverride && typeof proxyIdOverride === "string") {
+        proxyId = proxyIdOverride;
+      }
     } else {
       const { data: liveProxies } = await supabase
         .from("proxies")
