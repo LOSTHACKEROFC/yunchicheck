@@ -83,7 +83,7 @@ const checkSingleSite = async (
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-      const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(TEST_CC)}&url=${encodeURIComponent(siteUrl)}&proxy=${proxyStr}`;
+      const apiUrl = `${API_BASE_URL}?site=${encodeURIComponent(siteUrl)}&cc=${encodeURIComponent(TEST_CC)}&proxy=${proxyStr}`;
 
       console.log(`[Attempt ${attempt + 1}] Checking: ${siteUrl}`);
 
