@@ -419,7 +419,7 @@ const AdminHealthCheck = () => {
         while (!stopRef.current) {
           if (nextUrlIndex >= uniqueUrls.length) break;
           const siteUrl = uniqueUrls[nextUrlIndex++];
-          const result = await checkSingleUrl(siteUrl, proxyOverride);
+          const result = await checkSingleUrl(siteUrl, proxyOverride, BOOT_RETRY_LIMIT, proxyIdOverride);
           if (!stopRef.current) {
             processResult(result);
           }
