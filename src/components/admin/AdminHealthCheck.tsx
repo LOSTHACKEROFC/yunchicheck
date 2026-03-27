@@ -350,7 +350,7 @@ const AdminHealthCheck = () => {
       toast.info(`Skipped ${skipped} duplicate URL${skipped > 1 ? "s" : ""}`);
     }
 
-    const proxyOverride = getProxyString();
+    const { proxy: proxyOverride, proxyId: proxyIdOverride } = getProxyInfo();
     const total = uniqueUrls.length;
     let completed = 0;
     let liveCount = 0;
