@@ -280,11 +280,13 @@ const AdminHealthCheck = () => {
     siteUrl: string,
     proxyOverride?: string,
     maxRetries = BOOT_RETRY_LIMIT,
+    proxyIdOverride?: string,
   ): Promise<SiteResult> => {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const body: Record<string, string> = { url: siteUrl };
         if (proxyOverride) body.proxy = proxyOverride;
+        if (proxyIdOverride) body.proxyId = proxyIdOverride;
 
         const { data, error } = await supabase.functions.invoke("health-check-sites", {
           body,
@@ -298,6 +300,14 @@ const AdminHealthCheck = () => {
             continue;
           }
           return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: error.message };
+        }
+
+        // If proxy was detected as dead, notify and refresh proxy list
+        if (data.proxyDead) {
+          toast.error(`Dead proxy removed: ${proxyOverride?.split(':').slice(0, 2).join(':') || 'system proxy'}`);
+          // Refresh system proxies list
+          const { data: freshProxies } = await supabase.from("proxies").select("*").eq("status", "live");
+          if (freshProxies) setSystemProxies(freshProxies);
         }
 
         return {
