@@ -63,11 +63,18 @@ const extractPrice = (response: string): { price: number; priceStr: string } => 
   };
 };
 
+const PROXY_DEAD_INDICATORS = [
+  '407', 'proxy error', 'proxy authentication', 'connection refused',
+  'proxy connect', 'tunneling socket', 'proxy_error', 'bad proxy',
+  'proxy timeout', 'socks', 'econnrefused', 'econnreset',
+];
+
 const checkSingleSite = async (
   siteUrl: string,
   proxyStr: string,
+  proxyId: string | null,
   supabase: ReturnType<typeof createClient>,
-): Promise<{ url: string; status: string; price: number; priceStr: string; apiResponse?: string; error?: string }> => {
+): Promise<{ url: string; status: string; price: number; priceStr: string; apiResponse?: string; error?: string; proxyDead?: boolean }> => {
   const maxAttempts = 1;
   const timeoutMs = 45000;
 
