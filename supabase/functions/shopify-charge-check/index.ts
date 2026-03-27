@@ -145,9 +145,7 @@ const userAgents = [
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
 const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string }> => {
-  const endpoint = API_ENDPOINTS[apiRotationIndex % API_ENDPOINTS.length];
-  apiRotationIndex++;
-  const apiUrl = endpoint.buildUrl(cc, site, proxy);
+  const apiUrl = buildApiUrl(cc, site, proxy);
   
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 55000);
