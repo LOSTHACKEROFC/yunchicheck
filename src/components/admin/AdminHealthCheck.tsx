@@ -397,7 +397,7 @@ const AdminHealthCheck = () => {
     let nextUrlIndex = 0;
 
     if (!stopRef.current && uniqueUrls.length > 0) {
-      const warmupResult = await checkSingleUrl(uniqueUrls[0], proxyOverride, BOOT_RETRY_LIMIT);
+      const warmupResult = await checkSingleUrl(uniqueUrls[0], proxyOverride, BOOT_RETRY_LIMIT, proxyIdOverride);
       if (!stopRef.current) {
         processResult(warmupResult);
         nextUrlIndex = 1;
