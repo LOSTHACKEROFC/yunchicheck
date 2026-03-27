@@ -63,11 +63,18 @@ const extractPrice = (response: string): { price: number; priceStr: string } => 
   };
 };
 
+const PROXY_DEAD_INDICATORS = [
+  '407', 'proxy error', 'proxy authentication', 'connection refused',
+  'proxy connect', 'tunneling socket', 'proxy_error', 'bad proxy',
+  'proxy timeout', 'socks', 'econnrefused', 'econnreset',
+];
+
 const checkSingleSite = async (
   siteUrl: string,
   proxyStr: string,
+  proxyId: string | null,
   supabase: ReturnType<typeof createClient>,
-): Promise<{ url: string; status: string; price: number; priceStr: string; apiResponse?: string; error?: string }> => {
+): Promise<{ url: string; status: string; price: number; priceStr: string; apiResponse?: string; error?: string; proxyDead?: boolean }> => {
   const maxAttempts = 1;
   const timeoutMs = 45000;
 
@@ -92,6 +99,15 @@ const checkSingleSite = async (
 
       clearTimeout(timeoutId);
       const rawText = await response.text();
+
+      // Check if proxy is dead based on API response
+      const rawLower = (rawText || '').toLowerCase();
+      const isProxyDead = PROXY_DEAD_INDICATORS.some(ind => rawLower.includes(ind));
+      if (isProxyDead && proxyId) {
+        console.log(`[Result] Proxy dead detected for ${siteUrl}, removing proxy ${proxyId}`);
+        await supabase.from("proxies").delete().eq("id", proxyId);
+        return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: rawText, error: "Dead proxy removed", proxyDead: true };
+      }
 
       if (!rawText || rawText.trim() === "") {
         console.log(`[Attempt ${attempt + 1}] Empty response for ${siteUrl}`);
@@ -256,12 +272,11 @@ Deno.serve(async (req) => {
     }
 
     let proxyStr = "";
+    let proxyId: string | null = null;
     
     if (proxyOverride && typeof proxyOverride === "string") {
-      // Use the proxy provided by the caller
       proxyStr = proxyOverride;
     } else {
-      // Fetch a random live proxy
       const { data: liveProxies } = await supabase
         .from("proxies")
         .select("*")
@@ -269,13 +284,14 @@ Deno.serve(async (req) => {
 
       if (liveProxies && liveProxies.length > 0) {
         const randomProxy = getRandomItem(liveProxies);
+        proxyId = randomProxy.id;
         proxyStr = randomProxy.username && randomProxy.password
           ? `${randomProxy.ip}:${randomProxy.port}:${randomProxy.username}:${randomProxy.password}`
           : `${randomProxy.ip}:${randomProxy.port}`;
       }
     }
 
-    const result = await checkSingleSite(url, proxyStr, supabase);
+    const result = await checkSingleSite(url, proxyStr, proxyId, supabase);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
