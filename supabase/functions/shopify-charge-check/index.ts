@@ -12,11 +12,9 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "8496943061";
 
-const API_ENDPOINTS = [
-  { base: "http://188.137.230.163:5000/shopify", buildUrl: (cc: string, site: string, proxy: string) => `http://188.137.230.163:5000/shopify?site=${encodeURIComponent(site)}&cc=${encodeURIComponent(cc)}&proxy=${proxy}` },
-  { base: "http://108.165.12.183:8081/", buildUrl: (cc: string, site: string, proxy: string) => `http://108.165.12.183:8081/?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}` },
-];
-let apiRotationIndex = 0;
+const API_URL = "http://108.165.12.183:8081/";
+const buildApiUrl = (cc: string, site: string, proxy: string) => 
+  `${API_URL}?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${proxy}`;
 
 const badResponses = [
   "Site not supported",
