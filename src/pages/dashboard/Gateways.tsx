@@ -4327,17 +4327,6 @@ const Gateways = () => {
                           <span className="text-muted-foreground font-bold italic mr-2">:</span>
                           <span className="text-primary font-bold italic">
                             {apiGateway}
-                            {selectedGateway?.id === "combined_auth" && result.usedApi && (
-                              <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                result.usedApi === 'stripe' 
-                                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' 
-                                  : result.usedApi === 'b3'
-                                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                                    : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
-                              }`}>
-                                via {result.usedApi === 'stripe' ? 'STRIPE' : result.usedApi === 'b3' ? 'B3' : result.usedApi.toUpperCase()}
-                              </span>
-                            )}
                           </span>
                         </div>
                         <div className="flex">
@@ -4905,17 +4894,6 @@ const Gateways = () => {
                                     <span className="text-muted-foreground font-bold italic mr-1">:</span>
                                     <span className="text-primary font-bold italic">
                                       {bGateway}
-                                      {selectedGateway?.id === "combined_auth" && r.usedApi && (
-                                        <span className={`ml-1.5 px-1 py-0.5 rounded text-[8px] font-bold ${
-                                          r.usedApi === 'stripe' 
-                                            ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' 
-                                            : r.usedApi === 'b3'
-                                              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                                              : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
-                                        }`}>
-                                          via {r.usedApi === 'stripe' ? 'STRIPE' : r.usedApi === 'b3' ? 'B3' : r.usedApi.toUpperCase()}
-                                        </span>
-                                      )}
                                     </span>
                                   </div>
                                   <div className="flex">
