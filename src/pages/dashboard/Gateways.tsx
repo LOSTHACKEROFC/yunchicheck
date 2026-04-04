@@ -2139,7 +2139,7 @@ const Gateways = () => {
       // For auth gateways, use 000 as CVV internally if not provided
       const internalCvv = cvv || "000";
 
-      // Use real API for YUNCHI AUTH gateways and PAYGATE, simulation for others
+      // Use real API for auth gateways and PAYGATE, simulation for others
       let gatewayResponse: GatewayApiResponse | null = null;
       
       if (selectedGateway.id === "stripe_auth") {
@@ -3009,7 +3009,7 @@ const Gateways = () => {
       const cardData = affordableCards[cardIndex];
 
       try {
-        // Use real API for YUNCHI AUTH gateways and PAYGATE, simulation for others
+        // Use real API for auth gateways and PAYGATE, simulation for others
         let gatewayResponse: GatewayApiResponse | null = null;
         
         if (selectedGateway.id === "stripe_auth") {
