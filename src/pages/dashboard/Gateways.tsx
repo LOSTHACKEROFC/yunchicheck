@@ -1641,7 +1641,7 @@ const Gateways = () => {
     };
   };
 
-  // Combined Auth API check (Adyen-auth-chk) - uses both Stripe + B3 APIs in parallel for single card
+  // Combined Auth API check (adyenauth-check) - uses both Stripe + B3 APIs in parallel for single card
   const checkCardViaCombined = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 3): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
