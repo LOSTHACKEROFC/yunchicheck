@@ -572,7 +572,7 @@ ${brandEmoji} ${toFancyBold('Brand')}: ${binInfo.brand}
 ${countryFlag} ${toFancyBold('Country')}: ${binInfo.country}
 ━━━━━━━━━━━━━━━━━━━━
 
-⚡ ${gateway} • 👤 @${username}
+⚡ ${displayGateway} • 👤 @${username}
 🕐 ${timeNow}
 
 ${toFancyScript('Yunchi')} ⚡`.trim();
