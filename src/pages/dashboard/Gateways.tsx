@@ -3609,7 +3609,7 @@ const Gateways = () => {
       return "UNKNOWN";
     }
     
-    // Auth gateways (Adyen1, Adyen, App Based) - show LIVE/DEAD
+    // Auth gateways (Chao, Adyen, App Based) - show LIVE/DEAD
     if (gatewayType === "auth") {
       if (status === "live") return "LIVE";
       if (status === "dead") return "DEAD";
