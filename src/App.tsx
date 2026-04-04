@@ -56,6 +56,9 @@ function AppContent() {
   
   // Log device on login
   useDeviceLogger();
+  
+  // Sync user's timezone to profile for localized notifications
+  useTimezoneSync();
 
   // Show blocked page if device is blocked
   if (isBlocked) {
