@@ -139,7 +139,7 @@ const defaultGateways: Gateway[] = [
   { 
     id: "stripe_auth",
     name: "Adyenauth-check",
-    code: "Adyen",
+    code: "Adyen1",
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/UnionPay/Diners/Maestro",
