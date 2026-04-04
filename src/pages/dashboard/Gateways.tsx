@@ -1544,7 +1544,7 @@ const Gateways = () => {
     }
   };
 
-  // B3 API check (appbased-auth-check) via edge function with retry - returns status AND API response
+  // B3 API check (appbased-check) via edge function with retry - returns status AND API response
   const checkCardViaB3 = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
