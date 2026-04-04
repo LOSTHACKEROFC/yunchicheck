@@ -776,7 +776,7 @@ const Gateways = () => {
     if (selectedGateway?.id === "stripe_auth") {
       const { blocked, brand } = isBlockedCardBrand(formatted);
       if (blocked) {
-        toast.error(`${brand} cards are not supported on Adyenauth-check`);
+        toast.error(`${brand} cards are not supported on Chao-auth-check`);
         setCardNumber("");
         return;
       }
