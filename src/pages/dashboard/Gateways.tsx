@@ -3004,9 +3004,7 @@ const Gateways = () => {
         if (selectedGateway.id === "stripe_auth") {
           gatewayResponse = await checkCardViaApi(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "combined_auth") {
-          // Parallel distributed processing: alternate cards between Stripe (even) and B3 (odd)
-          const targetApi: 'stripe' | 'b3' = cardIndex % 2 === 0 ? 'stripe' : 'b3';
-          gatewayResponse = await checkCardViaDistributed(cardData.card, cardData.month, cardData.year, cardData.cvv, targetApi);
+          gatewayResponse = await checkCardViaCombined(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "braintree_auth") {
           gatewayResponse = await checkCardViaB3(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "paygate_charge") {
