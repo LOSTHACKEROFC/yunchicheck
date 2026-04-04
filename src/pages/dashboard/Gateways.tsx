@@ -138,8 +138,8 @@ interface Gateway {
 const defaultGateways: Gateway[] = [
   { 
     id: "stripe_auth",
-    name: "Adyenauth-check",
-    code: "Adyen1",
+    name: "Chao-auth-check",
+    code: "Chao",
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/UnionPay/Diners/Maestro",
