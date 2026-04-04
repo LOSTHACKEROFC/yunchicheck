@@ -78,9 +78,9 @@ const ITEMS_PER_PAGE = 50;
 
 // Gateway display name mapping
 const GATEWAY_DISPLAY_NAMES: Record<string, string> = {
-  "stripe_auth": "Yunchi Auth",
+  "stripe_auth": "Chao-auth-check",
   "stripe_preauth": "Yunchi Pre Auth",
-  "braintree_auth": "Yunchi Auth 2",
+  "braintree_auth": "Adyen-auth-chk",
   "clover_charge": "Yunchi Clover",
   "square_charge": "Yunchi Square",
   "shopify_charge": "Yunchi Shopify",

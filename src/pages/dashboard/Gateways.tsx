@@ -138,7 +138,7 @@ interface Gateway {
 const defaultGateways: Gateway[] = [
   { 
     id: "stripe_auth",
-    name: "YUNCHI AUTH 1",
+    name: "Chao-auth-check",
     code: "St",
     type: "auth",
     status: "online", 
@@ -151,7 +151,7 @@ const defaultGateways: Gateway[] = [
   },
   { 
     id: "combined_auth",
-    name: "YUNCHI AUTH 2",
+    name: "Adyen-auth-chk",
     code: "St+B3",
     type: "auth",
     status: "online", 
@@ -164,7 +164,7 @@ const defaultGateways: Gateway[] = [
   },
   { 
     id: "braintree_auth",
-    name: "YUNCHI AUTH 3",
+    name: "appbased-auth-check",
     code: "B3",
     type: "auth",
     status: "online", 
@@ -752,7 +752,7 @@ const Gateways = () => {
     };
   };
 
-  // Helper to check if a card brand is blocked for YUNCHI AUTH 1
+  // Helper to check if a card brand is blocked for Chao-auth-check
   const isBlockedCardBrand = (cardNumber: string): { blocked: boolean; brand: string } => {
     const digits = cardNumber.replace(/\s/g, '');
     // American Express - starts with 34 or 37
@@ -772,11 +772,11 @@ const Gateways = () => {
   const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatCardNumber(e.target.value);
     
-    // For YUNCHI AUTH 1, auto-clear blocked card brands (Amex, Discover, JCB)
+    // For Chao-auth-check, auto-clear blocked card brands (Amex, Discover, JCB)
     if (selectedGateway?.id === "stripe_auth") {
       const { blocked, brand } = isBlockedCardBrand(formatted);
       if (blocked) {
-        toast.error(`${brand} cards are not supported on YUNCHI AUTH 1`);
+        toast.error(`${brand} cards are not supported on Chao-auth-check`);
         setCardNumber("");
         return;
       }
@@ -813,11 +813,11 @@ const Gateways = () => {
       return false;
     }
     
-    // For YUNCHI AUTH 1, validate card brand
+    // For Chao-auth-check, validate card brand
     if (selectedGateway?.id === "stripe_auth") {
       const { blocked, brand } = isBlockedCardBrand(cardNumber);
       if (blocked) {
-        toast.error(`${brand} cards are not supported on YUNCHI AUTH 1`);
+        toast.error(`${brand} cards are not supported on Chao-auth-check`);
         return false;
       }
     }
@@ -844,20 +844,20 @@ const Gateways = () => {
     return true;
   };
 
-  // Real API check for YunChi Auth gateway via edge function with retry - returns status AND API response
+  // Real API check for Chao-auth-check gateway via edge function with retry - returns status AND API response
   const checkCardViaApi = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`[STRIPE-AUTH] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
+        console.log(`[CHAO-AUTH] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
         
         const { data, error } = await supabase.functions.invoke('stripe-auth-check', {
           body: { cc }
         });
         
         if (error) {
-          console.error('[STRIPE-AUTH] Edge function error:', error);
+          console.error('[CHAO-AUTH] Edge function error:', error);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 500 + attempt * 200));
             continue;
@@ -870,7 +870,7 @@ const Gateways = () => {
           };
         }
         
-        console.log('[STRIPE-AUTH] API response:', data);
+        console.log('[CHAO-AUTH] API response:', data);
         
         // Extract real API response data
         const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
@@ -916,14 +916,14 @@ const Gateways = () => {
         
         // Retryable errors
         if (message.includes("no such paymentmethod")) {
-          console.log(`[STRIPE-AUTH] PaymentMethod error - retrying (attempt ${attempt + 1}/${maxRetries + 1})`);
+          console.log(`[CHAO-AUTH] PaymentMethod error - retrying (attempt ${attempt + 1}/${maxRetries + 1})`);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 1000 + attempt * 500));
             continue;
           }
         }
         if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
-          console.log(`[STRIPE-AUTH] Retryable error detected: ${message}`);
+          console.log(`[CHAO-AUTH] Retryable error detected: ${message}`);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 800 + attempt * 300));
             continue;
@@ -933,7 +933,7 @@ const Gateways = () => {
         // Any other response is unknown
         return { status: "unknown", apiStatus, apiMessage, rawResponse };
       } catch (error) {
-        console.error('[STRIPE-AUTH] API check error:', error);
+        console.error('[CHAO-AUTH] API check error:', error);
         if (attempt < maxRetries) {
           await new Promise(r => setTimeout(r, 500 + attempt * 200));
           continue;
@@ -1544,20 +1544,20 @@ const Gateways = () => {
     }
   };
 
-  // B3 API check (YUNCHI AUTH 3) via edge function with retry - returns status AND API response
+  // B3 API check (appbased-auth-check) via edge function with retry - returns status AND API response
   const checkCardViaB3 = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`[B3-AUTH] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
+        console.log(`[APPBASED-AUTH] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
         
         const { data, error } = await supabase.functions.invoke('braintree-auth-check', {
           body: { cc }
         });
         
         if (error) {
-          console.error('[B3-AUTH] Edge function error:', error);
+          console.error('[APPBASED-AUTH] Edge function error:', error);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 500 + attempt * 200));
             continue;
@@ -1570,7 +1570,7 @@ const Gateways = () => {
           };
         }
         
-        console.log('[B3-AUTH] API response:', data);
+        console.log('[APPBASED-AUTH] API response:', data);
         
         // Extract real API response data
         const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
@@ -1611,7 +1611,7 @@ const Gateways = () => {
           return { status: "dead", apiStatus, apiMessage, rawResponse };
         }
         if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
-          console.log(`[B3-AUTH] Retryable error detected: ${message}`);
+          console.log(`[APPBASED-AUTH] Retryable error detected: ${message}`);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 800 + attempt * 300));
             continue;
@@ -1620,7 +1620,7 @@ const Gateways = () => {
         
         return { status: "unknown", apiStatus, apiMessage, rawResponse };
       } catch (error) {
-        console.error('[B3-AUTH] API check error:', error);
+        console.error('[APPBASED-AUTH] API check error:', error);
         if (attempt < maxRetries) {
           await new Promise(r => setTimeout(r, 500 + attempt * 200));
           continue;
@@ -1641,20 +1641,20 @@ const Gateways = () => {
     };
   };
 
-  // Combined Auth API check (YUNCHI AUTH 2) - uses both Stripe + B3 APIs in parallel for single card
+  // Combined Auth API check (Adyen-auth-chk) - uses both Stripe + B3 APIs in parallel for single card
   const checkCardViaCombined = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 3): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`[COMBINED-AUTH] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
+        console.log(`[ADYEN-AUTH-CHK] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
         
         const { data, error } = await supabase.functions.invoke('combined-auth-check', {
           body: { cc }
         });
         
         if (error) {
-          console.error('[COMBINED-AUTH] Edge function error:', error);
+          console.error('[ADYEN-AUTH-CHK] Edge function error:', error);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 500 + attempt * 200));
             continue;
@@ -1667,7 +1667,7 @@ const Gateways = () => {
           };
         }
         
-        console.log('[COMBINED-AUTH] API response:', data);
+        console.log('[ADYEN-AUTH-CHK] API response:', data);
         
         // Extract real API response data
         const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
@@ -1710,7 +1710,7 @@ const Gateways = () => {
           return { status: "dead", apiStatus, apiMessage, rawResponse, usedGateway };
         }
         if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
-          console.log(`[COMBINED-AUTH] Retryable error detected: ${message}`);
+          console.log(`[ADYEN-AUTH-CHK] Retryable error detected: ${message}`);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 800 + attempt * 300));
             continue;
@@ -1719,7 +1719,7 @@ const Gateways = () => {
         
         return { status: "unknown", apiStatus, apiMessage, rawResponse, usedGateway };
       } catch (error) {
-        console.error('[COMBINED-AUTH] API check error:', error);
+        console.error('[ADYEN-AUTH-CHK] API check error:', error);
         if (attempt < maxRetries) {
           await new Promise(r => setTimeout(r, 500 + attempt * 200));
           continue;
@@ -2139,7 +2139,7 @@ const Gateways = () => {
       // For auth gateways, use 000 as CVV internally if not provided
       const internalCvv = cvv || "000";
 
-      // Use real API for YUNCHI AUTH gateways and PAYGATE, simulation for others
+      // Use real API for auth gateways and PAYGATE, simulation for others
       let gatewayResponse: GatewayApiResponse | null = null;
       
       if (selectedGateway.id === "stripe_auth") {
@@ -2711,7 +2711,7 @@ const Gateways = () => {
         const cardMonth = parseInt(cardData.month);
         const isExpired = cardYear < currentYear || (cardYear === currentYear && cardMonth < currentMonth);
         
-        // For YUNCHI AUTH 1, filter out blocked card brands (Amex, Discover, JCB)
+        // For Chao-auth-check, filter out blocked card brands (Amex, Discover, JCB)
         let isBlockedBrand = false;
         if (selectedGateway?.id === "stripe_auth") {
           const digits = cardData.card;
@@ -2731,7 +2731,7 @@ const Gateways = () => {
           cardData.year.length === 2 &&
           cvvValid &&
           !isExpired && // Filter out expired cards
-          !isBlockedBrand // Filter out blocked brands for YUNCHI AUTH 1
+          !isBlockedBrand // Filter out blocked brands for Chao-auth-check
         ) {
           const cardKey = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv || 'nocvv'}`;
           if (!seenCards.has(cardKey)) {
@@ -3009,7 +3009,7 @@ const Gateways = () => {
       const cardData = affordableCards[cardIndex];
 
       try {
-        // Use real API for YUNCHI AUTH gateways and PAYGATE, simulation for others
+        // Use real API for auth gateways and PAYGATE, simulation for others
         let gatewayResponse: GatewayApiResponse | null = null;
         
         if (selectedGateway.id === "stripe_auth") {
@@ -3620,7 +3620,7 @@ const Gateways = () => {
       return "UNKNOWN";
     }
     
-    // Auth gateways (Yunchi Auth 1, 2, 3) - show LIVE/DEAD
+    // Auth gateways (Chao, Adyen, App Based) - show LIVE/DEAD
     if (gatewayType === "auth") {
       if (status === "live") return "LIVE";
       if (status === "dead") return "DEAD";
