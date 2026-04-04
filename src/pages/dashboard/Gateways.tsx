@@ -152,7 +152,7 @@ const defaultGateways: Gateway[] = [
   { 
     id: "combined_auth",
     name: "Adyen-auth-chk",
-    code: "St+B3",
+    code: "Adyen",
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Amex/Discover",
