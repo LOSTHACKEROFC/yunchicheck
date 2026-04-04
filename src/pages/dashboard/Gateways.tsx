@@ -138,7 +138,7 @@ interface Gateway {
 const defaultGateways: Gateway[] = [
   { 
     id: "stripe_auth",
-    name: "Chao-auth-check",
+    name: "Adyenauth-check",
     code: "Chao",
     type: "auth",
     status: "online", 
@@ -752,7 +752,7 @@ const Gateways = () => {
     };
   };
 
-  // Helper to check if a card brand is blocked for Chao-auth-check
+  // Helper to check if a card brand is blocked for Adyenauth-check
   const isBlockedCardBrand = (cardNumber: string): { blocked: boolean; brand: string } => {
     const digits = cardNumber.replace(/\s/g, '');
     // American Express - starts with 34 or 37
@@ -772,11 +772,11 @@ const Gateways = () => {
   const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatCardNumber(e.target.value);
     
-    // For Chao-auth-check, auto-clear blocked card brands (Amex, Discover, JCB)
+    // For Adyenauth-check, auto-clear blocked card brands (Amex, Discover, JCB)
     if (selectedGateway?.id === "stripe_auth") {
       const { blocked, brand } = isBlockedCardBrand(formatted);
       if (blocked) {
-        toast.error(`${brand} cards are not supported on Chao-auth-check`);
+        toast.error(`${brand} cards are not supported on Adyenauth-check`);
         setCardNumber("");
         return;
       }
@@ -813,11 +813,11 @@ const Gateways = () => {
       return false;
     }
     
-    // For Chao-auth-check, validate card brand
+    // For Adyenauth-check, validate card brand
     if (selectedGateway?.id === "stripe_auth") {
       const { blocked, brand } = isBlockedCardBrand(cardNumber);
       if (blocked) {
-        toast.error(`${brand} cards are not supported on Chao-auth-check`);
+        toast.error(`${brand} cards are not supported on Adyenauth-check`);
         return false;
       }
     }
@@ -844,20 +844,20 @@ const Gateways = () => {
     return true;
   };
 
-  // Real API check for Chao-auth-check gateway via edge function with retry - returns status AND API response
+  // Real API check for Adyenauth-check gateway via edge function with retry - returns status AND API response
   const checkCardViaApi = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`[CHAO-AUTH] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
+        console.log(`[ADYEN-AUTH] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
         
         const { data, error } = await supabase.functions.invoke('stripe-auth-check', {
           body: { cc }
         });
         
         if (error) {
-          console.error('[CHAO-AUTH] Edge function error:', error);
+          console.error('[ADYEN-AUTH] Edge function error:', error);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 500 + attempt * 200));
             continue;
@@ -870,7 +870,7 @@ const Gateways = () => {
           };
         }
         
-        console.log('[CHAO-AUTH] API response:', data);
+        console.log('[ADYEN-AUTH] API response:', data);
         
         // Extract real API response data
         const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
@@ -916,14 +916,14 @@ const Gateways = () => {
         
         // Retryable errors
         if (message.includes("no such paymentmethod")) {
-          console.log(`[CHAO-AUTH] PaymentMethod error - retrying (attempt ${attempt + 1}/${maxRetries + 1})`);
+          console.log(`[ADYEN-AUTH] PaymentMethod error - retrying (attempt ${attempt + 1}/${maxRetries + 1})`);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 1000 + attempt * 500));
             continue;
           }
         }
         if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
-          console.log(`[CHAO-AUTH] Retryable error detected: ${message}`);
+          console.log(`[ADYEN-AUTH] Retryable error detected: ${message}`);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 800 + attempt * 300));
             continue;
@@ -933,7 +933,7 @@ const Gateways = () => {
         // Any other response is unknown
         return { status: "unknown", apiStatus, apiMessage, rawResponse };
       } catch (error) {
-        console.error('[CHAO-AUTH] API check error:', error);
+        console.error('[ADYEN-AUTH] API check error:', error);
         if (attempt < maxRetries) {
           await new Promise(r => setTimeout(r, 500 + attempt * 200));
           continue;
