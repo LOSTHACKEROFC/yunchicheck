@@ -425,10 +425,10 @@ serve(async (req) => {
     }
     // ========== END DEDUPLICATION CHECK ==========
 
-    // Get user's Telegram chat ID and username
+    // Get user's Telegram chat ID, username, and timezone
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('telegram_chat_id, username')
+      .select('telegram_chat_id, username, timezone')
       .eq('user_id', user_id)
       .single();
 
@@ -455,7 +455,17 @@ serve(async (req) => {
     }
 
     // Build fancy notification with Unicode fonts
-    const timeNow = new Date().toISOString().replace('T', ' ').slice(0, 16);
+    // Format time in user's local timezone
+    const userTimezone = profile?.timezone || 'UTC';
+    const timeNow = new Date().toLocaleString('en-GB', {
+      timeZone: userTimezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).replace(',', '');
     const randomGif = await getRandomAnimeGif();
     
     // Fancy Unicode text converters

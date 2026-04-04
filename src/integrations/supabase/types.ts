@@ -597,6 +597,7 @@ export type Database = {
           telegram_changed_at: string | null
           telegram_chat_id: string | null
           telegram_username: string | null
+          timezone: string | null
           updated_at: string
           user_id: string
           username: string | null
@@ -613,6 +614,7 @@ export type Database = {
           telegram_changed_at?: string | null
           telegram_chat_id?: string | null
           telegram_username?: string | null
+          timezone?: string | null
           updated_at?: string
           user_id: string
           username?: string | null
@@ -629,6 +631,7 @@ export type Database = {
           telegram_changed_at?: string | null
           telegram_chat_id?: string | null
           telegram_username?: string | null
+          timezone?: string | null
           updated_at?: string
           user_id?: string
           username?: string | null

@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { DeviceBlockProvider, useDeviceBlock } from "@/contexts/DeviceBlockContext";
 import { useDeviceLogger } from "@/hooks/useDeviceLogger";
+import { useTimezoneSync } from "@/hooks/useTimezoneSync";
 import { lazy, Suspense } from "react";
 import DeviceBlocked from "./pages/DeviceBlocked";
 
@@ -55,6 +56,9 @@ function AppContent() {
   
   // Log device on login
   useDeviceLogger();
+  
+  // Sync user's timezone to profile for localized notifications
+  useTimezoneSync();
 
   // Show blocked page if device is blocked
   if (isBlocked) {
