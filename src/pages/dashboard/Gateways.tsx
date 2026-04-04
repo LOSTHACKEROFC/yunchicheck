@@ -2720,8 +2720,7 @@ const Gateways = () => {
           monthNum <= 12 && 
           cardData.year.length === 2 &&
           cvvValid &&
-          !isExpired && // Filter out expired cards
-          !isBlockedBrand // Filter out blocked brands for Chao-auth-check
+          !isExpired // Filter out expired cards
         ) {
           const cardKey = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv || 'nocvv'}`;
           if (!seenCards.has(cardKey)) {
