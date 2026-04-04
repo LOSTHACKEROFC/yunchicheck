@@ -772,7 +772,7 @@ const Gateways = () => {
   const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatCardNumber(e.target.value);
     
-    // For Adyenauth-check, auto-clear blocked card brands (Amex, Discover, JCB)
+    // For Chao-auth-check, auto-clear blocked card brands (Amex, Discover, JCB)
     if (selectedGateway?.id === "stripe_auth") {
       const { blocked, brand } = isBlockedCardBrand(formatted);
       if (blocked) {
