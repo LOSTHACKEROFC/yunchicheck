@@ -265,7 +265,7 @@ interface CheckResult {
   card?: string;
   displayCard?: string; // Card as entered by user (without auto-added CVC)
   apiResponse?: string; // Real API response message for PAYGATE
-  usedApi?: string; // For combined gateway - which API (stripe/b3) returned the result
+  usedApi?: string;
   rawResponse?: string; // Full raw API response for debugging
   timeTaken?: number; // Time taken in seconds (for Killer Auth)
 }
