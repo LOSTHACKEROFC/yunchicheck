@@ -2711,17 +2711,7 @@ const Gateways = () => {
         const cardMonth = parseInt(cardData.month);
         const isExpired = cardYear < currentYear || (cardYear === currentYear && cardMonth < currentMonth);
         
-        // For Chao-auth-check, filter out blocked card brands (Amex, Discover, JCB)
-        let isBlockedBrand = false;
-        if (selectedGateway?.id === "stripe_auth") {
-          const digits = cardData.card;
-          // American Express - starts with 34 or 37
-          if (/^3[47]/.test(digits)) isBlockedBrand = true;
-          // Discover - starts with 6011, 644-649, 65, or 622126-622925
-          if (/^6(?:011|5|4[4-9]|22)/.test(digits)) isBlockedBrand = true;
-          // JCB - starts with 3528-3589
-          if (/^35(?:2[89]|[3-8])/.test(digits)) isBlockedBrand = true;
-        }
+        // All card brands are now accepted - API handles unsupported brands
         
         if (
           cardData.card.length >= 13 && 
