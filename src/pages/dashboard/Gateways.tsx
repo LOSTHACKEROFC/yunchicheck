@@ -2139,7 +2139,7 @@ const Gateways = () => {
       if (selectedGateway.id === "stripe_auth") {
         gatewayResponse = await checkCardViaApi(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "combined_auth") {
-        gatewayResponse = await checkCardViaCombined(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
+        gatewayResponse = await checkCardViaAdyenAuth(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "braintree_auth") {
         gatewayResponse = await checkCardViaB3(cardNumber.replace(/\s/g, ''), expMonth, expYear, internalCvv);
       } else if (selectedGateway.id === "paygate_charge") {
