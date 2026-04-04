@@ -870,7 +870,7 @@ const Gateways = () => {
           };
         }
         
-        console.log('[ADYEN-AUTH] API response:', data);
+        console.log('[CHAO-AUTH] API response:', data);
         
         // Extract real API response data
         const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
@@ -916,14 +916,14 @@ const Gateways = () => {
         
         // Retryable errors
         if (message.includes("no such paymentmethod")) {
-          console.log(`[ADYEN-AUTH] PaymentMethod error - retrying (attempt ${attempt + 1}/${maxRetries + 1})`);
+          console.log(`[CHAO-AUTH] PaymentMethod error - retrying (attempt ${attempt + 1}/${maxRetries + 1})`);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 1000 + attempt * 500));
             continue;
           }
         }
         if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
-          console.log(`[ADYEN-AUTH] Retryable error detected: ${message}`);
+          console.log(`[CHAO-AUTH] Retryable error detected: ${message}`);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 800 + attempt * 300));
             continue;
@@ -933,7 +933,7 @@ const Gateways = () => {
         // Any other response is unknown
         return { status: "unknown", apiStatus, apiMessage, rawResponse };
       } catch (error) {
-        console.error('[ADYEN-AUTH] API check error:', error);
+        console.error('[CHAO-AUTH] API check error:', error);
         if (attempt < maxRetries) {
           await new Promise(r => setTimeout(r, 500 + attempt * 200));
           continue;

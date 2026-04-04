@@ -36,7 +36,7 @@ const notifyChargedCard = (
       amount,
       gateway,
     }),
-  }).catch((err) => console.error("[ADYEN-AUTH] notify-charged-card error:", err));
+  }).catch((err) => console.error("[CHAO-AUTH] notify-charged-card error:", err));
 };
 
 const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" | "unknown" => {
