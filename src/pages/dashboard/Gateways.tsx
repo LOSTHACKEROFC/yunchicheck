@@ -752,7 +752,7 @@ const Gateways = () => {
     };
   };
 
-  // Helper to check if a card brand is blocked for Adyenauth-check
+  // Helper to check if a card brand is blocked for Chao-auth-check
   const isBlockedCardBrand = (cardNumber: string): { blocked: boolean; brand: string } => {
     const digits = cardNumber.replace(/\s/g, '');
     // American Express - starts with 34 or 37
