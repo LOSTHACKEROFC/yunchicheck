@@ -138,8 +138,8 @@ interface Gateway {
 const defaultGateways: Gateway[] = [
   { 
     id: "stripe_auth",
-    name: "Chao-auth-check",
-    code: "Chao",
+    name: "Chaos-auth-check",
+    code: "Chaos",
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/UnionPay/Diners/Maestro",
