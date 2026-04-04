@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,15 +35,13 @@ const notifyChargedCard = (
       amount,
       gateway,
     }),
-  }).catch((err) => console.error("[APPBASED-AUTH] notify-charged-card error:", err));
+  }).then(() => {}).catch((err) => console.error("[APPBASED-AUTH] notify-charged-card error:", err));
 };
 
 const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" | "unknown" => {
   const status = String(data?.status || '').toLowerCase();
-
   if (status === 'approved') return "live";
   if (status === 'declined') return "dead";
-
   return "unknown";
 };
 
@@ -98,7 +95,7 @@ const performCheck = async (cc: string, attempt: number = 1): Promise<Record<str
   }
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
