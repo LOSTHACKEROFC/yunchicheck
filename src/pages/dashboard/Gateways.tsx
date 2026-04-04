@@ -813,7 +813,7 @@ const Gateways = () => {
       return false;
     }
     
-    // For Adyenauth-check, validate card brand
+    // For Chao-auth-check, validate card brand
     if (selectedGateway?.id === "stripe_auth") {
       const { blocked, brand } = isBlockedCardBrand(cardNumber);
       if (blocked) {
