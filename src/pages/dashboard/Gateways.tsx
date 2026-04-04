@@ -151,14 +151,14 @@ const defaultGateways: Gateway[] = [
   },
   { 
     id: "combined_auth",
-    name: "adyenauth-check",
+    name: "adyenn-auth-check",
     code: "Adyen",
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Amex/Discover",
     speed: "⚡⚡ Ultra",
     successRate: "99%",
-    description: "$0 Auth Check • Parallel API (Stripe ↔ B3) • CVC optional",
+    description: "$0 Auth Check • Adyen API Only • CVC optional",
     icon: Zap,
     iconColor: "text-indigo-500"
   },
