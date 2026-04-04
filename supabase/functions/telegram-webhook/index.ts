@@ -8928,7 +8928,7 @@ Select a gateway to edit:
 
         // Step handlers
         const stepConfig: Record<string, { nextStep: string; field: string; stepNum: number; nextPrompt: string }> = {
-          id: { nextStep: "name", field: "gateway_id", stepNum: 2, nextPrompt: "Enter the display name for this gateway.\n\n<b>Example:</b> <code>Adyenauth-check</code>" },
+          id: { nextStep: "name", field: "gateway_id", stepNum: 2, nextPrompt: "Enter the display name for this gateway.\n\n<b>Example:</b> <code>Chao-auth-check</code>" },
           name: { nextStep: "code", field: "gateway_name", stepNum: 3, nextPrompt: "Enter a short code for this gateway (optional).\nPress /skip to skip.\n\n<b>Example:</b> <code>St4</code> or <code>B4</code>" },
           code: { nextStep: "type", field: "gateway_code", stepNum: 4, nextPrompt: "Select the gateway type:" },
           type: { nextStep: "card_types", field: "gateway_type", stepNum: 5, nextPrompt: "Enter supported card types.\n\n<b>Example:</b> <code>Visa/MC/Amex</code>" },
@@ -8937,7 +8937,7 @@ Select a gateway to edit:
           success_rate: { nextStep: "description", field: "success_rate", stepNum: 8, nextPrompt: "Enter the description.\n\n<b>Example:</b> <code>$0 Auth Check • CVC optional</code>" },
           description: { nextStep: "icon_name", field: "description", stepNum: 9, nextPrompt: "Enter the icon name (Lucide icon).\n\n<b>Options:</b> <code>Zap</code>, <code>CreditCard</code>, <code>Wallet</code>, <code>Sparkles</code>, <code>Store</code>, <code>ShoppingBag</code>, <code>CircleDollarSign</code>" },
           icon_name: { nextStep: "icon_color", field: "icon_name", stepNum: 10, nextPrompt: "Enter the icon color (Tailwind class).\n\n<b>Example:</b> <code>text-purple-500</code>, <code>text-blue-500</code>, <code>text-green-500</code>" },
-          icon_color: { nextStep: "edge_function", field: "icon_color", stepNum: 11, nextPrompt: "Enter the edge function name (optional).\nPress /skip to skip.\n\n<b>Example:</b> <code>Adyenauth-check</code>" },
+          icon_color: { nextStep: "edge_function", field: "icon_color", stepNum: 11, nextPrompt: "Enter the edge function name (optional).\nPress /skip to skip.\n\n<b>Example:</b> <code>Chao-auth-check</code>" },
           edge_function: { nextStep: "charge_amount", field: "edge_function_name", stepNum: 12, nextPrompt: "Enter the charge amount (for charge gateways).\nPress /skip to skip.\n\n<b>Example:</b> <code>$10.00</code> or <code>custom</code>" },
           charge_amount: { nextStep: "cvc_required", field: "charge_amount", stepNum: 13, nextPrompt: "Is CVC required?" },
         };

@@ -36,7 +36,7 @@ const notifyChargedCard = (
       amount,
       gateway,
     }),
-  }).catch((err) => console.error("[ADYEN-AUTH] notify-charged-card error:", err));
+  }).catch((err) => console.error("[CHAO-AUTH] notify-charged-card error:", err));
 };
 
 const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" | "unknown" => {
@@ -52,7 +52,7 @@ const performCheck = async (cc: string, attempt: number = 1): Promise<Record<str
   const maxRetries = 5;
   const apiUrl = `https://onyxenvbot.up.railway.app/chaos/key=yashikaaa/cc=${cc}`;
 
-  console.log(`[ADYEN-AUTH] Attempt ${attempt}/${maxRetries} - Calling API`);
+  console.log(`[CHAO-AUTH] Attempt ${attempt}/${maxRetries} - Calling API`);
 
   try {
     const response = await fetch(apiUrl, {
@@ -61,7 +61,7 @@ const performCheck = async (cc: string, attempt: number = 1): Promise<Record<str
     });
 
     const rawText = await response.text();
-    console.log(`[ADYEN-AUTH] Attempt ${attempt} - Raw response:`, rawText);
+    console.log(`[CHAO-AUTH] Attempt ${attempt} - Raw response:`, rawText);
 
     let data: Record<string, unknown>;
     try {
@@ -74,7 +74,7 @@ const performCheck = async (cc: string, attempt: number = 1): Promise<Record<str
     const apiMessage = data.message || data.response || data.status || 'No response message';
 
     if (computedStatus === "unknown" && attempt < maxRetries) {
-      console.log(`[ADYEN-AUTH] UNKNOWN on attempt ${attempt}, retrying...`);
+      console.log(`[CHAO-AUTH] UNKNOWN on attempt ${attempt}, retrying...`);
       await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
       return performCheck(cc, attempt + 1);
     }
@@ -86,7 +86,7 @@ const performCheck = async (cc: string, attempt: number = 1): Promise<Record<str
       rawResponse: rawText,
     };
   } catch (error) {
-    console.error(`[ADYEN-AUTH] Attempt ${attempt} error:`, error);
+    console.error(`[CHAO-AUTH] Attempt ${attempt} error:`, error);
 
     if (attempt < maxRetries) {
       await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
@@ -140,12 +140,12 @@ serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log('[ADYEN-AUTH] Checking card for user:', user.id);
+    console.log('[CHAO-AUTH] Checking card for user:', user.id);
 
     const data = await performCheck(cc);
 
     if (data.computedStatus === 'live') {
-      notifyChargedCard(user.id, cc, 'CHARGED', String(data.apiMessage || 'LIVE'), '$0.00', 'Adyenauth-check');
+      notifyChargedCard(user.id, cc, 'CHARGED', String(data.apiMessage || 'LIVE'), '$0.00', 'Chao-auth-check');
     }
 
     return new Response(JSON.stringify(data),
@@ -153,7 +153,7 @@ serve(async (req) => {
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[ADYEN-AUTH] Error:', errorMessage);
+    console.error('[CHAO-AUTH] Error:', errorMessage);
     return new Response(JSON.stringify({
       error: errorMessage, status: "ERROR", computedStatus: "unknown", apiStatus: "ERROR", apiMessage: errorMessage
     }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

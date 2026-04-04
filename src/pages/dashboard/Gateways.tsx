@@ -138,8 +138,8 @@ interface Gateway {
 const defaultGateways: Gateway[] = [
   { 
     id: "stripe_auth",
-    name: "Adyenauth-check",
-    code: "Adyen1",
+    name: "Chao-auth-check",
+    code: "Chao",
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/UnionPay/Diners/Maestro",
@@ -151,7 +151,7 @@ const defaultGateways: Gateway[] = [
   },
   { 
     id: "combined_auth",
-    name: "Adyen-auth-chk",
+    name: "adyenauth-check",
     code: "Adyen",
     type: "auth",
     status: "online", 
@@ -164,7 +164,7 @@ const defaultGateways: Gateway[] = [
   },
   { 
     id: "braintree_auth",
-    name: "appbased-auth-check",
+    name: "appbased-check",
     code: "App Based",
     type: "auth",
     status: "online", 
@@ -752,7 +752,7 @@ const Gateways = () => {
     };
   };
 
-  // Helper to check if a card brand is blocked for Adyenauth-check
+  // Helper to check if a card brand is blocked for Chao-auth-check
   const isBlockedCardBrand = (cardNumber: string): { blocked: boolean; brand: string } => {
     const digits = cardNumber.replace(/\s/g, '');
     // American Express - starts with 34 or 37
@@ -772,11 +772,11 @@ const Gateways = () => {
   const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatCardNumber(e.target.value);
     
-    // For Adyenauth-check, auto-clear blocked card brands (Amex, Discover, JCB)
+    // For Chao-auth-check, auto-clear blocked card brands (Amex, Discover, JCB)
     if (selectedGateway?.id === "stripe_auth") {
       const { blocked, brand } = isBlockedCardBrand(formatted);
       if (blocked) {
-        toast.error(`${brand} cards are not supported on Adyenauth-check`);
+        toast.error(`${brand} cards are not supported on Chao-auth-check`);
         setCardNumber("");
         return;
       }
@@ -813,11 +813,11 @@ const Gateways = () => {
       return false;
     }
     
-    // For Adyenauth-check, validate card brand
+    // For Chao-auth-check, validate card brand
     if (selectedGateway?.id === "stripe_auth") {
       const { blocked, brand } = isBlockedCardBrand(cardNumber);
       if (blocked) {
-        toast.error(`${brand} cards are not supported on Adyenauth-check`);
+        toast.error(`${brand} cards are not supported on Chao-auth-check`);
         return false;
       }
     }
@@ -844,20 +844,20 @@ const Gateways = () => {
     return true;
   };
 
-  // Real API check for Adyenauth-check gateway via edge function with retry - returns status AND API response
+  // Real API check for Chao-auth-check gateway via edge function with retry - returns status AND API response
   const checkCardViaApi = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`[ADYEN-AUTH] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
+        console.log(`[CHAO-AUTH] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
         
         const { data, error } = await supabase.functions.invoke('stripe-auth-check', {
           body: { cc }
         });
         
         if (error) {
-          console.error('[ADYEN-AUTH] Edge function error:', error);
+          console.error('[CHAO-AUTH] Edge function error:', error);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 500 + attempt * 200));
             continue;
@@ -870,7 +870,7 @@ const Gateways = () => {
           };
         }
         
-        console.log('[ADYEN-AUTH] API response:', data);
+        console.log('[CHAO-AUTH] API response:', data);
         
         // Extract real API response data
         const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
@@ -916,14 +916,14 @@ const Gateways = () => {
         
         // Retryable errors
         if (message.includes("no such paymentmethod")) {
-          console.log(`[ADYEN-AUTH] PaymentMethod error - retrying (attempt ${attempt + 1}/${maxRetries + 1})`);
+          console.log(`[CHAO-AUTH] PaymentMethod error - retrying (attempt ${attempt + 1}/${maxRetries + 1})`);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 1000 + attempt * 500));
             continue;
           }
         }
         if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
-          console.log(`[ADYEN-AUTH] Retryable error detected: ${message}`);
+          console.log(`[CHAO-AUTH] Retryable error detected: ${message}`);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 800 + attempt * 300));
             continue;
@@ -933,7 +933,7 @@ const Gateways = () => {
         // Any other response is unknown
         return { status: "unknown", apiStatus, apiMessage, rawResponse };
       } catch (error) {
-        console.error('[ADYEN-AUTH] API check error:', error);
+        console.error('[CHAO-AUTH] API check error:', error);
         if (attempt < maxRetries) {
           await new Promise(r => setTimeout(r, 500 + attempt * 200));
           continue;
@@ -1544,7 +1544,7 @@ const Gateways = () => {
     }
   };
 
-  // B3 API check (appbased-auth-check) via edge function with retry - returns status AND API response
+  // B3 API check (appbased-check) via edge function with retry - returns status AND API response
   const checkCardViaB3 = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
@@ -1641,7 +1641,7 @@ const Gateways = () => {
     };
   };
 
-  // Combined Auth API check (Adyen-auth-chk) - uses both Stripe + B3 APIs in parallel for single card
+  // Combined Auth API check (adyenauth-check) - uses both Stripe + B3 APIs in parallel for single card
   const checkCardViaCombined = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 3): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
@@ -3609,7 +3609,7 @@ const Gateways = () => {
       return "UNKNOWN";
     }
     
-    // Auth gateways (Adyen1, Adyen, App Based) - show LIVE/DEAD
+    // Auth gateways (Chao, Adyen, App Based) - show LIVE/DEAD
     if (gatewayType === "auth") {
       if (status === "live") return "LIVE";
       if (status === "dead") return "DEAD";
@@ -3747,7 +3747,7 @@ const Gateways = () => {
                       <div className="flex flex-wrap gap-1.5">
                         {gateway.code && (
                           <Badge className={`text-[10px] font-semibold border rounded-full px-2.5 py-0.5 ${
-                            gateway.code === "Adyen1" ? "bg-purple-500/20 text-purple-400 border-purple-500/30" :
+                            gateway.code === "Chao" ? "bg-purple-500/20 text-purple-400 border-purple-500/30" :
                             gateway.code === "Adyen" ? "bg-blue-500/20 text-blue-400 border-blue-500/30" :
                             gateway.code === "App Based" ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" :
                             "bg-primary/20 text-primary border-primary/30"
