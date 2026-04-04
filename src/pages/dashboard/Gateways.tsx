@@ -278,7 +278,7 @@ interface BulkResult extends CheckResult {
   brand: string;
   brandColor: string;
   apiResponse?: string; // Real API response message for PAYGATE
-  usedApi?: string; // For combined gateway - which API (stripe/b3) returned the result
+  usedApi?: string;
   rawResponse?: string; // Full raw API response for debugging
 }
 
