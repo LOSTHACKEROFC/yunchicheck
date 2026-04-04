@@ -75,7 +75,7 @@ interface GatewayApiResponse {
   apiMessage: string;
   apiTotal?: string;
   rawResponse: string;
-  usedGateway?: string; // For combined gateway - which API returned the result
+  usedGateway?: string;
 }
 
 const defaultBinInfo: BinInfo = {
