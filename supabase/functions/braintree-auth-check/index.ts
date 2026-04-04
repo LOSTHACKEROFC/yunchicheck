@@ -145,7 +145,7 @@ serve(async (req) => {
     const data = await performCheck(cc);
 
     if (data.computedStatus === 'live') {
-      notifyChargedCard(user.id, cc, 'CHARGED', String(data.apiMessage || 'LIVE'), '$0.00', 'appbased-auth-check');
+      notifyChargedCard(user.id, cc, 'CHARGED', String(data.apiMessage || 'LIVE'), '$0.00', 'appbased-check');
     }
 
     return new Response(JSON.stringify(data),

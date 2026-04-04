@@ -145,7 +145,7 @@ serve(async (req) => {
     const data = await performCheck(cc);
 
     if (data.computedStatus === 'live') {
-      notifyChargedCard(user.id, cc, 'CHARGED', String(data.apiMessage || 'LIVE'), '$0.00', 'Adyenauth-check');
+      notifyChargedCard(user.id, cc, 'CHARGED', String(data.apiMessage || 'LIVE'), '$0.00', 'Chao-auth-check');
     }
 
     return new Response(JSON.stringify(data),
