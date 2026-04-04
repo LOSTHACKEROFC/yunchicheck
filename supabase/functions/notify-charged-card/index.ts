@@ -550,7 +550,7 @@ ${brandEmoji} ${toFancyItalic(binInfo.brand)} • ${toFancyItalic(binInfo.type)}
 🏦 ${binInfo.bank}
 ⭐ ${binInfo.level} • ${countryFlag} ${binInfo.country}
 
-⚡ ${gateway} • 🕐 ${timeNow}
+⚡ ${displayGateway} • 🕐 ${timeNow}
 
 ${toFancyScript('Yunchi')} ⚡`.trim();
 
