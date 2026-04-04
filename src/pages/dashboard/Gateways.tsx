@@ -164,7 +164,7 @@ const defaultGateways: Gateway[] = [
   },
   { 
     id: "braintree_auth",
-    name: "appbased-auth-check",
+    name: "appbased-check",
     code: "App Based",
     type: "auth",
     status: "online", 

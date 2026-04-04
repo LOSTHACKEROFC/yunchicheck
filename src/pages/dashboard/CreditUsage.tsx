@@ -64,9 +64,9 @@ const CREDIT_COST_PER_CHECK = 1;
 
 // Gateway display name mapping
 const GATEWAY_DISPLAY_NAMES: Record<string, string> = {
-  "stripe_auth": "Adyenauth-check",
+  "stripe_auth": "Chao-auth-check",
   "stripe_preauth": "Yunchi Pre Auth",
-  "braintree_auth": "Adyen-auth-chk",
+  "braintree_auth": "appbased-check",
   "clover_charge": "Yunchi Clover",
   "square_charge": "Yunchi Square",
   "shopify_charge": "Yunchi Shopify",
