@@ -2080,15 +2080,8 @@ const Gateways = () => {
     }
   };
 
-  const checkCardViaDistributed = async (cardNumber: string, month: string, year: string, cvv: string, targetApi: 'stripe' | 'b3', maxRetries = 5): Promise<GatewayApiResponse> => {
-    if (targetApi === 'stripe') {
-      const result = await checkCardViaApi(cardNumber, month, year, cvv, maxRetries);
-      return { ...result, usedGateway: 'stripe' };
-    } else {
-      const result = await checkCardViaB3(cardNumber, month, year, cvv, maxRetries);
-      return { ...result, usedGateway: 'b3' };
-    }
-  };
+
+
 
   // Fallback simulation for non-API gateways
   const simulateCheck = async (): Promise<"live" | "dead" | "unknown"> => {
