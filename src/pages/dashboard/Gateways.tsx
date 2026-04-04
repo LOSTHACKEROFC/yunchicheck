@@ -139,7 +139,7 @@ const defaultGateways: Gateway[] = [
   { 
     id: "stripe_auth",
     name: "Adyenauth-check",
-    code: "Chao",
+    code: "Adyen",
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/UnionPay/Diners/Maestro",
@@ -3609,7 +3609,7 @@ const Gateways = () => {
       return "UNKNOWN";
     }
     
-    // Auth gateways (Chao, Adyen, App Based) - show LIVE/DEAD
+    // Auth gateways (Adyen1, Adyen, App Based) - show LIVE/DEAD
     if (gatewayType === "auth") {
       if (status === "live") return "LIVE";
       if (status === "dead") return "DEAD";
@@ -3747,7 +3747,7 @@ const Gateways = () => {
                       <div className="flex flex-wrap gap-1.5">
                         {gateway.code && (
                           <Badge className={`text-[10px] font-semibold border rounded-full px-2.5 py-0.5 ${
-                            gateway.code === "Chao" ? "bg-purple-500/20 text-purple-400 border-purple-500/30" :
+                            gateway.code === "Adyen1" ? "bg-purple-500/20 text-purple-400 border-purple-500/30" :
                             gateway.code === "Adyen" ? "bg-blue-500/20 text-blue-400 border-blue-500/30" :
                             gateway.code === "App Based" ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" :
                             "bg-primary/20 text-primary border-primary/30"
