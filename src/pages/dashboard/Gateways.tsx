@@ -151,7 +151,7 @@ const defaultGateways: Gateway[] = [
   },
   { 
     id: "combined_auth",
-    name: "Adyen-auth-chk",
+    name: "adyenauth-check",
     code: "Adyen",
     type: "auth",
     status: "online", 
