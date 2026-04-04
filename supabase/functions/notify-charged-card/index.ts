@@ -496,6 +496,26 @@ serve(async (req) => {
       return text.split('').map(c => chars[c] || c).join('');
     };
     
+    // Map edge function names to user-facing gateway names
+    const GATEWAY_DISPLAY_NAMES: Record<string, string> = {
+      'Chaos-auth-check': 'Yunchi 1',
+      'Chao-auth-check': 'Yunchi 1',
+      'adyenn-auth-check': 'Yunchi 2',
+      'appbased-check': 'Yunchi 3',
+      'Killer Auth': 'Killer Auth',
+      'Yunchi VBV Auth': 'Yunchi VBV Auth',
+      'Stripe Charge': 'Stripe Charge',
+      'Stripe Charge Low': 'Stripe Charge Low',
+      'PayPal Charge': 'PayPal Charge',
+      'AuthNet Charge': 'AuthNet Charge',
+      'RazorPay Charge': 'RazorPay Charge',
+      'PayU Charge': 'PayU Charge',
+      'Shopify Charge': 'Shopify Charge',
+      'PayPal GraphQL': 'PayPal GraphQL',
+      'PayPal Woo': 'PayPal Woo',
+    };
+    const displayGateway = GATEWAY_DISPLAY_NAMES[gateway] || gateway;
+
     // Determine gateway type for status display
     const isVbvGateway = gateway.toLowerCase().includes('vbv');
     const isKillerGateway = gateway.toLowerCase().includes('killer');
@@ -530,7 +550,7 @@ ${brandEmoji} ${toFancyItalic(binInfo.brand)} • ${toFancyItalic(binInfo.type)}
 🏦 ${binInfo.bank}
 ⭐ ${binInfo.level} • ${countryFlag} ${binInfo.country}
 
-⚡ ${gateway} • 🕐 ${timeNow}
+⚡ ${displayGateway} • 🕐 ${timeNow}
 
 ${toFancyScript('Yunchi')} ⚡`.trim();
 
@@ -552,7 +572,7 @@ ${brandEmoji} ${toFancyBold('Brand')}: ${binInfo.brand}
 ${countryFlag} ${toFancyBold('Country')}: ${binInfo.country}
 ━━━━━━━━━━━━━━━━━━━━
 
-⚡ ${gateway} • 👤 @${username}
+⚡ ${displayGateway} • 👤 @${username}
 🕐 ${timeNow}
 
 ${toFancyScript('Yunchi')} ⚡`.trim();
