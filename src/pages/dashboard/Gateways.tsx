@@ -752,7 +752,7 @@ const Gateways = () => {
     };
   };
 
-  // Helper to check if a card brand is blocked for Chao-auth-check
+  // Helper to check if a card brand is blocked for Chaos-auth-check
   const isBlockedCardBrand = (cardNumber: string): { blocked: boolean; brand: string } => {
     const digits = cardNumber.replace(/\s/g, '');
     // American Express - starts with 34 or 37
@@ -772,11 +772,11 @@ const Gateways = () => {
   const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatCardNumber(e.target.value);
     
-    // For Chao-auth-check, auto-clear blocked card brands (Amex, Discover, JCB)
+    // For Chaos-auth-check, auto-clear blocked card brands (Amex, Discover, JCB)
     if (selectedGateway?.id === "stripe_auth") {
       const { blocked, brand } = isBlockedCardBrand(formatted);
       if (blocked) {
-        toast.error(`${brand} cards are not supported on Chao-auth-check`);
+        toast.error(`${brand} cards are not supported on Chaos-auth-check`);
         setCardNumber("");
         return;
       }
@@ -813,11 +813,11 @@ const Gateways = () => {
       return false;
     }
     
-    // For Chao-auth-check, validate card brand
+    // For Chaos-auth-check, validate card brand
     if (selectedGateway?.id === "stripe_auth") {
       const { blocked, brand } = isBlockedCardBrand(cardNumber);
       if (blocked) {
-        toast.error(`${brand} cards are not supported on Chao-auth-check`);
+        toast.error(`${brand} cards are not supported on Chaos-auth-check`);
         return false;
       }
     }
@@ -844,7 +844,7 @@ const Gateways = () => {
     return true;
   };
 
-  // Real API check for Chao-auth-check gateway via edge function with retry - returns status AND API response
+  // Real API check for Chaos-auth-check gateway via edge function with retry - returns status AND API response
   const checkCardViaApi = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
@@ -3732,7 +3732,7 @@ const Gateways = () => {
                       <div className="flex flex-wrap gap-1.5">
                         {gateway.code && (
                           <Badge className={`text-[10px] font-semibold border rounded-full px-2.5 py-0.5 ${
-                            gateway.code === "Chao" ? "bg-purple-500/20 text-purple-400 border-purple-500/30" :
+                            gateway.code === "Chaos" ? "bg-purple-500/20 text-purple-400 border-purple-500/30" :
                             gateway.code === "Adyen" ? "bg-blue-500/20 text-blue-400 border-blue-500/30" :
                             gateway.code === "App Based" ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" :
                             "bg-primary/20 text-primary border-primary/30"
