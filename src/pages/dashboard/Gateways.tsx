@@ -139,7 +139,7 @@ const defaultGateways: Gateway[] = [
   { 
     id: "stripe_auth",
     name: "Chao-auth-check",
-    code: "St",
+    code: "Chao",
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/UnionPay/Diners/Maestro",
@@ -152,7 +152,7 @@ const defaultGateways: Gateway[] = [
   { 
     id: "combined_auth",
     name: "Adyen-auth-chk",
-    code: "St+B3",
+    code: "Adyen",
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Amex/Discover",
@@ -165,7 +165,7 @@ const defaultGateways: Gateway[] = [
   { 
     id: "braintree_auth",
     name: "appbased-auth-check",
-    code: "B3",
+    code: "App Based",
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Discover",
@@ -3757,7 +3757,12 @@ const Gateways = () => {
                     <CardContent className="p-4 pt-0 space-y-3">
                       <div className="flex flex-wrap gap-1.5">
                         {gateway.code && (
-                          <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] font-mono font-bold">
+                          <Badge className={`text-[10px] font-semibold border rounded-full px-2.5 py-0.5 ${
+                            gateway.code === "Chao" ? "bg-purple-500/20 text-purple-400 border-purple-500/30" :
+                            gateway.code === "Adyen" ? "bg-blue-500/20 text-blue-400 border-blue-500/30" :
+                            gateway.code === "App Based" ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" :
+                            "bg-primary/20 text-primary border-primary/30"
+                          }`}>
                             {gateway.code}
                           </Badge>
                         )}
