@@ -165,7 +165,7 @@ const defaultGateways: Gateway[] = [
   { 
     id: "braintree_auth",
     name: "appbased-auth-check",
-    code: "B3",
+    code: "App Based",
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/Discover",
