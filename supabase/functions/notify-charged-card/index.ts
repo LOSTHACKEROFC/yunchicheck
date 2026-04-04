@@ -425,10 +425,10 @@ serve(async (req) => {
     }
     // ========== END DEDUPLICATION CHECK ==========
 
-    // Get user's Telegram chat ID and username
+    // Get user's Telegram chat ID, username, and timezone
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('telegram_chat_id, username')
+      .select('telegram_chat_id, username, timezone')
       .eq('user_id', user_id)
       .single();
 
