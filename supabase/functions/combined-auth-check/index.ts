@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,15 +35,13 @@ const notifyChargedCard = (
       amount,
       gateway,
     }),
-  }).catch((err) => console.error("[ADYEN-AUTH-CHK] notify-charged-card error:", err));
+  }).then(() => {}).catch((err) => console.error("[Adyenn-auth-chk] notify-charged-card error:", err));
 };
 
 const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" | "unknown" => {
   const status = String(data?.status || '').toLowerCase();
-
   if (status === 'approved') return "live";
   if (status === 'declined') return "dead";
-
   return "unknown";
 };
 
@@ -52,7 +49,7 @@ const performCheck = async (cc: string, attempt: number = 1): Promise<Record<str
   const maxRetries = 5;
   const apiUrl = `https://onyxenvbot.up.railway.app/adyen/key=yashikaaa/cc=${cc}`;
 
-  console.log(`[ADYEN-AUTH-CHK] Attempt ${attempt}/${maxRetries} - Calling API`);
+  console.log(`[Adyenn-auth-chk] Attempt ${attempt}/${maxRetries} - Calling API`);
 
   try {
     const response = await fetch(apiUrl, {
@@ -61,7 +58,7 @@ const performCheck = async (cc: string, attempt: number = 1): Promise<Record<str
     });
 
     const rawText = await response.text();
-    console.log(`[ADYEN-AUTH-CHK] Attempt ${attempt} - Raw response:`, rawText);
+    console.log(`[Adyenn-auth-chk] Attempt ${attempt} - Raw response:`, rawText);
 
     let data: Record<string, unknown>;
     try {
@@ -74,7 +71,7 @@ const performCheck = async (cc: string, attempt: number = 1): Promise<Record<str
     const apiMessage = data.message || data.response || data.status || 'No response message';
 
     if (computedStatus === "unknown" && attempt < maxRetries) {
-      console.log(`[ADYEN-AUTH-CHK] UNKNOWN on attempt ${attempt}, retrying...`);
+      console.log(`[Adyenn-auth-chk] UNKNOWN on attempt ${attempt}, retrying...`);
       await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
       return performCheck(cc, attempt + 1);
     }
@@ -86,7 +83,7 @@ const performCheck = async (cc: string, attempt: number = 1): Promise<Record<str
       rawResponse: rawText,
     };
   } catch (error) {
-    console.error(`[ADYEN-AUTH-CHK] Attempt ${attempt} error:`, error);
+    console.error(`[Adyenn-auth-chk] Attempt ${attempt} error:`, error);
 
     if (attempt < maxRetries) {
       await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
@@ -98,7 +95,7 @@ const performCheck = async (cc: string, attempt: number = 1): Promise<Record<str
   }
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -140,7 +137,7 @@ serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log('[ADYEN-AUTH-CHK] Checking card for user:', user.id);
+    console.log('[Adyenn-auth-chk] Checking card for user:', user.id);
 
     const data = await performCheck(cc);
 
@@ -153,7 +150,7 @@ serve(async (req) => {
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[ADYEN-AUTH-CHK] Error:', errorMessage);
+    console.error('[Adyenn-auth-chk] Error:', errorMessage);
     return new Response(JSON.stringify({
       error: errorMessage, status: "ERROR", computedStatus: "unknown", apiStatus: "ERROR", apiMessage: errorMessage
     }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
