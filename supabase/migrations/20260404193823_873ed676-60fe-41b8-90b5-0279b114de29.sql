@@ -1,0 +1,1 @@
+UPDATE public.gateways SET code = 'Chaos' WHERE id = 'stripe_auth';
