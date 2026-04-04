@@ -1641,20 +1641,20 @@ const Gateways = () => {
     };
   };
 
-  // Combined Auth API check (adyenauth-check) - uses only Adyen API
-  const checkCardViaCombined = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 3): Promise<GatewayApiResponse> => {
+  // Adyen Auth check (adyenn-auth-check) - independent Adyen API only
+  const checkCardViaAdyenAuth = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`[ADYEN-AUTH-CHK] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
+        console.log(`[ADYENN-AUTH-CHK] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
         
         const { data, error } = await supabase.functions.invoke('combined-auth-check', {
           body: { cc }
         });
         
         if (error) {
-          console.error('[ADYEN-AUTH-CHK] Edge function error:', error);
+          console.error('[ADYENN-AUTH-CHK] Edge function error:', error);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 500 + attempt * 200));
             continue;
@@ -1667,59 +1667,53 @@ const Gateways = () => {
           };
         }
         
-        console.log('[ADYEN-AUTH-CHK] API response:', data);
+        console.log('[ADYENN-AUTH-CHK] API response:', data);
         
-        // Extract real API response data
         const apiStatus = data?.apiStatus || data?.status || 'UNKNOWN';
         const apiMessage = data?.apiMessage || data?.message || 'No message';
         const rawResponse = JSON.stringify(data);
-        const usedGateway = data?.usedGateway as string | undefined;
         
-        // Use computedStatus from edge function if available
         const computedStatus = data?.computedStatus;
         if (computedStatus === "live" || computedStatus === "dead") {
-          return { status: computedStatus, apiStatus, apiMessage, rawResponse, usedGateway };
+          return { status: computedStatus, apiStatus, apiMessage, rawResponse };
         }
         
-        // Fallback: Check success field from API response
         if (data?.success === true) {
-          return { status: "live", apiStatus, apiMessage, rawResponse, usedGateway };
+          return { status: "live", apiStatus, apiMessage, rawResponse };
         }
         if (data?.success === false) {
-          return { status: "dead", apiStatus, apiMessage, rawResponse, usedGateway };
+          return { status: "dead", apiStatus, apiMessage, rawResponse };
         }
         
-        // Fallback: Check status field
         const statusUpper = (data?.status as string)?.toUpperCase() || '';
         if (statusUpper === 'SUCCESS' || statusUpper === 'APPROVED' || statusUpper === 'LIVE') {
-          return { status: "live", apiStatus, apiMessage, rawResponse, usedGateway };
+          return { status: "live", apiStatus, apiMessage, rawResponse };
         }
         if (statusUpper === 'ERROR' || statusUpper === 'DECLINED' || statusUpper === 'DEAD' || statusUpper === 'FAILED') {
-          return { status: "dead", apiStatus, apiMessage, rawResponse, usedGateway };
+          return { status: "dead", apiStatus, apiMessage, rawResponse };
         }
         
-        // Fallback: Check message for status indicators
         const message = (data?.message as string)?.toLowerCase() || (apiMessage as string)?.toLowerCase() || '';
         
         if (message.includes("approved") || message.includes("success") || message.includes("authorized") ||
             message.includes("payment method added successfully") || message.includes("card added successfully")) {
-          return { status: "live", apiStatus, apiMessage, rawResponse, usedGateway };
+          return { status: "live", apiStatus, apiMessage, rawResponse };
         }
         if (message.includes("declined") || message.includes("insufficient funds") || message.includes("card was declined") ||
             message.includes("invalid") || message.includes("expired") || message.includes("failed")) {
-          return { status: "dead", apiStatus, apiMessage, rawResponse, usedGateway };
+          return { status: "dead", apiStatus, apiMessage, rawResponse };
         }
         if (message.includes("rate limit") || message.includes("timeout") || message.includes("try again")) {
-          console.log(`[ADYEN-AUTH-CHK] Retryable error detected: ${message}`);
+          console.log(`[ADYENN-AUTH-CHK] Retryable error detected: ${message}`);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 800 + attempt * 300));
             continue;
           }
         }
         
-        return { status: "unknown", apiStatus, apiMessage, rawResponse, usedGateway };
+        return { status: "unknown", apiStatus, apiMessage, rawResponse };
       } catch (error) {
-        console.error('[ADYEN-AUTH-CHK] API check error:', error);
+        console.error('[ADYENN-AUTH-CHK] API check error:', error);
         if (attempt < maxRetries) {
           await new Promise(r => setTimeout(r, 500 + attempt * 200));
           continue;
