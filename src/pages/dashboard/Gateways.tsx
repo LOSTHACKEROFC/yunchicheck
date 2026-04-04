@@ -844,13 +844,13 @@ const Gateways = () => {
     return true;
   };
 
-  // Real API check for Adyenauth-check gateway via edge function with retry - returns status AND API response
+  // Real API check for Chao-auth-check gateway via edge function with retry - returns status AND API response
   const checkCardViaApi = async (cardNumber: string, month: string, year: string, cvv: string, maxRetries = 5): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`[ADYEN-AUTH] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
+        console.log(`[CHAO-AUTH] Checking card (attempt ${attempt + 1}/${maxRetries + 1}):`, cc);
         
         const { data, error } = await supabase.functions.invoke('stripe-auth-check', {
           body: { cc }
