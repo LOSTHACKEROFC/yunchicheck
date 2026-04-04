@@ -857,7 +857,7 @@ const Gateways = () => {
         });
         
         if (error) {
-          console.error('[ADYEN-AUTH] Edge function error:', error);
+          console.error('[CHAO-AUTH] Edge function error:', error);
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 500 + attempt * 200));
             continue;
