@@ -139,7 +139,7 @@ const defaultGateways: Gateway[] = [
   { 
     id: "stripe_auth",
     name: "Chao-auth-check",
-    code: "St",
+    code: "Chao",
     type: "auth",
     status: "online", 
     cardTypes: "Visa/MC/UnionPay/Diners/Maestro",
