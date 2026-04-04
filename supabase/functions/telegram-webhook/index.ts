@@ -8928,7 +8928,7 @@ Select a gateway to edit:
 
         // Step handlers
         const stepConfig: Record<string, { nextStep: string; field: string; stepNum: number; nextPrompt: string }> = {
-          id: { nextStep: "name", field: "gateway_id", stepNum: 2, nextPrompt: "Enter the display name for this gateway.\n\n<b>Example:</b> <code>Adyenauth-check</code>" },
+          id: { nextStep: "name", field: "gateway_id", stepNum: 2, nextPrompt: "Enter the display name for this gateway.\n\n<b>Example:</b> <code>Chao-auth-check</code>" },
           name: { nextStep: "code", field: "gateway_name", stepNum: 3, nextPrompt: "Enter a short code for this gateway (optional).\nPress /skip to skip.\n\n<b>Example:</b> <code>St4</code> or <code>B4</code>" },
           code: { nextStep: "type", field: "gateway_code", stepNum: 4, nextPrompt: "Select the gateway type:" },
           type: { nextStep: "card_types", field: "gateway_type", stepNum: 5, nextPrompt: "Enter supported card types.\n\n<b>Example:</b> <code>Visa/MC/Amex</code>" },
