@@ -97,7 +97,7 @@ const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" |
 
 const performCheck = async (cc: string, userAgent: string, attempt: number = 1): Promise<Record<string, unknown>> => {
   const maxRetries = 3;
-  const apiUrl = `http://api-production-d218.up.railway.app/api/authnet-registration?cc=${cc}`;
+  const apiUrl = `https://auth-production-17c5.up.railway.app/api/cc=${cc}`;
 
   console.log(`[AUTHNET-AUTH] Attempt ${attempt}/${maxRetries} - Calling API`);
 
