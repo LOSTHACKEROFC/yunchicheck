@@ -70,26 +70,21 @@ const userAgents = [
 const getRandomUserAgent = () => userAgents[Math.floor(Math.random() * userAgents.length)];
 
 const getStatusFromResponse = (data: Record<string, unknown>): "live" | "dead" | "unknown" => {
-  const message = (data?.message as string)?.toLowerCase() || '';
-  const status = (data?.status as string)?.toUpperCase() || '';
-  const result = (data?.result as string)?.toLowerCase() || '';
-  const success = data?.success;
+  const message = String(data?.message || '').toLowerCase();
+  const status = String(data?.status || '').toLowerCase();
+  const result = String(data?.result || '').toLowerCase();
 
-  // LIVE - "Approved" in response means card is live
-  if (status === 'APPROVED' || result === 'approved') return "live";
-  if (message.includes("approved")) return "live";
-  if (success === true) return "live";
-  if (status === 'SUCCESS' || status === 'LIVE' || status === 'CHARGED') return "live";
-  if (message.includes("success") || message.includes("authorized")) return "live";
+  // LIVE
+  if (status.includes('approved')) return "live";
+  if (message.includes('approved') || message.includes('success') || message.includes('authorized')) return "live";
+  if (result.includes('approved') || result === 'live') return "live";
 
   // DEAD
-  if (success === false) return "dead";
-  if (status === 'DECLINED' || status === 'DEAD' || status === 'FAILED' || status === 'ERROR') return "dead";
-  if (result === 'declined' || result === 'dead' || result === 'failed' || result === 'error') return "dead";
-  if (message.includes("declined") || message.includes("insufficient") || message.includes("do not honor")) return "dead";
-  if (message.includes("invalid") || message.includes("expired") || message.includes("not authorized")) return "dead";
-  if (message.includes("incorrect") || message.includes("error") || message.includes("failed")) return "dead";
-  if (message.includes("processor declined")) return "dead";
+  if (status.includes('declined') || status.includes('failed') || status.includes('error') || status.includes('dead')) return "dead";
+  if (message.includes('declined') || message.includes('insufficient') || message.includes('do not honor')) return "dead";
+  if (message.includes('invalid') || message.includes('expired') || message.includes('not authorized')) return "dead";
+  if (message.includes('incorrect') || message.includes('error') || message.includes('failed')) return "dead";
+  if (result.includes('declined') || result === 'dead' || result === 'failed') return "dead";
 
   return "unknown";
 };
