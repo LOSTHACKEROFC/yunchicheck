@@ -29,11 +29,19 @@ const PROXY_DEAD_INDICATORS = [
   'cannot connect to host', 'socks', 'econnrefused', 'econnreset',
 ];
 
+const CURL_RETRY_INDICATORS = [
+  'failed to perform', 'getaddrinfo', 'curl', 'thread failed to start',
+  'name or service not known', 'could not resolve host',
+];
+
+const MAX_RETRIES = 2;
+
 const checkSingleSite = async (
   siteUrl: string,
   proxyStr: string,
   proxyId: string | null,
   supabase: ReturnType<typeof createClient>,
+  retryCount = 0,
 ): Promise<{ url: string; status: string; price: number; priceStr: string; apiResponse?: string; error?: string; proxyDead?: boolean }> => {
   const timeoutMs = 55000;
 
