@@ -167,11 +167,10 @@ const checkSingleSite = async (
       }
 
       // Status=true → CHARGED/success → site is live
-      if (apiStatus === true) {
-        if (price > 0) {
-          await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
-        }
-        console.log(`[Result] ${siteUrl} → LIVE (charged, ${priceStr}, gateway: ${gateway})`);
+      // OR new API: no Status field but known gateway + price → live
+      if (apiStatus === true || (apiStatus === undefined && gateway && gateway !== "UNKNOWN" && price > 0 && price <= 100)) {
+        await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
+        console.log(`[Result] ${siteUrl} → LIVE (charged/active, ${priceStr}, gateway: ${gateway})`);
         return { url: siteUrl, status: "live", price, priceStr, apiResponse };
       }
 
