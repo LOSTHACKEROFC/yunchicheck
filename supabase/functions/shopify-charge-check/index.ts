@@ -144,7 +144,17 @@ const userAgents = [
 
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
-const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string }> => {
+const PROXY_DEAD_INDICATORS = [
+  "proxy dead", "proxy error", "proxy authentication", "connection refused",
+  "proxy connect", "tunneling socket", "proxy_error", "bad proxy",
+  "cannot connect to host", "socks", "econnrefused", "econnreset",
+];
+
+const SITE_DEAD_INDICATORS = [
+  "site dead",
+];
+
+const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string; proxyDead?: boolean; siteDead?: boolean }> => {
   const apiUrl = buildApiUrl(cc, site, proxy);
   
   const controller = new AbortController();
@@ -166,6 +176,20 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ s
     
     if (!rawText || rawText.trim() === '') {
       return { status: 'unknown', message: 'Empty response', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
+    }
+
+    const rawLower = rawText.toLowerCase();
+
+    // Check for proxy dead indicators FIRST
+    const isProxyDead = PROXY_DEAD_INDICATORS.some(ind => rawLower.includes(ind));
+    if (isProxyDead) {
+      return { status: 'dead', message: 'Proxy Dead', apiResponse: 'Proxy Dead', rawResponse: rawText, price: 0, priceStr: '$0.00', proxyDead: true };
+    }
+
+    // Check for site dead indicators
+    const isSiteDead = SITE_DEAD_INDICATORS.some(ind => rawLower.includes(ind));
+    if (isSiteDead) {
+      return { status: 'dead', message: 'Site Dead', apiResponse: 'Site Dead', rawResponse: rawText, price: 0, priceStr: '$0.00', siteDead: true };
     }
 
     // Check for bad responses
