@@ -144,7 +144,17 @@ const userAgents = [
 
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
-const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string }> => {
+const PROXY_DEAD_INDICATORS = [
+  "proxy dead", "proxy error", "proxy authentication", "connection refused",
+  "proxy connect", "tunneling socket", "proxy_error", "bad proxy",
+  "cannot connect to host", "socks", "econnrefused", "econnreset",
+];
+
+const SITE_DEAD_INDICATORS = [
+  "site dead",
+];
+
+const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string; proxyDead?: boolean; siteDead?: boolean }> => {
   const apiUrl = buildApiUrl(cc, site, proxy);
   
   const controller = new AbortController();
@@ -166,6 +176,20 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ s
     
     if (!rawText || rawText.trim() === '') {
       return { status: 'unknown', message: 'Empty response', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
+    }
+
+    const rawLower = rawText.toLowerCase();
+
+    // Check for proxy dead indicators FIRST
+    const isProxyDead = PROXY_DEAD_INDICATORS.some(ind => rawLower.includes(ind));
+    if (isProxyDead) {
+      return { status: 'dead', message: 'Proxy Dead', apiResponse: 'Proxy Dead', rawResponse: rawText, price: 0, priceStr: '$0.00', proxyDead: true };
+    }
+
+    // Check for site dead indicators
+    const isSiteDead = SITE_DEAD_INDICATORS.some(ind => rawLower.includes(ind));
+    if (isSiteDead) {
+      return { status: 'dead', message: 'Site Dead', apiResponse: 'Site Dead', rawResponse: rawText, price: 0, priceStr: '$0.00', siteDead: true };
     }
 
     // Check for bad responses
@@ -286,10 +310,16 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ s
 };
 
 // Wrapper with automatic retry for transient failures (timeout, empty response)
-const callApi = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string }> => {
+const callApi = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string; proxyDead?: boolean; siteDead?: boolean }> => {
   console.log(`[SHOPIFY-CHARGE] Calling: site=${site} proxy=${proxy ? 'yes' : 'none'}`);
   
   const result = await callApiOnce(cc, site, proxy);
+  
+  // If proxy dead or site dead, return immediately — no retry needed
+  if (result.proxyDead || result.siteDead) {
+    console.log(`[SHOPIFY-CHARGE] Result: ${result.proxyDead ? 'PROXY DEAD' : 'SITE DEAD'}`);
+    return result;
+  }
   
   // If result is a definitive live/dead, return immediately
   if (result.status === 'live' || result.status === 'dead') {
@@ -416,9 +446,10 @@ Deno.serve(async (req) => {
     const formatProxy = (p: typeof userProxies[0]) => 
       p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
 
-    let result: { status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string } | null = null;
+    let result: { status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string; proxyDead?: boolean; siteDead?: boolean } | null = null;
     let usedSite = shuffledSites[0];
     const failedProxyIds: string[] = [];
+    const deadSiteUrls: string[] = [];
     let allProxiesDeadFlag = false;
 
     for (let siteAttempt = 0; siteAttempt < MAX_SITE_ATTEMPTS; siteAttempt++) {
@@ -443,7 +474,42 @@ Deno.serve(async (req) => {
         
         siteResult = await callApi(cc, currentSite.url, proxyStr);
         
-        // Check if proxy error
+        // If proxy dead flag is set, remove proxy and try next
+        if (siteResult.proxyDead) {
+          console.log(`[SHOPIFY-CHARGE] Proxy dead detected, removing proxy ${currentProxy.id} (${currentProxy.ip}:${currentProxy.port})`);
+          failedProxyIds.push(currentProxy.id);
+          // Immediately delete from DB
+          adminClient.from('user_proxies').delete().eq('id', currentProxy.id).then(({ error: delErr }) => {
+            if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove dead proxy ${currentProxy.id}:`, delErr);
+            else console.log(`[SHOPIFY-CHARGE] Dead proxy removed from DB: ${currentProxy.id}`);
+          });
+          continue; // try next proxy
+        }
+
+        // If site dead flag is set, remove site and try next site
+        if (siteResult.siteDead) {
+          console.log(`[SHOPIFY-CHARGE] Site dead detected, removing site: ${currentSite.url}`);
+          deadSiteUrls.push(currentSite.url);
+          adminClient.from('gateway_urls').delete().eq('url', currentSite.url).then(({ error: delErr }) => {
+            if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove dead site:`, delErr);
+            else console.log(`[SHOPIFY-CHARGE] Dead site removed: ${currentSite.url}`);
+          });
+          if (TELEGRAM_BOT_TOKEN) {
+            fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chat_id: ADMIN_TELEGRAM_CHAT_ID,
+                text: `🗑️ <b>SITE DEAD - AUTO-REMOVED</b>\n\n<code>${currentSite.url}</code>\n\n<i>API returned "Site Dead"</i>`,
+                parse_mode: "HTML",
+              }),
+            }).catch(() => {});
+          }
+          siteResult = null; // force try next site
+          break;
+        }
+
+        // Legacy proxy error check (407, connection refused without proxyDead flag)
         const rawLower = (siteResult.rawResponse || '').toLowerCase();
         let isValidApiResponse = false;
         try {
@@ -460,8 +526,12 @@ Deno.serve(async (req) => {
         );
         
         if (isProxyError) {
-          console.log(`[SHOPIFY-CHARGE] Proxy error, removing proxy ${currentProxy.ip}:${currentProxy.port}`);
+          console.log(`[SHOPIFY-CHARGE] Proxy error (legacy), removing proxy ${currentProxy.ip}:${currentProxy.port}`);
           failedProxyIds.push(currentProxy.id);
+          adminClient.from('user_proxies').delete().eq('id', currentProxy.id).then(({ error: delErr }) => {
+            if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove proxy ${currentProxy.id}:`, delErr);
+            else console.log(`[SHOPIFY-CHARGE] Removed dead proxy: ${currentProxy.id}`);
+          });
           continue; // try next proxy
         }
         
@@ -470,7 +540,11 @@ Deno.serve(async (req) => {
       }
 
       if (!siteResult) {
-        siteResult = { status: 'unknown', message: 'All proxies failed', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
+        // Site was dead or all proxies failed for this site — try next site
+        if (siteAttempt + 1 < MAX_SITE_ATTEMPTS) {
+          await new Promise(r => setTimeout(r, 300 + Math.random() * 300));
+        }
+        continue;
       }
 
       // If we got a definitive live/dead result, use it and stop
@@ -509,15 +583,7 @@ Deno.serve(async (req) => {
     const allProxiesDead = allProxiesDeadFlag || failedProxyIds.length >= userProxies.length;
     const randomSite = usedSite;
 
-    // Delete failed proxies from DB
-    if (failedProxyIds.length > 0) {
-      for (const proxyId of failedProxyIds) {
-        adminClient.from('user_proxies').delete().eq('id', proxyId).then(({ error: delErr }) => {
-          if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove proxy ${proxyId}:`, delErr);
-          else console.log(`[SHOPIFY-CHARGE] Removed dead proxy: ${proxyId}`);
-        });
-      }
-    }
+    // Dead proxies already removed inline during the proxy loop above
 
     // Auto-remove all bad sites discovered during the multi-site retry loop
     for (const badSite of badSiteUrls) {
