@@ -240,12 +240,12 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ s
       const responseText = (apiResponse || apiMessage || '').trim();
       if (isEmptyOrErrorOnly(responseText) && price === 0) {
         apiStatus = 'unknown';
-      } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED') {
+      } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
         apiStatus = 'live';
-        apiMessage = json.message || 'Charged';
-      } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED') {
+        apiMessage = json.message || json.Response || 'Charged';
+      } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED') {
         apiStatus = 'dead';
-        apiMessage = json.message || json.error || 'Declined';
+        apiMessage = json.message || json.error || json.Response || 'Declined';
       } else if (json.status === 'error') {
         // Only mark as dead if there's a meaningful error message
         const errMsg = (json.message || json.error || '').trim().toLowerCase();
