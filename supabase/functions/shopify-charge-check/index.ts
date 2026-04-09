@@ -290,7 +290,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ s
           lower.includes('thank you') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
         apiStatus = 'live';
       } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || 
-                 lower.includes('insufficient') ||
+                 lower.includes('insufficient') || lower.includes('otp_required') || lower.includes('otp required') ||
                  lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) {
         apiStatus = 'dead';
       } else if (lower.includes('failed') || lower.includes('error')) {
