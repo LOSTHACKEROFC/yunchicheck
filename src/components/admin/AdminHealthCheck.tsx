@@ -47,13 +47,34 @@ interface SiteResult {
   priceStr: string;
   apiResponse?: string;
   error?: string;
+  proxyDead?: boolean;
 }
 
 const CONCURRENCY = 40;
+const SINGLE_PROXY_CONCURRENCY = 8;
 const WORKER_STAGGER_MS = 40;
 const WARMUP_DELAY_MS = 400;
 const BOOT_RETRY_LIMIT = 4;
 const BOOT_RETRY_BASE_DELAY_MS = 1200;
+const RETRYABLE_RESULT_ERRORS = [
+  "empty response",
+  "non-json response",
+  "timeout",
+  "dns resolution failed",
+  "gateway error",
+  "request failed",
+  "internal error",
+];
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const getEffectiveConcurrency = (mode: "random" | "specific" | "custom") =>
+  mode === "random" ? CONCURRENCY : SINGLE_PROXY_CONCURRENCY;
+
+const isRetryableSiteError = (result: SiteResult) => {
+  if (result.status !== "error" || result.proxyDead) return false;
+  const message = `${result.error || ""} ${result.apiResponse || ""}`.toLowerCase();
+  return RETRYABLE_RESULT_ERRORS.some((indicator) => message.includes(indicator));
+};
 
 const fetchAllGatewayUrls = async (fields: string) => {
   const PAGE_SIZE = 1000;
@@ -91,6 +112,7 @@ const AdminHealthCheck = () => {
   const [deletingAll, setDeletingAll] = useState(false);
   const stopRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const deadProxyNoticeRef = useRef(new Set<string>());
 
   // Proxy config state
   const [systemProxies, setSystemProxies] = useState<ProxyItem[]>([]);
@@ -122,7 +144,7 @@ const AdminHealthCheck = () => {
   }, []);
 
   const getProxyInfo = (): { proxy?: string; proxyId?: string } => {
-    if (proxyMode === "random") return {}; // let edge function pick randomly
+    if (proxyMode === "random") return {};
     if (proxyMode === "specific" && selectedProxyId) {
       const p = systemProxies.find((px) => px.id === selectedProxyId);
       if (p) {
@@ -137,7 +159,7 @@ const AdminHealthCheck = () => {
     }
     return {};
   };
-  
+
   // Keep backward compat helper
   const getProxyString = (): string | undefined => getProxyInfo().proxy;
 
