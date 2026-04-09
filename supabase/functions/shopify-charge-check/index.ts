@@ -271,7 +271,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ s
                    combinedText.includes('insufficient') || combinedText.includes('card_declined') || combinedText.includes('incorrect') ||
                    combinedText.includes('do_not_honor') || combinedText.includes('fraud') || combinedText.includes('not accepted') ||
                    combinedText.includes('ds_required') || combinedText.includes('3ds') || combinedText.includes('3d_secure') ||
-                   combinedText.includes('rejected') ||
+                   combinedText.includes('rejected') || combinedText.includes('otp_required') || combinedText.includes('otp required') ||
                    combinedText.includes('pickup_card') || combinedText.includes('lost_card') || combinedText.includes('stolen_card') ||
                    combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline')) {
           apiStatus = 'dead';
@@ -290,7 +290,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ s
           lower.includes('thank you') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
         apiStatus = 'live';
       } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || 
-                 lower.includes('insufficient') ||
+                 lower.includes('insufficient') || lower.includes('otp_required') || lower.includes('otp required') ||
                  lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) {
         apiStatus = 'dead';
       } else if (lower.includes('failed') || lower.includes('error')) {
