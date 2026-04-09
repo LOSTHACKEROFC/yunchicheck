@@ -243,7 +243,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ s
       } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true) {
         apiStatus = 'live';
         apiMessage = json.message || 'Charged';
-      } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED') {
+      } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED') {
         apiStatus = 'dead';
         apiMessage = json.message || json.error || 'Declined';
       } else if (json.status === 'error') {
