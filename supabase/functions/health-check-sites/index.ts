@@ -159,6 +159,7 @@ const checkSingleSite = async (
       }
 
       console.log(`[Result] ${normalizedSiteUrl} → ERROR (empty response after ${MAX_RETRIES} retries)`);
+      await sendHealthCheckDebug(normalizedSiteUrl, "Empty response after retries", "", proxyStr, retryCount, response.status);
       return { url: normalizedSiteUrl, status: "error", price: 0, priceStr: "$0.00", error: "Empty response" };
     }
 
@@ -173,6 +174,7 @@ const checkSingleSite = async (
       }
 
       console.log(`[Result] ${normalizedSiteUrl} → ERROR (curl/DNS failed after ${MAX_RETRIES} retries)`);
+      await sendHealthCheckDebug(normalizedSiteUrl, "curl/DNS failed after retries", rawText.substring(0, 500), proxyStr, retryCount);
       return {
         url: normalizedSiteUrl,
         status: "error",
