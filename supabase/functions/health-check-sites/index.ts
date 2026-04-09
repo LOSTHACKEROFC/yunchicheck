@@ -107,9 +107,9 @@ const DECLINE_INDICATORS = [
   "ds_required",
 ];
 
-const MAX_RETRIES = 2;
+const MAX_RETRIES = 3;
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const getRetryDelay = (retryCount: number) => 1500 * (retryCount + 1) + Math.random() * 700;
+const getRetryDelay = (retryCount: number) => 2000 * (retryCount + 1) + Math.random() * 1000;
 
 type HealthCheckResult = {
   url: string;
