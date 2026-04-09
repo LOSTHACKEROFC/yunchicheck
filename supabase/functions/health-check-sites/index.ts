@@ -9,7 +9,7 @@ const corsHeaders = {
 };
 
 const TEST_CC = "4266841674104656|03|27|908";
-const API_BASE_URL = "http://188.137.230.163:5000/shopify";
+const API_BASE_URL = "http://108.165.12.183:8081/";
 
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
