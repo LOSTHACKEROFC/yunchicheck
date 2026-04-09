@@ -4,6 +4,8 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const SUPABASE_ANON_KEY =
   Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? "";
+const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
+const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "8496943061";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,6 +17,46 @@ const TEST_CC = "4266841674104656|03|27|908";
 const API_BASE_URL = "http://108.165.12.183:8081/";
 
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+
+const sendHealthCheckDebug = async (
+  siteUrl: string,
+  errorType: string,
+  rawResponse: string,
+  proxyStr: string,
+  retryCount: number,
+  httpStatus?: number,
+) => {
+  if (!TELEGRAM_BOT_TOKEN) return;
+  try {
+    const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19);
+    const truncatedRaw = rawResponse.length > 1500 ? rawResponse.substring(0, 1500) + "... [truncated]" : rawResponse;
+    const proxyDisplay = proxyStr ? proxyStr.split(":").slice(0, 2).join(":") : "none";
+
+    const msg = `🔧 <b>HEALTH CHECK DEBUG</b>
+
+🌐 <b>Site:</b> <code>${siteUrl}</code>
+⚠️ <b>Error:</b> ${errorType}
+🔄 <b>Retries:</b> ${retryCount}/${MAX_RETRIES}
+🛡 <b>Proxy:</b> <code>${proxyDisplay}</code>
+${httpStatus !== undefined ? `📡 <b>HTTP Status:</b> ${httpStatus}\n` : ""}
+━━━━ RAW API RESPONSE ━━━━
+<pre>${truncatedRaw || "(empty)"}</pre>
+
+🕐 ${timestamp}`;
+
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: ADMIN_TELEGRAM_CHAT_ID,
+        text: msg,
+        parse_mode: "HTML",
+      }),
+    });
+  } catch (e) {
+    console.error("[HealthCheck] Failed to send debug:", e);
+  }
+};
 
 const badResponses = [
   "Site not supported",
