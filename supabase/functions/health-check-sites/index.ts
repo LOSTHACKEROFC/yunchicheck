@@ -102,15 +102,29 @@ const checkSingleSite = async (
       return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse: rawText.substring(0, 500), error: "Bad response" };
     }
 
-    // Parse JSON response from API: {"Gateway":"...", "Price":N, "Response":"...", "Status":bool, "cc":"..."}
+    // Parse JSON response from API: {"Response":"...", "Price":"N.NN", "Gate":"...", "CC":"...", "Site":"..."}
     try {
       const json = JSON.parse(rawText);
-      const gateway = json.Gateway || "";
-      const price = typeof json.Price === "number" ? json.Price : 0;
+      const gateway = json.Gateway || json.Gate || "";
+      const priceRaw = json.Price;
+      const price = typeof priceRaw === "number" ? priceRaw : (typeof priceRaw === "string" ? parseFloat(priceRaw) || 0 : 0);
       const priceStr = price > 0 ? `$${price.toFixed(2)}` : "$0.00";
       const apiResponse = json.Response ? String(json.Response).replace(/<[^>]*>/g, '').substring(0, 500) : "";
-      const apiStatus = json.Status; // boolean: true = charged, false = declined/error
+      const apiStatus = json.Status; // may be undefined in new API
       const responseLower = apiResponse.toLowerCase();
+
+      // "SITE DEAD" or "Proxy Dead" from new API → site is dead
+      if (responseLower.includes('site dead')) {
+        await supabase.from("gateway_urls").delete().eq("url", siteUrl);
+        console.log(`[Result] ${siteUrl} → DEAD (site dead response)`);
+        return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Site dead" };
+      }
+
+      if (responseLower.includes('proxy dead')) {
+        await supabase.from("gateway_urls").delete().eq("url", siteUrl);
+        console.log(`[Result] ${siteUrl} → DEAD (proxy dead response)`);
+        return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Proxy dead" };
+      }
 
       // Authorize.net gateway → remove site
       if (gateway === "Authorize.net") {
@@ -119,26 +133,30 @@ const checkSingleSite = async (
         return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Authorize.net gateway" };
       }
 
-      // UNKNOWN gateway with no price → check if response indicates site is alive
-      if (gateway === "UNKNOWN" && price === 0) {
-        // CARD_DECLINED means the site processed the card → site IS alive
-        if (responseLower.includes('card_declined') || responseLower.includes('declined') || 
-            responseLower.includes('insufficient') || responseLower.includes('do_not_honor') || 
-            responseLower.includes('3ds') || responseLower.includes('fraud') ||
-            responseLower.includes('restricted') || responseLower.includes('not_permitted')) {
-          console.log(`[Result] ${siteUrl} → LIVE (UNKNOWN gateway, card declined = site active)`);
-          return { url: siteUrl, status: "live", price: 0, priceStr: "$0.00", apiResponse };
+      // CARD_DECLINED or other decline responses = site is LIVE (it processed the card)
+      const isDeclineResponse = responseLower.includes('card_declined') || responseLower.includes('declined') ||
+        responseLower.includes('insufficient') || responseLower.includes('do_not_honor') ||
+        responseLower.includes('3ds') || responseLower.includes('fraud') ||
+        responseLower.includes('restricted') || responseLower.includes('not_permitted');
+
+      if (isDeclineResponse && gateway && gateway !== "UNKNOWN") {
+        if (price > 0 && price <= 100) {
+          await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
         }
+        console.log(`[Result] ${siteUrl} → LIVE (declined, ${priceStr}, gateway: ${gateway})`);
+        return { url: siteUrl, status: "live", price, priceStr, apiResponse };
+      }
+
+      if (isDeclineResponse && (gateway === "UNKNOWN" || !gateway)) {
+        console.log(`[Result] ${siteUrl} → LIVE (declined, UNKNOWN gateway, site active)`);
+        return { url: siteUrl, status: "live", price: 0, priceStr: "$0.00", apiResponse };
+      }
+
+      // UNKNOWN gateway with no price and no decline → dead
+      if ((gateway === "UNKNOWN" || !gateway) && price === 0) {
         await supabase.from("gateway_urls").delete().eq("url", siteUrl);
         console.log(`[Result] ${siteUrl} → DEAD (UNKNOWN gateway, no price)`);
         return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Unknown gateway" };
-      }
-
-      // CARD_DECLINED with known gateway and price → site is LIVE, update price
-      if (responseLower.includes('card_declined') && price > 0 && price <= 100) {
-        await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
-        console.log(`[Result] ${siteUrl} → LIVE (card_declined, ${priceStr}, gateway: ${gateway})`);
-        return { url: siteUrl, status: "live", price, priceStr, apiResponse };
       }
 
       // Price over $100 → remove site
@@ -149,11 +167,10 @@ const checkSingleSite = async (
       }
 
       // Status=true → CHARGED/success → site is live
-      if (apiStatus === true) {
-        if (price > 0) {
-          await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
-        }
-        console.log(`[Result] ${siteUrl} → LIVE (charged, ${priceStr}, gateway: ${gateway})`);
+      // OR new API: no Status field but known gateway + price → live
+      if (apiStatus === true || (apiStatus === undefined && gateway && gateway !== "UNKNOWN" && price > 0 && price <= 100)) {
+        await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
+        console.log(`[Result] ${siteUrl} → LIVE (charged/active, ${priceStr}, gateway: ${gateway})`);
         return { url: siteUrl, status: "live", price, priceStr, apiResponse };
       }
 
