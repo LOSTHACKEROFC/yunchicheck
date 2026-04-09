@@ -2,10 +2,13 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_ANON_KEY =
+  Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? "";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 const TEST_CC = "4266841674104656|03|27|908";
@@ -24,17 +27,57 @@ const badResponses = [
 ];
 
 const PROXY_DEAD_INDICATORS = [
-  'proxy error', 'proxy authentication', 'connection refused',
-  'proxy connect', 'tunneling socket', 'proxy_error', 'bad proxy',
-  'cannot connect to host', 'socks', 'econnrefused', 'econnreset',
+  "proxy error",
+  "proxy authentication",
+  "connection refused",
+  "proxy connect",
+  "tunneling socket",
+  "proxy_error",
+  "bad proxy",
+  "cannot connect to host",
+  "socks",
+  "econnrefused",
+  "econnreset",
 ];
 
 const CURL_RETRY_INDICATORS = [
-  'failed to perform', 'getaddrinfo', 'curl', 'thread failed to start',
-  'name or service not known', 'could not resolve host',
+  "failed to perform",
+  "getaddrinfo",
+  "curl",
+  "thread failed to start",
+  "name or service not known",
+  "could not resolve host",
+];
+
+const DECLINE_INDICATORS = [
+  "card_declined",
+  "declined",
+  "insufficient",
+  "do_not_honor",
+  "3ds",
+  "fraud",
+  "restricted",
+  "not_permitted",
+  "generic_decline",
+  "pickup_card",
+  "lost_card",
+  "stolen_card",
+  "ds_required",
 ];
 
 const MAX_RETRIES = 2;
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const getRetryDelay = (retryCount: number) => 1500 * (retryCount + 1) + Math.random() * 700;
+
+type HealthCheckResult = {
+  url: string;
+  status: "live" | "dead" | "error";
+  price: number;
+  priceStr: string;
+  apiResponse?: string;
+  error?: string;
+  proxyDead?: boolean;
+};
 
 const checkSingleSite = async (
   siteUrl: string,
@@ -42,199 +85,259 @@ const checkSingleSite = async (
   proxyId: string | null,
   supabase: ReturnType<typeof createClient>,
   retryCount = 0,
-): Promise<{ url: string; status: string; price: number; priceStr: string; apiResponse?: string; error?: string; proxyDead?: boolean }> => {
+): Promise<HealthCheckResult> => {
   const timeoutMs = 55000;
+  const normalizedSiteUrl = siteUrl.trim().replace(/\/+$/, "");
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(TEST_CC)}&url=${encodeURIComponent(siteUrl)}&proxy=${proxyStr}`;
+    const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(TEST_CC)}&url=${encodeURIComponent(normalizedSiteUrl)}&proxy=${encodeURIComponent(proxyStr)}`;
 
-    console.log(`[Check] ${siteUrl} | proxy=${proxyStr ? 'yes' : 'none'}`);
+    console.log(`[Check] ${normalizedSiteUrl} | proxy=${proxyStr ? "yes" : "none"}`);
 
     const response = await fetch(apiUrl, {
       method: "GET",
       signal: controller.signal,
       headers: {
-        "Accept": "application/json, text/plain, */*",
+        Accept: "application/json, text/plain, */*",
         "Cache-Control": "no-cache",
       },
     });
 
-    clearTimeout(timeoutId);
     const rawText = await response.text();
 
     if (!rawText || rawText.trim() === "") {
-      console.log(`[Result] ${siteUrl} → ERROR (empty response)`);
-      return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: "Empty response" };
+      if (retryCount < MAX_RETRIES) {
+        console.log(`[Retry] ${normalizedSiteUrl} → empty response, retry ${retryCount + 1}/${MAX_RETRIES}`);
+        await wait(getRetryDelay(retryCount));
+        return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1);
+      }
+
+      console.log(`[Result] ${normalizedSiteUrl} → ERROR (empty response after ${MAX_RETRIES} retries)`);
+      return { url: normalizedSiteUrl, status: "error", price: 0, priceStr: "$0.00", error: "Empty response" };
     }
 
     const rawLower = rawText.toLowerCase();
 
-    // Check for curl/DNS errors → retry with same site
-    const isCurlError = CURL_RETRY_INDICATORS.some(ind => rawLower.includes(ind));
+    const isCurlError = CURL_RETRY_INDICATORS.some((indicator) => rawLower.includes(indicator));
     if (isCurlError) {
       if (retryCount < MAX_RETRIES) {
-        console.log(`[Retry] ${siteUrl} → curl/DNS error, retry ${retryCount + 1}/${MAX_RETRIES}`);
-        await new Promise(r => setTimeout(r, 2000 * (retryCount + 1)));
-        return checkSingleSite(siteUrl, proxyStr, proxyId, supabase, retryCount + 1);
+        console.log(`[Retry] ${normalizedSiteUrl} → curl/DNS error, retry ${retryCount + 1}/${MAX_RETRIES}`);
+        await wait(getRetryDelay(retryCount));
+        return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1);
       }
-      console.log(`[Result] ${siteUrl} → ERROR (curl/DNS failed after ${MAX_RETRIES} retries)`);
-      return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: rawText.substring(0, 500), error: "DNS resolution failed" };
+
+      console.log(`[Result] ${normalizedSiteUrl} → ERROR (curl/DNS failed after ${MAX_RETRIES} retries)`);
+      return {
+        url: normalizedSiteUrl,
+        status: "error",
+        price: 0,
+        priceStr: "$0.00",
+        apiResponse: rawText.substring(0, 500),
+        error: "DNS resolution failed",
+      };
     }
 
-    // Check if proxy is dead
-    const isProxyDead = PROXY_DEAD_INDICATORS.some(ind => rawLower.includes(ind));
+    const isProxyDead = PROXY_DEAD_INDICATORS.some((indicator) => rawLower.includes(indicator));
     if (isProxyDead) {
       if (proxyId) {
-        console.log(`[Result] Proxy dead for ${siteUrl}, removing proxy ${proxyId}`);
+        console.log(`[Result] Proxy dead for ${normalizedSiteUrl}, removing proxy ${proxyId}`);
         await supabase.from("proxies").delete().eq("id", proxyId);
       }
-      return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: rawText, error: "Dead proxy", proxyDead: true };
+
+      return {
+        url: normalizedSiteUrl,
+        status: "error",
+        price: 0,
+        priceStr: "$0.00",
+        apiResponse: rawText.substring(0, 500),
+        error: "Dead proxy",
+        proxyDead: true,
+      };
     }
 
-    // Check for bad responses — site is broken/unsupported
-    const isBad = badResponses.some(bad => rawLower.includes(bad.toLowerCase()));
+    const isBad = badResponses.some((bad) => rawLower.includes(bad.toLowerCase()));
     if (isBad) {
-      await supabase.from("gateway_urls").delete().eq("url", siteUrl);
-      console.log(`[Result] ${siteUrl} → DEAD (bad response)`);
-      return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse: rawText.substring(0, 500), error: "Bad response" };
+      await supabase.from("gateway_urls").delete().eq("url", normalizedSiteUrl);
+      console.log(`[Result] ${normalizedSiteUrl} → DEAD (bad response)`);
+      return {
+        url: normalizedSiteUrl,
+        status: "dead",
+        price: 0,
+        priceStr: "$0.00",
+        apiResponse: rawText.substring(0, 500),
+        error: "Bad response",
+      };
     }
 
-    // Parse JSON response from API: {"Response":"...", "Price":"N.NN", "Gate":"...", "CC":"...", "Site":"..."}
     try {
       const json = JSON.parse(rawText);
       const gateway = json.Gateway || json.Gate || "";
       const priceRaw = json.Price;
-      const price = typeof priceRaw === "number" ? priceRaw : (typeof priceRaw === "string" ? parseFloat(priceRaw) || 0 : 0);
+      const price =
+        typeof priceRaw === "number"
+          ? priceRaw
+          : typeof priceRaw === "string"
+            ? Number.parseFloat(priceRaw) || 0
+            : 0;
       const priceStr = price > 0 ? `$${price.toFixed(2)}` : "$0.00";
-      const apiResponse = json.Response ? String(json.Response).replace(/<[^>]*>/g, '').substring(0, 500) : "";
-      const apiStatus = json.Status; // may be undefined in new API
+      const apiResponse = json.Response ? String(json.Response).replace(/<[^>]*>/g, "").substring(0, 500) : "";
+      const apiStatus = json.Status;
       const responseLower = apiResponse.toLowerCase();
+      const isDeclineResponse = DECLINE_INDICATORS.some((indicator) => responseLower.includes(indicator));
 
-      // "SITE DEAD" or "Proxy Dead" from new API → site is dead
-      if (responseLower.includes('site dead')) {
-        await supabase.from("gateway_urls").delete().eq("url", siteUrl);
-        console.log(`[Result] ${siteUrl} → DEAD (site dead response)`);
-        return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Site dead" };
+      if (responseLower.includes("site dead")) {
+        await supabase.from("gateway_urls").delete().eq("url", normalizedSiteUrl);
+        console.log(`[Result] ${normalizedSiteUrl} → DEAD (site dead response)`);
+        return { url: normalizedSiteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Site dead" };
       }
 
-      if (responseLower.includes('proxy dead')) {
-        await supabase.from("gateway_urls").delete().eq("url", siteUrl);
-        console.log(`[Result] ${siteUrl} → DEAD (proxy dead response)`);
-        return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Proxy dead" };
+      if (responseLower.includes("proxy dead")) {
+        await supabase.from("gateway_urls").delete().eq("url", normalizedSiteUrl);
+        console.log(`[Result] ${normalizedSiteUrl} → DEAD (proxy dead response)`);
+        return { url: normalizedSiteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Proxy dead" };
       }
 
-      // Authorize.net gateway → remove site
       if (gateway === "Authorize.net") {
-        await supabase.from("gateway_urls").delete().eq("url", siteUrl);
-        console.log(`[Result] ${siteUrl} → DEAD (Authorize.net)`);
-        return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Authorize.net gateway" };
+        await supabase.from("gateway_urls").delete().eq("url", normalizedSiteUrl);
+        console.log(`[Result] ${normalizedSiteUrl} → DEAD (Authorize.net)`);
+        return { url: normalizedSiteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Authorize.net gateway" };
       }
-
-      // CARD_DECLINED or other decline responses = site is LIVE (it processed the card)
-      const isDeclineResponse = responseLower.includes('card_declined') || responseLower.includes('declined') ||
-        responseLower.includes('insufficient') || responseLower.includes('do_not_honor') ||
-        responseLower.includes('3ds') || responseLower.includes('fraud') ||
-        responseLower.includes('restricted') || responseLower.includes('not_permitted');
 
       if (isDeclineResponse && gateway && gateway !== "UNKNOWN") {
         if (price > 0 && price <= 100) {
-          await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
+          await supabase.from("gateway_urls").upsert({ url: normalizedSiteUrl, price }, { onConflict: "url" });
         }
-        console.log(`[Result] ${siteUrl} → LIVE (declined, ${priceStr}, gateway: ${gateway})`);
-        return { url: siteUrl, status: "live", price, priceStr, apiResponse };
+        console.log(`[Result] ${normalizedSiteUrl} → LIVE (declined, ${priceStr}, gateway: ${gateway})`);
+        return { url: normalizedSiteUrl, status: "live", price, priceStr, apiResponse };
       }
 
       if (isDeclineResponse && (gateway === "UNKNOWN" || !gateway)) {
-        console.log(`[Result] ${siteUrl} → LIVE (declined, UNKNOWN gateway, site active)`);
-        return { url: siteUrl, status: "live", price: 0, priceStr: "$0.00", apiResponse };
+        console.log(`[Result] ${normalizedSiteUrl} → LIVE (declined, UNKNOWN gateway, site active)`);
+        return { url: normalizedSiteUrl, status: "live", price: 0, priceStr: "$0.00", apiResponse };
       }
 
-      // UNKNOWN gateway with no price and no decline → dead
       if ((gateway === "UNKNOWN" || !gateway) && price === 0) {
-        await supabase.from("gateway_urls").delete().eq("url", siteUrl);
-        console.log(`[Result] ${siteUrl} → DEAD (UNKNOWN gateway, no price)`);
-        return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Unknown gateway" };
+        await supabase.from("gateway_urls").delete().eq("url", normalizedSiteUrl);
+        console.log(`[Result] ${normalizedSiteUrl} → DEAD (UNKNOWN gateway, no price)`);
+        return { url: normalizedSiteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Unknown gateway" };
       }
 
-      // Price over $100 → remove site
       if (price > 100) {
-        await supabase.from("gateway_urls").delete().eq("url", siteUrl);
-        console.log(`[Result] ${siteUrl} → DEAD (price too high: ${priceStr})`);
-        return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Price exceeds $100" };
+        await supabase.from("gateway_urls").delete().eq("url", normalizedSiteUrl);
+        console.log(`[Result] ${normalizedSiteUrl} → DEAD (price too high: ${priceStr})`);
+        return { url: normalizedSiteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Price exceeds $100" };
       }
 
-      // Status=true → CHARGED/success → site is live
-      // OR new API: no Status field but known gateway + price → live
       if (apiStatus === true || (apiStatus === undefined && gateway && gateway !== "UNKNOWN" && price > 0 && price <= 100)) {
-        await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
-        console.log(`[Result] ${siteUrl} → LIVE (charged/active, ${priceStr}, gateway: ${gateway})`);
-        return { url: siteUrl, status: "live", price, priceStr, apiResponse };
+        await supabase.from("gateway_urls").upsert({ url: normalizedSiteUrl, price }, { onConflict: "url" });
+        console.log(`[Result] ${normalizedSiteUrl} → LIVE (charged/active, ${priceStr}, gateway: ${gateway})`);
+        return { url: normalizedSiteUrl, status: "live", price, priceStr, apiResponse };
       }
 
-      // Status=false → declined/error → site is still alive if gateway is known & price > 0
       if (apiStatus === false) {
-        // Check for MERCHANDISE_EXPECTED_PRICE_MISMATCH — site issue
-        if (responseLower.includes('merchandise_expected_price_mismatch')) {
-          await supabase.from("gateway_urls").delete().eq("url", siteUrl);
-          console.log(`[Result] ${siteUrl} → DEAD (price mismatch)`);
-          return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Price mismatch" };
+        if (responseLower.includes("merchandise_expected_price_mismatch")) {
+          await supabase.from("gateway_urls").delete().eq("url", normalizedSiteUrl);
+          console.log(`[Result] ${normalizedSiteUrl} → DEAD (price mismatch)`);
+          return { url: normalizedSiteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Price mismatch" };
         }
 
-        // Known gateway with price → site is LIVE (merchant processed the card)
         if (gateway && gateway !== "UNKNOWN" && price > 0) {
-          await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
-          console.log(`[Result] ${siteUrl} → LIVE (declined but active, ${priceStr}, gateway: ${gateway})`);
-          return { url: siteUrl, status: "live", price, priceStr, apiResponse };
+          await supabase.from("gateway_urls").upsert({ url: normalizedSiteUrl, price }, { onConflict: "url" });
+          console.log(`[Result] ${normalizedSiteUrl} → LIVE (declined but active, ${priceStr}, gateway: ${gateway})`);
+          return { url: normalizedSiteUrl, status: "live", price, priceStr, apiResponse };
         }
 
-        // Known gateway but no price → still alive, keep existing record
         if (gateway && gateway !== "UNKNOWN") {
-          // Check if response indicates the card was actually processed
-          if (responseLower.includes('declined') || responseLower.includes('do_not_honor') ||
-              responseLower.includes('card_declined') || responseLower.includes('insufficient') ||
-              responseLower.includes('generic_decline') || responseLower.includes('fraud') ||
-              responseLower.includes('restricted') || responseLower.includes('pickup_card') ||
-              responseLower.includes('lost_card') || responseLower.includes('stolen_card') ||
-              responseLower.includes('not_permitted') || responseLower.includes('3ds') ||
-              responseLower.includes('ds_required')) {
-            console.log(`[Result] ${siteUrl} → LIVE (declined, gateway: ${gateway}, no price update)`);
-            return { url: siteUrl, status: "live", price: 0, priceStr: "$0.00", apiResponse };
+          if (isDeclineResponse) {
+            console.log(`[Result] ${normalizedSiteUrl} → LIVE (declined, gateway: ${gateway}, no price update)`);
+            return { url: normalizedSiteUrl, status: "live", price: 0, priceStr: "$0.00", apiResponse };
           }
-          
-          // Error from gateway but not a decline → might be temporary
-          console.log(`[Result] ${siteUrl} → ERROR (gateway: ${gateway}, response: ${apiResponse.substring(0, 100)})`);
-          return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse, error: "Gateway error" };
+
+          console.log(`[Result] ${normalizedSiteUrl} → ERROR (gateway: ${gateway}, response: ${apiResponse.substring(0, 100)})`);
+          return { url: normalizedSiteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse, error: "Gateway error" };
         }
 
-        // No gateway, no price → dead
-        await supabase.from("gateway_urls").delete().eq("url", siteUrl);
-        console.log(`[Result] ${siteUrl} → DEAD (no gateway, no price)`);
-        return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse };
+        await supabase.from("gateway_urls").delete().eq("url", normalizedSiteUrl);
+        console.log(`[Result] ${normalizedSiteUrl} → DEAD (no gateway, no price)`);
+        return { url: normalizedSiteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse };
       }
 
-      // Fallback: has price → live
       if (price > 0 && price <= 100) {
-        await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
-        console.log(`[Result] ${siteUrl} → LIVE (price detected: ${priceStr})`);
-        return { url: siteUrl, status: "live", price, priceStr, apiResponse };
+        await supabase.from("gateway_urls").upsert({ url: normalizedSiteUrl, price }, { onConflict: "url" });
+        console.log(`[Result] ${normalizedSiteUrl} → LIVE (price detected: ${priceStr})`);
+        return { url: normalizedSiteUrl, status: "live", price, priceStr, apiResponse };
       }
 
-      console.log(`[Result] ${siteUrl} → DEAD (unrecognized: ${rawText.substring(0, 200)})`);
-      return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse };
-
+      console.log(`[Result] ${normalizedSiteUrl} → DEAD (unrecognized: ${rawText.substring(0, 200)})`);
+      return { url: normalizedSiteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse };
     } catch {
-      // Not JSON — text fallback
-      console.log(`[Result] ${siteUrl} → ERROR (non-JSON response: ${rawText.substring(0, 200)})`);
-      return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: rawText.substring(0, 500), error: "Non-JSON response" };
-    }
+      const apiResponse = rawText.replace(/<[^>]*>/g, "").substring(0, 500);
+      const responseLower = apiResponse.toLowerCase();
+      const fallbackPriceMatch = rawText.match(/"Price"\s*:\s*"?(\d+(?:\.\d{1,2})?)"?/i);
+      const fallbackPrice = fallbackPriceMatch ? Number.parseFloat(fallbackPriceMatch[1]) || 0 : 0;
+      const fallbackPriceStr = fallbackPrice > 0 ? `$${fallbackPrice.toFixed(2)}` : "$0.00";
+      const isDeclineResponse = DECLINE_INDICATORS.some((indicator) => responseLower.includes(indicator));
 
+      if (responseLower.includes("site dead")) {
+        await supabase.from("gateway_urls").delete().eq("url", normalizedSiteUrl);
+        console.log(`[Result] ${normalizedSiteUrl} → DEAD (text site dead response)`);
+        return { url: normalizedSiteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Site dead" };
+      }
+
+      if (responseLower.includes("proxy dead")) {
+        await supabase.from("gateway_urls").delete().eq("url", normalizedSiteUrl);
+        console.log(`[Result] ${normalizedSiteUrl} → DEAD (text proxy dead response)`);
+        return { url: normalizedSiteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Proxy dead" };
+      }
+
+      if (isDeclineResponse) {
+        if (fallbackPrice > 0 && fallbackPrice <= 100) {
+          await supabase.from("gateway_urls").upsert({ url: normalizedSiteUrl, price: fallbackPrice }, { onConflict: "url" });
+        }
+        console.log(`[Result] ${normalizedSiteUrl} → LIVE (text decline response, ${fallbackPriceStr})`);
+        return {
+          url: normalizedSiteUrl,
+          status: "live",
+          price: fallbackPrice,
+          priceStr: fallbackPriceStr,
+          apiResponse,
+        };
+      }
+
+      console.log(`[Result] ${normalizedSiteUrl} → ERROR (non-JSON response: ${rawText.substring(0, 200)})`);
+      return {
+        url: normalizedSiteUrl,
+        status: "error",
+        price: fallbackPrice,
+        priceStr: fallbackPriceStr,
+        apiResponse,
+        error: "Non-JSON response",
+      };
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
-    console.log(`[Error] ${siteUrl}: ${msg}`);
-    return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: msg.includes('abort') ? 'Timeout' : msg };
+    const msgLower = msg.toLowerCase();
+
+    if ((msgLower.includes("abort") || msgLower.includes("timeout") || msgLower.includes("fetch failed")) && retryCount < MAX_RETRIES) {
+      console.log(`[Retry] ${normalizedSiteUrl} → transient fetch error, retry ${retryCount + 1}/${MAX_RETRIES}`);
+      await wait(getRetryDelay(retryCount));
+      return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1);
+    }
+
+    console.log(`[Error] ${normalizedSiteUrl}: ${msg}`);
+    return {
+      url: normalizedSiteUrl,
+      status: "error",
+      price: 0,
+      priceStr: "$0.00",
+      error: msgLower.includes("abort") ? "Timeout" : msg,
+    };
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 };
 
@@ -250,18 +353,22 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    const anonClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
 
-    if (authError || !user) {
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: authError } = await anonClient.auth.getClaims(token);
+    const userId = claimsData?.claims?.sub as string | undefined;
+
+    if (authError || !userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const { data: roleData } = await supabase
       .from("user_roles")
       .select("role")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("role", "admin")
       .maybeSingle();
 
@@ -269,18 +376,21 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { url, proxy: proxyOverride, proxyId: proxyIdOverride } = await req.json();
+    const body = await req.json();
+    const url = typeof body?.url === "string" ? body.url.trim().replace(/\/+$/, "") : "";
+    const proxyOverride = typeof body?.proxy === "string" ? body.proxy.trim() : undefined;
+    const proxyIdOverride = typeof body?.proxyId === "string" ? body.proxyId : undefined;
 
-    if (!url || typeof url !== "string") {
+    if (!url) {
       return new Response(JSON.stringify({ error: "No URL provided" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     let proxyStr = "";
     let proxyId: string | null = null;
-    
-    if (proxyOverride && typeof proxyOverride === "string") {
+
+    if (proxyOverride) {
       proxyStr = proxyOverride;
-      if (proxyIdOverride && typeof proxyIdOverride === "string") {
+      if (proxyIdOverride) {
         proxyId = proxyIdOverride;
       }
     } else {
@@ -307,7 +417,7 @@ Deno.serve(async (req) => {
     console.error("Health check error:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Internal error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });
