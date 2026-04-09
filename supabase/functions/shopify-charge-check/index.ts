@@ -240,7 +240,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ s
       const responseText = (apiResponse || apiMessage || '').trim();
       if (isEmptyOrErrorOnly(responseText) && price === 0) {
         apiStatus = 'unknown';
-      } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true) {
+      } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED') {
         apiStatus = 'live';
         apiMessage = json.message || 'Charged';
       } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED') {
@@ -262,6 +262,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ s
         const combinedText = lower + ' ' + responseLower;
         
         if (combinedText.includes('order_placed') || combinedText.includes('order placed') || 
+            combinedText.includes('order completed') || combinedText.includes('order_completed') ||
             combinedText.includes('thank you') || combinedText.includes('thankyou') ||
             combinedText.includes('charged') || combinedText.includes('success') || 
             combinedText.includes('approved')) {
@@ -285,8 +286,8 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ s
       const lower = rawText.toLowerCase();
       if (isEmptyOrErrorOnly(lower)) {
         apiStatus = 'unknown';
-      } else if (lower.includes('order_placed') || lower.includes('order placed') || lower.includes('thank you') || 
-          lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
+      } else if (lower.includes('order_placed') || lower.includes('order placed') || lower.includes('order completed') || lower.includes('order_completed') ||
+          lower.includes('thank you') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
         apiStatus = 'live';
       } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || 
                  lower.includes('insufficient') ||
