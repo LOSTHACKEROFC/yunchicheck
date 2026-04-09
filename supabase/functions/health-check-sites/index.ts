@@ -72,6 +72,18 @@ const checkSingleSite = async (
 
     const rawLower = rawText.toLowerCase();
 
+    // Check for curl/DNS errors → retry with same site
+    const isCurlError = CURL_RETRY_INDICATORS.some(ind => rawLower.includes(ind));
+    if (isCurlError) {
+      if (retryCount < MAX_RETRIES) {
+        console.log(`[Retry] ${siteUrl} → curl/DNS error, retry ${retryCount + 1}/${MAX_RETRIES}`);
+        await new Promise(r => setTimeout(r, 2000 * (retryCount + 1)));
+        return checkSingleSite(siteUrl, proxyStr, proxyId, supabase, retryCount + 1);
+      }
+      console.log(`[Result] ${siteUrl} → ERROR (curl/DNS failed after ${MAX_RETRIES} retries)`);
+      return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", apiResponse: rawText.substring(0, 500), error: "DNS resolution failed" };
+    }
+
     // Check if proxy is dead
     const isProxyDead = PROXY_DEAD_INDICATORS.some(ind => rawLower.includes(ind));
     if (isProxyDead) {
