@@ -583,15 +583,7 @@ Deno.serve(async (req) => {
     const allProxiesDead = allProxiesDeadFlag || failedProxyIds.length >= userProxies.length;
     const randomSite = usedSite;
 
-    // Delete failed proxies from DB
-    if (failedProxyIds.length > 0) {
-      for (const proxyId of failedProxyIds) {
-        adminClient.from('user_proxies').delete().eq('id', proxyId).then(({ error: delErr }) => {
-          if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove proxy ${proxyId}:`, delErr);
-          else console.log(`[SHOPIFY-CHARGE] Removed dead proxy: ${proxyId}`);
-        });
-      }
-    }
+    // Dead proxies already removed inline during the proxy loop above
 
     // Auto-remove all bad sites discovered during the multi-site retry loop
     for (const badSite of badSiteUrls) {
