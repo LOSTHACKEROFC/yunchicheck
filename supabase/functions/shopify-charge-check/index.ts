@@ -446,9 +446,10 @@ Deno.serve(async (req) => {
     const formatProxy = (p: typeof userProxies[0]) => 
       p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
 
-    let result: { status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string } | null = null;
+    let result: { status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string; proxyDead?: boolean; siteDead?: boolean } | null = null;
     let usedSite = shuffledSites[0];
     const failedProxyIds: string[] = [];
+    const deadSiteUrls: string[] = [];
     let allProxiesDeadFlag = false;
 
     for (let siteAttempt = 0; siteAttempt < MAX_SITE_ATTEMPTS; siteAttempt++) {
@@ -473,7 +474,42 @@ Deno.serve(async (req) => {
         
         siteResult = await callApi(cc, currentSite.url, proxyStr);
         
-        // Check if proxy error
+        // If proxy dead flag is set, remove proxy and try next
+        if (siteResult.proxyDead) {
+          console.log(`[SHOPIFY-CHARGE] Proxy dead detected, removing proxy ${currentProxy.id} (${currentProxy.ip}:${currentProxy.port})`);
+          failedProxyIds.push(currentProxy.id);
+          // Immediately delete from DB
+          adminClient.from('user_proxies').delete().eq('id', currentProxy.id).then(({ error: delErr }) => {
+            if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove dead proxy ${currentProxy.id}:`, delErr);
+            else console.log(`[SHOPIFY-CHARGE] Dead proxy removed from DB: ${currentProxy.id}`);
+          });
+          continue; // try next proxy
+        }
+
+        // If site dead flag is set, remove site and try next site
+        if (siteResult.siteDead) {
+          console.log(`[SHOPIFY-CHARGE] Site dead detected, removing site: ${currentSite.url}`);
+          deadSiteUrls.push(currentSite.url);
+          adminClient.from('gateway_urls').delete().eq('url', currentSite.url).then(({ error: delErr }) => {
+            if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove dead site:`, delErr);
+            else console.log(`[SHOPIFY-CHARGE] Dead site removed: ${currentSite.url}`);
+          });
+          if (TELEGRAM_BOT_TOKEN) {
+            fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chat_id: ADMIN_TELEGRAM_CHAT_ID,
+                text: `🗑️ <b>SITE DEAD - AUTO-REMOVED</b>\n\n<code>${currentSite.url}</code>\n\n<i>API returned "Site Dead"</i>`,
+                parse_mode: "HTML",
+              }),
+            }).catch(() => {});
+          }
+          siteResult = null; // force try next site
+          break;
+        }
+
+        // Legacy proxy error check (407, connection refused without proxyDead flag)
         const rawLower = (siteResult.rawResponse || '').toLowerCase();
         let isValidApiResponse = false;
         try {
@@ -490,8 +526,12 @@ Deno.serve(async (req) => {
         );
         
         if (isProxyError) {
-          console.log(`[SHOPIFY-CHARGE] Proxy error, removing proxy ${currentProxy.ip}:${currentProxy.port}`);
+          console.log(`[SHOPIFY-CHARGE] Proxy error (legacy), removing proxy ${currentProxy.ip}:${currentProxy.port}`);
           failedProxyIds.push(currentProxy.id);
+          adminClient.from('user_proxies').delete().eq('id', currentProxy.id).then(({ error: delErr }) => {
+            if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove proxy ${currentProxy.id}:`, delErr);
+            else console.log(`[SHOPIFY-CHARGE] Removed dead proxy: ${currentProxy.id}`);
+          });
           continue; // try next proxy
         }
         
@@ -500,7 +540,11 @@ Deno.serve(async (req) => {
       }
 
       if (!siteResult) {
-        siteResult = { status: 'unknown', message: 'All proxies failed', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
+        // Site was dead or all proxies failed for this site — try next site
+        if (siteAttempt + 1 < MAX_SITE_ATTEMPTS) {
+          await new Promise(r => setTimeout(r, 300 + Math.random() * 300));
+        }
+        continue;
       }
 
       // If we got a definitive live/dead result, use it and stop
