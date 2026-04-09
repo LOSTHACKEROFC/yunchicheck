@@ -310,10 +310,16 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ s
 };
 
 // Wrapper with automatic retry for transient failures (timeout, empty response)
-const callApi = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string }> => {
+const callApi = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string; proxyDead?: boolean; siteDead?: boolean }> => {
   console.log(`[SHOPIFY-CHARGE] Calling: site=${site} proxy=${proxy ? 'yes' : 'none'}`);
   
   const result = await callApiOnce(cc, site, proxy);
+  
+  // If proxy dead or site dead, return immediately — no retry needed
+  if (result.proxyDead || result.siteDead) {
+    console.log(`[SHOPIFY-CHARGE] Result: ${result.proxyDead ? 'PROXY DEAD' : 'SITE DEAD'}`);
+    return result;
+  }
   
   // If result is a definitive live/dead, return immediately
   if (result.status === 'live' || result.status === 'dead') {
