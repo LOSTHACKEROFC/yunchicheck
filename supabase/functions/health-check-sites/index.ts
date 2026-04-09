@@ -353,6 +353,7 @@ const checkSingleSite = async (
       }
 
       console.log(`[Result] ${normalizedSiteUrl} → ERROR (non-JSON response: ${rawText.substring(0, 200)})`);
+      await sendHealthCheckDebug(normalizedSiteUrl, "Non-JSON response", rawText.substring(0, 500), proxyStr, retryCount);
       return {
         url: normalizedSiteUrl,
         status: "error",
@@ -373,6 +374,7 @@ const checkSingleSite = async (
     }
 
     console.log(`[Error] ${normalizedSiteUrl}: ${msg}`);
+    await sendHealthCheckDebug(normalizedSiteUrl, `Fetch error: ${msg}`, "", proxyStr, retryCount);
     return {
       url: normalizedSiteUrl,
       status: "error",
