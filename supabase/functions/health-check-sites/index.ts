@@ -102,15 +102,15 @@ const checkSingleSite = async (
       return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse: rawText.substring(0, 500), error: "Bad response" };
     }
 
-    // Parse JSON response from API: {"Gateway":"...", "Price":N, "Response":"...", "Status":bool, "cc":"..."}
+    // Parse JSON response from API: {"Response":"...", "Price":"N.NN", "Gate":"...", "CC":"...", "Site":"..."}
     try {
       const json = JSON.parse(rawText);
-      const gateway = json.Gateway || "";
-      const price = typeof json.Price === "number" ? json.Price : 0;
+      const gateway = json.Gateway || json.Gate || "";
+      const priceRaw = json.Price;
+      const price = typeof priceRaw === "number" ? priceRaw : (typeof priceRaw === "string" ? parseFloat(priceRaw) || 0 : 0);
       const priceStr = price > 0 ? `$${price.toFixed(2)}` : "$0.00";
       const apiResponse = json.Response ? String(json.Response).replace(/<[^>]*>/g, '').substring(0, 500) : "";
-      const apiStatus = json.Status; // boolean: true = charged, false = declined/error
-      const responseLower = apiResponse.toLowerCase();
+      const apiStatus = json.Status; // may be undefined in new API
 
       // Authorize.net gateway → remove site
       if (gateway === "Authorize.net") {
