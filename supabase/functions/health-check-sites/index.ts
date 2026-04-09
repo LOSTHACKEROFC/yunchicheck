@@ -9,7 +9,7 @@ const corsHeaders = {
 };
 
 const TEST_CC = "4266841674104656|03|27|908";
-const API_BASE_URL = "http://188.137.230.163:5000/shopify";
+const API_BASE_URL = "http://108.165.12.183:8081/";
 
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
@@ -41,7 +41,7 @@ const checkSingleSite = async (
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const apiUrl = `${API_BASE_URL}?site=${encodeURIComponent(siteUrl)}&cc=${encodeURIComponent(TEST_CC)}&proxy=${proxyStr}`;
+    const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(TEST_CC)}&url=${encodeURIComponent(siteUrl)}&proxy=${proxyStr}`;
 
     console.log(`[Check] ${siteUrl} | proxy=${proxyStr ? 'yes' : 'none'}`);
 

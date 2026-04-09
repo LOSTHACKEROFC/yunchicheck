@@ -13,7 +13,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "8496943061";
 
-const API_BASE_URL = "http://188.137.230.163:5000/shopify";
+const API_BASE_URL = "http://108.165.12.183:8081/";
 
 const badResponses = [
   "Site not supported",
@@ -137,7 +137,7 @@ const checkSingleCard = async (
   for (let attempt = 0; attempt < shuffledProxies.length; attempt++) {
     const currentProxy = shuffledProxies[attempt];
     const proxyStr = formatProxy(currentProxy);
-    const apiUrl = `${API_BASE_URL}?site=${encodeURIComponent(randomSite.url)}&cc=${encodeURIComponent(cc)}&proxy=${proxyStr}`;
+    const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(randomSite.url)}&proxy=${proxyStr}`;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
