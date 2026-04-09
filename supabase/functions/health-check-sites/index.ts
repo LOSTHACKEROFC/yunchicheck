@@ -99,19 +99,26 @@ const checkSingleSite = async (
         return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Authorize.net gateway" };
       }
 
-      // UNKNOWN gateway with no price → site not working
+      // UNKNOWN gateway with no price → check if response indicates site is alive
       if (gateway === "UNKNOWN" && price === 0) {
-        // Check if response has meaningful decline keywords → site IS alive
-        if (responseLower.includes('declined') || responseLower.includes('insufficient') ||
-            responseLower.includes('do_not_honor') || responseLower.includes('card_declined') ||
+        // CARD_DECLINED means the site processed the card → site IS alive
+        if (responseLower.includes('card_declined') || responseLower.includes('declined') || 
+            responseLower.includes('insufficient') || responseLower.includes('do_not_honor') || 
             responseLower.includes('3ds') || responseLower.includes('fraud') ||
             responseLower.includes('restricted') || responseLower.includes('not_permitted')) {
-          console.log(`[Result] ${siteUrl} → DEAD (UNKNOWN gateway, declined, no price)`);
-          return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse };
+          console.log(`[Result] ${siteUrl} → LIVE (UNKNOWN gateway, card declined = site active)`);
+          return { url: siteUrl, status: "live", price: 0, priceStr: "$0.00", apiResponse };
         }
         await supabase.from("gateway_urls").delete().eq("url", siteUrl);
         console.log(`[Result] ${siteUrl} → DEAD (UNKNOWN gateway, no price)`);
         return { url: siteUrl, status: "dead", price: 0, priceStr: "$0.00", apiResponse, error: "Unknown gateway" };
+      }
+
+      // CARD_DECLINED with known gateway and price → site is LIVE, update price
+      if (responseLower.includes('card_declined') && price > 0 && price <= 100) {
+        await supabase.from("gateway_urls").upsert({ url: siteUrl, price }, { onConflict: "url" });
+        console.log(`[Result] ${siteUrl} → LIVE (card_declined, ${priceStr}, gateway: ${gateway})`);
+        return { url: siteUrl, status: "live", price, priceStr, apiResponse };
       }
 
       // Price over $100 → remove site
