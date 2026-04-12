@@ -19,11 +19,9 @@ import {
   Shield,
   CheckCircle,
   XCircle,
-  Clock,
   Pencil,
   X,
   Check,
-  Skull,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -55,27 +53,68 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [removingDead, setRemovingDead] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  const getAuthenticatedUserId = useCallback(async () => {
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data.user) return null;
+    return data.user.id;
+  }, []);
+
+  const requireUserId = useCallback(async () => {
+    const userId = currentUserId ?? await getAuthenticatedUserId();
+    if (!userId) {
+      toast.error("Not authenticated");
+      return null;
+    }
+    if (!currentUserId) setCurrentUserId(userId);
+    return userId;
+  }, [currentUserId, getAuthenticatedUserId]);
+
+  const fetchProxies = useCallback(async () => {
+    setLoading(true);
+
+    const userId = await getAuthenticatedUserId();
+    if (!userId) {
+      setCurrentUserId(null);
+      setProxies([]);
+      setProxyStatuses({});
+      setLoading(false);
+      return;
+    }
+
+    setCurrentUserId(userId);
+
+    const { data, error } = await supabase
+      .from("user_proxies" as any)
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true });
+
+    if (!error && data) {
+      const rows = (data ?? []) as unknown as UserProxy[];
+      setProxies(rows);
+      setProxyStatuses((prev) => {
+        const allowedIds = new Set(rows.map((proxy) => proxy.id));
+        return Object.fromEntries(
+          Object.entries(prev).filter(([id]) => allowedIds.has(id)),
+        ) as ProxyStatus;
+      });
+    } else {
+      setProxies([]);
+      setProxyStatuses({});
+    }
+
+    setLoading(false);
+  }, [getAuthenticatedUserId]);
 
   useEffect(() => {
-    fetchProxies();
-  }, []);
+    void fetchProxies();
+  }, [fetchProxies]);
 
   useEffect(() => {
     onProxyCountChange?.(proxies.length);
   }, [proxies.length, onProxyCountChange]);
-
-  const fetchProxies = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("user_proxies" as any)
-      .select("*")
-      .order("created_at", { ascending: true });
-
-    if (!error && data) {
-      setProxies(data as any);
-    }
-    setLoading(false);
-  };
 
   const parseProxy = (raw: string): { ip: string; port: string; username?: string; password?: string } | null => {
     const parts = raw.trim().split(":");
@@ -107,71 +146,127 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
       toast.error("Maximum 10 proxies allowed");
       return;
     }
+
     const parsed = parseProxy(newProxy);
     if (!parsed) {
       toast.error("Format: ip:port or ip:port:user:pass");
       return;
     }
+
     setAdding(true);
     toast.info("Checking proxy liveness...");
+
     const results = await checkProxiesViaEdge([parsed]);
     if (results[0]?.status !== "live") {
       toast.error(`Proxy ${parsed.ip}:${parsed.port} is DEAD — not added`);
       setAdding(false);
       return;
     }
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { toast.error("Not authenticated"); setAdding(false); return; }
+
+    const userId = await requireUserId();
+    if (!userId) {
+      setAdding(false);
+      return;
+    }
 
     const { error } = await supabase
       .from("user_proxies" as any)
-      .insert({ user_id: user.id, ip: parsed.ip, port: parsed.port, username: parsed.username || null, password: parsed.password || null } as any);
+      .insert({
+        user_id: userId,
+        ip: parsed.ip,
+        port: parsed.port,
+        username: parsed.username || null,
+        password: parsed.password || null,
+      } as any);
 
-    if (error) { toast.error("Failed to add proxy"); }
-    else { setNewProxy(""); fetchProxies(); toast.success(`Proxy ${parsed.ip}:${parsed.port} is LIVE ✓ — added`); }
+    if (error) {
+      toast.error("Failed to add proxy");
+    } else {
+      setNewProxy("");
+      await fetchProxies();
+      toast.success(`Proxy ${parsed.ip}:${parsed.port} is LIVE ✓ — added`);
+    }
+
     setAdding(false);
   };
 
   const addBulkProxies = async () => {
     const lines = bulkText.split("\n").map(l => l.trim()).filter(Boolean);
     if (!lines.length) return;
+
     const remaining = 10 - proxies.length;
-    if (remaining <= 0) { toast.error("Maximum 10 proxies allowed"); return; }
+    if (remaining <= 0) {
+      toast.error("Maximum 10 proxies allowed");
+      return;
+    }
 
     const toAdd = lines.slice(0, remaining);
     const parsed = toAdd.map(parseProxy).filter(Boolean) as { ip: string; port: string; username?: string; password?: string }[];
-    if (!parsed.length) { toast.error("No valid proxies found"); return; }
+    if (!parsed.length) {
+      toast.error("No valid proxies found");
+      return;
+    }
 
     setAdding(true);
     toast.info(`Checking ${parsed.length} proxies...`);
+
     const results = await checkProxiesViaEdge(parsed);
     const liveProxies = results.filter(r => r.status === "live");
     const deadCount = results.filter(r => r.status === "dead").length;
 
-    if (liveProxies.length === 0) { toast.error(`All ${parsed.length} proxies are DEAD`); setAdding(false); return; }
+    if (liveProxies.length === 0) {
+      toast.error(`All ${parsed.length} proxies are DEAD`);
+      setAdding(false);
+      return;
+    }
     if (deadCount > 0) toast.warning(`${deadCount} dead proxies skipped`);
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { toast.error("Not authenticated"); setAdding(false); return; }
+    const userId = await requireUserId();
+    if (!userId) {
+      setAdding(false);
+      return;
+    }
 
-    const rows = liveProxies.map(p => ({
-      user_id: user.id, ip: p.ip, port: p.port,
-      username: (parsed.find(pp => pp.ip === p.ip && pp.port === p.port)?.username) || null,
-      password: (parsed.find(pp => pp.ip === p.ip && pp.port === p.port)?.password) || null,
+    const rows = liveProxies.map((p) => ({
+      user_id: userId,
+      ip: p.ip,
+      port: p.port,
+      username: parsed.find((pp) => pp.ip === p.ip && pp.port === p.port)?.username || null,
+      password: parsed.find((pp) => pp.ip === p.ip && pp.port === p.port)?.password || null,
     }));
 
     const { error } = await supabase.from("user_proxies" as any).insert(rows as any);
-    if (error) { toast.error("Failed to add proxies"); }
-    else { setBulkText(""); fetchProxies(); toast.success(`${liveProxies.length} live proxies added`); }
+    if (error) {
+      toast.error("Failed to add proxies");
+    } else {
+      setBulkText("");
+      await fetchProxies();
+      toast.success(`${liveProxies.length} live proxies added`);
+    }
+
     setAdding(false);
   };
 
   const removeProxy = async (id: string) => {
-    const { error } = await supabase.from("user_proxies" as any).delete().eq("id", id);
+    const userId = await requireUserId();
+    if (!userId) return;
+
+    const { error } = await supabase
+      .from("user_proxies" as any)
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
+
     if (!error) {
       setProxies(prev => prev.filter(p => p.id !== id));
-      setProxyStatuses(prev => { const c = { ...prev }; delete c[id]; return c; });
+      setProxyStatuses(prev => {
+        const c = { ...prev };
+        delete c[id];
+        return c;
+      });
       toast.success("Proxy removed");
+    } else {
+      toast.error("Failed to remove proxy");
     }
   };
 
@@ -181,11 +276,17 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
     setEditValue(val);
   };
 
-  const cancelEdit = () => { setEditingId(null); setEditValue(""); };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditValue("");
+  };
 
   const saveEdit = async (id: string) => {
     const parsed = parseProxy(editValue);
-    if (!parsed) { toast.error("Invalid format"); return; }
+    if (!parsed) {
+      toast.error("Invalid format");
+      return;
+    }
 
     toast.info("Verifying updated proxy...");
     const results = await checkProxiesViaEdge([parsed]);
@@ -194,16 +295,27 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
       return;
     }
 
+    const userId = await requireUserId();
+    if (!userId) return;
+
     const { error } = await supabase
       .from("user_proxies" as any)
-      .update({ ip: parsed.ip, port: parsed.port, username: parsed.username || null, password: parsed.password || null } as any)
-      .eq("id", id);
+      .update({
+        ip: parsed.ip,
+        port: parsed.port,
+        username: parsed.username || null,
+        password: parsed.password || null,
+      } as any)
+      .eq("id", id)
+      .eq("user_id", userId);
 
-    if (error) { toast.error("Failed to update"); }
-    else {
-      setEditingId(null); setEditValue("");
+    if (error) {
+      toast.error("Failed to update");
+    } else {
+      setEditingId(null);
+      setEditValue("");
       setProxyStatuses(prev => ({ ...prev, [id]: "live" }));
-      fetchProxies();
+      await fetchProxies();
       toast.success("Proxy updated & verified LIVE ✓");
     }
   };
@@ -220,20 +332,26 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
 
   const checkAllProxies = async () => {
     if (!proxies.length) return;
+
     setCheckingAll(true);
     const checkingState: ProxyStatus = {};
-    proxies.forEach(p => { checkingState[p.id] = "checking"; });
+    proxies.forEach((p) => {
+      checkingState[p.id] = "checking";
+    });
     setProxyStatuses(checkingState);
 
-    const proxyList = proxies.map(p => ({
-      id: p.id, ip: p.ip, port: p.port,
-      username: p.username || undefined, password: p.password || undefined,
+    const proxyList = proxies.map((p) => ({
+      id: p.id,
+      ip: p.ip,
+      port: p.port,
+      username: p.username || undefined,
+      password: p.password || undefined,
     }));
     const results = await checkProxiesViaEdge(proxyList);
 
     const newStatuses: ProxyStatus = {};
     const deadIds: string[] = [];
-    results.forEach(r => {
+    results.forEach((r) => {
       if (r.id) {
         newStatuses[r.id] = r.status === "live" ? "live" : "dead";
         if (r.status !== "live") deadIds.push(r.id);
@@ -245,12 +363,20 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
     const dead = results.filter(r => r.status !== "live").length;
     setCheckingAll(false);
 
-    // Auto-remove dead proxies
     if (deadIds.length > 0) {
+      const userId = await requireUserId();
+      if (!userId) return;
+
       setRemovingDead(true);
-      for (const did of deadIds) {
-        await supabase.from("user_proxies" as any).delete().eq("id", did);
-      }
+      await Promise.all(
+        deadIds.map((did) =>
+          supabase
+            .from("user_proxies" as any)
+            .delete()
+            .eq("id", did)
+            .eq("user_id", userId),
+        ),
+      );
       setProxies(prev => prev.filter(p => !deadIds.includes(p.id)));
       setProxyStatuses(prev => {
         const c = { ...prev };
@@ -285,7 +411,6 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
 
   return (
     <div className="rounded-xl border border-lime-500/20 bg-gradient-to-b from-lime-500/5 to-transparent overflow-hidden">
-      {/* Header */}
       <div className="px-4 py-3 border-b border-lime-500/10 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-lime-500/15 flex items-center justify-center">
@@ -320,7 +445,6 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
           </div>
         ) : (
           <>
-            {/* Proxy List — Scrollable */}
             {proxies.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -352,12 +476,11 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
                           proxyStatuses[proxy.id] === "live"
                             ? "bg-emerald-500/5 border-emerald-500/20"
                             : proxyStatuses[proxy.id] === "dead"
-                            ? "bg-red-500/5 border-red-500/20"
-                            : "bg-background/60 border-border/50 hover:border-border"
+                              ? "bg-red-500/5 border-red-500/20"
+                              : "bg-background/60 border-border/50 hover:border-border"
                         }`}
                       >
                         {editingId === proxy.id ? (
-                          /* Edit Mode */
                           <div className="flex items-center gap-2">
                             <Input
                               value={editValue}
@@ -384,7 +507,6 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
                             </Button>
                           </div>
                         ) : (
-                          /* View Mode */
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2.5 min-w-0 flex-1">
                               {getStatusIcon(proxy.id)}
@@ -435,7 +557,6 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
               </div>
             )}
 
-            {/* Add Proxies */}
             {proxies.length < 10 && (
               <Tabs defaultValue="single" className="w-full">
                 <TabsList className="w-full h-7 bg-background/50">
@@ -490,7 +611,6 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
               </Tabs>
             )}
 
-            {/* Empty State */}
             {proxies.length === 0 && !loading && (
               <div className="text-center py-4 space-y-1">
                 <WifiOff className="w-6 h-6 text-muted-foreground/40 mx-auto" />
