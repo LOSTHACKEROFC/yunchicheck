@@ -92,9 +92,10 @@ const UserProxyManager = ({ onProxyCountChange }: UserProxyManagerProps) => {
       .order("created_at", { ascending: true });
 
     if (!error && data) {
-      setProxies(data as any);
+      const rows = (data ?? []) as unknown as UserProxy[];
+      setProxies(rows);
       setProxyStatuses((prev) => {
-        const allowedIds = new Set((data as UserProxy[]).map((proxy) => proxy.id));
+        const allowedIds = new Set(rows.map((proxy) => proxy.id));
         return Object.fromEntries(
           Object.entries(prev).filter(([id]) => allowedIds.has(id)),
         ) as ProxyStatus;
