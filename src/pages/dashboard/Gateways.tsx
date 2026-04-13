@@ -337,7 +337,7 @@ const Gateways = () => {
   const shopifyInvokeActiveRef = useRef(0);
   const shopifyInvokeQueueRef = useRef<Array<() => void>>([]);
   const SHOPIFY_WARMUP_TTL_MS = 2 * 60 * 1000;
-  const SHOPIFY_MAX_PARALLEL_INVOCATIONS = 50;
+  const SHOPIFY_MAX_PARALLEL_INVOCATIONS = 24;
 
 
   // Gateway history state
@@ -1956,7 +1956,12 @@ const Gateways = () => {
           sdkMessage.includes('edge function returned 503') || sdkMessage.includes('boot_error');
 
         if (isRetryable && attempt < MAX_RETRIES) {
-          const baseDelay = isBootError ? 1200 : 900;
+          if (isBootError) {
+            shopifyWarmupAtRef.current = 0;
+            await warmupShopifyFunction();
+          }
+
+          const baseDelay = isBootError ? 1600 : 900;
           const backoffMs = Math.min(12000, baseDelay * (2 ** (attempt - 1)) + Math.floor(Math.random() * 500));
           console.warn(`[SHOPIFY] Retry ${attempt}/${MAX_RETRIES} after ${statusCode ?? 'unknown'} (${isBootError ? 'BOOT_ERROR' : 'transient'}) in ${backoffMs}ms`);
           await new Promise(r => setTimeout(r, backoffMs));
@@ -1982,6 +1987,11 @@ const Gateways = () => {
         const isRetryableException = msg.includes('network') || msg.includes('failed to fetch') || msg.includes('503') || msg.includes('boot_error');
 
         if (isRetryableException && attempt < MAX_RETRIES) {
+          if (msg.includes('503') || msg.includes('boot_error')) {
+            shopifyWarmupAtRef.current = 0;
+            await warmupShopifyFunction();
+          }
+
           const backoffMs = Math.min(12000, 1000 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 500));
           await new Promise(r => setTimeout(r, backoffMs));
           continue;
@@ -3230,12 +3240,12 @@ const Gateways = () => {
       }
     };
 
-    // Keep Shopify concurrency lower to avoid edge function cold-start bursts
+    // Keep 50-card Shopify sessions, but pace edge invocations to avoid BOOT_ERROR bursts
     const isShopifyBulk = selectedGateway.id === "shopify_charge";
     let completedCount = 0;
 
     if (isShopifyBulk) {
-      // HealthCheck-style batch model: 50 concurrent, wait for 49 before next batch
+      // HealthCheck-style session model: 50 cards queued, roll into the next session after 49 completions
       const SHOPIFY_CONCURRENCY = 50;
       const MIN_COMPLETE_BEFORE_NEXT = 49;
       let cardIndex = 0;
@@ -3249,7 +3259,7 @@ const Gateways = () => {
           const promises = batchIndices.map(async (idx, launchOrder) => {
             if (bulkAbortRef.current) return;
             if (launchOrder > 0) {
-              const launchDelay = launchOrder * 120 + Math.floor(Math.random() * 80);
+              const launchDelay = launchOrder * 180 + Math.floor(Math.random() * 120);
               await new Promise(r => setTimeout(r, launchDelay));
             }
             if (bulkAbortRef.current) return;
@@ -3282,9 +3292,9 @@ const Gateways = () => {
         await batchDonePromise;
         cardIndex = batchEnd;
 
-        // Small gap between batches so the backend can recycle workers cleanly
+        // Small gap between sessions so the backend can recycle workers cleanly
         if (cardIndex < affordableCards.length && !bulkAbortRef.current) {
-          await new Promise(r => setTimeout(r, 250));
+          await new Promise(r => setTimeout(r, 600));
         }
       }
     } else {
