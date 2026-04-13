@@ -180,6 +180,12 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ s
 
     const rawLower = rawText.toLowerCase();
 
+    // Check for curl/DNS transient errors — treat as UNKNOWN (retryable)
+    const isCurlTransient = rawLower.includes('failed to perform') || rawLower.includes('getaddrinfo') || rawLower.includes('could not resolve proxy');
+    if (isCurlTransient) {
+      return { status: 'unknown', message: 'Curl/DNS transient error', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
+    }
+
     // Check for proxy dead indicators FIRST
     const isProxyDead = PROXY_DEAD_INDICATORS.some(ind => rawLower.includes(ind));
     if (isProxyDead) {
@@ -328,17 +334,22 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
     return result;
   }
   
-  // For unknown results caused by timeout/empty/transient errors, retry once after a short delay
+  // For unknown results caused by timeout/empty/transient/curl errors, retry up to 2 times
   const msg = (result.message || '').toLowerCase();
   const isRetryable = msg.includes('timeout') || msg.includes('empty') || msg.includes('abort') || 
-                      msg.includes('request failed') || result.rawResponse === '';
+                      msg.includes('request failed') || msg.includes('curl') || msg.includes('getaddrinfo') ||
+                      msg.includes('could not resolve proxy') || result.rawResponse === '';
   
   if (isRetryable) {
-    console.log(`[SHOPIFY-CHARGE] Retrying once after transient failure: ${result.message}`);
-    await new Promise(r => setTimeout(r, 800 + Math.random() * 400));
-    const retryResult = await callApiOnce(cc, site, proxy);
-    console.log(`[SHOPIFY-CHARGE] Retry result: ${retryResult.status}`);
-    return retryResult;
+    for (let retry = 1; retry <= 2; retry++) {
+      console.log(`[SHOPIFY-CHARGE] Retry ${retry}/2 after transient failure: ${result.message}`);
+      await new Promise(r => setTimeout(r, 800 * retry + Math.random() * 400));
+      const retryResult = await callApiOnce(cc, site, proxy);
+      console.log(`[SHOPIFY-CHARGE] Retry ${retry} result: ${retryResult.status}`);
+      if (retryResult.status !== 'unknown') return retryResult;
+      // If still unknown on last retry, return the last result
+      if (retry === 2) return retryResult;
+    }
   }
   
   return result;
