@@ -337,7 +337,7 @@ const Gateways = () => {
   const shopifyInvokeActiveRef = useRef(0);
   const shopifyInvokeQueueRef = useRef<Array<() => void>>([]);
   const SHOPIFY_WARMUP_TTL_MS = 2 * 60 * 1000;
-  const SHOPIFY_MAX_PARALLEL_INVOCATIONS = 8;
+  const SHOPIFY_MAX_PARALLEL_INVOCATIONS = 50;
 
 
   // Gateway history state
@@ -3235,9 +3235,9 @@ const Gateways = () => {
     let completedCount = 0;
 
     if (isShopifyBulk) {
-      // Conservative Shopify batch model to avoid edge cold-start stampedes
-      const SHOPIFY_CONCURRENCY = 8;
-      const MIN_COMPLETE_BEFORE_NEXT = 8;
+      // HealthCheck-style batch model: 50 concurrent, wait for 49 before next batch
+      const SHOPIFY_CONCURRENCY = 50;
+      const MIN_COMPLETE_BEFORE_NEXT = 49;
       let cardIndex = 0;
 
       while (cardIndex < affordableCards.length && !bulkAbortRef.current) {
@@ -3249,7 +3249,7 @@ const Gateways = () => {
           const promises = batchIndices.map(async (idx, launchOrder) => {
             if (bulkAbortRef.current) return;
             if (launchOrder > 0) {
-              const launchDelay = launchOrder * 220 + Math.floor(Math.random() * 120);
+              const launchDelay = launchOrder * 120 + Math.floor(Math.random() * 80);
               await new Promise(r => setTimeout(r, launchDelay));
             }
             if (bulkAbortRef.current) return;
@@ -3284,7 +3284,7 @@ const Gateways = () => {
 
         // Small gap between batches so the backend can recycle workers cleanly
         if (cardIndex < affordableCards.length && !bulkAbortRef.current) {
-          await new Promise(r => setTimeout(r, 900));
+          await new Promise(r => setTimeout(r, 250));
         }
       }
     } else {
