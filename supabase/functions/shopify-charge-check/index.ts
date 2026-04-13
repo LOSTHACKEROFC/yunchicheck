@@ -180,10 +180,10 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ s
 
     const rawLower = rawText.toLowerCase();
 
-    // Check for curl/DNS transient errors — treat as UNKNOWN (retryable)
-    const isCurlTransient = rawLower.includes('failed to perform') || rawLower.includes('getaddrinfo') || rawLower.includes('could not resolve proxy');
+    // Check for curl/DNS/transient API errors — treat as UNKNOWN (retryable)
+    const isCurlTransient = rawLower.includes('failed to perform') || rawLower.includes('getaddrinfo') || rawLower.includes('could not resolve proxy') || rawLower.includes('tokenize_fail') || rawLower.includes('no_session_token');
     if (isCurlTransient) {
-      return { status: 'unknown', message: 'Curl/DNS transient error', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
+      return { status: 'unknown', message: 'Transient error (retryable)', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
     }
 
     // Check for proxy dead indicators FIRST
