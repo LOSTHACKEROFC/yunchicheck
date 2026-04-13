@@ -333,7 +333,11 @@ const Gateways = () => {
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bulkStatsRef = useRef({ completed: 0, total: 0, startTime: 0 });
   const shopifyWarmupAtRef = useRef(0);
+  const shopifyWarmupPromiseRef = useRef<Promise<void> | null>(null);
+  const shopifyInvokeActiveRef = useRef(0);
+  const shopifyInvokeQueueRef = useRef<Array<() => void>>([]);
   const SHOPIFY_WARMUP_TTL_MS = 2 * 60 * 1000;
+  const SHOPIFY_MAX_PARALLEL_INVOCATIONS = 8;
 
 
   // Gateway history state
@@ -1829,18 +1833,54 @@ const Gateways = () => {
   };
 
   // Shopify Charge API check via edge function - uses user proxies + auto-rotating sites
+  const acquireShopifyInvocationSlot = async () => {
+    if (shopifyInvokeActiveRef.current < SHOPIFY_MAX_PARALLEL_INVOCATIONS) {
+      shopifyInvokeActiveRef.current += 1;
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      shopifyInvokeQueueRef.current.push(() => {
+        shopifyInvokeActiveRef.current += 1;
+        resolve();
+      });
+    });
+  };
+
+  const releaseShopifyInvocationSlot = () => {
+    shopifyInvokeActiveRef.current = Math.max(0, shopifyInvokeActiveRef.current - 1);
+    const next = shopifyInvokeQueueRef.current.shift();
+    if (next) next();
+  };
+
   const warmupShopifyFunction = async () => {
+    if (shopifyWarmupPromiseRef.current) {
+      await shopifyWarmupPromiseRef.current;
+      return;
+    }
+
     const now = Date.now();
     if (now - shopifyWarmupAtRef.current < SHOPIFY_WARMUP_TTL_MS) return;
 
-    shopifyWarmupAtRef.current = now;
-    try {
-      await supabase.functions.invoke('shopify-charge-check', {
-        body: { cc: 'warmup' },
-      });
-    } catch {
-      // Warmup is best-effort only
-    }
+    shopifyWarmupPromiseRef.current = (async () => {
+      try {
+        await acquireShopifyInvocationSlot();
+        try {
+          await supabase.functions.invoke('shopify-charge-check', {
+            body: { cc: 'warmup' },
+          });
+          shopifyWarmupAtRef.current = Date.now();
+        } finally {
+          releaseShopifyInvocationSlot();
+        }
+      } catch {
+        // Warmup is best-effort only
+      } finally {
+        shopifyWarmupPromiseRef.current = null;
+      }
+    })();
+
+    await shopifyWarmupPromiseRef.current;
   };
 
   const checkCardViaShopify = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
@@ -1851,9 +1891,19 @@ const Gateways = () => {
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const { data, error } = await supabase.functions.invoke('shopify-charge-check', {
-          body: { cc, priceGroup: shopifyPriceGroup }
-        });
+        await acquireShopifyInvocationSlot();
+        let data: any;
+        let error: any;
+
+        try {
+          const response = await supabase.functions.invoke('shopify-charge-check', {
+            body: { cc, priceGroup: shopifyPriceGroup }
+          });
+          data = response.data;
+          error = response.error;
+        } finally {
+          releaseShopifyInvocationSlot();
+        }
 
         if (!error) {
           console.log('[SHOPIFY] Response:', data);
@@ -3185,9 +3235,9 @@ const Gateways = () => {
     let completedCount = 0;
 
     if (isShopifyBulk) {
-      // HealthCheck-style batch model: 50 concurrent, slight jittered stagger to avoid cold-start bursts
-      const SHOPIFY_CONCURRENCY = 50;
-      const MIN_COMPLETE_BEFORE_NEXT = 49;
+      // Conservative Shopify batch model to avoid edge cold-start stampedes
+      const SHOPIFY_CONCURRENCY = 8;
+      const MIN_COMPLETE_BEFORE_NEXT = 8;
       let cardIndex = 0;
 
       while (cardIndex < affordableCards.length && !bulkAbortRef.current) {
@@ -3199,7 +3249,7 @@ const Gateways = () => {
           const promises = batchIndices.map(async (idx, launchOrder) => {
             if (bulkAbortRef.current) return;
             if (launchOrder > 0) {
-              const launchDelay = launchOrder * 120 + Math.floor(Math.random() * 80);
+              const launchDelay = launchOrder * 220 + Math.floor(Math.random() * 120);
               await new Promise(r => setTimeout(r, launchDelay));
             }
             if (bulkAbortRef.current) return;
@@ -3234,7 +3284,7 @@ const Gateways = () => {
 
         // Small gap between batches so the backend can recycle workers cleanly
         if (cardIndex < affordableCards.length && !bulkAbortRef.current) {
-          await new Promise(r => setTimeout(r, 250));
+          await new Promise(r => setTimeout(r, 900));
         }
       }
     } else {
