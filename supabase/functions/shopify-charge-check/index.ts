@@ -66,7 +66,7 @@ const sendAdminDebug = async (
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        chat_id: ADMIN_TELEGRAM_CHAT_ID,
+        chat_id: SHOPIFY_DEBUG_CHAT_ID,
         text: debugMessage,
         parse_mode: "HTML",
       }),
@@ -500,7 +500,7 @@ Deno.serve(async (req) => {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                chat_id: ADMIN_TELEGRAM_CHAT_ID,
+                chat_id: SHOPIFY_DEBUG_CHAT_ID,
                 text: `🗑️ <b>SITE DEAD - AUTO-REMOVED</b>\n\n<code>${currentSite.url}</code>\n\n<i>API returned "Site Dead"</i>`,
                 parse_mode: "HTML",
               }),
@@ -600,7 +600,7 @@ Deno.serve(async (req) => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            chat_id: ADMIN_TELEGRAM_CHAT_ID,
+            chat_id: SHOPIFY_DEBUG_CHAT_ID,
             text: `🗑️ <b>SHOPIFY SITE AUTO-REMOVED</b>\n\n<code>${badSite.url}</code>\n\n<i>Reason: ${badSite.reason} (during multi-site retry)</i>`,
             parse_mode: "HTML",
           }),
@@ -632,7 +632,7 @@ Deno.serve(async (req) => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              chat_id: ADMIN_TELEGRAM_CHAT_ID,
+              chat_id: SHOPIFY_DEBUG_CHAT_ID,
               text: `🗑️ <b>SHOPIFY SITE AUTO-REMOVED (3 STRIKES)</b>\n\n<code>${key}</code>\n\n<i>Reason: ${matchedStrikeResponse} x${STRIKE_THRESHOLD}</i>`,
               parse_mode: "HTML",
             }),
@@ -655,7 +655,7 @@ Deno.serve(async (req) => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            chat_id: ADMIN_TELEGRAM_CHAT_ID,
+            chat_id: SHOPIFY_DEBUG_CHAT_ID,
             text: `🗑️ <b>SHOPIFY SITE AUTO-REMOVED</b>\n\n<code>${randomSite.url}</code>\n\n<i>Reason: ${removalReason}</i>`,
             parse_mode: "HTML",
           }),
