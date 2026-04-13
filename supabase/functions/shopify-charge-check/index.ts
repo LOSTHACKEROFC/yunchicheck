@@ -154,6 +154,9 @@ const SITE_DEAD_INDICATORS = [
   "site dead",
 ];
 
+const UNKNOWN_RETRY_ATTEMPTS = 4;
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string; proxyDead?: boolean; siteDead?: boolean }> => {
   const apiUrl = buildApiUrl(cc, site, proxy);
   
@@ -316,11 +319,11 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ s
   }
 };
 
-// Wrapper with automatic retry for transient failures (timeout, empty response)
+// Wrapper with automatic retry for all unknown responses
 const callApi = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string; proxyDead?: boolean; siteDead?: boolean }> => {
   console.log(`[SHOPIFY-CHARGE] Calling: site=${site} proxy=${proxy ? 'yes' : 'none'}`);
   
-  const result = await callApiOnce(cc, site, proxy);
+  let result = await callApiOnce(cc, site, proxy);
   
   // If proxy dead or site dead, return immediately — no retry needed
   if (result.proxyDead || result.siteDead) {
@@ -334,22 +337,27 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
     return result;
   }
   
-  // For unknown results caused by timeout/empty/transient/curl errors, retry up to 2 times
-  const msg = (result.message || '').toLowerCase();
-   const isRetryable = msg.includes('timeout') || msg.includes('empty') || msg.includes('abort') || 
-                       msg.includes('request failed') || msg.includes('curl') || msg.includes('getaddrinfo') ||
-                       msg.includes('could not resolve proxy') || msg.includes('tokenize_fail') || 
-                       msg.includes('no_session_token') || result.rawResponse === '';
-  
-  if (isRetryable) {
-    for (let retry = 1; retry <= 2; retry++) {
-      console.log(`[SHOPIFY-CHARGE] Retry ${retry}/2 after transient failure: ${result.message}`);
-      await new Promise(r => setTimeout(r, 800 * retry + Math.random() * 400));
-      const retryResult = await callApiOnce(cc, site, proxy);
-      console.log(`[SHOPIFY-CHARGE] Retry ${retry} result: ${retryResult.status}`);
-      if (retryResult.status !== 'unknown') return retryResult;
-      // If still unknown on last retry, return the last result
-      if (retry === 2) return retryResult;
+  // Retry every unknown result, not just specific message patterns
+  if (result.status === 'unknown') {
+    for (let retry = 1; retry <= UNKNOWN_RETRY_ATTEMPTS; retry++) {
+      const delayMs = 1000 * retry + Math.floor(Math.random() * 500);
+      console.log(
+        `[SHOPIFY-CHARGE] Retry ${retry}/${UNKNOWN_RETRY_ATTEMPTS} after unknown: ${result.message} (${delayMs}ms)`
+      );
+      await wait(delayMs);
+
+      result = await callApiOnce(cc, site, proxy);
+      console.log(
+        `[SHOPIFY-CHARGE] Retry ${retry}/${UNKNOWN_RETRY_ATTEMPTS} result: ${result.status} - ${result.message}`
+      );
+
+      if (result.proxyDead || result.siteDead) {
+        return result;
+      }
+
+      if (result.status === 'live' || result.status === 'dead') {
+        return result;
+      }
     }
   }
   
@@ -567,25 +575,27 @@ Deno.serve(async (req) => {
         break;
       }
 
-      // Site returned unknown/error — mark this site as bad and try next
+      // Site returned unknown/error — keep as fallback and try next site when available
       const rawLower = (siteResult.rawResponse || '').toLowerCase();
       const isBadSiteResponse = badResponses.some(bad => rawLower.includes(bad.toLowerCase()));
       const isSiteError = !siteResult.rawResponse || rawLower === '' || rawLower.includes('empty response') || rawLower.includes('timeout') || isBadSiteResponse;
+
+      result = siteResult;
 
       if (isSiteError) {
         const reason = isBadSiteResponse ? 'Bad Shopify response' : (rawLower.includes('timeout') ? 'Timeout' : 'Empty/Error response');
         badSiteUrls.push({ url: currentSite.url, reason });
         console.log(`[SHOPIFY-CHARGE] Site error (${reason}), marking ${currentSite.url} and trying next site...`);
-        result = siteResult; // keep as fallback
-        
-        if (siteAttempt + 1 < MAX_SITE_ATTEMPTS) {
-          await new Promise(r => setTimeout(r, 300 + Math.random() * 300));
-        }
-        continue; // try next site
       }
 
-      // Unknown but not a site error — keep result and stop
-      result = siteResult;
+      if (siteAttempt + 1 < MAX_SITE_ATTEMPTS) {
+        console.log(
+          `[SHOPIFY-CHARGE] Unknown after full retry chain on ${currentSite.url}, trying next site...`
+        );
+        await wait(300 + Math.random() * 300);
+        continue;
+      }
+
       break;
     }
 
