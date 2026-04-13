@@ -336,9 +336,10 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<{ statu
   
   // For unknown results caused by timeout/empty/transient/curl errors, retry up to 2 times
   const msg = (result.message || '').toLowerCase();
-  const isRetryable = msg.includes('timeout') || msg.includes('empty') || msg.includes('abort') || 
-                      msg.includes('request failed') || msg.includes('curl') || msg.includes('getaddrinfo') ||
-                      msg.includes('could not resolve proxy') || result.rawResponse === '';
+   const isRetryable = msg.includes('timeout') || msg.includes('empty') || msg.includes('abort') || 
+                       msg.includes('request failed') || msg.includes('curl') || msg.includes('getaddrinfo') ||
+                       msg.includes('could not resolve proxy') || msg.includes('tokenize_fail') || 
+                       msg.includes('no_session_token') || result.rawResponse === '';
   
   if (isRetryable) {
     for (let retry = 1; retry <= 2; retry++) {
