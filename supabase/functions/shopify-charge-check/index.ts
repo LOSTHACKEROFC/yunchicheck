@@ -154,10 +154,21 @@ const SITE_DEAD_INDICATORS = [
   "site dead",
 ];
 
+type ApiCheckResult = {
+  status: string;
+  message: string;
+  apiResponse: string;
+  rawResponse: string;
+  price: number;
+  priceStr: string;
+  proxyDead?: boolean;
+  siteDead?: boolean;
+};
+
 const UNKNOWN_RETRY_ATTEMPTS = 4;
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string; proxyDead?: boolean; siteDead?: boolean }> => {
+const callApiOnce = async (cc: string, site: string, proxy: string): Promise<ApiCheckResult> => {
   const apiUrl = buildApiUrl(cc, site, proxy);
   
   const controller = new AbortController();
@@ -320,7 +331,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<{ s
 };
 
 // Wrapper with automatic retry for all unknown responses
-const callApi = async (cc: string, site: string, proxy: string): Promise<{ status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string; proxyDead?: boolean; siteDead?: boolean }> => {
+const callApi = async (cc: string, site: string, proxy: string): Promise<ApiCheckResult> => {
   console.log(`[SHOPIFY-CHARGE] Calling: site=${site} proxy=${proxy ? 'yes' : 'none'}`);
   
   let result = await callApiOnce(cc, site, proxy);
@@ -467,7 +478,7 @@ Deno.serve(async (req) => {
     const formatProxy = (p: typeof userProxies[0]) => 
       p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
 
-    let result: { status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string; proxyDead?: boolean; siteDead?: boolean } | null = null;
+    let result: ApiCheckResult | null = null;
     let usedSite = shuffledSites[0];
     const failedProxyIds: string[] = [];
     const deadSiteUrls: string[] = [];
@@ -487,7 +498,7 @@ Deno.serve(async (req) => {
         break;
       }
 
-      let siteResult: typeof result = null;
+      let siteResult: ApiCheckResult | null = null;
       for (let proxyAttempt = 0; proxyAttempt < availableProxies.length; proxyAttempt++) {
         const currentProxy = availableProxies[proxyAttempt];
         const proxyStr = formatProxy(currentProxy);
