@@ -6252,7 +6252,16 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
          const mtxtFormatProxy = (p: any) => p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
          const mtxtFailedProxyIds: string[] = [];
-         const mtxtAvailableSites = [...mtxtSites].sort(() => Math.random() - 0.5);
+         // Shared mutable site pool — dead sites are removed so no card retries them
+         const mtxtLiveSites = [...mtxtSites].sort(() => Math.random() - 0.5);
+         const mtxtDeadSiteUrls = new Set<string>();
+         const mtxtRemoveSite = (url: string) => {
+           if (mtxtDeadSiteUrls.has(url)) return;
+           mtxtDeadSiteUrls.add(url);
+           const idx = mtxtLiveSites.findIndex(s => s.url === url);
+           if (idx !== -1) mtxtLiveSites.splice(idx, 1);
+           supabase.from('gateway_urls').delete().eq('url', url).then(() => {});
+         };
 
          // Helper: check if response is empty/meaningless (should be UNKNOWN, not DEAD) — matches web
          const mtxtIsEmptyOrErrorOnly = (text: string): boolean => {
