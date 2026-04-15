@@ -10049,6 +10049,127 @@ Example: <code>/sh 4111111111111111|12|25|123</code>
     // (This is handled inline - the button just shows no sites)
 
     // ─────────────────────────────────────────────────────────
+    // /msh - MULTI SHOPIFY CHARGE BULK CHECK (up to 20 cards)
+    // ─────────────────────────────────────────────────────────
+
+    if (text === "/msh" || text.startsWith("/msh ") || text.startsWith("/msh\n")) {
+      const mshInput = text.replace(/^\/msh\s*/, "").trim();
+
+      if (!mshInput) {
+        await sendTelegramMessage(chatId, `
+🛍 <b>𝗠𝗨𝗟𝗧𝗜 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+
+📌 <b>Usage:</b>
+<code>/msh
+cc|mm|yy|cvv
+cc|mm|yy|cvv
+cc|mm|yy|cvv</code>
+
+📎 <b>Example:</b>
+<code>/msh
+4111111111111111|12|25|123
+5333171146109372|10|26|100</code>
+
+📊 <b>Limits:</b> Up to <b>20 cards</b> per batch
+💎 Charged = 2 credits ・ ❌ Declined = 1 credit ・ ⚠️ Unknown = Free
+
+💡 <i>Cards are checked one by one with live results</i>
+`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Parse cards
+      const mshCardLines = mshInput.split("\n").map(l => l.trim()).filter(l => l && l.includes("|"));
+      if (mshCardLines.length === 0) {
+        await sendTelegramMessage(chatId, `❌ <b>No valid cards found.</b>\n\nFormat: <code>cc|mm|yy|cvv</code> (one per line)`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (mshCardLines.length > 20) {
+        await sendTelegramMessage(chatId, `❌ <b>Too many cards.</b>\n\nMax <b>20 cards</b> per batch. You sent ${mshCardLines.length}.`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Check user
+      const { data: mshUserProfile } = await supabase
+        .from("profiles")
+        .select("user_id, username, credits, is_banned")
+        .eq("telegram_chat_id", chatId)
+        .maybeSingle();
+
+      if (!mshUserProfile) {
+        await sendTelegramMessage(chatId, `❌ <b>Account Not Connected</b>\n\nLink your Telegram at yunchicheck.com\n<b>Chat ID:</b> <code>${chatId}</code>`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (mshUserProfile.is_banned) {
+        await sendTelegramMessage(chatId, `🚫 <b>Account Suspended</b>`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (mshUserProfile.credits < mshCardLines.length) {
+        await sendTelegramMessage(chatId, `❌ <b>Insufficient Credits</b>\n\nNeed at least <b>${mshCardLines.length}</b> credits for ${mshCardLines.length} cards.\nBalance: <b>${mshUserProfile.credits}</b>`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Validate cards
+      const validCards: string[] = [];
+      for (const line of mshCardLines) {
+        const parts = line.split("|");
+        if (parts.length >= 4 && parts[3] && parts[3].length >= 3 && /^\d+$/.test(parts[3])) {
+          validCards.push(line);
+        }
+      }
+
+      if (validCards.length === 0) {
+        await sendTelegramMessage(chatId, `❌ <b>No valid cards.</b>\n\nFormat: <code>cc|mm|yy|cvv</code>`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Encode cards and show price selection
+      const mshEncodedCards = btoa(validCards.join("\n"));
+
+      // Fetch price group counts
+      const mshPriceGroups = [
+        { label: "$0 – $10", min: 0, max: 10, emoji: "💰" },
+        { label: "$10 – $20", min: 10, max: 20, emoji: "💎" },
+        { label: "$20 – $35", min: 20, max: 35, emoji: "🔥" },
+        { label: "$35 – $100", min: 35, max: 100, emoji: "⚡" },
+      ];
+
+      const mshGroupCounts = await Promise.all(
+        mshPriceGroups.map(async (g) => {
+          let query = supabase.from("gateway_urls").select("id", { count: "exact", head: true }).not("url", "like", "https://razorpay.me/%").lte("price", g.max === 100 ? 100 : g.max);
+          if (g.min > 0) query = query.gt("price", g.min);
+          else query = query.gt("price", 0);
+          const { count } = await query;
+          return { ...g, count: count || 0 };
+        })
+      );
+
+      const mshTotalSites = mshGroupCounts.reduce((a, g) => a + g.count, 0);
+
+      const mshPriceButtons: any[][] = [];
+      for (const g of mshGroupCounts) {
+        if (g.count > 0) {
+          mshPriceButtons.push([{ text: `${g.emoji} ${g.label}  •  ${g.count} sites`, callback_data: `msh_price_${g.min}_${g.max}_${mshEncodedCards}` }]);
+        } else {
+          mshPriceButtons.push([{ text: `${g.emoji} ${g.label}  •  0 sites ✖️`, callback_data: `msh_nosite` }]);
+        }
+      }
+      mshPriceButtons.push([{ text: `🎲 𝗔𝘂𝘁𝗼 – Any Range  •  ${mshTotalSites} sites`, callback_data: `msh_price_0_100_${mshEncodedCards}` }]);
+
+      await sendTelegramMessage(chatId, `
+🛍 <b>𝗠𝗨𝗟𝗧𝗜 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+
+📊 <b>${validCards.length} cards</b> loaded
+💰 <b>Balance:</b> ${mshUserProfile.credits} credits
+🌐 <b>Sites:</b> ${mshTotalSites} available
+
+⬇️ <b>𝗦𝗲𝗹𝗲𝗰𝘁 𝗣𝗿𝗶𝗰𝗲 𝗥𝗮𝗻𝗴𝗲</b> ⬇️
+`, { inline_keyboard: mshPriceButtons }, messageId);
+
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ─────────────────────────────────────────────────────────
     // DEFAULT USER MESSAGE HANDLER
     // ─────────────────────────────────────────────────────────
 
