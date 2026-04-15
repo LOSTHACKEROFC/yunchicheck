@@ -5957,7 +5957,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
         // Auto-determine thread count based on cards and proxies
         const mshActiveProxies = mshProxies.filter((p: any) => !mshFailedProxyIds.includes(p.id)).length;
-        const mshThreads = Math.max(1, Math.min(mshActiveProxies, Math.min(mshCards.length, 10)));
+        const mshThreads = Math.max(3, Math.min(4, Math.min(mshActiveProxies, mshCards.length)));
 
         // Show initial processing message
         await editTelegramMessage(callbackChatId, messageId, `🛍 <b>𝗠𝗨𝗟𝗧𝗜 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b> | <b>0/${mshCards.length}</b> | <b>0.00s</b>\n\n⏳ <i>Starting bulk check (${mshThreads} threads)...</i>`);
