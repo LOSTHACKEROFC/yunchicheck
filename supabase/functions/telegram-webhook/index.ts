@@ -6177,14 +6177,39 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const mtxtBulkId = mtxtParts[2];
 
         // Fetch cards from DB
-        const { data: mtxtBulkData } = await supabase.from("pending_bulk_checks").select("cards").eq("id", mtxtBulkId).maybeSingle();
+        const { data: mtxtBulkData, error: mtxtBulkFetchError } = await supabase
+          .from("pending_bulk_checks")
+          .select("cards")
+          .eq("id", mtxtBulkId)
+          .maybeSingle();
+        if (mtxtBulkFetchError) {
+          console.error(`[MTXT] Failed to load bulk payload ${mtxtBulkId}:`, mtxtBulkFetchError);
+          await answerCallbackQuery(update.callback_query.id, "❌ Failed to load this batch");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        if (mtxtBulkData?.cards === "RUNNING") {
+          await answerCallbackQuery(update.callback_query.id, "⏳ This batch is already running");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
         let mtxtCards: string[] = [];
         if (mtxtBulkData?.cards) { mtxtCards = mtxtBulkData.cards.split("\n").filter((c: string) => c.trim()); }
-        await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
-        // Re-insert as stop-tracking record (use a valid dummy UUID for user_id)
-        await supabase.from("pending_bulk_checks").insert({ id: mtxtBulkId, cards: "RUNNING", chat_id: String(callbackChatId), user_id: "00000000-0000-0000-0000-000000000000" });
         if (!mtxtCards.length) {
           await answerCallbackQuery(update.callback_query.id, "❌ Card data expired or invalid");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        const { error: deleteMtxtPendingError } = await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
+        if (deleteMtxtPendingError) {
+          console.error(`[MTXT] Failed to prepare batch ${mtxtBulkId}:`, deleteMtxtPendingError);
+          await answerCallbackQuery(update.callback_query.id, "❌ Failed to start this batch");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        // Re-insert as stop-tracking record (use a valid dummy UUID for user_id)
+        const { error: insertMtxtRunningError } = await supabase
+          .from("pending_bulk_checks")
+          .insert({ id: mtxtBulkId, cards: "RUNNING", chat_id: String(callbackChatId), user_id: "00000000-0000-0000-0000-000000000000" });
+        if (insertMtxtRunningError) {
+          console.error(`[MTXT] Failed to create stop tracker ${mtxtBulkId}:`, insertMtxtRunningError);
+          await answerCallbackQuery(update.callback_query.id, "❌ Failed to start this batch");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
@@ -6505,6 +6530,34 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          let mtxtLastResponse = '—';
          let mtxtStopped = false;
          const mtxtStopKey = `mtxt_stop_${mtxtBulkId}`;
+         let mtxtLastStopPoll = 0;
+         const MTXT_STOP_POLL_INTERVAL = 1500;
+         const mtxtPollStopRequest = async (force = false) => {
+           if (mtxtStopped) return true;
+           const now = Date.now();
+           if (!force && now - mtxtLastStopPoll < MTXT_STOP_POLL_INTERVAL) {
+             return false;
+           }
+           mtxtLastStopPoll = now;
+
+           const { data: stopCheck, error: stopCheckError } = await supabase
+             .from("pending_bulk_checks")
+             .select("id")
+             .eq("id", mtxtBulkId)
+             .maybeSingle();
+
+           if (stopCheckError) {
+             console.error(`[MTXT] Stop poll failed for ${mtxtBulkId}:`, stopCheckError);
+             return false;
+           }
+
+           if (!stopCheck) {
+             mtxtStopped = true;
+             return true;
+           }
+
+           return false;
+         };
 
          const buildMtxtMessageAndButtons = (checked: number, total: number, elapsed: string, isComplete: boolean) => {
            const progressPct = total > 0 ? Math.round((checked / total) * 100) : 0;
@@ -6650,13 +6703,11 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
          // Process card helper
          let mtxtChecked = 0;
-         const mtxtProcessCard = async (cardCC: string) => {
-          try {
-            if (mtxtStopped) return;
-            // Check stop flag from DB
-            const { data: stopCheck } = await supabase.from("pending_bulk_checks").select("id").eq("id", mtxtBulkId).maybeSingle();
-            if (!stopCheck) { mtxtStopped = true; return; }
-             mtxtCurrentCard = cardCC;
+          const mtxtProcessCard = async (cardCC: string) => {
+           try {
+             if (mtxtStopped) return;
+             if (await mtxtPollStopRequest()) return;
+              mtxtCurrentCard = cardCC;
 
             const cardParts = cardCC.split("|");
             if (cardParts.length < 4 || !cardParts[3] || cardParts[3].length < 3) {
