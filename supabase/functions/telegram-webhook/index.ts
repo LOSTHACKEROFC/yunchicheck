@@ -6755,40 +6755,40 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            await mtxtSendFinalMessage();
          }, MTXT_SAFETY_TIMEOUT);
 
-         while (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
-          const batchEnd = Math.min(mtxtQueueIdx + MTXT_CONCURRENCY, mtxtQueue.length);
-          const batchCards = mtxtQueue.slice(mtxtQueueIdx, batchEnd);
+          while (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
+           const batchEnd = Math.min(mtxtQueueIdx + MTXT_CONCURRENCY, mtxtQueue.length);
+           const batchCards = mtxtQueue.slice(mtxtQueueIdx, batchEnd);
+           const isLastBatch = batchEnd >= mtxtQueue.length;
 
-          let batchCompleted = 0;
-          await new Promise<void>((resolve) => {
-            const promises = batchCards.map(async (card, launchOrder) => {
-              if (mtxtStopped) return;
-              // Staggered launch delay like web (180ms + random jitter)
-              if (launchOrder > 0) {
-                const launchDelay = launchOrder * MTXT_STAGGER_MS_VAL + Math.floor(Math.random() * 120);
-                await new Promise(r => setTimeout(r, launchDelay));
-              }
-              if (mtxtStopped) return;
+           await new Promise<void>((resolve) => {
+             let batchCompleted = 0;
+             const promises = batchCards.map(async (card, launchOrder) => {
+               if (mtxtStopped) return;
+               if (launchOrder > 0) {
+                 const launchDelay = launchOrder * MTXT_STAGGER_MS_VAL + Math.floor(Math.random() * 120);
+                 await new Promise(r => setTimeout(r, launchDelay));
+               }
+               if (mtxtStopped) return;
 
-              await mtxtProcessCard(card);
-              batchCompleted++;
-              if (batchCompleted >= Math.min(MIN_COMPLETE_BEFORE_NEXT, batchCards.length)) {
-                resolve();
-              }
-            });
-            Promise.all(promises).then(() => resolve());
-          });
+               await mtxtProcessCard(card);
+               batchCompleted++;
+               // For non-last batches, resolve early after 49 to start next batch
+               // For last batch, wait for ALL cards
+               if (!isLastBatch && batchCompleted >= Math.min(MIN_COMPLETE_BEFORE_NEXT, batchCards.length)) {
+                 resolve();
+               }
+             });
+             Promise.all(promises).then(() => resolve());
+           });
 
-          mtxtQueueIdx = batchEnd;
-          // Small gap between sessions
-          if (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
-            await new Promise(r => setTimeout(r, 600));
-          }
-        }
+           mtxtQueueIdx = batchEnd;
+           if (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
+             await new Promise(r => setTimeout(r, 600));
+           }
+         }
 
-         clearTimeout(mtxtSafetyTimer);
-         // Ensure final message is sent even if it wasn't triggered by last card callback
-         await mtxtSendFinalMessage();
+          clearTimeout(mtxtSafetyTimer);
+          await mtxtSendFinalMessage();
 
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
