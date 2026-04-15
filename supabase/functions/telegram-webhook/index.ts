@@ -6401,17 +6401,17 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            return result;
          };
 
-         // Check a single card — multi-site retry with proxy rotation, matching web exactly
-         const MAX_MTXT_SITE_ATTEMPTS = Math.min(3, mtxtAvailableSites.length);
+         // Check a single card — picks random sites from the shared live pool
+         const MAX_MTXT_SITE_ATTEMPTS = 5; // Try up to 5 random sites per card
          const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
            const availableProxies = [...mtxtProxies].filter(p => !mtxtFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
            if (availableProxies.length === 0) return { status: 'error', response: 'No proxies available', price: '$0.00' };
 
            let finalResult: any = null;
 
-           for (let siteAttempt = 0; siteAttempt < MAX_MTXT_SITE_ATTEMPTS; siteAttempt++) {
             // Pick random sites from the LIVE pool for this card (not sequential shared index)
-            const cardSites = [...mtxtLiveSites].sort(() => Math.random() - 0.5).slice(0, MAX_MTXT_SITE_ATTEMPTS);
+            const siteCount = Math.min(MAX_MTXT_SITE_ATTEMPTS, mtxtLiveSites.length);
+            const cardSites = [...mtxtLiveSites].sort(() => Math.random() - 0.5).slice(0, siteCount);
             if (cardSites.length === 0) return { status: 'error', response: 'No sites available', price: '$0.00' };
 
             for (let siteAttempt = 0; siteAttempt < cardSites.length; siteAttempt++) {
