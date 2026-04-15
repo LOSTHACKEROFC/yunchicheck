@@ -6116,6 +6116,15 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // MTXT Stop handler
+      if (callbackData.startsWith("mtxt_stop_")) {
+        const stopBulkId = callbackData.replace("mtxt_stop_", "");
+        // Mark the bulk check as stopped by deleting it
+        await supabase.from("pending_bulk_checks").delete().eq("id", stopBulkId);
+        await answerCallbackQuery(update.callback_query.id, "🛑 Stopping...");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite") && !callbackData.startsWith("mtxt_pending") && !callbackData.startsWith("mtxt_res_")) {
         const mtxtParts = callbackData.replace("mtxt_", "").split("_");
         const mtxtPriceMin = parseInt(mtxtParts[0]);
