@@ -5934,11 +5934,11 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
         // Build live update message
         const buildMshMessage = (checked: number, total: number, elapsed: string) => {
-          let msg = `🛍 𝗠𝗨𝗟𝗧𝗜 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘 | ${checked}/${total} | ${elapsed}s\n\n`;
+          let msg = `🛍 <b>𝗠𝗨𝗟𝗧𝗜 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b> | <b>${checked}/${total}</b> | <b>${elapsed}s</b>\n\n`;
           const counters: string[] = [];
-          if (mshCharged > 0) counters.push(`💎 ${mshCharged} Charged`);
-          if (mshApproved > 0) counters.push(`✅ ${mshApproved} Approved`);
-          if (mshDeclined > 0) counters.push(`❌ ${mshDeclined} Declined`);
+          if (mshCharged > 0) counters.push(`💎 <b>${mshCharged} Charged</b>`);
+          if (mshApproved > 0) counters.push(`✅ <b>${mshApproved} Approved</b>`);
+          if (mshDeclined > 0) counters.push(`❌ <b>${mshDeclined} Declined</b>`);
           if (counters.length > 0) msg += counters.join('   ') + '\n';
 
           for (const r of mshResults) {
@@ -5947,8 +5947,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             else if (r.status === 'dead') emoji = '❌';
             else emoji = '✅';
 
-            msg += `\n${escapeHtml(r.cc)}\n`;
-            msg += `${emoji} ${escapeHtml(r.response)} | ${escapeHtml(r.price)}\n`;
+            msg += `\n<code>${escapeHtml(r.cc)}</code>\n`;
+            msg += `${emoji} <b><i>${escapeHtml(r.response)}</i></b> | <b>${escapeHtml(r.price)}</b>\n`;
             msg += `<i>${escapeHtml(r.bank)} ${r.flag}</i>\n`;
           }
 
