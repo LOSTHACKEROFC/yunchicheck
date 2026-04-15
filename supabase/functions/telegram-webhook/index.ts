@@ -5306,22 +5306,57 @@ Examples:
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        const maskedCard = ccParts[0].length >= 10
-          ? `${ccParts[0].substring(0, 6)}******${ccParts[0].slice(-4)}`
-          : ccParts[0];
+        // BIN lookup
+        const shBinDigits = ccParts[0].replace(/\D/g, '').slice(0, 8);
+        let shBinBrand = "Unknown"; let shBinType = "Unknown"; let shBinBank = "Unknown Bank"; let shBinCountry = "Unknown"; let shBinCountryCode = "XX"; let shBinLevel = "Standard";
+        try {
+          const binR = await fetch(`https://lookup.binlist.net/${shBinDigits}`, { headers: { 'Accept-Version': '3' } });
+          if (binR.ok) {
+            const bd = await binR.json();
+            shBinBrand = bd.scheme?.toUpperCase() || "Unknown";
+            shBinType = bd.type ? bd.type.charAt(0).toUpperCase() + bd.type.slice(1) : "Unknown";
+            shBinBank = bd.bank?.name || "Unknown Bank";
+            shBinCountry = bd.country?.name || "Unknown";
+            shBinCountryCode = bd.country?.alpha2 || "XX";
+            shBinLevel = bd.brand || "Standard";
+          }
+        } catch { /* fallback */ }
+        if (shBinBrand === "Unknown") {
+          if (/^4/.test(shBinDigits)) shBinBrand = "VISA";
+          else if (/^5[1-5]/.test(shBinDigits) || /^2[2-7]/.test(shBinDigits)) shBinBrand = "MASTERCARD";
+          else if (/^3[47]/.test(shBinDigits)) shBinBrand = "AMEX";
+          else if (/^6(?:011|5|4[4-9]|22)/.test(shBinDigits)) shBinBrand = "DISCOVER";
+        }
+        const shBrandLogos: Record<string, string> = {
+          'VISA': '💙 𝗩𝗜𝗦𝗔', 'MASTERCARD': '🟠 𝗠𝗔𝗦𝗧𝗘𝗥𝗖𝗔𝗥𝗗', 'AMEX': '💚 𝗔𝗠𝗘𝗫',
+          'DISCOVER': '🟧 𝗗𝗜𝗦𝗖𝗢𝗩𝗘𝗥', 'JCB': '🔴 𝗝𝗖𝗕', 'UNIONPAY': '🔵 𝗨𝗡𝗜𝗢𝗡𝗣𝗔𝗬',
+          'MAESTRO': '🔷 𝗠𝗔𝗘𝗦𝗧𝗥𝗢', 'DINERS CLUB': '⚪ 𝗗𝗜𝗡𝗘𝗥𝗦',
+        };
+        const shBrandLogo = shBrandLogos[shBinBrand] || `💳 ${shBinBrand}`;
+        const shGetFlag = (code: string) => {
+          if (!code || code === 'XX') return '🌍';
+          return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+        };
+        const shCountryFlag = shGetFlag(shBinCountryCode);
 
-        // Show processing message
+        // Show processing message with BIN info
         await editTelegramMessage(callbackChatId, messageId, `
-━━━━━━━━━━━━━━━━━━━━━━
-   🛒 <b>SHOPIFY CHARGE</b>
-━━━━━━━━━━━━━━━━━━━━━━
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
+🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
-📇 <b>Card:</b> <code>${maskedCard}</code>
-💰 <b>Range:</b> $${priceMin} – $${priceMax}
-⏳ <b>Status:</b> Processing...
+┌─── 📇 <b>Card</b> ───┐
+│ ${shBrandLogo}
+│ 📟 <code>${escapeHtml(cc)}</code>
+│ 🏦 ${escapeHtml(shBinBank)}
+│ ${shCountryFlag} ${escapeHtml(shBinCountry)}
+└────────────────────────┘
 
-<i>Connecting to Shopify API...</i>
-━━━━━━━━━━━━━━━━━━━━━━
+⏳ <b>𝗣𝗿𝗼𝗰𝗲𝘀𝘀𝗶𝗻𝗴...</b>
+💰 Range: $${priceMin} – $${priceMax}
+
+<i>🔄 Connecting to Shopify API...</i>
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 `);
 
         const startTime = Date.now();
@@ -5511,17 +5546,24 @@ Go to yunchicheck.com/dashboard → Proxies
           let progressStep = 0;
           const updateProgress = async (step: string) => {
             progressStep++;
+            const progressBar = "▓".repeat(Math.min(progressStep, 5)) + "░".repeat(Math.max(0, 5 - progressStep));
             await editTelegramMessage(callbackChatId, messageId, `
-━━━━━━━━━━━━━━━━━━━━━━
-   🛒 <b>SHOPIFY CHARGE</b>
-━━━━━━━━━━━━━━━━━━━━━━
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
+🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
-📇 <b>Card:</b> <code>${maskedCard}</code>
-💰 <b>Range:</b> $${priceMin} – $${priceMax}
-⏳ <b>Step ${progressStep}:</b> ${step}
+┌─── 📇 <b>Card</b> ───┐
+│ ${shBrandLogo}
+│ 📟 <code>${escapeHtml(cc)}</code>
+│ 🏦 ${escapeHtml(shBinBank)}
+│ ${shCountryFlag} ${escapeHtml(shBinCountry)}
+└────────────────────────┘
 
-<i>${sites.length} sites | ${userProxies.length} proxies</i>
-━━━━━━━━━━━━━━━━━━━━━━
+⏳ <b>${step}</b>
+[${progressBar}] Step ${progressStep}
+💰 Range: $${priceMin} – $${priceMax}
+📊 ${sites.length} sites │ ${userProxies.length} proxies
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 `);
           };
 
@@ -5591,9 +5633,10 @@ Go to yunchicheck.com/dashboard → Proxies
           const apiMessage = finalResult.apiResponse || finalResult.message || "N/A";
           const sitePrice = finalResult.price > 0 ? finalResult.priceStr : (usedSite.price ? `$${Number(usedSite.price).toFixed(2)}` : 'Auto');
 
-          let statusEmoji = "⚠️"; let statusLabel = "UNKNOWN"; let creditCost = 0;
-          if (status === "live") { statusEmoji = "🟢"; statusLabel = "CHARGED ✅"; creditCost = 2; }
-          else if (status === "dead") { statusEmoji = "🔴"; statusLabel = "DECLINED ❌"; creditCost = 1; }
+          let statusEmoji = "⚠️"; let statusLabel = "𝗨𝗡𝗞𝗡𝗢𝗪𝗡"; let creditCost = 0; let statusBanner = "⚠️";
+          if (status === "live") { statusEmoji = "🟢"; statusLabel = "𝗖𝗛𝗔𝗥𝗚𝗘𝗗 ✅"; creditCost = 2; statusBanner = "🟩🟩🟩 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 🟩🟩🟩"; }
+          else if (status === "dead") { statusEmoji = "🔴"; statusLabel = "𝗗𝗘𝗖𝗟𝗜𝗡𝗘𝗗 ❌"; creditCost = 1; statusBanner = "🟥🟥🟥 𝗗𝗘𝗖𝗟𝗜𝗡𝗘𝗗 🟥🟥🟥"; }
+          else { statusBanner = "🟧🟧🟧 𝗨𝗡𝗞𝗡𝗢𝗪𝗡 🟧🟧🟧"; }
 
           // Deduct credits
           if (creditCost > 0) {
@@ -5631,27 +5674,41 @@ Go to yunchicheck.com/dashboard → Proxies
           const allProxiesDead = failedProxyIds.length >= userProxies.length;
 
           let resultMsg = `
-━━━━━━━━━━━━━━━━━━━━━━
-   🛒 <b>SHOPIFY CHARGE</b>
-━━━━━━━━━━━━━━━━━━━━━━
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
+🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
-📇 <b>Card:</b> <code>${escapeHtml(cc)}</code>
-${statusEmoji} <b>Status:</b> ${statusLabel}
-💬 <b>Response:</b> ${escapeHtml(String(apiMessage).substring(0, 200))}
-💵 <b>Amount:</b> ${escapeHtml(sitePrice)}
+${statusBanner}
 
-━━━━━ <b>Details</b> ━━━━━
-💰 <b>Cost:</b> ${creditCost > 0 ? `-${creditCost} credits` : "Free"}
-💳 <b>Balance:</b> ${newBalance} credits
-⏱️ <b>Time:</b> ${elapsed}s${deadProxiesCount > 0 ? `\n🔴 <b>Dead Proxies:</b> ${deadProxiesCount} removed` : ""}${allProxiesDead ? `\n⚠️ <b>All proxies are dead!</b> Add new ones.` : ""}
-━━━━━━━━━━━━━━━━━━━━━━
+┌─── 📇 <b>Card Info</b> ───┐
+│ ${shBrandLogo}
+│ 📟 <code>${escapeHtml(cc)}</code>
+│ 🏷 <b>Type:</b> ${escapeHtml(shBinType)} │ ${escapeHtml(shBinLevel)}
+│ 🏦 <b>Bank:</b> ${escapeHtml(shBinBank)}
+│ ${shCountryFlag} <b>Country:</b> ${escapeHtml(shBinCountry)}
+└────────────────────────┘
+
+┌─── ${statusEmoji} <b>Result</b> ───┐
+│ 📊 <b>Status:</b> ${statusLabel}
+│ 💬 <b>Response:</b>
+│ <code>${escapeHtml(String(apiMessage).substring(0, 150))}</code>
+│ 💵 <b>Amount:</b> ${escapeHtml(sitePrice)}
+└────────────────────────┘
+
+┌─── 💰 <b>Account</b> ───┐
+│ 🔹 <b>Cost:</b> ${creditCost > 0 ? `-${creditCost} credits` : "Free (0 credits)"}
+│ 💳 <b>Balance:</b> ${newBalance} credits
+│ ⏱️ <b>Time:</b> ${elapsed}s
+└────────────────────────┘${deadProxiesCount > 0 ? `\n\n🔴 <b>${deadProxiesCount} dead proxy${deadProxiesCount > 1 ? 'ies' : ''} removed</b>` : ""}${allProxiesDead ? `\n⚠️ <b>All proxies dead!</b> Add new ones at yunchicheck.com` : ""}
+
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 `;
 
           const resultButtons: any[][] = [];
           if (status !== "live") {
-            resultButtons.push([{ text: "🔄 Retry Same Range", callback_data: `sh_price_${priceMin}_${priceMax}_${encodedCC}` }]);
+            resultButtons.push([{ text: "🔄 𝗥𝗲𝘁𝗿𝘆 𝗦𝗮𝗺𝗲 𝗥𝗮𝗻𝗴𝗲", callback_data: `sh_price_${priceMin}_${priceMax}_${encodedCC}` }]);
           }
-          resultButtons.push([{ text: "🔙 Back to Menu", callback_data: "menu_back" }]);
+          resultButtons.push([{ text: "🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂", callback_data: "menu_back" }]);
 
           await editTelegramMessage(callbackChatId, messageId, resultMsg, { inline_keyboard: resultButtons });
 
@@ -5659,18 +5716,24 @@ ${statusEmoji} <b>Status:</b> ${statusLabel}
           const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
           const errMsg = err instanceof Error ? err.message : "Unknown error";
           await editTelegramMessage(callbackChatId, messageId, `
-━━━━━━━━━━━━━━━━━━━━━━
-   🛒 <b>SHOPIFY CHARGE</b>
-━━━━━━━━━━━━━━━━━━━━━━
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
+🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
-📇 <b>Card:</b> <code>${maskedCard}</code>
-❌ <b>Error:</b> ${escapeHtml(errMsg)}
+┌─── 📇 <b>Card</b> ───┐
+│ ${shBrandLogo}
+│ 📟 <code>${escapeHtml(cc)}</code>
+│ 🏦 ${escapeHtml(shBinBank)}
+│ ${shCountryFlag} ${escapeHtml(shBinCountry)}
+└────────────────────────┘
+
+❌ <b>𝗘𝗿𝗿𝗼𝗿:</b> ${escapeHtml(errMsg)}
 ⏱️ ${elapsed}s
-━━━━━━━━━━━━━━━━━━━━━━
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 `, {
             inline_keyboard: [
-              [{ text: "🔄 Retry", callback_data: `sh_price_${priceMin}_${priceMax}_${encodedCC}` }],
-              [{ text: "🔙 Back to Menu", callback_data: "menu_back" }]
+              [{ text: "🔄 𝗥𝗲𝘁𝗿𝘆", callback_data: `sh_price_${priceMin}_${priceMax}_${encodedCC}` }],
+              [{ text: "🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂", callback_data: "menu_back" }]
             ]
           });
         }
@@ -9522,24 +9585,26 @@ ${currentConfig.nextPrompt}
 
       if (!cc) {
         await sendTelegramMessage(chatId, `
-━━━━━━━━━━━━━━━━━━━━━━
-   🛒 <b>SHOPIFY CHARGE</b>
-━━━━━━━━━━━━━━━━━━━━━━
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
+🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
-<b>Usage:</b> <code>/sh cc|mm|yy|cvv</code>
+📌 <b>Usage:</b>
+<code>/sh cc|mm|yy|cvv</code>
 
-<b>Example:</b>
+📎 <b>Example:</b>
 <code>/sh 4111111111111111|12|25|123</code>
 
-<b>Cost:</b>
- • 🟢 CHARGED → 2 credits
- • 🔴 DECLINED → 1 credit
- • ⚠️ UNKNOWN → Free
+┌─── 💲 <b>Pricing</b> ───┐
+│ 🟢 CHARGED ➜ 2 credits     │
+│ 🔴 DECLINED ➜ 1 credit      │
+│ ⚠️ UNKNOWN ➜ Free           │
+└────────────────────────┘
 
-<b>Info:</b> Select a price range after
-sending the command to choose
-which Shopify sites to use.
-━━━━━━━━━━━━━━━━━━━━━━
+💡 <i>Select a price range after
+sending to choose Shopify sites</i>
+
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 `, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -9594,6 +9659,47 @@ Example: <code>/sh 4111111111111111|12|25|123</code>
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // BIN lookup for card info
+      const binDigits = shParts[0].replace(/\D/g, '').slice(0, 8);
+      let binBrand = "Unknown"; let binType = "Unknown"; let binBank = "Unknown Bank"; let binCountry = "Unknown"; let binCountryCode = "XX"; let binLevel = "Standard";
+      let brandLogo = "💳";
+      
+      try {
+        const binResp = await fetch(`https://lookup.binlist.net/${binDigits}`, { headers: { 'Accept-Version': '3' } });
+        if (binResp.ok) {
+          const binData = await binResp.json();
+          binBrand = binData.scheme?.toUpperCase() || "Unknown";
+          binType = binData.type ? binData.type.charAt(0).toUpperCase() + binData.type.slice(1) : "Unknown";
+          binBank = binData.bank?.name || "Unknown Bank";
+          binCountry = binData.country?.name || "Unknown";
+          binCountryCode = binData.country?.alpha2 || "XX";
+          binLevel = binData.brand || "Standard";
+        }
+      } catch { /* fallback */ }
+
+      // Fallback brand detection
+      if (binBrand === "Unknown") {
+        if (/^4/.test(binDigits)) binBrand = "VISA";
+        else if (/^5[1-5]/.test(binDigits) || /^2[2-7]/.test(binDigits)) binBrand = "MASTERCARD";
+        else if (/^3[47]/.test(binDigits)) binBrand = "AMEX";
+        else if (/^6(?:011|5|4[4-9]|22)/.test(binDigits)) binBrand = "DISCOVER";
+      }
+
+      // Brand logos
+      const brandLogos: Record<string, string> = {
+        'VISA': '💙 𝗩𝗜𝗦𝗔', 'MASTERCARD': '🟠 𝗠𝗔𝗦𝗧𝗘𝗥𝗖𝗔𝗥𝗗', 'AMEX': '💚 𝗔𝗠𝗘𝗫',
+        'DISCOVER': '🟧 𝗗𝗜𝗦𝗖𝗢𝗩𝗘𝗥', 'JCB': '🔴 𝗝𝗖𝗕', 'UNIONPAY': '🔵 𝗨𝗡𝗜𝗢𝗡𝗣𝗔𝗬',
+        'MAESTRO': '🔷 𝗠𝗔𝗘𝗦𝗧𝗥𝗢', 'DINERS CLUB': '⚪ 𝗗𝗜𝗡𝗘𝗥𝗦',
+      };
+      brandLogo = brandLogos[binBrand] || `💳 ${binBrand}`;
+
+      // Country flag emoji
+      const getFlag = (code: string) => {
+        if (!code || code === 'XX') return '🌍';
+        return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+      };
+      const countryFlag = getFlag(binCountryCode);
+
       // Fetch price group counts
       const priceGroups = [
         { label: "$0 – $10", min: 0, max: 10, emoji: "💰" },
@@ -9609,22 +9715,14 @@ Example: <code>/sh 4111111111111111|12|25|123</code>
             .select("id", { count: "exact", head: true })
             .not("url", "like", "https://razorpay.me/%")
             .lte("price", g.max === 100 ? 100 : g.max);
-          
-          if (g.min > 0) {
-            query = query.gt("price", g.min);
-          } else {
-            query = query.gt("price", 0);
-          }
-          
+          if (g.min > 0) query = query.gt("price", g.min);
+          else query = query.gt("price", 0);
           const { count } = await query;
           return { ...g, count: count || 0 };
         })
       );
 
       const totalSites = groupCounts.reduce((a, g) => a + g.count, 0);
-      const maskedSh = shParts[0].length >= 10
-        ? `${shParts[0].substring(0, 6)}******${shParts[0].slice(-4)}`
-        : shParts[0];
 
       // Encode cc in base64 for callback data
       const encodedCC = btoa(cc);
@@ -9634,12 +9732,12 @@ Example: <code>/sh 4111111111111111|12|25|123</code>
       for (const g of groupCounts) {
         if (g.count > 0) {
           priceButtons.push([{
-            text: `${g.emoji} ${g.label} (${g.count} sites)`,
+            text: `${g.emoji} ${g.label}  •  ${g.count} sites`,
             callback_data: `sh_price_${g.min}_${g.max}_${encodedCC}`,
           }]);
         } else {
           priceButtons.push([{
-            text: `${g.emoji} ${g.label} (0 sites) ❌`,
+            text: `${g.emoji} ${g.label}  •  0 sites ✖️`,
             callback_data: `sh_nosite`,
           }]);
         }
@@ -9647,25 +9745,30 @@ Example: <code>/sh 4111111111111111|12|25|123</code>
 
       // Add "Auto (Any Range)" button
       priceButtons.push([{
-        text: `🎲 Auto – Any Range (${totalSites} sites)`,
+        text: `🎲 𝗔𝘂𝘁𝗼 – Any Range  •  ${totalSites} sites`,
         callback_data: `sh_price_0_100_${encodedCC}`,
       }]);
 
       await sendTelegramMessage(chatId, `
-━━━━━━━━━━━━━━━━━━━━━━
-   🛒 <b>SHOPIFY CHARGE</b>
-━━━━━━━━━━━━━━━━━━━━━━
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
+🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
-📇 <b>Card:</b> <code>${maskedSh}</code>
-👤 <b>User:</b> ${escapeHtml(shUserProfile.username || "Unknown")}
-💰 <b>Balance:</b> ${shUserProfile.credits} credits
-🌐 <b>Total Sites:</b> ${totalSites}
+┌─── 📇 <b>Card Info</b> ───┐
+│ ${brandLogo}
+│ 📟 <code>${escapeHtml(cc)}</code>
+│ 🏷 <b>Type:</b> ${escapeHtml(binType)} │ ${escapeHtml(binLevel)}
+│ 🏦 <b>Bank:</b> ${escapeHtml(binBank)}
+│ ${countryFlag} <b>Country:</b> ${escapeHtml(binCountry)}
+└────────────────────────┘
 
-<b>━━━ Select Price Range ━━━</b>
+┌─── 👤 <b>Account</b> ───┐
+│ 🔹 ${escapeHtml(shUserProfile.username || "Unknown")}
+│ 💰 <b>Balance:</b> ${shUserProfile.credits} credits
+│ 🌐 <b>Sites:</b> ${totalSites} available
+└────────────────────────┘
 
-Choose which site price range
-to use for this card check:
-━━━━━━━━━━━━━━━━━━━━━━
+⬇️ <b>𝗦𝗲𝗹𝗲𝗰𝘁 𝗣𝗿𝗶𝗰𝗲 𝗥𝗮𝗻𝗴𝗲</b> ⬇️
 `, {
         inline_keyboard: priceButtons,
       }, messageId);
