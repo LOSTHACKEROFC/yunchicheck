@@ -553,6 +553,7 @@ async function setBotCommands(supabase?: any): Promise<void> {
     { command: "help", description: "View help & features" },
     { command: "mystatus", description: "Check account status" },
     { command: "kill", description: "Kill a card (5 credits)" },
+    { command: "sh", description: "Shopify Charge check" },
     { command: "bin", description: "Lookup BIN details" },
   ];
 
