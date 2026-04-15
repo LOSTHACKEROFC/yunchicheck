@@ -5736,6 +5736,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const { data: bulkData } = await supabase.from("pending_bulk_checks").select("cards").eq("id", mshBulkId).maybeSingle();
         let mshCards: string[] = [];
         if (bulkData?.cards) { mshCards = bulkData.cards.split("\n").filter((c: string) => c.trim()); }
+        // Delete immediately to prevent duplicate processing on re-click
+        await supabase.from("pending_bulk_checks").delete().eq("id", mshBulkId);
         if (!mshCards.length) {
           await answerCallbackQuery(update.callback_query.id, "❌ Card data expired or invalid");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
