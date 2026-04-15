@@ -9596,6 +9596,47 @@ Example: <code>/sh 4111111111111111|12|25|123</code>
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // BIN lookup for card info
+      const binDigits = shParts[0].replace(/\D/g, '').slice(0, 8);
+      let binBrand = "Unknown"; let binType = "Unknown"; let binBank = "Unknown Bank"; let binCountry = "Unknown"; let binCountryCode = "XX"; let binLevel = "Standard";
+      let brandLogo = "💳";
+      
+      try {
+        const binResp = await fetch(`https://lookup.binlist.net/${binDigits}`, { headers: { 'Accept-Version': '3' } });
+        if (binResp.ok) {
+          const binData = await binResp.json();
+          binBrand = binData.scheme?.toUpperCase() || "Unknown";
+          binType = binData.type ? binData.type.charAt(0).toUpperCase() + binData.type.slice(1) : "Unknown";
+          binBank = binData.bank?.name || "Unknown Bank";
+          binCountry = binData.country?.name || "Unknown";
+          binCountryCode = binData.country?.alpha2 || "XX";
+          binLevel = binData.brand || "Standard";
+        }
+      } catch { /* fallback */ }
+
+      // Fallback brand detection
+      if (binBrand === "Unknown") {
+        if (/^4/.test(binDigits)) binBrand = "VISA";
+        else if (/^5[1-5]/.test(binDigits) || /^2[2-7]/.test(binDigits)) binBrand = "MASTERCARD";
+        else if (/^3[47]/.test(binDigits)) binBrand = "AMEX";
+        else if (/^6(?:011|5|4[4-9]|22)/.test(binDigits)) binBrand = "DISCOVER";
+      }
+
+      // Brand logos
+      const brandLogos: Record<string, string> = {
+        'VISA': '💙 𝗩𝗜𝗦𝗔', 'MASTERCARD': '🟠 𝗠𝗔𝗦𝗧𝗘𝗥𝗖𝗔𝗥𝗗', 'AMEX': '💚 𝗔𝗠𝗘𝗫',
+        'DISCOVER': '🟧 𝗗𝗜𝗦𝗖𝗢𝗩𝗘𝗥', 'JCB': '🔴 𝗝𝗖𝗕', 'UNIONPAY': '🔵 𝗨𝗡𝗜𝗢𝗡𝗣𝗔𝗬',
+        'MAESTRO': '🔷 𝗠𝗔𝗘𝗦𝗧𝗥𝗢', 'DINERS CLUB': '⚪ 𝗗𝗜𝗡𝗘𝗥𝗦',
+      };
+      brandLogo = brandLogos[binBrand] || `💳 ${binBrand}`;
+
+      // Country flag emoji
+      const getFlag = (code: string) => {
+        if (!code || code === 'XX') return '🌍';
+        return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+      };
+      const countryFlag = getFlag(binCountryCode);
+
       // Fetch price group counts
       const priceGroups = [
         { label: "$0 – $10", min: 0, max: 10, emoji: "💰" },
@@ -9611,22 +9652,14 @@ Example: <code>/sh 4111111111111111|12|25|123</code>
             .select("id", { count: "exact", head: true })
             .not("url", "like", "https://razorpay.me/%")
             .lte("price", g.max === 100 ? 100 : g.max);
-          
-          if (g.min > 0) {
-            query = query.gt("price", g.min);
-          } else {
-            query = query.gt("price", 0);
-          }
-          
+          if (g.min > 0) query = query.gt("price", g.min);
+          else query = query.gt("price", 0);
           const { count } = await query;
           return { ...g, count: count || 0 };
         })
       );
 
       const totalSites = groupCounts.reduce((a, g) => a + g.count, 0);
-      const maskedSh = shParts[0].length >= 10
-        ? `${shParts[0].substring(0, 6)}******${shParts[0].slice(-4)}`
-        : shParts[0];
 
       // Encode cc in base64 for callback data
       const encodedCC = btoa(cc);
@@ -9636,12 +9669,12 @@ Example: <code>/sh 4111111111111111|12|25|123</code>
       for (const g of groupCounts) {
         if (g.count > 0) {
           priceButtons.push([{
-            text: `${g.emoji} ${g.label} (${g.count} sites)`,
+            text: `${g.emoji} ${g.label}  •  ${g.count} sites`,
             callback_data: `sh_price_${g.min}_${g.max}_${encodedCC}`,
           }]);
         } else {
           priceButtons.push([{
-            text: `${g.emoji} ${g.label} (0 sites) ❌`,
+            text: `${g.emoji} ${g.label}  •  0 sites ✖️`,
             callback_data: `sh_nosite`,
           }]);
         }
@@ -9649,25 +9682,30 @@ Example: <code>/sh 4111111111111111|12|25|123</code>
 
       // Add "Auto (Any Range)" button
       priceButtons.push([{
-        text: `🎲 Auto – Any Range (${totalSites} sites)`,
+        text: `🎲 𝗔𝘂𝘁𝗼 – Any Range  •  ${totalSites} sites`,
         callback_data: `sh_price_0_100_${encodedCC}`,
       }]);
 
       await sendTelegramMessage(chatId, `
-━━━━━━━━━━━━━━━━━━━━━━
-   🛒 <b>SHOPIFY CHARGE</b>
-━━━━━━━━━━━━━━━━━━━━━━
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
+🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
-📇 <b>Card:</b> <code>${maskedSh}</code>
-👤 <b>User:</b> ${escapeHtml(shUserProfile.username || "Unknown")}
-💰 <b>Balance:</b> ${shUserProfile.credits} credits
-🌐 <b>Total Sites:</b> ${totalSites}
+┌─── 📇 <b>Card Info</b> ───┐
+│ ${brandLogo}
+│ 📟 <code>${escapeHtml(cc)}</code>
+│ 🏷 <b>Type:</b> ${escapeHtml(binType)} │ ${escapeHtml(binLevel)}
+│ 🏦 <b>Bank:</b> ${escapeHtml(binBank)}
+│ ${countryFlag} <b>Country:</b> ${escapeHtml(binCountry)}
+└────────────────────────┘
 
-<b>━━━ Select Price Range ━━━</b>
+┌─── 👤 <b>Account</b> ───┐
+│ 🔹 ${escapeHtml(shUserProfile.username || "Unknown")}
+│ 💰 <b>Balance:</b> ${shUserProfile.credits} credits
+│ 🌐 <b>Sites:</b> ${totalSites} available
+└────────────────────────┘
 
-Choose which site price range
-to use for this card check:
-━━━━━━━━━━━━━━━━━━━━━━
+⬇️ <b>𝗦𝗲𝗹𝗲𝗰𝘁 𝗣𝗿𝗶𝗰𝗲 𝗥𝗮𝗻𝗴𝗲</b> ⬇️
 `, {
         inline_keyboard: priceButtons,
       }, messageId);
