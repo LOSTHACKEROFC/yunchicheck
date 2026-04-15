@@ -5726,15 +5726,18 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      if (callbackData.startsWith("msh_price_")) {
-        const mshParts = callbackData.replace("msh_price_", "").split("_");
+      if (callbackData.startsWith("msh_") && !callbackData.startsWith("msh_nosite")) {
+        const mshParts = callbackData.replace("msh_", "").split("_");
         const mshPriceMin = parseInt(mshParts[0]);
         const mshPriceMax = parseInt(mshParts[1]);
-        const mshEncodedCards = mshParts.slice(2).join("_");
+        const mshBulkId = mshParts[2];
 
+        // Fetch cards from DB
+        const { data: bulkData } = await supabase.from("pending_bulk_checks").select("cards").eq("id", mshBulkId).maybeSingle();
         let mshCards: string[] = [];
-        try { mshCards = atob(mshEncodedCards).split("\n").filter(c => c.trim()); } catch {
-          await answerCallbackQuery(update.callback_query.id, "❌ Invalid card data");
+        if (bulkData?.cards) { mshCards = bulkData.cards.split("\n").filter((c: string) => c.trim()); }
+        if (!mshCards.length) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Card data expired or invalid");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
@@ -10123,8 +10126,9 @@ cc|mm|yy|cvv</code>
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Encode cards and show price selection
-      const mshEncodedCards = btoa(validCards.join("\n"));
+      // Store cards in DB with short ID for callback_data (Telegram 64-byte limit)
+      const mshBulkId = crypto.randomUUID().slice(0, 8);
+      await supabase.from("pending_bulk_checks").insert({ id: mshBulkId, cards: validCards.join("\n"), chat_id: String(chatId), user_id: mshUserProfile.user_id });
 
       // Fetch price group counts
       const mshPriceGroups = [
@@ -10149,12 +10153,12 @@ cc|mm|yy|cvv</code>
       const mshPriceButtons: any[][] = [];
       for (const g of mshGroupCounts) {
         if (g.count > 0) {
-          mshPriceButtons.push([{ text: `${g.emoji} ${g.label}  •  ${g.count} sites`, callback_data: `msh_price_${g.min}_${g.max}_${mshEncodedCards}` }]);
+          mshPriceButtons.push([{ text: `${g.emoji} ${g.label}  •  ${g.count} sites`, callback_data: `msh_${g.min}_${g.max}_${mshBulkId}` }]);
         } else {
           mshPriceButtons.push([{ text: `${g.emoji} ${g.label}  •  0 sites ✖️`, callback_data: `msh_nosite` }]);
         }
       }
-      mshPriceButtons.push([{ text: `🎲 𝗔𝘂𝘁𝗼 – Any Range  •  ${mshTotalSites} sites`, callback_data: `msh_price_0_100_${mshEncodedCards}` }]);
+      mshPriceButtons.push([{ text: `🎲 𝗔𝘂𝘁𝗼 – Any Range  •  ${mshTotalSites} sites`, callback_data: `msh_0_100_${mshBulkId}` }]);
 
       await sendTelegramMessage(chatId, `
 🛍 <b>𝗠𝗨𝗟𝗧𝗜 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
