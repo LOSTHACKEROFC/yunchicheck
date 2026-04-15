@@ -6527,22 +6527,27 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           }
         }
 
-        // Cleanup stop tracker
-        await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
+         // Cleanup stop tracker and store error cards for recheck
+         await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
+         if (mtxtErrorCards.length > 0) {
+           // Store error cards for recheck using same bulk ID
+           await supabase.from("pending_bulk_checks").insert({ id: `rechk_${mtxtBulkId}`, cards: mtxtErrorCards.join("\n"), chat_id: String(callbackChatId), user_id: mtxtProfile.user_id });
+         }
 
-        // Final message with buttons
-        const mtxtElapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
-        const { data: mtxtUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", mtxtProfile.user_id).single();
-        const mtxtNewBalance = mtxtUpdatedProfile?.credits ?? (mtxtProfile.credits - mtxtTotalCost);
+         // Final message with buttons
+         const mtxtElapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
+         const { data: mtxtUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", mtxtProfile.user_id).single();
+         const mtxtNewBalance = mtxtUpdatedProfile?.credits ?? (mtxtProfile.credits - mtxtTotalCost);
 
-        const finalData = buildMtxtMessageAndButtons(mtxtChecked, mtxtCards.length, mtxtElapsed, true);
-        let mtxtFinalMsg = finalData.msg;
-        mtxtFinalMsg += `\n━━━━━━━━━━━━━━━━━━━━━━\n`;
-        mtxtFinalMsg += mtxtStopped ? `🛑 <b>Stopped</b> — ${mtxtChecked}/${mtxtCards.length} checked\n` : `✅ <b>Process Completed</b>\n`;
-        mtxtFinalMsg += `💰 Cost: <b>-${mtxtTotalCost}</b> credits ・ Balance: <b>${mtxtNewBalance}</b>`;
-        if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `\n🔴 <b>${mtxtFailedProxyIds.length} dead proxy removed</b>`;
+         const finalData = buildMtxtMessageAndButtons(mtxtChecked, mtxtCards.length, mtxtElapsed, true);
+         let mtxtFinalMsg = finalData.msg;
+         mtxtFinalMsg += `\n━━━━━━━━━━━━━━━━━━━━━━\n`;
+         mtxtFinalMsg += mtxtStopped ? `🛑 <b>Stopped</b> — ${mtxtChecked}/${mtxtCards.length} checked\n` : `✅ <b>Process Completed</b>\n`;
+         mtxtFinalMsg += `💰 Cost: <b>-${mtxtTotalCost}</b> credits ・ Balance: <b>${mtxtNewBalance}</b>`;
+         if (mtxtErrorCards.length > 0) mtxtFinalMsg += `\n⚠️ <b>${mtxtErrorCards.length} cards</b> had errors — tap Recheck to retry`;
+         if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `\n🔴 <b>${mtxtFailedProxyIds.length} dead proxy removed</b>`;
 
-        await editTelegramMessage(callbackChatId, messageId, mtxtFinalMsg, { inline_keyboard: finalData.buttons });
+         await editTelegramMessage(callbackChatId, messageId, mtxtFinalMsg, { inline_keyboard: finalData.buttons });
 
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
