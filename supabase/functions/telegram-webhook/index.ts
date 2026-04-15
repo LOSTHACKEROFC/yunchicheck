@@ -9562,9 +9562,7 @@ ${currentConfig.nextPrompt}
 
       if (!cc) {
         await sendTelegramMessage(chatId, `
-⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
-⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
 📌 <b>Usage:</b>
 <code>/sh cc|mm|yy|cvv</code>
@@ -9581,7 +9579,6 @@ ${currentConfig.nextPrompt}
 💡 <i>Select a price range after
 sending to choose Shopify sites</i>
 
-⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 `, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -9727,9 +9724,7 @@ Example: <code>/sh 4111111111111111|12|25|123</code>
       }]);
 
       await sendTelegramMessage(chatId, `
-⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
-⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
 ┌─── 📇 <b>Card Info</b> ───┐
 │ ${brandLogo}
