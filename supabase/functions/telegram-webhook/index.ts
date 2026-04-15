@@ -6383,93 +6383,123 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return { msg, buttons };
         };
 
-        // 50-thread concurrency with staggered launches like web Shopify gateway
-        const MTXT_CONCURRENCY = 50;
-        const MTXT_STAGGER_MS = 180;
+         // 50-thread concurrency with staggered launches like web Shopify gateway
+         const MTXT_CONCURRENCY = 50;
+         const MTXT_STAGGER_MS_VAL = 180;
 
-        // Show initial processing message with animation
-        const initData = buildMtxtMessageAndButtons(0, mtxtCards.length, '0.00', false);
-        await editTelegramMessage(callbackChatId, messageId, initData.msg, { inline_keyboard: initData.buttons });
+         // Throttled UI update - only send latest state, max 1 edit per 800ms
+         let mtxtUpdatePending = false;
+         let mtxtUpdateScheduled = false;
+         let mtxtLastEditTime = 0;
+         const MTXT_MIN_EDIT_INTERVAL = 800;
 
-        // Process card helper
-        let mtxtChecked = 0;
-        const mtxtProcessCard = async (cardCC: string) => {
-          if (mtxtStopped) return;
-          // Check stop flag from DB
-          const { data: stopCheck } = await supabase.from("pending_bulk_checks").select("id").eq("id", mtxtBulkId).maybeSingle();
-          if (!stopCheck) { mtxtStopped = true; return; }
-          mtxtCurrentCard = cardCC;
-          const checkElapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
-          try {
-            const checkingData = buildMtxtMessageAndButtons(mtxtChecked, mtxtCards.length, checkElapsed, false);
-            await editTelegramMessage(callbackChatId, messageId, checkingData.msg, { inline_keyboard: checkingData.buttons });
-          } catch {}
+         const mtxtFlushUpdate = async (forceNow = false) => {
+           const now = Date.now();
+           const elapsed = ((now - mtxtStartTime) / 1000).toFixed(2);
+           const timeSinceLastEdit = now - mtxtLastEditTime;
 
-          const cardParts = cardCC.split("|");
-          if (cardParts.length < 4 || !cardParts[3] || cardParts[3].length < 3) {
-            const errResult: MtxtResult = { cc: cardCC, status: 'error', response: 'Invalid format', price: '$0.00', bank: 'N/A', flag: '🌍' };
-            mtxtResults.push(errResult);
-            mtxtLastResponse = 'Invalid format';
-            mtxtDeclined++;
-            mtxtChecked++;
-            return;
-          }
+           if (!forceNow && timeSinceLastEdit < MTXT_MIN_EDIT_INTERVAL) {
+             // Schedule a deferred update if not already scheduled
+             if (!mtxtUpdateScheduled) {
+               mtxtUpdateScheduled = true;
+               setTimeout(async () => {
+                 mtxtUpdateScheduled = false;
+                 if (mtxtUpdatePending) {
+                   mtxtUpdatePending = false;
+                   await mtxtFlushUpdate(true);
+                 }
+               }, MTXT_MIN_EDIT_INTERVAL - timeSinceLastEdit + 50);
+             }
+             mtxtUpdatePending = true;
+             return;
+           }
 
-          const [binInfo, result] = await Promise.all([
-            mtxtLookupBin(cardParts[0]),
-            mtxtCheckCard(cardCC)
-          ]);
+           mtxtLastEditTime = Date.now();
+           try {
+             const updateData = buildMtxtMessageAndButtons(mtxtChecked, mtxtCards.length, elapsed, false);
+             await editTelegramMessage(callbackChatId, messageId, updateData.msg, { inline_keyboard: updateData.buttons });
+           } catch {}
+         };
 
-          let statusType: string;
-          const respLower = (result.response || '').toLowerCase();
-          if (result.status === 'live') {
-            if (respLower.includes('order_completed') || respLower.includes('order completed')) { mtxtCharged++; statusType = 'live'; }
-            else { mtxtApproved++; statusType = 'approved'; }
-          } else if (result.status === 'dead') {
-            mtxtDeclined++; statusType = 'dead';
-          } else {
-            if (respLower.includes('3ds') || respLower.includes('otp') || respLower.includes('required')) { mtxtApproved++; statusType = 'approved'; }
-            else { mtxtDeclined++; statusType = 'dead'; }
-          }
+         // Show initial processing message with animation
+         const initData = buildMtxtMessageAndButtons(0, mtxtCards.length, '0.00', false);
+         await editTelegramMessage(callbackChatId, messageId, initData.msg, { inline_keyboard: initData.buttons });
 
-          let cardCost = 0;
-          if (result.status === 'live') cardCost = 2;
-          else if (result.status === 'dead') cardCost = 1;
-          mtxtTotalCost += cardCost;
+         // Process card helper
+         let mtxtChecked = 0;
+         const mtxtProcessCard = async (cardCC: string) => {
+           if (mtxtStopped) return;
+           // Check stop flag from DB
+           const { data: stopCheck } = await supabase.from("pending_bulk_checks").select("id").eq("id", mtxtBulkId).maybeSingle();
+           if (!stopCheck) { mtxtStopped = true; return; }
+           mtxtCurrentCard = cardCC;
 
-          if (cardCost > 0) {
-            await supabase.from("profiles").update({ credits: mtxtProfile.credits - mtxtTotalCost, updated_at: new Date().toISOString() }).eq("user_id", mtxtProfile.user_id);
-            await supabase.from("card_checks").insert({ user_id: mtxtProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: result.status === "live" ? "charged" : "dead" });
-          } else {
-            await supabase.from("card_checks").insert({ user_id: mtxtProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: "unknown" });
-          }
+           // Show "checking" state for this card immediately (throttled)
+           await mtxtFlushUpdate();
 
-          if (result.status === 'live' && SUPABASE_SERVICE_ROLE_KEY) {
-            fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
-              method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
-              body: JSON.stringify({ user_id: mtxtProfile.user_id, card_details: cardCC, status: 'CHARGED', response_message: result.response, amount: result.price, gateway: 'Shopify Charge' }),
-            }).catch(() => {});
-          }
+           const cardParts = cardCC.split("|");
+           if (cardParts.length < 4 || !cardParts[3] || cardParts[3].length < 3) {
+             const errResult: MtxtResult = { cc: cardCC, status: 'error', response: 'Invalid format', price: '$0.00', bank: 'N/A', flag: '🌍' };
+             mtxtResults.push(errResult);
+             mtxtLastResponse = 'Invalid format';
+             mtxtDeclined++;
+             mtxtChecked++;
+             await mtxtFlushUpdate();
+             return;
+           }
 
-          const cardResult: MtxtResult = {
-            cc: cardCC,
-            status: statusType,
-            response: result.response || 'N/A',
-            price: result.price,
-            bank: binInfo.bank,
-            flag: binInfo.flag,
-          };
-          mtxtResults.push(cardResult);
-          mtxtLastResponse = result.response || 'N/A';
+           const [binInfo, result] = await Promise.all([
+             mtxtLookupBin(cardParts[0]),
+             mtxtCheckCard(cardCC)
+           ]);
 
-          mtxtChecked++;
+           let statusType: string;
+           const respLower = (result.response || '').toLowerCase();
+           if (result.status === 'live') {
+             if (respLower.includes('order_completed') || respLower.includes('order completed')) { mtxtCharged++; statusType = 'live'; }
+             else { mtxtApproved++; statusType = 'approved'; }
+           } else if (result.status === 'dead') {
+             mtxtDeclined++; statusType = 'dead';
+           } else {
+             if (respLower.includes('3ds') || respLower.includes('otp') || respLower.includes('required')) { mtxtApproved++; statusType = 'approved'; }
+             else { mtxtDeclined++; statusType = 'dead'; }
+           }
 
-          const elapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
-          try {
-            const updateData = buildMtxtMessageAndButtons(mtxtChecked, mtxtCards.length, elapsed, false);
-            await editTelegramMessage(callbackChatId, messageId, updateData.msg, { inline_keyboard: updateData.buttons });
-          } catch {}
-        };
+           let cardCost = 0;
+           if (result.status === 'live') cardCost = 2;
+           else if (result.status === 'dead') cardCost = 1;
+           mtxtTotalCost += cardCost;
+
+           if (cardCost > 0) {
+             await supabase.from("profiles").update({ credits: mtxtProfile.credits - mtxtTotalCost, updated_at: new Date().toISOString() }).eq("user_id", mtxtProfile.user_id);
+             await supabase.from("card_checks").insert({ user_id: mtxtProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: result.status === "live" ? "charged" : "dead" });
+           } else {
+             await supabase.from("card_checks").insert({ user_id: mtxtProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: "unknown" });
+           }
+
+           if (result.status === 'live' && SUPABASE_SERVICE_ROLE_KEY) {
+             fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
+               method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+               body: JSON.stringify({ user_id: mtxtProfile.user_id, card_details: cardCC, status: 'CHARGED', response_message: result.response, amount: result.price, gateway: 'Shopify Charge' }),
+             }).catch(() => {});
+           }
+
+           const cardResult: MtxtResult = {
+             cc: cardCC,
+             status: statusType,
+             response: result.response || 'N/A',
+             price: result.price,
+             bank: binInfo.bank,
+             flag: binInfo.flag,
+           };
+           mtxtResults.push(cardResult);
+           mtxtLastResponse = result.response || 'N/A';
+
+           mtxtChecked++;
+
+           // Update UI with this card's result (throttled to avoid Telegram rate limits)
+           await mtxtFlushUpdate();
+         };
 
         // Staggered 50-card session model (matching web Shopify gateway)
         const mtxtQueue = mtxtCards.map(c => c.trim()).filter(c => c);
