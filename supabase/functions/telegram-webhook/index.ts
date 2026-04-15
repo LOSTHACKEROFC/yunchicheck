@@ -5697,9 +5697,11 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
               body: JSON.stringify({ user_id: shProfile.user_id, card_details: cc, status: 'CHARGED', response_message: apiMessage, amount: sitePrice, gateway: 'Shopify Charge' }),
             }).catch(() => {});
-          }
+           }
 
-          const newBalance = shProfile.credits - creditCost;
+          // Re-fetch real-time balance from DB
+          const { data: shUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", shProfile.user_id).single();
+          const newBalance = shUpdatedProfile?.credits ?? (shProfile.credits - creditCost);
           const deadProxiesCount = failedProxyIds.length;
           const allProxiesDead = failedProxyIds.length >= userProxies.length;
 
@@ -6086,9 +6088,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         for (let t = 0; t < mshThreads; t++) { mshWorkers.push(mshWorker()); }
         await Promise.all(mshWorkers);
 
-        // Final message
+        // Final message - re-fetch real-time balance from DB
         const mshElapsed = ((Date.now() - mshStartTime) / 1000).toFixed(2);
-        const mshNewBalance = mshProfile.credits - mshTotalCost;
+        const { data: mshUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", mshProfile.user_id).single();
+        const mshNewBalance = mshUpdatedProfile?.credits ?? (mshProfile.credits - mshTotalCost);
         let finalMsg = buildMshMessage(mshCards.length, mshCards.length, mshElapsed);
         finalMsg += `\n✅ <b>Process Completed</b>\n`;
         finalMsg += `<i>💰 Cost: -${mshTotalCost} credits ・ Balance: ${mshNewBalance}</i>`;
@@ -7488,11 +7491,15 @@ Top up at yunchicheck.com/dashboard/topup
           result: "killed"
         });
 
+        // Re-fetch real-time balance from DB
+        const { data: killUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", profile.user_id).single();
+        const killBalance = killUpdatedProfile?.credits ?? newCredits;
+
         resultMessage += `
 <b>━━━ Final Status ━━━</b>
 🟢 <b>KILLED SUCCESSFULLY</b> 🔥
 
-💰 <b>-5 credits</b> | Balance: <b>${newCredits}</b>
+💰 <b>-5 credits</b> | Balance: <b>${killBalance}</b>
 ━━━━━━━━━━━━━━━━━━━━━━
 `;
       } else {
