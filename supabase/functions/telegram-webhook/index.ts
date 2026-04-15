@@ -6387,34 +6387,17 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          const MTXT_CONCURRENCY = 50;
          const MTXT_STAGGER_MS_VAL = 180;
 
-         // Throttled UI update - only send latest state, max 1 edit per 800ms
-         let mtxtUpdatePending = false;
-         let mtxtUpdateScheduled = false;
+         // Throttled UI update - max 1 edit per 500ms, always send on force
          let mtxtLastEditTime = 0;
-         const MTXT_MIN_EDIT_INTERVAL = 800;
+         const MTXT_MIN_EDIT_INTERVAL = 500;
 
          const mtxtFlushUpdate = async (forceNow = false) => {
            const now = Date.now();
-           const elapsed = ((now - mtxtStartTime) / 1000).toFixed(2);
-           const timeSinceLastEdit = now - mtxtLastEditTime;
-
-           if (!forceNow && timeSinceLastEdit < MTXT_MIN_EDIT_INTERVAL) {
-             // Schedule a deferred update if not already scheduled
-             if (!mtxtUpdateScheduled) {
-               mtxtUpdateScheduled = true;
-               setTimeout(async () => {
-                 mtxtUpdateScheduled = false;
-                 if (mtxtUpdatePending) {
-                   mtxtUpdatePending = false;
-                   await mtxtFlushUpdate(true);
-                 }
-               }, MTXT_MIN_EDIT_INTERVAL - timeSinceLastEdit + 50);
-             }
-             mtxtUpdatePending = true;
-             return;
+           if (!forceNow && (now - mtxtLastEditTime) < MTXT_MIN_EDIT_INTERVAL) {
+             return; // Skip this update, next card completion will send it
            }
-
            mtxtLastEditTime = Date.now();
+           const elapsed = ((now - mtxtStartTime) / 1000).toFixed(2);
            try {
              const updateData = buildMtxtMessageAndButtons(mtxtChecked, mtxtCards.length, elapsed, false);
              await editTelegramMessage(callbackChatId, messageId, updateData.msg, { inline_keyboard: updateData.buttons });
