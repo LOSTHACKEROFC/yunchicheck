@@ -10350,6 +10350,5 @@ account isn't connected yet.
     });
   }
 };
-};
 
 serve(handler);
