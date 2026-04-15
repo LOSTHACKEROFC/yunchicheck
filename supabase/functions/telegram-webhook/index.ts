@@ -9938,8 +9938,22 @@ ${currentConfig.nextPrompt}
     // /sh - SHOPIFY CHARGE SINGLE CARD CHECK
     // ─────────────────────────────────────────────────────────
 
-    if (text === "/sh" || text.startsWith("/sh ")) {
-      const cc = text.replace("/sh", "").trim();
+    if (text === "/sh" || text.startsWith("/sh ") || text.startsWith("/sh\n")) {
+      let shRawInput = text.replace(/^\/sh\s*/, "").trim();
+
+      // Support reply: if no card in command text, check replied message text
+      if (!shRawInput && update.message?.reply_to_message?.text) {
+        shRawInput = update.message.reply_to_message.text.trim();
+      }
+
+      // Parse card from input using universal parser (supports all formats)
+      let cc = "";
+      if (shRawInput) {
+        const parsedCards = extractCardsFromText(shRawInput);
+        if (parsedCards.length > 0) {
+          cc = parsedCards[0]; // Use first valid card for /sh
+        }
+      }
 
       if (!cc) {
         await sendTelegramMessage(chatId, `
@@ -9948,18 +9962,18 @@ ${currentConfig.nextPrompt}
 📌 <b>Usage:</b>
 <code>/sh cc|mm|yy|cvv</code>
 
-📎 <b>Example:</b>
+📎 <b>Formats:</b>
 <code>/sh 4111111111111111|12|25|123</code>
+<code>/sh 4111111111111111:12:25:123</code>
+<code>/sh 4111111111111111 12 25 123</code>
+
+💡 <i>Reply to a message with /sh to extract card</i>
 
 ┌─── 💲 <b>Pricing</b> ───┐
 │ 🟢 CHARGED ➜ 2 credits     │
 │ 🔴 DECLINED ➜ 1 credit      │
 │ ⚠️ UNKNOWN ➜ Free           │
 └────────────────────────┘
-
-💡 <i>Select a price range after
-sending to choose Shopify sites</i>
-
 `, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
