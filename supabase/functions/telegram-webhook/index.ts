@@ -6432,10 +6432,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            // Check stop flag from DB
            const { data: stopCheck } = await supabase.from("pending_bulk_checks").select("id").eq("id", mtxtBulkId).maybeSingle();
            if (!stopCheck) { mtxtStopped = true; return; }
-           mtxtCurrentCard = cardCC;
-
-           // Show "checking" state for this card immediately (throttled)
-           await mtxtFlushUpdate();
+            mtxtCurrentCard = cardCC;
 
            const cardParts = cardCC.split("|");
            if (cardParts.length < 4 || !cardParts[3] || cardParts[3].length < 3) {
