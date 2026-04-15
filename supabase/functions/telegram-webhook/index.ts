@@ -6234,7 +6234,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         }
 
          const SHOPIFY_API_URL_MTXT = "http://108.165.12.183:8081/";
-         const MTXT_MAX_RETRIES = 4; // Match web: UNKNOWN_RETRY_ATTEMPTS = 4
+         const MTXT_MAX_RETRIES = 2; // Reduced for mass checking (50 concurrent cards)
          const mtxtStartTime = Date.now();
 
          const mtxtBadResponses = ["Site not supported", "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH", "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED", "Payment method not available", "ARTIFACT_DISSATISFACTION", "VALIDATION_CUSTOM", '"Gateway":"Authorize.net"'];
