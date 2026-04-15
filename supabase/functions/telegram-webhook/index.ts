@@ -5806,15 +5806,34 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const mshAvailableSites = [...mshSites].sort(() => Math.random() - 0.5);
 
         // BIN lookup helper
+        const mshBinCache: Record<string, { bank: string; country: string; flag: string }> = {};
         const mshLookupBin = async (cardNum: string) => {
-          const bin = cardNum.replace(/\D/g, '').slice(0, 8);
+          const bin = cardNum.replace(/\D/g, '').slice(0, 6);
+          if (mshBinCache[bin]) return mshBinCache[bin];
           let bank = "Unknown", country = "", countryCode = "XX";
+          const getF = (code: string) => { if (!code || code === 'XX') return '🌍'; return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)); };
+          // Try binlist.net first
           try {
             const r = await fetch(`https://lookup.binlist.net/${bin}`, { headers: { 'Accept-Version': '3' } });
             if (r.ok) { const d = await r.json(); bank = d.bank?.name || "Unknown"; country = d.country?.name || ""; countryCode = d.country?.alpha2 || "XX"; }
           } catch {}
-          const getF = (code: string) => { if (!code || code === 'XX') return '🌍'; return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)); };
-          return { bank, country, flag: getF(countryCode) };
+          // Fallback to bincheck.io if still unknown
+          if (bank === "Unknown") {
+            try {
+              const r2 = await fetch(`https://api.bincodes.com/bin/?format=json&api_key=free&bin=${bin}`);
+              if (r2.ok) { const d2 = await r2.json(); if (d2.bank && d2.bank !== 'N/A') bank = d2.bank; if (d2.countrycode && d2.countrycode !== 'N/A') countryCode = d2.countrycode; }
+            } catch {}
+          }
+          // Fallback to edge function bin-lookup
+          if (bank === "Unknown") {
+            try {
+              const r3 = await fetch(`${SUPABASE_URL}/functions/v1/bin-lookup`, { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` }, body: JSON.stringify({ bin }) });
+              if (r3.ok) { const d3 = await r3.json(); if (d3.bank && d3.bank !== 'Unknown') bank = d3.bank; if (d3.countryCode && d3.countryCode !== 'XX') countryCode = d3.countryCode; }
+            } catch {}
+          }
+          const result = { bank, country, flag: getF(countryCode) };
+          mshBinCache[bin] = result;
+          return result;
         };
 
         // Single call helper
