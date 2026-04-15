@@ -10123,8 +10123,9 @@ cc|mm|yy|cvv</code>
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Encode cards and show price selection
-      const mshEncodedCards = btoa(validCards.join("\n"));
+      // Store cards in DB with short ID for callback_data (Telegram 64-byte limit)
+      const mshBulkId = crypto.randomUUID().slice(0, 8);
+      await supabase.from("pending_bulk_checks").insert({ id: mshBulkId, cards: validCards.join("\n"), chat_id: String(chatId), user_id: mshUserProfile.user_id });
 
       // Fetch price group counts
       const mshPriceGroups = [
@@ -10149,12 +10150,12 @@ cc|mm|yy|cvv</code>
       const mshPriceButtons: any[][] = [];
       for (const g of mshGroupCounts) {
         if (g.count > 0) {
-          mshPriceButtons.push([{ text: `${g.emoji} ${g.label}  •  ${g.count} sites`, callback_data: `msh_price_${g.min}_${g.max}_${mshEncodedCards}` }]);
+          mshPriceButtons.push([{ text: `${g.emoji} ${g.label}  •  ${g.count} sites`, callback_data: `msh_${g.min}_${g.max}_${mshBulkId}` }]);
         } else {
           mshPriceButtons.push([{ text: `${g.emoji} ${g.label}  •  0 sites ✖️`, callback_data: `msh_nosite` }]);
         }
       }
-      mshPriceButtons.push([{ text: `🎲 𝗔𝘂𝘁𝗼 – Any Range  •  ${mshTotalSites} sites`, callback_data: `msh_price_0_100_${mshEncodedCards}` }]);
+      mshPriceButtons.push([{ text: `🎲 𝗔𝘂𝘁𝗼 – Any Range  •  ${mshTotalSites} sites`, callback_data: `msh_0_100_${mshBulkId}` }]);
 
       await sendTelegramMessage(chatId, `
 🛍 <b>𝗠𝗨𝗟𝗧𝗜 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
