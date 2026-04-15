@@ -5257,6 +5257,11 @@ Examples:
       // SHOPIFY CHARGE (/sh) PRICE GROUP CALLBACK
       // ─────────────────────────────────────────────────────────
 
+      if (callbackData === "sh_nosite") {
+        await answerCallbackQuery(update.callback_query.id, "❌ No sites available in this price range");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       if (callbackData.startsWith("sh_price_")) {
         // Format: sh_price_{min}_{max}_{messageId}_{cc_base64}
         const parts = callbackData.replace("sh_price_", "").split("_");
