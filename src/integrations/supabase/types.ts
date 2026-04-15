@@ -494,6 +494,30 @@ export type Database = {
         }
         Relationships: []
       }
+      pending_bulk_checks: {
+        Row: {
+          cards: string
+          chat_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          cards: string
+          chat_id: string
+          created_at?: string
+          id: string
+          user_id: string
+        }
+        Update: {
+          cards?: string
+          chat_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       pending_gateway_additions: {
         Row: {
           admin_chat_id: string
