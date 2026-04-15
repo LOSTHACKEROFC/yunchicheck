@@ -5254,6 +5254,232 @@ Examples:
       }
 
       // ─────────────────────────────────────────────────────────
+      // SHOPIFY CHARGE (/sh) PRICE GROUP CALLBACK
+      // ─────────────────────────────────────────────────────────
+
+      if (callbackData.startsWith("sh_price_")) {
+        // Format: sh_price_{min}_{max}_{messageId}_{cc_base64}
+        const parts = callbackData.replace("sh_price_", "").split("_");
+        // parts: [min, max, origMsgId, ...cc_base64_parts]
+        // We store cc in a simple way: sh_price_MIN_MAX_CCENCODED
+        const priceMin = parseInt(parts[0]);
+        const priceMax = parseInt(parts[1]);
+        const encodedCC = parts.slice(2).join("_");
+        
+        // Decode cc from base64
+        let cc = "";
+        try {
+          cc = atob(encodedCC);
+        } catch {
+          await answerCallbackQuery(update.callback_query.id, "❌ Invalid card data");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (!cc || !callbackChatId || !messageId) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Invalid request");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        await answerCallbackQuery(update.callback_query.id, `⚡ Checking on $${priceMin}-$${priceMax} sites...`);
+
+        // Get user profile
+        const { data: shProfile } = await supabase
+          .from("profiles")
+          .select("user_id, username, credits, is_banned, telegram_chat_id")
+          .eq("telegram_chat_id", callbackChatId)
+          .maybeSingle();
+
+        if (!shProfile) {
+          await editTelegramMessage(callbackChatId, messageId, "❌ <b>Account not connected.</b>");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (shProfile.is_banned) {
+          await editTelegramMessage(callbackChatId, messageId, "🚫 <b>Account Suspended</b>");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (shProfile.credits < 2) {
+          await editTelegramMessage(callbackChatId, messageId, `❌ <b>Insufficient Credits</b>\n\nNeed at least <b>2 credits</b>.\nBalance: <b>${shProfile.credits}</b>\n\nTop up at yunchicheck.com/dashboard/topup`);
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Card format validation
+        const ccParts = cc.split("|");
+        if (ccParts.length < 4 || !ccParts[3] || ccParts[3].length < 3) {
+          await editTelegramMessage(callbackChatId, messageId, "❌ <b>Invalid card format.</b> Use: <code>cc|mm|yy|cvv</code>");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const maskedCard = ccParts[0].length >= 10
+          ? `${ccParts[0].substring(0, 6)}******${ccParts[0].slice(-4)}`
+          : ccParts[0];
+
+        // Show processing message
+        await editTelegramMessage(callbackChatId, messageId, `
+━━━━━━━━━━━━━━━━━━━━━━
+   🛒 <b>SHOPIFY CHARGE</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+📇 <b>Card:</b> <code>${maskedCard}</code>
+💰 <b>Range:</b> $${priceMin} – $${priceMax}
+⏳ <b>Status:</b> Processing...
+
+<i>Selecting site & proxy, please wait...</i>
+━━━━━━━━━━━━━━━━━━━━━━
+`);
+
+        // Call shopify-charge-check edge function
+        const startTime = Date.now();
+        try {
+          // Create a temporary auth token for the user via service role
+          const { data: authData, error: authErr } = await supabase.auth.admin.getUserById(shProfile.user_id);
+          if (authErr || !authData?.user) {
+            await editTelegramMessage(callbackChatId, messageId, "❌ <b>Auth error.</b> Try again later.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // Call shopify-charge-check directly via HTTP with service role
+          const shopifyResponse = await fetch(`${SUPABASE_URL}/functions/v1/shopify-charge-check`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            },
+            body: JSON.stringify({
+              cc,
+              priceGroup: { min: priceMin, max: priceMax },
+            }),
+          });
+
+          const shopifyResult = await shopifyResponse.json();
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+
+          if (shopifyResult.error) {
+            await editTelegramMessage(callbackChatId, messageId, `
+━━━━━━━━━━━━━━━━━━━━━━
+   🛒 <b>SHOPIFY CHARGE</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+📇 <b>Card:</b> <code>${maskedCard}</code>
+⚠️ <b>Error:</b> ${escapeHtml(shopifyResult.error)}
+
+⏱️ ${elapsed}s
+━━━━━━━━━━━━━━━━━━━━━━
+`, {
+              inline_keyboard: [
+                [{ text: "🔄 Retry", callback_data: `sh_price_${priceMin}_${priceMax}_${encodedCC}` }],
+                [{ text: "🔙 Back to Menu", callback_data: "menu_back" }]
+              ]
+            });
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          const status = shopifyResult.computedStatus || "unknown";
+          const apiMessage = shopifyResult.apiMessage || shopifyResult.message || "N/A";
+          const chargeAmount = shopifyResult.apiTotal || "Auto";
+          const usedSite = shopifyResult.usedSite || "N/A";
+
+          let statusEmoji = "⚠️";
+          let statusLabel = "UNKNOWN";
+          let creditCost = 0;
+
+          if (status === "live") {
+            statusEmoji = "🟢";
+            statusLabel = "CHARGED ✅";
+            creditCost = 2;
+          } else if (status === "dead") {
+            statusEmoji = "🔴";
+            statusLabel = "DECLINED ❌";
+            creditCost = 1;
+          } else {
+            statusEmoji = "⚠️";
+            statusLabel = "UNKNOWN";
+            creditCost = 0;
+          }
+
+          // Deduct credits
+          if (creditCost > 0) {
+            const newCredits = shProfile.credits - creditCost;
+            await supabase
+              .from("profiles")
+              .update({ credits: newCredits, updated_at: new Date().toISOString() })
+              .eq("user_id", shProfile.user_id);
+
+            // Log the card check
+            await supabase.from("card_checks").insert({
+              user_id: shProfile.user_id,
+              card_details: cc,
+              gateway: "shopify_charge",
+              status: "completed",
+              result: status === "live" ? "charged" : "dead",
+            });
+          } else {
+            // Log unknown result
+            await supabase.from("card_checks").insert({
+              user_id: shProfile.user_id,
+              card_details: cc,
+              gateway: "shopify_charge",
+              status: "completed",
+              result: "unknown",
+            });
+          }
+
+          const newBalance = shProfile.credits - creditCost;
+
+          // Build result message
+          let resultMsg = `
+━━━━━━━━━━━━━━━━━━━━━━
+   🛒 <b>SHOPIFY CHARGE</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+📇 <b>Card:</b> <code>${maskedCard}</code>
+${statusEmoji} <b>Status:</b> ${statusLabel}
+💬 <b>Response:</b> ${escapeHtml(String(apiMessage).substring(0, 200))}
+💵 <b>Amount:</b> ${escapeHtml(chargeAmount)}
+🌐 <b>Site:</b> <code>${escapeHtml(String(usedSite).substring(0, 50))}</code>
+
+━━━━━ <b>Details</b> ━━━━━
+💰 <b>Cost:</b> ${creditCost > 0 ? `-${creditCost} credits` : "Free"}
+💳 <b>Balance:</b> ${newBalance} credits
+⏱️ <b>Time:</b> ${elapsed}s
+━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+          const resultButtons: any[][] = [];
+          if (status !== "live") {
+            resultButtons.push([{ text: "🔄 Retry Same Range", callback_data: `sh_price_${priceMin}_${priceMax}_${encodedCC}` }]);
+          }
+          resultButtons.push([{ text: "🔙 Back to Menu", callback_data: "menu_back" }]);
+
+          await editTelegramMessage(callbackChatId, messageId, resultMsg, {
+            inline_keyboard: resultButtons,
+          });
+
+        } catch (err) {
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+          const errMsg = err instanceof Error ? err.message : "Unknown error";
+          await editTelegramMessage(callbackChatId, messageId, `
+━━━━━━━━━━━━━━━━━━━━━━
+   🛒 <b>SHOPIFY CHARGE</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+📇 <b>Card:</b> <code>${maskedCard}</code>
+❌ <b>Error:</b> ${escapeHtml(errMsg)}
+⏱️ ${elapsed}s
+━━━━━━━━━━━━━━━━━━━━━━
+`, {
+            inline_keyboard: [
+              [{ text: "🔄 Retry", callback_data: `sh_price_${priceMin}_${priceMax}_${encodedCC}` }],
+              [{ text: "🔙 Back to Menu", callback_data: "menu_back" }]
+            ]
+          });
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ─────────────────────────────────────────────────────────
       // USER START PAGE CALLBACKS
       // ─────────────────────────────────────────────────────────
       
