@@ -6381,9 +6381,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         // Process card helper
         let mtxtChecked = 0;
         const mtxtProcessCard = async (cardCC: string) => {
-          // Mark as checking and update UI
-          mtxtCardStatus.set(cardCC, { state: 'checking' });
-          mtxtActiveCards.add(cardCC);
+          if (mtxtStopped) return;
+          mtxtCurrentCard = cardCC;
           const checkElapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
           try {
             const checkingData = buildMtxtMessageAndButtons(mtxtChecked, mtxtCards.length, checkElapsed, false);
@@ -6394,8 +6393,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           if (cardParts.length < 4 || !cardParts[3] || cardParts[3].length < 3) {
             const errResult: MtxtResult = { cc: cardCC, status: 'error', response: 'Invalid format', price: '$0.00', bank: 'N/A', flag: '🌍' };
             mtxtResults.push(errResult);
-            mtxtCardStatus.set(cardCC, { state: 'done', result: errResult });
-            mtxtActiveCards.delete(cardCC);
+            mtxtLastResponse = 'Invalid format';
             mtxtDeclined++;
             mtxtChecked++;
             return;
