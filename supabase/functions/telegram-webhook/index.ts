@@ -5546,17 +5546,24 @@ Go to yunchicheck.com/dashboard → Proxies
           let progressStep = 0;
           const updateProgress = async (step: string) => {
             progressStep++;
+            const progressBar = "▓".repeat(Math.min(progressStep, 5)) + "░".repeat(Math.max(0, 5 - progressStep));
             await editTelegramMessage(callbackChatId, messageId, `
-━━━━━━━━━━━━━━━━━━━━━━
-   🛒 <b>SHOPIFY CHARGE</b>
-━━━━━━━━━━━━━━━━━━━━━━
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
+🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
-📇 <b>Card:</b> <code>${maskedCard}</code>
-💰 <b>Range:</b> $${priceMin} – $${priceMax}
-⏳ <b>Step ${progressStep}:</b> ${step}
+┌─── 📇 <b>Card</b> ───┐
+│ ${shBrandLogo}
+│ 📟 <code>${escapeHtml(cc)}</code>
+│ 🏦 ${escapeHtml(shBinBank)}
+│ ${shCountryFlag} ${escapeHtml(shBinCountry)}
+└────────────────────────┘
 
-<i>${sites.length} sites | ${userProxies.length} proxies</i>
-━━━━━━━━━━━━━━━━━━━━━━
+⏳ <b>${step}</b>
+[${progressBar}] Step ${progressStep}
+💰 Range: $${priceMin} – $${priceMax}
+📊 ${sites.length} sites │ ${userProxies.length} proxies
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 `);
           };
 
