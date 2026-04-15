@@ -6111,12 +6111,12 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
       // TXT FILE SHOPIFY CHARGE (/mtxt) PRICE GROUP CALLBACK
       // ─────────────────────────────────────────────────────────
 
-      if (callbackData === "mtxt_nosite") {
-        await answerCallbackQuery(update.callback_query.id, "❌ No sites available in this price range");
+      if (callbackData === "mtxt_nosite" || callbackData === "mtxt_pending" || callbackData.startsWith("mtxt_res_")) {
+        await answerCallbackQuery(update.callback_query.id, callbackData === "mtxt_nosite" ? "❌ No sites available" : callbackData === "mtxt_pending" ? "⏳ Still checking..." : "ℹ️ Card result");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite")) {
+      if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite") && !callbackData.startsWith("mtxt_pending") && !callbackData.startsWith("mtxt_res_")) {
         const mtxtParts = callbackData.replace("mtxt_", "").split("_");
         const mtxtPriceMin = parseInt(mtxtParts[0]);
         const mtxtPriceMax = parseInt(mtxtParts[1]);
