@@ -264,7 +264,46 @@ function escapeHtml(text: string | null | undefined): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+
+// ═══════════════════════════════════════════════════════════
+// UNIVERSAL CARD PARSER - supports all common formats
+// ═══════════════════════════════════════════════════════════
+
+function parseCardLine(line: string): string | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  const cardPatterns = [
+    /^([\d\s\-]{13,23})\s*[|:\/]\s*(\d{1,2})\s*[|:\/]\s*(\d{2,4})\s*[|:\/]\s*(\d{3,4})$/,
+    /^([\d\s\-]{13,23})\s*[|:]\s*(\d{1,2})\/(\d{2,4})\s*[|:]\s*(\d{3,4})$/,
+    /^(\d{13,19})\s+(\d{1,2})\s+(\d{2,4})\s+(\d{3,4})$/,
+  ];
+  for (const pattern of cardPatterns) {
+    const match = trimmed.match(pattern);
+    if (match) {
+      const cardNum = match[1].replace(/[\s\-]/g, '');
+      const mm = match[2].padStart(2, '0');
+      let yy = match[3];
+      if (yy.length === 4) yy = yy.slice(2);
+      const cvv = match[4];
+      if (cardNum.length >= 13 && cardNum.length <= 19 && /^\d+$/.test(cardNum)) {
+        return `${cardNum}|${mm}|${yy}|${cvv}`;
+      }
+    }
+  }
+  return null;
 }
+
+function extractCardsFromText(text: string): string[] {
+  const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean);
+  const cards: string[] = [];
+  for (const line of lines) {
+    const parsed = parseCardLine(line);
+    if (parsed) cards.push(parsed);
+  }
+  return cards;
+}
+
+
 
 function formatTimeAgo(date: Date): string {
   const now = new Date();
