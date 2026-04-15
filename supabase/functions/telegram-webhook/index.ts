@@ -264,6 +264,7 @@ function escapeHtml(text: string | null | undefined): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
 
 // ═══════════════════════════════════════════════════════════
 // UNIVERSAL CARD PARSER - supports all common formats
