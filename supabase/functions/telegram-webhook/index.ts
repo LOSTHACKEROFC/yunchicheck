@@ -6352,28 +6352,46 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           let msg = `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>\n\n`;
           msg += `${spinner} <code>[${progressBar}]</code> <b>${progressPct}%</b>\n`;
           msg += `📊 <b>${checked}/${total}</b> checked  ⏱ <b>${elapsed}s</b>\n`;
+
+          // Real-time card results with responses (last 8)
+          if (mtxtResults.length > 0) {
+            msg += `\n━━━━━━━━━━━━━━━━━━━━━━\n`;
+            const recentResults = mtxtResults.slice(-8);
+            for (const r of recentResults) {
+              const num = r.cc.split('|')[0];
+              const masked = `${num.slice(0, 6)}****${num.slice(-4)}`;
+              let icon = '❌';
+              let label = 'DECLINED';
+              if (r.status === 'live') { icon = '💎'; label = 'CHARGED'; }
+              else if (r.status === 'approved') { icon = '✅'; label = 'APPROVED'; }
+              else if (r.status === 'error') { icon = '⚠️'; label = 'ERROR'; }
+              const resp = (r.response || 'N/A').length > 25 ? (r.response || 'N/A').slice(0, 25) + '…' : (r.response || 'N/A');
+              msg += `${icon} <code>${masked}</code> ┃ <b>${label}</b>\n`;
+              msg += `   ↳ ${resp} ┃ ${r.price}\n`;
+            }
+            if (mtxtResults.length > 8) {
+              msg += `<i>… +${mtxtResults.length - 8} more results</i>\n`;
+            }
+            msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+          }
+
           if (mtxtStopped) msg += `\n🛑 <b>STOPPED BY USER</b>\n`;
           if (isComplete && !mtxtStopped) msg += `\n✅ <b>Process Completed</b>\n`;
 
           // 6-button layout
           const buttons: any[][] = [];
-          // Row 1: Card Number
           const cardDisplay = mtxtCurrentCard !== '—' ? (() => {
             const num = mtxtCurrentCard.split('|')[0];
             return `${num.slice(0, 6)}****${num.slice(-4)}`;
           })() : '—';
           buttons.push([{ text: `💳 ${cardDisplay}`, callback_data: 'mtxt_pending' }]);
-          // Row 2: Response
           const respText = mtxtLastResponse.length > 35 ? mtxtLastResponse.slice(0, 35) + '…' : mtxtLastResponse;
           buttons.push([{ text: `📝 ${respText}`, callback_data: 'mtxt_pending' }]);
-          // Row 3: Charged + Declined
           buttons.push([
             { text: `💎 Charged: ${mtxtCharged}`, callback_data: 'mtxt_pending' },
             { text: `❌ Declined: ${mtxtDeclined}`, callback_data: 'mtxt_pending' },
           ]);
-          // Row 4: Progress
           buttons.push([{ text: `📊 Progress: ${checked}/${total} (${progressPct}%)`, callback_data: 'mtxt_pending' }]);
-          // Row 5: Stop or Back
           if (isComplete || mtxtStopped) {
             buttons.push([{ text: '🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂', callback_data: 'menu_back' }]);
           } else {
