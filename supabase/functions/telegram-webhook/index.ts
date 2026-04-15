@@ -5625,7 +5625,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
           let statusEmoji = "⚠️"; let statusLabel = "𝗨𝗡𝗞𝗡𝗢𝗪𝗡"; let creditCost = 0; let statusBanner = "⚠️";
           if (status === "live") { statusEmoji = "🟢"; statusLabel = "𝗖𝗛𝗔𝗥𝗚𝗘𝗗 ✅"; creditCost = 2; statusBanner = "🟩🟩🟩 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 🟩🟩🟩"; }
-          else if (status === "dead") { statusEmoji = "🔴"; statusLabel = "𝗗𝗘𝗖𝗟𝗜𝗡𝗘𝗗 ❌"; creditCost = 1; statusBanner = "🟥🟥🟥 𝗗𝗘𝗖𝗟𝗜𝗡𝗘𝗗 🟥🟥🟥"; }
+          else if (status === "dead") { statusEmoji = "<tg-emoji emoji-id=\"5974083768233760323\">✖️</tg-emoji>"; statusLabel = "𝗗𝗘𝗖𝗟𝗜𝗡𝗘𝗗"; creditCost = 1; statusBanner = "<tg-emoji emoji-id=\"5974083768233760323\">✖️</tg-emoji><tg-emoji emoji-id=\"5974083768233760323\">✖️</tg-emoji><tg-emoji emoji-id=\"5974083768233760323\">✖️</tg-emoji> 𝗗𝗘𝗖𝗟𝗜𝗡𝗘𝗗 <tg-emoji emoji-id=\"5974083768233760323\">✖️</tg-emoji><tg-emoji emoji-id=\"5974083768233760323\">✖️</tg-emoji><tg-emoji emoji-id=\"5974083768233760323\">✖️</tg-emoji>"; }
           else { statusBanner = "🟧🟧🟧 𝗨𝗡𝗞𝗡𝗢𝗪𝗡 🟧🟧🟧"; }
 
           // Deduct credits
