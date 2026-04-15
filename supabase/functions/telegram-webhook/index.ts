@@ -6333,7 +6333,6 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const mtxtAnimFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
         let mtxtAnimIdx = 0;
         const mtxtCheckingSpinners = ['🔄', '🔃', '⚡', '🔄'];
-        let mtxtSpinIdx = 0;
 
         // Track per-card status: 'waiting' | 'checking' | done result
         let mtxtCurrentCard = '—';
