@@ -5716,18 +5716,24 @@ ${statusBanner}
           const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
           const errMsg = err instanceof Error ? err.message : "Unknown error";
           await editTelegramMessage(callbackChatId, messageId, `
-━━━━━━━━━━━━━━━━━━━━━━
-   🛒 <b>SHOPIFY CHARGE</b>
-━━━━━━━━━━━━━━━━━━━━━━
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
+🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
-📇 <b>Card:</b> <code>${maskedCard}</code>
-❌ <b>Error:</b> ${escapeHtml(errMsg)}
+┌─── 📇 <b>Card</b> ───┐
+│ ${shBrandLogo}
+│ 📟 <code>${escapeHtml(cc)}</code>
+│ 🏦 ${escapeHtml(shBinBank)}
+│ ${shCountryFlag} ${escapeHtml(shBinCountry)}
+└────────────────────────┘
+
+❌ <b>𝗘𝗿𝗿𝗼𝗿:</b> ${escapeHtml(errMsg)}
 ⏱️ ${elapsed}s
-━━━━━━━━━━━━━━━━━━━━━━
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 `, {
             inline_keyboard: [
-              [{ text: "🔄 Retry", callback_data: `sh_price_${priceMin}_${priceMax}_${encodedCC}` }],
-              [{ text: "🔙 Back to Menu", callback_data: "menu_back" }]
+              [{ text: "🔄 𝗥𝗲𝘁𝗿𝘆", callback_data: `sh_price_${priceMin}_${priceMax}_${encodedCC}` }],
+              [{ text: "🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂", callback_data: "menu_back" }]
             ]
           });
         }
