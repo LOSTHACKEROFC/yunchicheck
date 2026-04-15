@@ -6410,79 +6410,80 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            let finalResult: any = null;
 
            for (let siteAttempt = 0; siteAttempt < MAX_MTXT_SITE_ATTEMPTS; siteAttempt++) {
-             const site = mtxtAvailableSites[siteAttempt % mtxtAvailableSites.length];
-             let siteResult: any = null;
+            // Pick random sites from the LIVE pool for this card (not sequential shared index)
+            const cardSites = [...mtxtLiveSites].sort(() => Math.random() - 0.5).slice(0, MAX_MTXT_SITE_ATTEMPTS);
+            if (cardSites.length === 0) return { status: 'error', response: 'No sites available', price: '$0.00' };
 
-             // Try each proxy for this site
-             const currentProxies = availableProxies.filter(p => !mtxtFailedProxyIds.includes(p.id));
-             if (currentProxies.length === 0) { finalResult = { status: 'error', response: 'All proxies dead', price: '$0.00' }; break; }
+            for (let siteAttempt = 0; siteAttempt < cardSites.length; siteAttempt++) {
+              const site = cardSites[siteAttempt];
+              if (mtxtDeadSiteUrls.has(site.url)) continue; // Skip if removed by another card
+              let siteResult: any = null;
 
-             for (const proxy of currentProxies) {
-               if (mtxtFailedProxyIds.includes(proxy.id)) continue;
-               siteResult = await mtxtCallWithRetry(cardCC, site.url, mtxtFormatProxy(proxy));
+              // Pick ONE random proxy (not all proxies per site — too slow for mass check)
+              const currentProxies = availableProxies.filter(p => !mtxtFailedProxyIds.includes(p.id));
+              if (currentProxies.length === 0) { finalResult = { status: 'error', response: 'All proxies dead', price: '$0.00' }; break; }
+              const proxy = currentProxies[Math.floor(Math.random() * currentProxies.length)];
 
-               if (siteResult.proxyDead) {
-                 mtxtFailedProxyIds.push(proxy.id);
-                 supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
-                 continue;
-               }
+              siteResult = await mtxtCallWithRetry(cardCC, site.url, mtxtFormatProxy(proxy));
 
-               if (siteResult.siteDead) {
-                 supabase.from('gateway_urls').delete().eq('url', site.url).then(() => {});
-                 siteResult = null;
-                 break;
-               }
+              if (siteResult.proxyDead) {
+                mtxtFailedProxyIds.push(proxy.id);
+                supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
+                // Try next site with different proxy
+                if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
+                finalResult = siteResult;
+                break;
+              }
 
-               // Legacy proxy error check (407 etc without proxyDead flag) — matches web
-               let isValidApiResponse = false;
-               try { const parsed = JSON.parse(siteResult.rawResponse || ''); if (parsed && (parsed.Gateway || parsed.Response || parsed.Price !== undefined || parsed.status || parsed.message)) isValidApiResponse = true; } catch {}
-               const rl = (siteResult.rawResponse || '').toLowerCase();
-               const isProxyError = !isValidApiResponse && (rl.includes('407') || rl.includes('proxy error') || rl.includes('proxy authentication') || rl.includes('connection refused') || rl.includes('proxy connect') || rl.includes('tunneling socket'));
-               if (isProxyError) {
-                 mtxtFailedProxyIds.push(proxy.id);
-                 supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
-                 continue;
-               }
+              if (siteResult.siteDead) {
+                mtxtRemoveSite(site.url);
+                siteResult = null;
+                if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
+                break;
+              }
 
-               // Proxy worked, stop proxy loop
-               break;
-             }
+              // Legacy proxy error check
+              let isValidApiResponse = false;
+              try { const parsed = JSON.parse(siteResult.rawResponse || ''); if (parsed && (parsed.Gateway || parsed.Response || parsed.Price !== undefined || parsed.status || parsed.message)) isValidApiResponse = true; } catch {}
+              const rl = (siteResult.rawResponse || '').toLowerCase();
+              const isProxyError = !isValidApiResponse && (rl.includes('407') || rl.includes('proxy error') || rl.includes('proxy authentication') || rl.includes('connection refused') || rl.includes('proxy connect') || rl.includes('tunneling socket'));
+              if (isProxyError) {
+                mtxtFailedProxyIds.push(proxy.id);
+                supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
+                if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
+                finalResult = siteResult;
+                break;
+              }
 
-             if (!siteResult) {
-               // Site dead or all proxies failed — try next site
-               if (siteAttempt + 1 < MAX_MTXT_SITE_ATTEMPTS) await new Promise(r => setTimeout(r, 300 + Math.random() * 300));
-               continue;
-             }
+              // Definitive result → done
+              if (siteResult.status === 'live' || siteResult.status === 'dead') {
+                // Handle strike counter
+                const matchedStrike = mtxtStrikeResponses.find(s => (siteResult.rawResponse || '').toLowerCase().includes(s.toLowerCase()));
+                if (matchedStrike) {
+                  mtxtSiteStrikeCounter[site.url] = (mtxtSiteStrikeCounter[site.url] || 0) + 1;
+                  if (mtxtSiteStrikeCounter[site.url] >= MTXT_STRIKE_THRESHOLD) {
+                    mtxtRemoveSite(site.url);
+                    delete mtxtSiteStrikeCounter[site.url];
+                  }
+                } else { delete mtxtSiteStrikeCounter[site.url]; }
 
-             // Definitive result → done
-             if (siteResult.status === 'live' || siteResult.status === 'dead') {
-               // Handle strike counter
-               const matchedStrike = mtxtStrikeResponses.find(s => (siteResult.rawResponse || '').toLowerCase().includes(s.toLowerCase()));
-               if (matchedStrike) {
-                 mtxtSiteStrikeCounter[site.url] = (mtxtSiteStrikeCounter[site.url] || 0) + 1;
-                 if (mtxtSiteStrikeCounter[site.url] >= MTXT_STRIKE_THRESHOLD) {
-                   supabase.from('gateway_urls').delete().eq('url', site.url).then(() => {});
-                   delete mtxtSiteStrikeCounter[site.url];
-                 }
-               } else { delete mtxtSiteStrikeCounter[site.url]; }
+                return { status: siteResult.status, response: siteResult.response || siteResult.message || 'N/A', price: siteResult.price > 0 ? siteResult.priceStr : (site.price ? `$${Number(site.price).toFixed(2)}` : '$0.00') };
+              }
 
-               return { status: siteResult.status, response: siteResult.response || siteResult.message || 'N/A', price: siteResult.price > 0 ? siteResult.priceStr : (site.price ? `$${Number(site.price).toFixed(2)}` : '$0.00') };
-             }
+              // Unknown — keep as fallback, remove bad sites, try next
+              finalResult = siteResult;
+              const rl2 = (siteResult.rawResponse || '').toLowerCase();
+              const isBadSite = mtxtBadResponses.some(bad => rl2.includes(bad.toLowerCase()));
+              if (isBadSite || !siteResult.rawResponse || rl2 === '' || rl2.includes('empty response') || rl2.includes('timeout')) {
+                mtxtRemoveSite(site.url);
+              }
 
-             // Unknown — keep as fallback and try next site
-             finalResult = siteResult;
-             const rl2 = (siteResult.rawResponse || '').toLowerCase();
-             const isBadSite = mtxtBadResponses.some(bad => rl2.includes(bad.toLowerCase()));
-             if (isBadSite || !siteResult.rawResponse || rl2 === '' || rl2.includes('empty response') || rl2.includes('timeout')) {
-               supabase.from('gateway_urls').delete().eq('url', site.url).then(() => {});
-             }
-
-             if (siteAttempt + 1 < MAX_MTXT_SITE_ATTEMPTS) {
-               await new Promise(r => setTimeout(r, 300 + Math.random() * 300));
-               continue;
-             }
-             break;
-           }
+              if (siteAttempt + 1 < cardSites.length) {
+                await new Promise(r => setTimeout(r, 300 + Math.random() * 300));
+                continue;
+              }
+              break;
+            }
 
            if (!finalResult) return { status: 'error', response: 'All site attempts failed', price: '$0.00' };
            return { status: 'error', response: finalResult.response || finalResult.message || 'Unknown', price: '$0.00' };
