@@ -336,6 +336,7 @@ const Gateways = () => {
   const shopifyWarmupPromiseRef = useRef<Promise<void> | null>(null);
   const shopifyInvokeActiveRef = useRef(0);
   const shopifyInvokeQueueRef = useRef<Array<() => void>>([]);
+  const shopifyProxyWarningShownRef = useRef(false);
   const SHOPIFY_WARMUP_TTL_MS = 2 * 60 * 1000;
   const SHOPIFY_MAX_PARALLEL_INVOCATIONS = 24;
 
@@ -1939,12 +1940,13 @@ const Gateways = () => {
         const bodyCode = typeof errorBody?.code === 'string' ? errorBody.code.toLowerCase() : '';
         const bodyMessage = typeof errorBody?.message === 'string' ? errorBody.message.toLowerCase() : '';
 
-        // 400 = card format/validation error — not retryable, mark as dead
+        // 400 can be either invalid card data or an infrastructure issue like missing proxies/sites
         if (statusCode === 400) {
-          const errMsg = errorBody?.error || errorBody?.message || error.message || 'Invalid card format';
+          const errMsg = errorBody?.error || errorBody?.message || error.message || 'Invalid request';
+          const isCardValidationError = /format|invalid\s+card|invalid\s+cvc|invalid\s+expiry|cardnumber\|mm\|yy\|cvc/i.test(String(errMsg));
           return {
-            status: "dead",
-            apiStatus: "DECLINED",
+            status: isCardValidationError ? "dead" : "unknown",
+            apiStatus: isCardValidationError ? "DECLINED" : "ERROR",
             apiMessage: errMsg,
             rawResponse: JSON.stringify(errorBody || error),
           };
@@ -2918,6 +2920,7 @@ const Gateways = () => {
     bulkPauseRef.current = false;
     pendingResultsRef.current = [];
     bulkStatsRef.current = { completed: 0, total: affordableCards.length, startTime: Date.now() };
+    shopifyProxyWarningShownRef.current = false;
     
     // Enable background mode to prevent browser throttling when minimized
     startBackgroundMode();
@@ -2984,6 +2987,26 @@ const Gateways = () => {
     const processCard = async (cardIndex: number): Promise<BulkResult | null> => {
       if (bulkAbortRef.current) return null;
 
+      const cardData = affordableCards[cardIndex];
+      const fullCardStr = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
+      const displayCardStr = cardData.originalCvv
+        ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
+        : `${cardData.card}|${cardData.month}|${cardData.year}`;
+      const { brand, brandColor } = detectCardBrandLocal(cardData.card);
+      const buildUnknownBulkResult = (message: string, apiResponse?: string, rawResponse?: string): BulkResult => ({
+        _id: crypto.randomUUID(),
+        status: "unknown",
+        message,
+        gateway: selectedGateway.name,
+        cardMasked: maskCard(cardData.card),
+        fullCard: fullCardStr,
+        displayCard: displayCardStr,
+        brand,
+        brandColor,
+        apiResponse,
+        rawResponse,
+      });
+
       while (bulkPauseRef.current && !bulkAbortRef.current) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
@@ -3035,14 +3058,16 @@ const Gateways = () => {
         }
         // Transient error — skip this card but continue processing others
         console.warn('[BULK] Skipping card due to credit deduction error, continuing...');
-        return null;
+        return buildUnknownBulkResult(
+          "Credit deduction error",
+          "ERROR: Credit deduction failed",
+          JSON.stringify({ error: 'Credit deduction failed before check started' })
+        );
       }
       
       remainingCredits = upfrontDeduct.newCredits;
       totalCreditsDeducted += 1;
       setUserCredits(upfrontDeduct.newCredits);
-
-      const cardData = affordableCards[cardIndex];
 
       try {
         // Use real API for auth gateways and PAYGATE, simulation for others
@@ -3088,23 +3113,24 @@ const Gateways = () => {
           gatewayResponse = await checkCardViaRazorpay(cardData.card, cardData.month, cardData.year, cardData.cvv, site);
         } else if (selectedGateway.id === "shopify_charge") {
           gatewayResponse = await checkCardViaShopify(cardData.card, cardData.month, cardData.year, cardData.cvv);
-          // Stop bulk if all user proxies are dead
+          // Count proxy exhaustion as an unknown result instead of aborting the full batch
           if ((gatewayResponse as any)?.allProxiesDead) {
-            bulkAbortRef.current = true;
-            toast.error("⚠️ All proxies are dead! Add new valid proxies to restart checking.", {
-              duration: 10000,
-              description: "Go to Proxy Manager and add working proxies before continuing.",
-            });
-            return null;
+            if (!shopifyProxyWarningShownRef.current) {
+              shopifyProxyWarningShownRef.current = true;
+              toast.warning("⚠️ Proxies are failing — continuing and marking these cards as unknown.", {
+                duration: 10000,
+                description: "Add fresh working proxies in Proxy Manager to improve the remaining checks.",
+              });
+            }
+            return buildUnknownBulkResult(
+              "Proxy error",
+              `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`,
+              gatewayResponse.rawResponse || JSON.stringify(gatewayResponse)
+            );
           }
         }
         
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
-
-        const fullCardStr = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
-        const displayCardStr = cardData.originalCvv 
-          ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
-          : `${cardData.card}|${cardData.month}|${cardData.year}`;
         
         // Deduct 1 extra credit for LIVE/CHARGED results (1 already deducted upfront) — with retry
         if (checkStatus === "live" || checkStatus === "killed") {
@@ -3137,8 +3163,6 @@ const Gateways = () => {
             card_details: fullCardStr
           });
 
-        const { brand, brandColor } = detectCardBrandLocal(cardData.card);
-        
         // Build API response string for display
         const isOrderPlaced = gatewayResponse && (
           (gatewayResponse.apiMessage || '').toUpperCase().includes('ORDER_PLACED') ||
@@ -3222,21 +3246,11 @@ const Gateways = () => {
 
       } catch (error) {
         console.error('Bulk check error:', error);
-        const displayCardStr = cardData.originalCvv 
-          ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
-          : `${cardData.card}|${cardData.month}|${cardData.year}`;
-        const { brand: errorBrand, brandColor: errorBrandColor } = detectCardBrandLocal(cardData.card);
-        return {
-          _id: crypto.randomUUID(),
-          status: "unknown" as const,
-          message: "Error",
-          gateway: selectedGateway.name,
-          cardMasked: maskCard(cardData.card),
-          fullCard: `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`,
-          displayCard: displayCardStr,
-          brand: errorBrand,
-          brandColor: errorBrandColor
-        };
+        return buildUnknownBulkResult(
+          "Error",
+          error instanceof Error ? error.message : 'Unknown error',
+          JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' })
+        );
       }
     };
 
