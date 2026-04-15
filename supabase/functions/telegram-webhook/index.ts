@@ -5669,9 +5669,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 ${statusBanner}
 
 <blockquote>📇 <b>BIN Info</b>
-${shBrandLogo} ・ ${escapeHtml(shBinType)} ・ ${escapeHtml(shBinLevel)}
+<i>${shBrandLogo} ・ ${escapeHtml(shBinType)} ・ ${escapeHtml(shBinLevel)}
 🏦 ${escapeHtml(shBinBank)}
-${shCountryFlag} ${escapeHtml(shBinCountry)}</blockquote>
+${shCountryFlag} ${escapeHtml(shBinCountry)}</i></blockquote>
 📟 <code>${escapeHtml(cc)}</code>
 
 ${statusEmoji} <b>Result</b>
@@ -5679,10 +5679,10 @@ ${statusEmoji} <b>Result</b>
 💬 <b>Response:</b> <code>${escapeHtml(String(apiMessage).substring(0, 150))}</code>
 💵 <b>Amount:</b> ${escapeHtml(sitePrice)}
 
-💰 <b>Account</b>
+<i>💰 <b>Account</b>
 🔹 <b>Cost:</b> ${creditCost > 0 ? `-${creditCost} credits` : "Free (0 credits)"}
 💳 <b>Balance:</b> ${newBalance} credits
-⏱️ <b>Time:</b> ${elapsed}s${deadProxiesCount > 0 ? `\n\n🔴 <b>${deadProxiesCount} dead proxy${deadProxiesCount > 1 ? 'ies' : ''} removed</b>` : ""}${allProxiesDead ? `\n⚠️ <b>All proxies dead!</b> Add new ones at yunchicheck.com` : ""}
+⏱️ <b>Time:</b> ${elapsed}s</i>${deadProxiesCount > 0 ? `\n\n🔴 <b>${deadProxiesCount} dead proxy${deadProxiesCount > 1 ? 'ies' : ''} removed</b>` : ""}${allProxiesDead ? `\n⚠️ <b>All proxies dead!</b> Add new ones at yunchicheck.com` : ""}
 `;
 
           const resultButtons: any[][] = [];
