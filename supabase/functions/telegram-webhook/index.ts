@@ -6318,35 +6318,81 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         let mtxtCharged = 0, mtxtApproved = 0, mtxtDeclined = 0;
         let mtxtTotalCost = 0;
 
-        // Build live update message
-        const buildMtxtMessage = (checked: number, total: number, elapsed: string) => {
-          let msg = `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b> | <b>${checked}/${total}</b> | <b>${elapsed}s</b>\n\n`;
+        // Build live update message + result buttons
+        const mtxtAnimFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+        let mtxtAnimIdx = 0;
+
+        const buildMtxtMessageAndButtons = (checked: number, total: number, elapsed: string, isComplete: boolean) => {
+          const progressPct = total > 0 ? Math.round((checked / total) * 100) : 0;
+          const filledBlocks = Math.round(progressPct / 5);
+          const progressBar = '█'.repeat(filledBlocks) + '░'.repeat(20 - filledBlocks);
+          const spinner = isComplete ? '✅' : mtxtAnimFrames[mtxtAnimIdx++ % mtxtAnimFrames.length];
+
+          let msg = `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>\n\n`;
+          msg += `${spinner} <code>[${progressBar}]</code> <b>${progressPct}%</b>\n`;
+          msg += `📊 <b>${checked}/${total}</b> checked  ⏱ <b>${elapsed}s</b>\n\n`;
+
           const counters: string[] = [];
-          if (mtxtCharged > 0) counters.push(`💎 <b>${mtxtCharged} Charged</b>`);
-          if (mtxtApproved > 0) counters.push(`✅ <b>${mtxtApproved} Approved</b>`);
-          if (mtxtDeclined > 0) counters.push(`❌ <b>${mtxtDeclined} Declined</b>`);
-          if (counters.length > 0) msg += counters.join('   ') + '\n';
+          if (mtxtCharged > 0) counters.push(`💎 ${mtxtCharged} Charged`);
+          if (mtxtApproved > 0) counters.push(`✅ ${mtxtApproved} Approved`);
+          if (mtxtDeclined > 0) counters.push(`❌ ${mtxtDeclined} Declined`);
+          if (counters.length > 0) msg += counters.join(' ┃ ') + '\n';
 
-          for (const r of mtxtResults) {
-            let emoji = '⚠️';
-            if (r.status === 'live') emoji = '💎';
-            else if (r.status === 'dead') emoji = '❌';
-            else emoji = '✅';
-
-            msg += `\n<code>${escapeHtml(r.cc)}</code>\n`;
-            msg += `${emoji} <b><i>${escapeHtml(r.response)}</i></b> | <b>${escapeHtml(r.price)}</b>\n`;
-            msg += `<i>${escapeHtml(r.bank)} ${r.flag}</i>\n`;
+          if (!isComplete && checked < total) {
+            msg += `\n⏳ <i>Processing card ${checked + 1}...</i>`;
           }
 
-          return msg;
+          // Build result buttons - each card result as a button row
+          const resultButtons: any[][] = [];
+          for (const r of mtxtResults) {
+            let statusEmoji = '⚠️';
+            let statusLabel = 'UNKNOWN';
+            if (r.status === 'live') { statusEmoji = '💎'; statusLabel = 'CHARGED'; }
+            else if (r.status === 'dead') { statusEmoji = '❌'; statusLabel = 'DECLINED'; }
+            else if (r.status === 'approved') { statusEmoji = '✅'; statusLabel = 'APPROVED'; }
+            else if (r.status === 'error') { statusEmoji = '⛔'; statusLabel = 'ERROR'; }
+
+            const maskedCC = r.cc.split('|')[0];
+            const last4 = maskedCC.slice(-4);
+            const first6 = maskedCC.slice(0, 6);
+
+            resultButtons.push([{
+              text: `${statusEmoji} ${first6}****${last4} ┃ ${statusLabel} ┃ ${r.price}`,
+              callback_data: `mtxt_res_${r.status}_${last4}`
+            }]);
+          }
+
+          // Show pending cards as dimmed buttons
+          if (!isComplete) {
+            const remaining = total - checked;
+            const showPending = Math.min(remaining, 3);
+            for (let p = 0; p < showPending; p++) {
+              const pendingIdx = checked + p;
+              if (pendingIdx < total) {
+                const pendingCard = mtxtCards[pendingIdx];
+                const pLast4 = pendingCard.split('|')[0].slice(-4);
+                resultButtons.push([{
+                  text: `⏳ ****${pLast4} ┃ CHECKING...`,
+                  callback_data: `mtxt_pending`
+                }]);
+              }
+            }
+          }
+
+          if (isComplete) {
+            resultButtons.push([{ text: "🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂", callback_data: "menu_back" }]);
+          }
+
+          return { msg, buttons: resultButtons };
         };
 
         // Auto-determine thread count
         const mtxtActiveProxies = mtxtProxies.filter((p: any) => !mtxtFailedProxyIds.includes(p.id)).length;
         const mtxtThreads = Math.max(3, Math.min(4, Math.min(mtxtActiveProxies, mtxtCards.length)));
 
-        // Show initial processing message
-        await editTelegramMessage(callbackChatId, messageId, `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b> | <b>0/${mtxtCards.length}</b> | <b>0.00s</b>\n\n⏳ <i>Starting bulk check (${mtxtThreads} threads)...</i>`);
+        // Show initial processing message with animation
+        const initData = buildMtxtMessageAndButtons(0, mtxtCards.length, '0.00', false);
+        await editTelegramMessage(callbackChatId, messageId, initData.msg, { inline_keyboard: initData.buttons });
 
         // Process card helper
         let mtxtChecked = 0;
@@ -6408,7 +6454,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
           const elapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
           try {
-            await editTelegramMessage(callbackChatId, messageId, buildMtxtMessage(mtxtChecked, mtxtCards.length, elapsed));
+            const updateData = buildMtxtMessageAndButtons(mtxtChecked, mtxtCards.length, elapsed, false);
+            await editTelegramMessage(callbackChatId, messageId, updateData.msg, { inline_keyboard: updateData.buttons });
           } catch {}
         };
 
@@ -6425,18 +6472,19 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         for (let t = 0; t < mtxtThreads; t++) { mtxtWorkers.push(mtxtWorker()); }
         await Promise.all(mtxtWorkers);
 
-        // Final message
+        // Final message with buttons
         const mtxtElapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
         const { data: mtxtUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", mtxtProfile.user_id).single();
         const mtxtNewBalance = mtxtUpdatedProfile?.credits ?? (mtxtProfile.credits - mtxtTotalCost);
-        let mtxtFinalMsg = buildMtxtMessage(mtxtCards.length, mtxtCards.length, mtxtElapsed);
-        mtxtFinalMsg += `\n✅ <b>Process Completed</b>\n`;
-        mtxtFinalMsg += `<i>💰 Cost: -${mtxtTotalCost} credits ・ Balance: ${mtxtNewBalance}</i>`;
+
+        const finalData = buildMtxtMessageAndButtons(mtxtCards.length, mtxtCards.length, mtxtElapsed, true);
+        let mtxtFinalMsg = finalData.msg;
+        mtxtFinalMsg += `\n━━━━━━━━━━━━━━━━━━━━━━\n`;
+        mtxtFinalMsg += `✅ <b>Process Completed</b>\n`;
+        mtxtFinalMsg += `💰 Cost: <b>-${mtxtTotalCost}</b> credits ・ Balance: <b>${mtxtNewBalance}</b>`;
         if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `\n🔴 <b>${mtxtFailedProxyIds.length} dead proxy removed</b>`;
 
-        await editTelegramMessage(callbackChatId, messageId, mtxtFinalMsg, {
-          inline_keyboard: [[{ text: "🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂", callback_data: "menu_back" }]]
-        });
+        await editTelegramMessage(callbackChatId, messageId, mtxtFinalMsg, { inline_keyboard: finalData.buttons });
 
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
