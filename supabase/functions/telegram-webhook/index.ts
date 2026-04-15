@@ -264,7 +264,46 @@ function escapeHtml(text: string | null | undefined): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+
+// ═══════════════════════════════════════════════════════════
+// UNIVERSAL CARD PARSER - supports all common formats
+// ═══════════════════════════════════════════════════════════
+
+function parseCardLine(line: string): string | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  const cardPatterns = [
+    /^([\d\s\-]{13,23})\s*[|:\/]\s*(\d{1,2})\s*[|:\/]\s*(\d{2,4})\s*[|:\/]\s*(\d{3,4})$/,
+    /^([\d\s\-]{13,23})\s*[|:]\s*(\d{1,2})\/(\d{2,4})\s*[|:]\s*(\d{3,4})$/,
+    /^(\d{13,19})\s+(\d{1,2})\s+(\d{2,4})\s+(\d{3,4})$/,
+  ];
+  for (const pattern of cardPatterns) {
+    const match = trimmed.match(pattern);
+    if (match) {
+      const cardNum = match[1].replace(/[\s\-]/g, '');
+      const mm = match[2].padStart(2, '0');
+      let yy = match[3];
+      if (yy.length === 4) yy = yy.slice(2);
+      const cvv = match[4];
+      if (cardNum.length >= 13 && cardNum.length <= 19 && /^\d+$/.test(cardNum)) {
+        return `${cardNum}|${mm}|${yy}|${cvv}`;
+      }
+    }
+  }
+  return null;
 }
+
+function extractCardsFromText(text: string): string[] {
+  const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean);
+  const cards: string[] = [];
+  for (const line of lines) {
+    const parsed = parseCardLine(line);
+    if (parsed) cards.push(parsed);
+  }
+  return cards;
+}
+
+
 
 function formatTimeAgo(date: Date): string {
   const now = new Date();
@@ -6064,7 +6103,6 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
       }
 
 
-      
       if (callbackData === "user_mystatus") {
         const { data: profile } = await supabase
           .from("profiles")
@@ -9900,8 +9938,22 @@ ${currentConfig.nextPrompt}
     // /sh - SHOPIFY CHARGE SINGLE CARD CHECK
     // ─────────────────────────────────────────────────────────
 
-    if (text === "/sh" || text.startsWith("/sh ")) {
-      const cc = text.replace("/sh", "").trim();
+    if (text === "/sh" || text.startsWith("/sh ") || text.startsWith("/sh\n")) {
+      let shRawInput = text.replace(/^\/sh\s*/, "").trim();
+
+      // Support reply: if no card in command text, check replied message text
+      if (!shRawInput && update.message?.reply_to_message?.text) {
+        shRawInput = update.message.reply_to_message.text.trim();
+      }
+
+      // Parse card from input using universal parser (supports all formats)
+      let cc = "";
+      if (shRawInput) {
+        const parsedCards = extractCardsFromText(shRawInput);
+        if (parsedCards.length > 0) {
+          cc = parsedCards[0]; // Use first valid card for /sh
+        }
+      }
 
       if (!cc) {
         await sendTelegramMessage(chatId, `
@@ -9910,18 +9962,18 @@ ${currentConfig.nextPrompt}
 📌 <b>Usage:</b>
 <code>/sh cc|mm|yy|cvv</code>
 
-📎 <b>Example:</b>
+📎 <b>Formats:</b>
 <code>/sh 4111111111111111|12|25|123</code>
+<code>/sh 4111111111111111:12:25:123</code>
+<code>/sh 4111111111111111 12 25 123</code>
+
+💡 <i>Reply to a message with /sh to extract card</i>
 
 ┌─── 💲 <b>Pricing</b> ───┐
 │ 🟢 CHARGED ➜ 2 credits     │
 │ 🔴 DECLINED ➜ 1 credit      │
 │ ⚠️ UNKNOWN ➜ Free           │
 └────────────────────────┘
-
-💡 <i>Select a price range after
-sending to choose Shopify sites</i>
-
 `, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -9964,17 +10016,8 @@ Top up at yunchicheck.com/dashboard/topup
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Validate card format
+      // Card is already validated and normalized by parseCardLine
       const shParts = cc.split("|");
-      if (shParts.length < 4 || !shParts[3] || shParts[3].length < 3 || !/^\d+$/.test(shParts[3])) {
-        await sendTelegramMessage(chatId, `
-❌ <b>Invalid Format</b>
-
-Use: <code>/sh CardNumber|MM|YY|CVC</code>
-Example: <code>/sh 4111111111111111|12|25|123</code>
-`, undefined, messageId);
-        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
 
       // BIN lookup for card info
       const binDigits = shParts[0].replace(/\D/g, '').slice(0, 8);
@@ -10099,39 +10142,41 @@ Example: <code>/sh 4111111111111111|12|25|123</code>
     // ─────────────────────────────────────────────────────────
 
     if (text === "/msh" || text.startsWith("/msh ") || text.startsWith("/msh\n")) {
-      const mshInput = text.replace(/^\/msh\s*/, "").trim();
+      let mshRawInput = text.replace(/^\/msh\s*/, "").trim();
 
-      if (!mshInput) {
+      // Support reply: if no cards in command text, check replied message text
+      if (!mshRawInput && update.message?.reply_to_message?.text) {
+        mshRawInput = update.message.reply_to_message.text.trim();
+      }
+
+      if (!mshRawInput) {
         await sendTelegramMessage(chatId, `
 🛍 <b>𝗠𝗨𝗟𝗧𝗜 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
 
 📌 <b>Usage:</b>
 <code>/msh
 cc|mm|yy|cvv
-cc|mm|yy|cvv
 cc|mm|yy|cvv</code>
 
-📎 <b>Example:</b>
-<code>/msh
-4111111111111111|12|25|123
-5333171146109372|10|26|100</code>
+📎 <b>Formats:</b>
+<code>4111111111111111|12|25|123</code>
+<code>4111111111111111:12:25:123</code>
+<code>4111111111111111 12 25 123</code>
 
 📊 <b>Limits:</b> Up to <b>20 cards</b> per batch
-💎 Charged = 2 credits ・ ❌ Declined = 1 credit ・ ⚠️ Unknown = Free
-
-💡 <i>Cards are checked one by one with live results</i>
+💡 <i>Reply to a message with /msh to extract cards</i>
 `, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Parse cards
-      const mshCardLines = mshInput.split("\n").map(l => l.trim()).filter(l => l && l.includes("|"));
-      if (mshCardLines.length === 0) {
-        await sendTelegramMessage(chatId, `❌ <b>No valid cards found.</b>\n\nFormat: <code>cc|mm|yy|cvv</code> (one per line)`, undefined, messageId);
+      // Parse cards using universal parser (supports all formats)
+      const validCards = extractCardsFromText(mshRawInput);
+      if (validCards.length === 0) {
+        await sendTelegramMessage(chatId, `❌ <b>No valid cards found.</b>\n\nSupported formats:\n<code>cc|mm|yy|cvv</code>\n<code>cc:mm:yy:cvv</code>\n<code>cc mm yy cvv</code>`, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      if (mshCardLines.length > 20) {
-        await sendTelegramMessage(chatId, `❌ <b>Too many cards.</b>\n\nMax <b>20 cards</b> per batch. You sent ${mshCardLines.length}.`, undefined, messageId);
+      if (validCards.length > 20) {
+        await sendTelegramMessage(chatId, `❌ <b>Too many cards.</b>\n\nMax <b>20 cards</b> per batch. You sent ${validCards.length}.`, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -10150,22 +10195,8 @@ cc|mm|yy|cvv</code>
         await sendTelegramMessage(chatId, `🚫 <b>Account Suspended</b>`, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      if (mshUserProfile.credits < mshCardLines.length) {
-        await sendTelegramMessage(chatId, `❌ <b>Insufficient Credits</b>\n\nNeed at least <b>${mshCardLines.length}</b> credits for ${mshCardLines.length} cards.\nBalance: <b>${mshUserProfile.credits}</b>`, undefined, messageId);
-        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-
-      // Validate cards
-      const validCards: string[] = [];
-      for (const line of mshCardLines) {
-        const parts = line.split("|");
-        if (parts.length >= 4 && parts[3] && parts[3].length >= 3 && /^\d+$/.test(parts[3])) {
-          validCards.push(line);
-        }
-      }
-
-      if (validCards.length === 0) {
-        await sendTelegramMessage(chatId, `❌ <b>No valid cards.</b>\n\nFormat: <code>cc|mm|yy|cvv</code>`, undefined, messageId);
+      if (mshUserProfile.credits < validCards.length) {
+        await sendTelegramMessage(chatId, `❌ <b>Insufficient Credits</b>\n\nNeed at least <b>${validCards.length}</b> credits for ${validCards.length} cards.\nBalance: <b>${mshUserProfile.credits}</b>`, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -10317,6 +10348,7 @@ account isn't connected yet.
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+};
 };
 
 serve(handler);
