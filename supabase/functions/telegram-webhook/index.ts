@@ -6786,6 +6786,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           }
         }
 
+         clearTimeout(mtxtSafetyTimer);
          // Ensure final message is sent even if it wasn't triggered by last card callback
          await mtxtSendFinalMessage();
 
