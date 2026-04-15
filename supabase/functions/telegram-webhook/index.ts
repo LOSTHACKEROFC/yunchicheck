@@ -6283,12 +6283,14 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           } catch (e) { clearTimeout(timeout); const msg = e instanceof Error ? e.message : 'Error'; return { status: 'unknown', message: msg.includes('abort') ? 'Timeout' : msg, price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '' }; }
         };
 
-        // With retry
+        // With retry - exponential backoff like web Shopify gateway
         const mtxtCallWithRetry = async (cardCC: string, siteUrl: string, proxy: string) => {
           let result = await mtxtCallOnce(cardCC, siteUrl, proxy);
           if (result.proxyDead || result.siteDead || result.status === 'live' || result.status === 'dead') return result;
-          for (let retry = 1; retry <= MTXT_UNKNOWN_RETRIES; retry++) {
-            await new Promise(r => setTimeout(r, 800 * retry));
+          for (let retry = 1; retry <= MTXT_MAX_RETRIES; retry++) {
+            const baseDelay = 900;
+            const backoffMs = Math.min(12000, baseDelay * (2 ** (retry - 1)) + Math.floor(Math.random() * 500));
+            await new Promise(r => setTimeout(r, backoffMs));
             result = await mtxtCallOnce(cardCC, siteUrl, proxy);
             if (result.proxyDead || result.siteDead || result.status === 'live' || result.status === 'dead') return result;
           }
