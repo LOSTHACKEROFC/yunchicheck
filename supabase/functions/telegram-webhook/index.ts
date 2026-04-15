@@ -6301,7 +6301,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
           const shuffledProxies = [...mtxtProxies].filter(p => !mtxtFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
           if (shuffledProxies.length === 0) return { status: 'unknown', response: 'No proxies', price: '$0.00' };
-          const maxSites = Math.min(2, mtxtAvailableSites.length);
+          const maxSites = Math.min(5, mtxtAvailableSites.length);
           for (let si = 0; si < maxSites; si++) {
             const site = mtxtAvailableSites[si % mtxtAvailableSites.length];
             for (const proxy of shuffledProxies) {
@@ -6319,7 +6319,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (result.status === 'live' || result.status === 'dead') {
                 return { status: result.status, response: result.response || result.message || 'N/A', price: result.price > 0 ? result.priceStr : (site.price ? `$${Number(site.price).toFixed(2)}` : '$0.00') };
               }
-              return { status: 'unknown', response: result.response || result.message || 'Unknown', price: result.price > 0 ? result.priceStr : '$0.00' };
+              // On unknown, try next site instead of returning immediately
+              break;
             }
           }
           return { status: 'unknown', response: 'All attempts failed', price: '$0.00' };
