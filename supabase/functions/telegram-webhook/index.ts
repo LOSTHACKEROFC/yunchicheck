@@ -6734,8 +6734,13 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
            mtxtChecked++;
 
-           // Update UI with this card's result (throttled to avoid Telegram rate limits)
-           await mtxtFlushUpdate();
+           // If this was the last card, send final message immediately
+           if (mtxtChecked >= mtxtCards.length || mtxtStopped) {
+             await mtxtSendFinalMessage();
+           } else {
+             // Update UI with this card's result (throttled)
+             await mtxtFlushUpdate();
+           }
          };
 
         // Staggered 50-card session model (matching web Shopify gateway)
