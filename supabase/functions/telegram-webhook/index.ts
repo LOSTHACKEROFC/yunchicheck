@@ -6383,9 +6383,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return { msg, buttons };
         };
 
-        // Auto-determine thread count
-        const mtxtActiveProxies = mtxtProxies.filter((p: any) => !mtxtFailedProxyIds.includes(p.id)).length;
-        const mtxtThreads = Math.max(3, Math.min(4, Math.min(mtxtActiveProxies, mtxtCards.length)));
+        // 50-thread concurrency with staggered launches like web Shopify gateway
+        const MTXT_CONCURRENCY = 50;
+        const MTXT_STAGGER_MS = 180;
 
         // Show initial processing message with animation
         const initData = buildMtxtMessageAndButtons(0, mtxtCards.length, '0.00', false);
@@ -6471,18 +6471,41 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           } catch {}
         };
 
-        // Process cards with auto threads
+        // Staggered 50-card session model (matching web Shopify gateway)
         const mtxtQueue = mtxtCards.map(c => c.trim()).filter(c => c);
         let mtxtQueueIdx = 0;
-        const mtxtWorker = async () => {
-          while (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
-            const idx = mtxtQueueIdx++;
-            await mtxtProcessCard(mtxtQueue[idx]);
+        const MIN_COMPLETE_BEFORE_NEXT = 49;
+
+        while (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
+          const batchEnd = Math.min(mtxtQueueIdx + MTXT_CONCURRENCY, mtxtQueue.length);
+          const batchCards = mtxtQueue.slice(mtxtQueueIdx, batchEnd);
+
+          let batchCompleted = 0;
+          await new Promise<void>((resolve) => {
+            const promises = batchCards.map(async (card, launchOrder) => {
+              if (mtxtStopped) return;
+              // Staggered launch delay like web (180ms + random jitter)
+              if (launchOrder > 0) {
+                const launchDelay = launchOrder * MTXT_STAGGER_MS + Math.floor(Math.random() * 120);
+                await new Promise(r => setTimeout(r, launchDelay));
+              }
+              if (mtxtStopped) return;
+
+              await mtxtProcessCard(card);
+              batchCompleted++;
+              if (batchCompleted >= Math.min(MIN_COMPLETE_BEFORE_NEXT, batchCards.length)) {
+                resolve();
+              }
+            });
+            Promise.all(promises).then(() => resolve());
+          });
+
+          mtxtQueueIdx = batchEnd;
+          // Small gap between sessions
+          if (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
+            await new Promise(r => setTimeout(r, 600));
           }
-        };
-        const mtxtWorkers: Promise<void>[] = [];
-        for (let t = 0; t < mtxtThreads; t++) { mtxtWorkers.push(mtxtWorker()); }
-        await Promise.all(mtxtWorkers);
+        }
 
         // Cleanup stop tracker
         await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
