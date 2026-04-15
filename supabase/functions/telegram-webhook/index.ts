@@ -6651,97 +6651,112 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          // Process card helper
          let mtxtChecked = 0;
          const mtxtProcessCard = async (cardCC: string) => {
-           if (mtxtStopped) return;
-           // Check stop flag from DB
-           const { data: stopCheck } = await supabase.from("pending_bulk_checks").select("id").eq("id", mtxtBulkId).maybeSingle();
-           if (!stopCheck) { mtxtStopped = true; return; }
-            mtxtCurrentCard = cardCC;
+          try {
+            if (mtxtStopped) return;
+            // Check stop flag from DB
+            const { data: stopCheck } = await supabase.from("pending_bulk_checks").select("id").eq("id", mtxtBulkId).maybeSingle();
+            if (!stopCheck) { mtxtStopped = true; return; }
+             mtxtCurrentCard = cardCC;
 
-           const cardParts = cardCC.split("|");
-           if (cardParts.length < 4 || !cardParts[3] || cardParts[3].length < 3) {
-             const errResult: MtxtResult = { cc: cardCC, status: 'error', response: 'Invalid format', price: '$0.00', bank: 'N/A', flag: '🌍' };
-             mtxtResults.push(errResult);
-             mtxtLastResponse = 'Invalid format';
-             mtxtDeclined++;
-             mtxtChecked++;
-             await mtxtFlushUpdate();
-             return;
-           }
-
-           const [binInfo, result] = await Promise.all([
-             mtxtLookupBin(cardParts[0]),
-             mtxtCheckCard(cardCC)
-           ]);
-
-            let statusType: string;
-            const respLower = (result.response || '').toLowerCase();
-            if (result.status === 'live') {
-              if (respLower.includes('order_completed') || respLower.includes('order completed')) { mtxtCharged++; statusType = 'live'; }
-              else { mtxtApproved++; statusType = 'approved'; }
-            } else if (result.status === 'dead') {
-              mtxtDeclined++; statusType = 'dead';
-            } else if (result.status === 'error') {
-              mtxtErrorCount++; statusType = 'error';
+            const cardParts = cardCC.split("|");
+            if (cardParts.length < 4 || !cardParts[3] || cardParts[3].length < 3) {
+              const errResult: MtxtResult = { cc: cardCC, status: 'error', response: 'Invalid format', price: '$0.00', bank: 'N/A', flag: '🌍' };
+              mtxtResults.push(errResult);
+              mtxtLastResponse = 'Invalid format';
+              mtxtErrorCount++;
               mtxtErrorCards.push(cardCC);
+              mtxtChecked++;
+              await mtxtFlushUpdate();
+              return;
+            }
+
+            const [binInfo, result] = await Promise.all([
+              mtxtLookupBin(cardParts[0]),
+              mtxtCheckCard(cardCC)
+            ]);
+
+             let statusType: string;
+             const respLower = (result.response || '').toLowerCase();
+             if (result.status === 'live') {
+               if (respLower.includes('order_completed') || respLower.includes('order completed')) { mtxtCharged++; statusType = 'live'; }
+               else { mtxtApproved++; statusType = 'approved'; }
+             } else if (result.status === 'dead') {
+               mtxtDeclined++; statusType = 'dead';
+             } else if (result.status === 'error') {
+               mtxtErrorCount++; statusType = 'error';
+               mtxtErrorCards.push(cardCC);
+             } else {
+               if (respLower.includes('3ds') || respLower.includes('otp') || respLower.includes('required')) { mtxtApproved++; statusType = 'approved'; }
+               else { mtxtErrorCount++; statusType = 'error'; mtxtErrorCards.push(cardCC); }
+             }
+
+             let cardCost = 0;
+             if (result.status === 'live') cardCost = 2;
+             else if (result.status === 'dead') cardCost = 1;
+             // No cost for error cards
+             mtxtTotalCost += cardCost;
+
+             if (result.status === 'live' || result.status === 'dead') {
+               await supabase.from("profiles").update({ credits: mtxtProfile.credits - mtxtTotalCost, updated_at: new Date().toISOString() }).eq("user_id", mtxtProfile.user_id);
+               await supabase.from("card_checks").insert({ user_id: mtxtProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: result.status === "live" ? "charged" : "dead" });
+             }
+             // Don't insert error cards into card_checks - they'll be rechecked
+
+            if (result.status === 'live' && SUPABASE_SERVICE_ROLE_KEY) {
+               // Broadcast to channel + notify user via notify-charged-card
+               fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
+                 method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+                 body: JSON.stringify({ user_id: mtxtProfile.user_id, card_details: cardCC, status: 'CHARGED', response_message: result.response, amount: result.price, gateway: 'Shopify Charge' }),
+               }).catch(() => {});
+
+               // Also send a separate instant message to the user with full card details
+               const chargedBin = await mtxtLookupBin(cardParts[0]);
+               const chargedMsg = `💎 <b>𝗖𝗛𝗔𝗥𝗚𝗘𝗗!</b>\n\n` +
+                 `💳 <code>${cardCC}</code>\n` +
+                 `${chargedBin.flag} <b>${chargedBin.bank}</b>\n` +
+                 `💰 Price: <b>${result.price}</b>\n` +
+                 `📝 ${result.response}\n` +
+                 `🔧 Gateway: <b>Shopify Charge</b>`;
+               fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                 method: "POST", headers: { "Content-Type": "application/json" },
+                 body: JSON.stringify({ chat_id: callbackChatId, text: chargedMsg, parse_mode: "HTML" }),
+               }).catch(() => {});
+             }
+
+            const cardResult: MtxtResult = {
+              cc: cardCC,
+              status: statusType,
+              response: result.response || 'N/A',
+              price: result.price,
+              bank: binInfo.bank,
+              flag: binInfo.flag,
+            };
+            mtxtResults.push(cardResult);
+            mtxtLastResponse = result.response || 'N/A';
+
+            mtxtChecked++;
+
+            // If this was the last card, send final message immediately
+            if (mtxtChecked >= mtxtCards.length || mtxtStopped) {
+              await mtxtSendFinalMessage();
             } else {
-              if (respLower.includes('3ds') || respLower.includes('otp') || respLower.includes('required')) { mtxtApproved++; statusType = 'approved'; }
-              else { mtxtErrorCount++; statusType = 'error'; mtxtErrorCards.push(cardCC); }
+              // Update UI with this card's result (throttled)
+              await mtxtFlushUpdate();
             }
-
-            let cardCost = 0;
-            if (result.status === 'live') cardCost = 2;
-            else if (result.status === 'dead') cardCost = 1;
-            // No cost for error cards
-            mtxtTotalCost += cardCost;
-
-            if (result.status === 'live' || result.status === 'dead') {
-              await supabase.from("profiles").update({ credits: mtxtProfile.credits - mtxtTotalCost, updated_at: new Date().toISOString() }).eq("user_id", mtxtProfile.user_id);
-              await supabase.from("card_checks").insert({ user_id: mtxtProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: result.status === "live" ? "charged" : "dead" });
+          } catch (cardError) {
+            // Catch ANY unexpected error so it doesn't stop the entire batch
+            console.error(`mtxtProcessCard error for ${cardCC}:`, cardError);
+            mtxtErrorCount++;
+            mtxtErrorCards.push(cardCC);
+            mtxtResults.push({ cc: cardCC, status: 'error', response: 'Processing error', price: '$0.00', bank: 'N/A', flag: '🌍' });
+            mtxtChecked++;
+            if (mtxtChecked >= mtxtCards.length || mtxtStopped) {
+              await mtxtSendFinalMessage();
+            } else {
+              await mtxtFlushUpdate();
             }
-            // Don't insert error cards into card_checks - they'll be rechecked
-
-           if (result.status === 'live' && SUPABASE_SERVICE_ROLE_KEY) {
-              // Broadcast to channel + notify user via notify-charged-card
-              fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
-                method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
-                body: JSON.stringify({ user_id: mtxtProfile.user_id, card_details: cardCC, status: 'CHARGED', response_message: result.response, amount: result.price, gateway: 'Shopify Charge' }),
-              }).catch(() => {});
-
-              // Also send a separate instant message to the user with full card details
-              const chargedBin = await mtxtLookupBin(cardParts[0]);
-              const chargedMsg = `💎 <b>𝗖𝗛𝗔𝗥𝗚𝗘𝗗!</b>\n\n` +
-                `💳 <code>${cardCC}</code>\n` +
-                `${chargedBin.flag} <b>${chargedBin.bank}</b>\n` +
-                `💰 Price: <b>${result.price}</b>\n` +
-                `📝 ${result.response}\n` +
-                `🔧 Gateway: <b>Shopify Charge</b>`;
-              fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ chat_id: callbackChatId, text: chargedMsg, parse_mode: "HTML" }),
-              }).catch(() => {});
-            }
-
-           const cardResult: MtxtResult = {
-             cc: cardCC,
-             status: statusType,
-             response: result.response || 'N/A',
-             price: result.price,
-             bank: binInfo.bank,
-             flag: binInfo.flag,
-           };
-           mtxtResults.push(cardResult);
-           mtxtLastResponse = result.response || 'N/A';
-
-           mtxtChecked++;
-
-           // If this was the last card, send final message immediately
-           if (mtxtChecked >= mtxtCards.length || mtxtStopped) {
-             await mtxtSendFinalMessage();
-           } else {
-             // Update UI with this card's result (throttled)
-             await mtxtFlushUpdate();
-           }
-         };
+          }
+          };
 
         // Staggered 50-card session model (matching web Shopify gateway)
          const mtxtQueue = mtxtCards.map(c => c.trim()).filter(c => c);
