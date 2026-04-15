@@ -9522,24 +9522,26 @@ ${currentConfig.nextPrompt}
 
       if (!cc) {
         await sendTelegramMessage(chatId, `
-━━━━━━━━━━━━━━━━━━━━━━
-   🛒 <b>SHOPIFY CHARGE</b>
-━━━━━━━━━━━━━━━━━━━━━━
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
+🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
-<b>Usage:</b> <code>/sh cc|mm|yy|cvv</code>
+📌 <b>Usage:</b>
+<code>/sh cc|mm|yy|cvv</code>
 
-<b>Example:</b>
+📎 <b>Example:</b>
 <code>/sh 4111111111111111|12|25|123</code>
 
-<b>Cost:</b>
- • 🟢 CHARGED → 2 credits
- • 🔴 DECLINED → 1 credit
- • ⚠️ UNKNOWN → Free
+┌─── 💲 <b>Pricing</b> ───┐
+│ 🟢 CHARGED ➜ 2 credits     │
+│ 🔴 DECLINED ➜ 1 credit      │
+│ ⚠️ UNKNOWN ➜ Free           │
+└────────────────────────┘
 
-<b>Info:</b> Select a price range after
-sending the command to choose
-which Shopify sites to use.
-━━━━━━━━━━━━━━━━━━━━━━
+💡 <i>Select a price range after
+sending to choose Shopify sites</i>
+
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 `, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
