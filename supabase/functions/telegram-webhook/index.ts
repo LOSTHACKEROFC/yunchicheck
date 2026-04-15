@@ -6123,9 +6123,54 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         await supabase.from("pending_bulk_checks").delete().eq("id", stopBulkId);
         await answerCallbackQuery(update.callback_query.id, "🛑 Stopping...");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
+       }
 
-      if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite") && !callbackData.startsWith("mtxt_pending") && !callbackData.startsWith("mtxt_res_")) {
+       // MTXT Recheck errors handler - redirects error cards back through the price selection flow
+       if (callbackData.startsWith("mtxt_rechk_")) {
+         const rechkBulkId = callbackData.replace("mtxt_rechk_", "");
+         const rechkKey = `rechk_${rechkBulkId}`;
+         const { data: rechkData } = await supabase.from("pending_bulk_checks").select("cards, user_id").eq("id", rechkKey).maybeSingle();
+         if (!rechkData || !rechkData.cards) {
+           await answerCallbackQuery(update.callback_query.id, "❌ No error cards found");
+           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+         }
+         const rechkCards = rechkData.cards.split("\n").filter((c: string) => c.trim());
+         // Delete old recheck record and create new bulk check record
+         await supabase.from("pending_bulk_checks").delete().eq("id", rechkKey);
+         const newBulkId = crypto.randomUUID().slice(0, 8);
+         await supabase.from("pending_bulk_checks").insert({ id: newBulkId, cards: rechkCards.join("\n"), chat_id: String(callbackChatId), user_id: rechkData.user_id });
+
+         // Fetch the user profile for balance display
+         const { data: rechkProfile } = await supabase.from("profiles").select("credits").eq("user_id", rechkData.user_id).single();
+
+         // Show price group selection for the recheck
+         const rechkPriceGroups = [
+           { min: 0, max: 5, label: '$1 - $5', emoji: '💵' },
+           { min: 5, max: 20, label: '$5 - $20', emoji: '💰' },
+           { min: 20, max: 50, label: '$20 - $50', emoji: '💎' },
+           { min: 50, max: 100, label: '$50 - $100', emoji: '🏆' },
+         ];
+         const rechkGroupCounts = await Promise.all(
+           rechkPriceGroups.map(async (g) => {
+             let q = supabase.from("gateway_urls").select("id", { count: "exact", head: true }).not("url", "like", "https://razorpay.me/%").gt("price", g.min).lte("price", g.max);
+             const { count } = await q;
+             return { ...g, count: count || 0 };
+           })
+         );
+         const rechkTotalSites = rechkGroupCounts.reduce((a, g) => a + g.count, 0);
+         const rechkButtons: any[][] = [];
+         for (const g of rechkGroupCounts) {
+           if (g.count > 0) rechkButtons.push([{ text: `${g.emoji} ${g.label}  •  ${g.count} sites`, callback_data: `mtxt_${g.min}_${g.max}_${newBulkId}` }]);
+           else rechkButtons.push([{ text: `${g.emoji} ${g.label}  •  0 sites ✖️`, callback_data: `mtxt_nosite` }]);
+         }
+         rechkButtons.push([{ text: `🎲 𝗔𝘂𝘁𝗼 – Any Range  •  ${rechkTotalSites} sites`, callback_data: `mtxt_0_100_${newBulkId}` }]);
+
+         await answerCallbackQuery(update.callback_query.id, `🔄 Rechecking ${rechkCards.length} error cards...`);
+         await editTelegramMessage(callbackChatId, messageId, `🔄 <b>𝗥𝗘𝗖𝗛𝗘𝗖𝗞 𝗘𝗥𝗥𝗢𝗥 𝗖𝗔𝗥𝗗𝗦</b>\n\n📊 <b>${rechkCards.length} cards</b> to recheck\n💰 <b>Balance:</b> ${rechkProfile?.credits ?? '?'} credits\n🌐 <b>Sites:</b> ${rechkTotalSites} available\n\n<i>Select price range:</i>`, { inline_keyboard: rechkButtons });
+         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+       }
+
+       if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite") && !callbackData.startsWith("mtxt_pending") && !callbackData.startsWith("mtxt_res_")) {
         const mtxtParts = callbackData.replace("mtxt_", "").split("_");
         const mtxtPriceMin = parseInt(mtxtParts[0]);
         const mtxtPriceMax = parseInt(mtxtParts[1]);
