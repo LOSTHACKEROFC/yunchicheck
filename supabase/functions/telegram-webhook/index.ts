@@ -5341,22 +5341,17 @@ Examples:
 
         // Show processing message with BIN info
         await editTelegramMessage(callbackChatId, messageId, `
-⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
-⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
-┌─── 📇 <b>Card</b> ───┐
-│ ${shBrandLogo}
-│ 📟 <code>${escapeHtml(cc)}</code>
-│ 🏦 ${escapeHtml(shBinBank)}
-│ ${shCountryFlag} ${escapeHtml(shBinCountry)}
-└────────────────────────┘
+${shBrandLogo}
+📟 <code>${escapeHtml(cc)}</code>
+🏦 ${escapeHtml(shBinBank)}
+${shCountryFlag} ${escapeHtml(shBinCountry)}
 
 ⏳ <b>𝗣𝗿𝗼𝗰𝗲𝘀𝘀𝗶𝗻𝗴...</b>
 💰 Range: $${priceMin} – $${priceMax}
 
 <i>🔄 Connecting to Shopify API...</i>
-⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 `);
 
         const startTime = Date.now();
@@ -5548,22 +5543,17 @@ Go to yunchicheck.com/dashboard → Proxies
             progressStep++;
             const progressBar = "▓".repeat(Math.min(progressStep, 5)) + "░".repeat(Math.max(0, 5 - progressStep));
             await editTelegramMessage(callbackChatId, messageId, `
-⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
-⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
-┌─── 📇 <b>Card</b> ───┐
-│ ${shBrandLogo}
-│ 📟 <code>${escapeHtml(cc)}</code>
-│ 🏦 ${escapeHtml(shBinBank)}
-│ ${shCountryFlag} ${escapeHtml(shBinCountry)}
-└────────────────────────┘
+${shBrandLogo}
+📟 <code>${escapeHtml(cc)}</code>
+🏦 ${escapeHtml(shBinBank)}
+${shCountryFlag} ${escapeHtml(shBinCountry)}
 
 ⏳ <b>${step}</b>
 [${progressBar}] Step ${progressStep}
 💰 Range: $${priceMin} – $${priceMax}
-📊 ${sites.length} sites │ ${userProxies.length} proxies
-⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
+📊 ${sites.length} sites ・ ${userProxies.length} proxies
 `);
           };
 
@@ -5674,34 +5664,26 @@ Go to yunchicheck.com/dashboard → Proxies
           const allProxiesDead = failedProxyIds.length >= userProxies.length;
 
           let resultMsg = `
-⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
-⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
 ${statusBanner}
 
-┌─── 📇 <b>Card Info</b> ───┐
-│ ${shBrandLogo}
-│ 📟 <code>${escapeHtml(cc)}</code>
-│ 🏷 <b>Type:</b> ${escapeHtml(shBinType)} │ ${escapeHtml(shBinLevel)}
-│ 🏦 <b>Bank:</b> ${escapeHtml(shBinBank)}
-│ ${shCountryFlag} <b>Country:</b> ${escapeHtml(shBinCountry)}
-└────────────────────────┘
+📇 <b>Card Info</b>
+${shBrandLogo}
+📟 <code>${escapeHtml(cc)}</code>
+🏷 <b>Type:</b> ${escapeHtml(shBinType)} ・ ${escapeHtml(shBinLevel)}
+🏦 <b>Bank:</b> ${escapeHtml(shBinBank)}
+${shCountryFlag} <b>Country:</b> ${escapeHtml(shBinCountry)}
 
-┌─── ${statusEmoji} <b>Result</b> ───┐
-│ 📊 <b>Status:</b> ${statusLabel}
-│ 💬 <b>Response:</b>
-│ <code>${escapeHtml(String(apiMessage).substring(0, 150))}</code>
-│ 💵 <b>Amount:</b> ${escapeHtml(sitePrice)}
-└────────────────────────┘
+${statusEmoji} <b>Result</b>
+📊 <b>Status:</b> ${statusLabel}
+💬 <b>Response:</b> <code>${escapeHtml(String(apiMessage).substring(0, 150))}</code>
+💵 <b>Amount:</b> ${escapeHtml(sitePrice)}
 
-┌─── 💰 <b>Account</b> ───┐
-│ 🔹 <b>Cost:</b> ${creditCost > 0 ? `-${creditCost} credits` : "Free (0 credits)"}
-│ 💳 <b>Balance:</b> ${newBalance} credits
-│ ⏱️ <b>Time:</b> ${elapsed}s
-└────────────────────────┘${deadProxiesCount > 0 ? `\n\n🔴 <b>${deadProxiesCount} dead proxy${deadProxiesCount > 1 ? 'ies' : ''} removed</b>` : ""}${allProxiesDead ? `\n⚠️ <b>All proxies dead!</b> Add new ones at yunchicheck.com` : ""}
-
-⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
+💰 <b>Account</b>
+🔹 <b>Cost:</b> ${creditCost > 0 ? `-${creditCost} credits` : "Free (0 credits)"}
+💳 <b>Balance:</b> ${newBalance} credits
+⏱️ <b>Time:</b> ${elapsed}s${deadProxiesCount > 0 ? `\n\n🔴 <b>${deadProxiesCount} dead proxy${deadProxiesCount > 1 ? 'ies' : ''} removed</b>` : ""}${allProxiesDead ? `\n⚠️ <b>All proxies dead!</b> Add new ones at yunchicheck.com` : ""}
 `;
 
           const resultButtons: any[][] = [];
@@ -5716,20 +5698,15 @@ ${statusBanner}
           const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
           const errMsg = err instanceof Error ? err.message : "Unknown error";
           await editTelegramMessage(callbackChatId, messageId, `
-⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
-⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
-┌─── 📇 <b>Card</b> ───┐
-│ ${shBrandLogo}
-│ 📟 <code>${escapeHtml(cc)}</code>
-│ 🏦 ${escapeHtml(shBinBank)}
-│ ${shCountryFlag} ${escapeHtml(shBinCountry)}
-└────────────────────────┘
+${shBrandLogo}
+📟 <code>${escapeHtml(cc)}</code>
+🏦 ${escapeHtml(shBinBank)}
+${shCountryFlag} ${escapeHtml(shBinCountry)}
 
 ❌ <b>𝗘𝗿𝗿𝗼𝗿:</b> ${escapeHtml(errMsg)}
 ⏱️ ${elapsed}s
-⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 `, {
             inline_keyboard: [
               [{ text: "🔄 𝗥𝗲𝘁𝗿𝘆", callback_data: `sh_price_${priceMin}_${priceMax}_${encodedCC}` }],
