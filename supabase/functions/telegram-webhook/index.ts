@@ -6393,6 +6393,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         let mtxtChecked = 0;
         const mtxtProcessCard = async (cardCC: string) => {
           if (mtxtStopped) return;
+          // Check stop flag from DB
+          const { data: stopCheck } = await supabase.from("pending_bulk_checks").select("id").eq("id", mtxtBulkId).maybeSingle();
+          if (!stopCheck) { mtxtStopped = true; return; }
           mtxtCurrentCard = cardCC;
           const checkElapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
           try {
