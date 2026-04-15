@@ -10142,39 +10142,41 @@ Top up at yunchicheck.com/dashboard/topup
     // ─────────────────────────────────────────────────────────
 
     if (text === "/msh" || text.startsWith("/msh ") || text.startsWith("/msh\n")) {
-      const mshInput = text.replace(/^\/msh\s*/, "").trim();
+      let mshRawInput = text.replace(/^\/msh\s*/, "").trim();
 
-      if (!mshInput) {
+      // Support reply: if no cards in command text, check replied message text
+      if (!mshRawInput && update.message?.reply_to_message?.text) {
+        mshRawInput = update.message.reply_to_message.text.trim();
+      }
+
+      if (!mshRawInput) {
         await sendTelegramMessage(chatId, `
 🛍 <b>𝗠𝗨𝗟𝗧𝗜 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
 
 📌 <b>Usage:</b>
 <code>/msh
 cc|mm|yy|cvv
-cc|mm|yy|cvv
 cc|mm|yy|cvv</code>
 
-📎 <b>Example:</b>
-<code>/msh
-4111111111111111|12|25|123
-5333171146109372|10|26|100</code>
+📎 <b>Formats:</b>
+<code>4111111111111111|12|25|123</code>
+<code>4111111111111111:12:25:123</code>
+<code>4111111111111111 12 25 123</code>
 
 📊 <b>Limits:</b> Up to <b>20 cards</b> per batch
-💎 Charged = 2 credits ・ ❌ Declined = 1 credit ・ ⚠️ Unknown = Free
-
-💡 <i>Cards are checked one by one with live results</i>
+💡 <i>Reply to a message with /msh to extract cards</i>
 `, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Parse cards
-      const mshCardLines = mshInput.split("\n").map(l => l.trim()).filter(l => l && l.includes("|"));
-      if (mshCardLines.length === 0) {
-        await sendTelegramMessage(chatId, `❌ <b>No valid cards found.</b>\n\nFormat: <code>cc|mm|yy|cvv</code> (one per line)`, undefined, messageId);
+      // Parse cards using universal parser (supports all formats)
+      const validCards = extractCardsFromText(mshRawInput);
+      if (validCards.length === 0) {
+        await sendTelegramMessage(chatId, `❌ <b>No valid cards found.</b>\n\nSupported formats:\n<code>cc|mm|yy|cvv</code>\n<code>cc:mm:yy:cvv</code>\n<code>cc mm yy cvv</code>`, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      if (mshCardLines.length > 20) {
-        await sendTelegramMessage(chatId, `❌ <b>Too many cards.</b>\n\nMax <b>20 cards</b> per batch. You sent ${mshCardLines.length}.`, undefined, messageId);
+      if (validCards.length > 20) {
+        await sendTelegramMessage(chatId, `❌ <b>Too many cards.</b>\n\nMax <b>20 cards</b> per batch. You sent ${validCards.length}.`, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -10193,22 +10195,8 @@ cc|mm|yy|cvv</code>
         await sendTelegramMessage(chatId, `🚫 <b>Account Suspended</b>`, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      if (mshUserProfile.credits < mshCardLines.length) {
-        await sendTelegramMessage(chatId, `❌ <b>Insufficient Credits</b>\n\nNeed at least <b>${mshCardLines.length}</b> credits for ${mshCardLines.length} cards.\nBalance: <b>${mshUserProfile.credits}</b>`, undefined, messageId);
-        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-
-      // Validate cards
-      const validCards: string[] = [];
-      for (const line of mshCardLines) {
-        const parts = line.split("|");
-        if (parts.length >= 4 && parts[3] && parts[3].length >= 3 && /^\d+$/.test(parts[3])) {
-          validCards.push(line);
-        }
-      }
-
-      if (validCards.length === 0) {
-        await sendTelegramMessage(chatId, `❌ <b>No valid cards.</b>\n\nFormat: <code>cc|mm|yy|cvv</code>`, undefined, messageId);
+      if (mshUserProfile.credits < validCards.length) {
+        await sendTelegramMessage(chatId, `❌ <b>Insufficient Credits</b>\n\nNeed at least <b>${validCards.length}</b> credits for ${validCards.length} cards.\nBalance: <b>${mshUserProfile.credits}</b>`, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
