@@ -6136,6 +6136,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         let mtxtCards: string[] = [];
         if (mtxtBulkData?.cards) { mtxtCards = mtxtBulkData.cards.split("\n").filter((c: string) => c.trim()); }
         await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
+        // Re-insert as stop-tracking record
+        await supabase.from("pending_bulk_checks").insert({ id: mtxtBulkId, cards: "RUNNING", chat_id: callbackChatId, user_id: "mtxt_stop_tracker" });
         if (!mtxtCards.length) {
           await answerCallbackQuery(update.callback_query.id, "❌ Card data expired or invalid");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
