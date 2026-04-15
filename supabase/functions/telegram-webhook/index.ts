@@ -6010,8 +6010,12 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const mshElapsed = ((Date.now() - mshStartTime) / 1000).toFixed(2);
         const mshNewBalance = mshProfile.credits - mshTotalCost;
         let finalMsg = buildMshMessage(mshCards.length, mshCards.length, mshElapsed);
-        finalMsg += `\n<i>💰 Cost: -${mshTotalCost} credits ・ Balance: ${mshNewBalance}</i>`;
+        finalMsg += `\n✅ <b>Process Completed</b>\n`;
+        finalMsg += `<i>💰 Cost: -${mshTotalCost} credits ・ Balance: ${mshNewBalance}</i>`;
         if (mshFailedProxyIds.length > 0) finalMsg += `\n🔴 <b>${mshFailedProxyIds.length} dead proxy removed</b>`;
+
+        // Clean up stored cards
+        supabase.from("pending_bulk_checks").delete().eq("id", mshBulkId).then(() => {});
 
         await editTelegramMessage(callbackChatId, messageId, finalMsg, {
           inline_keyboard: [[{ text: "🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂", callback_data: "menu_back" }]]
