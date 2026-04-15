@@ -6560,10 +6560,81 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          let mtxtLastEditTime = 0;
          const MTXT_MIN_EDIT_INTERVAL = 500;
 
+         // Flag to ensure final message is sent exactly once
+         let mtxtFinalSent = false;
+
+         const mtxtSendFinalMessage = async () => {
+           if (mtxtFinalSent) return;
+           mtxtFinalSent = true;
+
+           // Cleanup stop tracker and store error cards for recheck
+           await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
+           if (mtxtErrorCards.length > 0) {
+             await supabase.from("pending_bulk_checks").insert({ id: `rechk_${mtxtBulkId}`, cards: mtxtErrorCards.join("\n"), chat_id: String(callbackChatId), user_id: mtxtProfile.user_id });
+           }
+
+           const mtxtElapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
+           const { data: mtxtUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", mtxtProfile.user_id).single();
+           const mtxtNewBalance = mtxtUpdatedProfile?.credits ?? (mtxtProfile.credits - mtxtTotalCost);
+
+           let mtxtFinalMsg = `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘 — 𝗙𝗜𝗡𝗜𝗦𝗛𝗘𝗗</b>\n\n`;
+           mtxtFinalMsg += mtxtStopped ? `🛑 <b>Stopped</b> — ${mtxtChecked}/${mtxtCards.length} checked\n` : `✅ <b>Process Completed</b>\n`;
+           mtxtFinalMsg += `⏱ Time: <b>${mtxtElapsed}s</b>\n\n`;
+
+           mtxtFinalMsg += `━━━━━━ 📊 𝗦𝘁𝗮𝘁𝘀 ━━━━━━\n`;
+           mtxtFinalMsg += `💎 Charged: <b>${mtxtCharged}</b>\n`;
+           mtxtFinalMsg += `✅ Approved: <b>${mtxtApproved}</b>\n`;
+           mtxtFinalMsg += `❌ Declined: <b>${mtxtDeclined}</b>\n`;
+           mtxtFinalMsg += `⚠️ Errors: <b>${mtxtErrorCount}</b>\n`;
+           mtxtFinalMsg += `📊 Total: <b>${mtxtChecked}/${mtxtCards.length}</b>\n\n`;
+
+           mtxtFinalMsg += `━━━━━━ 💰 𝗖𝗼𝘀𝘁 ━━━━━━\n`;
+           mtxtFinalMsg += `💸 Spent: <b>-${mtxtTotalCost}</b> credits\n`;
+           mtxtFinalMsg += `💰 Balance: <b>${mtxtNewBalance}</b> credits\n\n`;
+
+           const chargedResults = mtxtResults.filter(r => r.status === 'live');
+           if (chargedResults.length > 0) {
+             mtxtFinalMsg += `━━━━ 💎 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 𝗖𝗔𝗥𝗗𝗦 ━━━━\n\n`;
+             for (const card of chargedResults) {
+               const num = card.cc.split('|')[0];
+               const maskedCC = `${num.slice(0, 6)}****${num.slice(-4)}`;
+               mtxtFinalMsg += `💎 <code>${maskedCC}</code>\n`;
+               mtxtFinalMsg += `   ${card.flag} ${card.bank} ・ ${card.price}\n`;
+               mtxtFinalMsg += `   📝 ${card.response}\n\n`;
+             }
+           }
+
+           const approvedResults = mtxtResults.filter(r => r.status === 'approved');
+           if (approvedResults.length > 0) {
+             mtxtFinalMsg += `━━━━ ✅ 𝗔𝗣𝗣𝗥𝗢𝗩𝗘𝗗 ━━━━\n\n`;
+             for (const card of approvedResults) {
+               const num = card.cc.split('|')[0];
+               const maskedCC = `${num.slice(0, 6)}****${num.slice(-4)}`;
+               mtxtFinalMsg += `✅ <code>${maskedCC}</code> ・ ${card.flag} ${card.bank}\n`;
+             }
+             mtxtFinalMsg += `\n`;
+           }
+
+           if (mtxtErrorCards.length > 0) mtxtFinalMsg += `⚠️ <b>${mtxtErrorCards.length} cards</b> had errors — use Recheck below\n`;
+           if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `🔴 <b>${mtxtFailedProxyIds.length} dead proxies</b> auto-removed\n`;
+
+           const finalButtons: any[][] = [];
+           if (mtxtErrorCards.length > 0) {
+             finalButtons.push([{ text: `🔄 Recheck ${mtxtErrorCards.length} Errors`, callback_data: `mtxt_rechk_${mtxtBulkId}` }]);
+           }
+           finalButtons.push([{ text: '🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂', callback_data: 'menu_back' }]);
+
+           if (mtxtFinalMsg.length > 4000) {
+             mtxtFinalMsg = mtxtFinalMsg.slice(0, 3950) + `\n\n<i>... truncated</i>`;
+           }
+
+           await editTelegramMessage(callbackChatId, messageId, mtxtFinalMsg, finalButtons.length > 0 ? { inline_keyboard: finalButtons } : undefined);
+         };
+
          const mtxtFlushUpdate = async (forceNow = false) => {
            const now = Date.now();
            if (!forceNow && (now - mtxtLastEditTime) < MTXT_MIN_EDIT_INTERVAL) {
-             return; // Skip this update, next card completion will send it
+             return;
            }
            mtxtLastEditTime = Date.now();
            const elapsed = ((now - mtxtStartTime) / 1000).toFixed(2);
@@ -6663,16 +6734,28 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
            mtxtChecked++;
 
-           // Update UI with this card's result (throttled to avoid Telegram rate limits)
-           await mtxtFlushUpdate();
+           // If this was the last card, send final message immediately
+           if (mtxtChecked >= mtxtCards.length || mtxtStopped) {
+             await mtxtSendFinalMessage();
+           } else {
+             // Update UI with this card's result (throttled)
+             await mtxtFlushUpdate();
+           }
          };
 
         // Staggered 50-card session model (matching web Shopify gateway)
-        const mtxtQueue = mtxtCards.map(c => c.trim()).filter(c => c);
-        let mtxtQueueIdx = 0;
-        const MIN_COMPLETE_BEFORE_NEXT = 49;
+         const mtxtQueue = mtxtCards.map(c => c.trim()).filter(c => c);
+         let mtxtQueueIdx = 0;
+         const MIN_COMPLETE_BEFORE_NEXT = 49;
 
-        while (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
+         // Safety timeout: send final message before edge function dies (140s limit)
+         const MTXT_SAFETY_TIMEOUT = 135000;
+         const mtxtSafetyTimer = setTimeout(async () => {
+           mtxtStopped = true;
+           await mtxtSendFinalMessage();
+         }, MTXT_SAFETY_TIMEOUT);
+
+         while (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
           const batchEnd = Math.min(mtxtQueueIdx + MTXT_CONCURRENCY, mtxtQueue.length);
           const batchCards = mtxtQueue.slice(mtxtQueueIdx, batchEnd);
 
@@ -6703,77 +6786,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           }
         }
 
-         // Cleanup stop tracker and store error cards for recheck
-         await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
-         if (mtxtErrorCards.length > 0) {
-           // Store error cards for recheck using same bulk ID
-           await supabase.from("pending_bulk_checks").insert({ id: `rechk_${mtxtBulkId}`, cards: mtxtErrorCards.join("\n"), chat_id: String(callbackChatId), user_id: mtxtProfile.user_id });
-         }
-
-         // Final message — NO buttons, full summary
-         const mtxtElapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
-         const { data: mtxtUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", mtxtProfile.user_id).single();
-         const mtxtNewBalance = mtxtUpdatedProfile?.credits ?? (mtxtProfile.credits - mtxtTotalCost);
-
-         let mtxtFinalMsg = `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘 — 𝗙𝗜𝗡𝗜𝗦𝗛𝗘𝗗</b>\n\n`;
-         mtxtFinalMsg += mtxtStopped ? `🛑 <b>Stopped</b> — ${mtxtChecked}/${mtxtCards.length} checked\n` : `✅ <b>Process Completed</b>\n`;
-         mtxtFinalMsg += `⏱ Time: <b>${mtxtElapsed}s</b>\n\n`;
-
-         // Stats
-         mtxtFinalMsg += `━━━━━━ 📊 𝗦𝘁𝗮𝘁𝘀 ━━━━━━\n`;
-         mtxtFinalMsg += `💎 Charged: <b>${mtxtCharged}</b>\n`;
-         mtxtFinalMsg += `✅ Approved: <b>${mtxtApproved}</b>\n`;
-         mtxtFinalMsg += `❌ Declined: <b>${mtxtDeclined}</b>\n`;
-         mtxtFinalMsg += `⚠️ Errors: <b>${mtxtErrorCount}</b>\n`;
-         mtxtFinalMsg += `📊 Total: <b>${mtxtChecked}/${mtxtCards.length}</b>\n\n`;
-
-         // Cost
-         mtxtFinalMsg += `━━━━━━ 💰 𝗖𝗼𝘀𝘁 ━━━━━━\n`;
-         mtxtFinalMsg += `💸 Spent: <b>-${mtxtTotalCost}</b> credits\n`;
-         mtxtFinalMsg += `💰 Balance: <b>${mtxtNewBalance}</b> credits\n\n`;
-
-         // Charged cards section (if any)
-         const chargedResults = mtxtResults.filter(r => r.status === 'live');
-         if (chargedResults.length > 0) {
-           mtxtFinalMsg += `━━━━ 💎 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 𝗖𝗔𝗥𝗗𝗦 ━━━━\n\n`;
-           for (const card of chargedResults) {
-             const num = card.cc.split('|')[0];
-             const maskedCC = `${num.slice(0, 6)}****${num.slice(-4)}`;
-             mtxtFinalMsg += `💎 <code>${maskedCC}</code>\n`;
-             mtxtFinalMsg += `   ${card.flag} ${card.bank} ・ ${card.price}\n`;
-             mtxtFinalMsg += `   📝 ${card.response}\n\n`;
-           }
-         }
-
-         // Approved cards section (if any)
-         const approvedResults = mtxtResults.filter(r => r.status === 'approved');
-         if (approvedResults.length > 0) {
-           mtxtFinalMsg += `━━━━ ✅ 𝗔𝗣𝗣𝗥𝗢𝗩𝗘𝗗 ━━━━\n\n`;
-           for (const card of approvedResults) {
-             const num = card.cc.split('|')[0];
-             const maskedCC = `${num.slice(0, 6)}****${num.slice(-4)}`;
-             mtxtFinalMsg += `✅ <code>${maskedCC}</code> ・ ${card.flag} ${card.bank}\n`;
-           }
-           mtxtFinalMsg += `\n`;
-         }
-
-         // Error info
-         if (mtxtErrorCards.length > 0) mtxtFinalMsg += `⚠️ <b>${mtxtErrorCards.length} cards</b> had errors — use Recheck below\n`;
-         if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `🔴 <b>${mtxtFailedProxyIds.length} dead proxies</b> auto-removed\n`;
-
-         // Only keep recheck + back buttons (no status buttons)
-         const finalButtons: any[][] = [];
-         if (mtxtErrorCards.length > 0) {
-           finalButtons.push([{ text: `🔄 Recheck ${mtxtErrorCards.length} Errors`, callback_data: `mtxt_rechk_${mtxtBulkId}` }]);
-         }
-         finalButtons.push([{ text: '🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂', callback_data: 'menu_back' }]);
-
-         // Trim message if too long for Telegram (4096 limit)
-         if (mtxtFinalMsg.length > 4000) {
-           mtxtFinalMsg = mtxtFinalMsg.slice(0, 3950) + `\n\n<i>... truncated</i>`;
-         }
-
-         await editTelegramMessage(callbackChatId, messageId, mtxtFinalMsg, finalButtons.length > 0 ? { inline_keyboard: finalButtons } : undefined);
+         clearTimeout(mtxtSafetyTimer);
+         // Ensure final message is sent even if it wasn't triggered by last card callback
+         await mtxtSendFinalMessage();
 
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
