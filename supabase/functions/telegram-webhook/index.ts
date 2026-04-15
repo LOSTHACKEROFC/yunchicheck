@@ -5955,26 +5955,28 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return msg;
         };
 
+        // Auto-determine thread count based on cards and proxies
+        const mshActiveProxies = mshProxies.filter((p: any) => !mshFailedProxyIds.includes(p.id)).length;
+        const mshThreads = Math.max(1, Math.min(mshActiveProxies, Math.min(mshCards.length, 10)));
+
         // Show initial processing message
-        await editTelegramMessage(callbackChatId, messageId, `🛍 𝗠𝗨𝗟𝗧𝗜 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘 | 0/${mshCards.length} | 0.00s\n\n⏳ <i>Starting bulk check...</i>`);
+        await editTelegramMessage(callbackChatId, messageId, `🛍 <b>𝗠𝗨𝗟𝗧𝗜 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b> | <b>0/${mshCards.length}</b> | <b>0.00s</b>\n\n⏳ <i>Starting bulk check (${mshThreads} threads)...</i>`);
 
-        // Process cards one by one
-        for (let i = 0; i < mshCards.length; i++) {
-          const cardCC = mshCards[i].trim();
-          if (!cardCC) continue;
-
+        // Process card helper
+        let mshChecked = 0;
+        const mshProcessCard = async (cardCC: string) => {
           const cardParts = cardCC.split("|");
           if (cardParts.length < 4 || !cardParts[3] || cardParts[3].length < 3) {
             mshResults.push({ cc: cardCC, status: 'error', response: 'Invalid format', price: '$0.00', bank: 'N/A', flag: '🌍' });
             mshDeclined++;
-            continue;
+            mshChecked++;
+            return;
           }
 
-          // BIN lookup
-          const binInfo = await mshLookupBin(cardParts[0]);
-
-          // Check card
-          const result = await mshCheckCard(cardCC);
+          const [binInfo, result] = await Promise.all([
+            mshLookupBin(cardParts[0]),
+            mshCheckCard(cardCC)
+          ]);
 
           // Classify
           let statusType: string;
@@ -5985,7 +5987,6 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           } else if (result.status === 'dead') {
             mshDeclined++; statusType = 'dead';
           } else {
-            // Check if it's a soft approval (3DS, OTP)
             if (respLower.includes('3ds') || respLower.includes('otp') || respLower.includes('required')) { mshApproved++; statusType = 'approved'; }
             else { mshDeclined++; statusType = 'dead'; }
           }
@@ -6020,12 +6021,27 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             flag: binInfo.flag,
           });
 
-          // Update message every card
+          mshChecked++;
+
+          // Update message
           const elapsed = ((Date.now() - mshStartTime) / 1000).toFixed(2);
           try {
-            await editTelegramMessage(callbackChatId, messageId, buildMshMessage(i + 1, mshCards.length, elapsed));
+            await editTelegramMessage(callbackChatId, messageId, buildMshMessage(mshChecked, mshCards.length, elapsed));
           } catch {}
-        }
+        };
+
+        // Process cards with auto threads
+        const mshQueue = mshCards.map(c => c.trim()).filter(c => c);
+        let mshQueueIdx = 0;
+        const mshWorker = async () => {
+          while (mshQueueIdx < mshQueue.length) {
+            const idx = mshQueueIdx++;
+            await mshProcessCard(mshQueue[idx]);
+          }
+        };
+        const mshWorkers: Promise<void>[] = [];
+        for (let t = 0; t < mshThreads; t++) { mshWorkers.push(mshWorker()); }
+        await Promise.all(mshWorkers);
 
         // Final message
         const mshElapsed = ((Date.now() - mshStartTime) / 1000).toFixed(2);
