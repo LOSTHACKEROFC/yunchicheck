@@ -10016,17 +10016,8 @@ Top up at yunchicheck.com/dashboard/topup
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Validate card format
+      // Card is already validated and normalized by parseCardLine
       const shParts = cc.split("|");
-      if (shParts.length < 4 || !shParts[3] || shParts[3].length < 3 || !/^\d+$/.test(shParts[3])) {
-        await sendTelegramMessage(chatId, `
-❌ <b>Invalid Format</b>
-
-Use: <code>/sh CardNumber|MM|YY|CVC</code>
-Example: <code>/sh 4111111111111111|12|25|123</code>
-`, undefined, messageId);
-        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
 
       // BIN lookup for card info
       const binDigits = shParts[0].replace(/\D/g, '').slice(0, 8);
