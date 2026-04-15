@@ -6063,6 +6063,68 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+// ═══════════════════════════════════════════════════════════
+// UNIVERSAL CARD PARSER - supports all common formats
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Parse a single card line from various formats into pipe-separated cc|mm|yy|cvv
+ * Supported formats:
+ *   cc|mm|yy|cvv   cc:mm:yy:cvv   cc mm yy cvv   cc/mm/yy/cvv
+ *   cc|mm/yy|cvv   cc|mm/yyyy|cvv  and mixed separators
+ */
+function parseCardLine(line: string): string | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+
+  // Try to extract 4 parts: cardNumber, month, year, cvv
+  // Strategy: replace all common separators with a uniform one, then split
+  // Common separators: | : / space tab
+  // But card numbers can have spaces (4111 1111 1111 1111), so handle that
+
+  // First, try regex for known patterns
+  // Pattern: 13-19 digit card (possibly with spaces/dashes), then separator, then mm, separator, yy(yy), separator, cvv
+  const cardPatterns = [
+    // Standard with separators: |  :  /  space
+    /^([\d\s\-]{13,23})\s*[|:\/]\s*(\d{1,2})\s*[|:\/]\s*(\d{2,4})\s*[|:\/]\s*(\d{3,4})$/,
+    // With mm/yy combined: cc|mm/yy|cvv or cc:mm/yy:cvv
+    /^([\d\s\-]{13,23})\s*[|:]\s*(\d{1,2})\/(\d{2,4})\s*[|:]\s*(\d{3,4})$/,
+    // Space-separated: cc mm yy cvv (card number has no spaces - 13-19 digits)
+    /^(\d{13,19})\s+(\d{1,2})\s+(\d{2,4})\s+(\d{3,4})$/,
+  ];
+
+  for (const pattern of cardPatterns) {
+    const match = trimmed.match(pattern);
+    if (match) {
+      const cardNum = match[1].replace(/[\s\-]/g, '');
+      const mm = match[2].padStart(2, '0');
+      let yy = match[3];
+      if (yy.length === 4) yy = yy.slice(2);
+      const cvv = match[4];
+
+      if (cardNum.length >= 13 && cardNum.length <= 19 && /^\d+$/.test(cardNum)) {
+        return `${cardNum}|${mm}|${yy}|${cvv}`;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Extract all valid cards from a text block (multi-line).
+ * Returns array of normalized cc|mm|yy|cvv strings.
+ */
+function extractCardsFromText(text: string): string[] {
+  const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean);
+  const cards: string[] = [];
+  for (const line of lines) {
+    const parsed = parseCardLine(line);
+    if (parsed) cards.push(parsed);
+  }
+  return cards;
+}
+
 
       
       if (callbackData === "user_mystatus") {
