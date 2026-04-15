@@ -5726,15 +5726,18 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      if (callbackData.startsWith("msh_price_")) {
-        const mshParts = callbackData.replace("msh_price_", "").split("_");
+      if (callbackData.startsWith("msh_") && !callbackData.startsWith("msh_nosite")) {
+        const mshParts = callbackData.replace("msh_", "").split("_");
         const mshPriceMin = parseInt(mshParts[0]);
         const mshPriceMax = parseInt(mshParts[1]);
-        const mshEncodedCards = mshParts.slice(2).join("_");
+        const mshBulkId = mshParts[2];
 
+        // Fetch cards from DB
+        const { data: bulkData } = await supabase.from("pending_bulk_checks").select("cards").eq("id", mshBulkId).maybeSingle();
         let mshCards: string[] = [];
-        try { mshCards = atob(mshEncodedCards).split("\n").filter(c => c.trim()); } catch {
-          await answerCallbackQuery(update.callback_query.id, "❌ Invalid card data");
+        if (bulkData?.cards) { mshCards = bulkData.cards.split("\n").filter((c: string) => c.trim()); }
+        if (!mshCards.length) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Card data expired or invalid");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
