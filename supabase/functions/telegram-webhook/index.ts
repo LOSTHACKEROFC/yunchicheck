@@ -5633,9 +5633,10 @@ Go to yunchicheck.com/dashboard → Proxies
           const apiMessage = finalResult.apiResponse || finalResult.message || "N/A";
           const sitePrice = finalResult.price > 0 ? finalResult.priceStr : (usedSite.price ? `$${Number(usedSite.price).toFixed(2)}` : 'Auto');
 
-          let statusEmoji = "⚠️"; let statusLabel = "UNKNOWN"; let creditCost = 0;
-          if (status === "live") { statusEmoji = "🟢"; statusLabel = "CHARGED ✅"; creditCost = 2; }
-          else if (status === "dead") { statusEmoji = "🔴"; statusLabel = "DECLINED ❌"; creditCost = 1; }
+          let statusEmoji = "⚠️"; let statusLabel = "𝗨𝗡𝗞𝗡𝗢𝗪𝗡"; let creditCost = 0; let statusBanner = "⚠️";
+          if (status === "live") { statusEmoji = "🟢"; statusLabel = "𝗖𝗛𝗔𝗥𝗚𝗘𝗗 ✅"; creditCost = 2; statusBanner = "🟩🟩🟩 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 🟩🟩🟩"; }
+          else if (status === "dead") { statusEmoji = "🔴"; statusLabel = "𝗗𝗘𝗖𝗟𝗜𝗡𝗘𝗗 ❌"; creditCost = 1; statusBanner = "🟥🟥🟥 𝗗𝗘𝗖𝗟𝗜𝗡𝗘𝗗 🟥🟥🟥"; }
+          else { statusBanner = "🟧🟧🟧 𝗨𝗡𝗞𝗡𝗢𝗪𝗡 🟧🟧🟧"; }
 
           // Deduct credits
           if (creditCost > 0) {
@@ -5673,27 +5674,41 @@ Go to yunchicheck.com/dashboard → Proxies
           const allProxiesDead = failedProxyIds.length >= userProxies.length;
 
           let resultMsg = `
-━━━━━━━━━━━━━━━━━━━━━━
-   🛒 <b>SHOPIFY CHARGE</b>
-━━━━━━━━━━━━━━━━━━━━━━
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
+🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
-📇 <b>Card:</b> <code>${escapeHtml(cc)}</code>
-${statusEmoji} <b>Status:</b> ${statusLabel}
-💬 <b>Response:</b> ${escapeHtml(String(apiMessage).substring(0, 200))}
-💵 <b>Amount:</b> ${escapeHtml(sitePrice)}
+${statusBanner}
 
-━━━━━ <b>Details</b> ━━━━━
-💰 <b>Cost:</b> ${creditCost > 0 ? `-${creditCost} credits` : "Free"}
-💳 <b>Balance:</b> ${newBalance} credits
-⏱️ <b>Time:</b> ${elapsed}s${deadProxiesCount > 0 ? `\n🔴 <b>Dead Proxies:</b> ${deadProxiesCount} removed` : ""}${allProxiesDead ? `\n⚠️ <b>All proxies are dead!</b> Add new ones.` : ""}
-━━━━━━━━━━━━━━━━━━━━━━
+┌─── 📇 <b>Card Info</b> ───┐
+│ ${shBrandLogo}
+│ 📟 <code>${escapeHtml(cc)}</code>
+│ 🏷 <b>Type:</b> ${escapeHtml(shBinType)} │ ${escapeHtml(shBinLevel)}
+│ 🏦 <b>Bank:</b> ${escapeHtml(shBinBank)}
+│ ${shCountryFlag} <b>Country:</b> ${escapeHtml(shBinCountry)}
+└────────────────────────┘
+
+┌─── ${statusEmoji} <b>Result</b> ───┐
+│ 📊 <b>Status:</b> ${statusLabel}
+│ 💬 <b>Response:</b>
+│ <code>${escapeHtml(String(apiMessage).substring(0, 150))}</code>
+│ 💵 <b>Amount:</b> ${escapeHtml(sitePrice)}
+└────────────────────────┘
+
+┌─── 💰 <b>Account</b> ───┐
+│ 🔹 <b>Cost:</b> ${creditCost > 0 ? `-${creditCost} credits` : "Free (0 credits)"}
+│ 💳 <b>Balance:</b> ${newBalance} credits
+│ ⏱️ <b>Time:</b> ${elapsed}s
+└────────────────────────┘${deadProxiesCount > 0 ? `\n\n🔴 <b>${deadProxiesCount} dead proxy${deadProxiesCount > 1 ? 'ies' : ''} removed</b>` : ""}${allProxiesDead ? `\n⚠️ <b>All proxies dead!</b> Add new ones at yunchicheck.com` : ""}
+
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 `;
 
           const resultButtons: any[][] = [];
           if (status !== "live") {
-            resultButtons.push([{ text: "🔄 Retry Same Range", callback_data: `sh_price_${priceMin}_${priceMax}_${encodedCC}` }]);
+            resultButtons.push([{ text: "🔄 𝗥𝗲𝘁𝗿𝘆 𝗦𝗮𝗺𝗲 𝗥𝗮𝗻𝗴𝗲", callback_data: `sh_price_${priceMin}_${priceMax}_${encodedCC}` }]);
           }
-          resultButtons.push([{ text: "🔙 Back to Menu", callback_data: "menu_back" }]);
+          resultButtons.push([{ text: "🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂", callback_data: "menu_back" }]);
 
           await editTelegramMessage(callbackChatId, messageId, resultMsg, { inline_keyboard: resultButtons });
 
