@@ -6744,11 +6744,18 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          };
 
         // Staggered 50-card session model (matching web Shopify gateway)
-        const mtxtQueue = mtxtCards.map(c => c.trim()).filter(c => c);
-        let mtxtQueueIdx = 0;
-        const MIN_COMPLETE_BEFORE_NEXT = 49;
+         const mtxtQueue = mtxtCards.map(c => c.trim()).filter(c => c);
+         let mtxtQueueIdx = 0;
+         const MIN_COMPLETE_BEFORE_NEXT = 49;
 
-        while (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
+         // Safety timeout: send final message before edge function dies (140s limit)
+         const MTXT_SAFETY_TIMEOUT = 135000;
+         const mtxtSafetyTimer = setTimeout(async () => {
+           mtxtStopped = true;
+           await mtxtSendFinalMessage();
+         }, MTXT_SAFETY_TIMEOUT);
+
+         while (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
           const batchEnd = Math.min(mtxtQueueIdx + MTXT_CONCURRENCY, mtxtQueue.length);
           const batchCards = mtxtQueue.slice(mtxtQueueIdx, batchEnd);
 
