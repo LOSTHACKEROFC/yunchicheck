@@ -10951,7 +10951,7 @@ One card per line in the TXT file:
 <code>4111111111111111:12:25:123</code>
 <code>4111111111111111 12 25 123</code>
 
-📊 <b>Limits:</b> Up to <b>50 cards</b> per file
+📊 <b>Limits:</b> Based on your credit balance
 
 ┌─── 💲 <b>Pricing</b> ───┐
 │ 🟢 CHARGED ➜ 2 credits     │
@@ -10993,10 +10993,7 @@ One card per line in the TXT file:
         await sendTelegramMessage(chatId, `❌ <b>No valid cards found in file.</b>\n\nSupported formats:\n<code>cc|mm|yy|cvv</code>\n<code>cc:mm:yy:cvv</code>\n<code>cc mm yy cvv</code>`, undefined, messageId);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      if (mtxtValidCards.length > 50) {
-        await sendTelegramMessage(chatId, `❌ <b>Too many cards.</b>\n\nMax <b>50 cards</b> per file. Your file has ${mtxtValidCards.length}.`, undefined, messageId);
-        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
+      // No card limit — user can check as many cards as they have credits for
 
       // Check user
       const { data: mtxtUserProfile } = await supabase
