@@ -6696,20 +6696,70 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            await supabase.from("pending_bulk_checks").insert({ id: `rechk_${mtxtBulkId}`, cards: mtxtErrorCards.join("\n"), chat_id: String(callbackChatId), user_id: mtxtProfile.user_id });
          }
 
-         // Final message with buttons
+         // Final message — NO buttons, full summary
          const mtxtElapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
          const { data: mtxtUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", mtxtProfile.user_id).single();
          const mtxtNewBalance = mtxtUpdatedProfile?.credits ?? (mtxtProfile.credits - mtxtTotalCost);
 
-         const finalData = buildMtxtMessageAndButtons(mtxtChecked, mtxtCards.length, mtxtElapsed, true);
-         let mtxtFinalMsg = finalData.msg;
-         mtxtFinalMsg += `\n━━━━━━━━━━━━━━━━━━━━━━\n`;
+         let mtxtFinalMsg = `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘 — 𝗙𝗜𝗡𝗜𝗦𝗛𝗘𝗗</b>\n\n`;
          mtxtFinalMsg += mtxtStopped ? `🛑 <b>Stopped</b> — ${mtxtChecked}/${mtxtCards.length} checked\n` : `✅ <b>Process Completed</b>\n`;
-         mtxtFinalMsg += `💰 Cost: <b>-${mtxtTotalCost}</b> credits ・ Balance: <b>${mtxtNewBalance}</b>`;
-         if (mtxtErrorCards.length > 0) mtxtFinalMsg += `\n⚠️ <b>${mtxtErrorCards.length} cards</b> had errors — tap Recheck to retry`;
-         if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `\n🔴 <b>${mtxtFailedProxyIds.length} dead proxy removed</b>`;
+         mtxtFinalMsg += `⏱ Time: <b>${mtxtElapsed}s</b>\n\n`;
 
-         await editTelegramMessage(callbackChatId, messageId, mtxtFinalMsg, { inline_keyboard: finalData.buttons });
+         // Stats
+         mtxtFinalMsg += `━━━━━━ 📊 𝗦𝘁𝗮𝘁𝘀 ━━━━━━\n`;
+         mtxtFinalMsg += `💎 Charged: <b>${mtxtCharged}</b>\n`;
+         mtxtFinalMsg += `✅ Approved: <b>${mtxtApproved}</b>\n`;
+         mtxtFinalMsg += `❌ Declined: <b>${mtxtDeclined}</b>\n`;
+         mtxtFinalMsg += `⚠️ Errors: <b>${mtxtErrorCount}</b>\n`;
+         mtxtFinalMsg += `📊 Total: <b>${mtxtChecked}/${mtxtCards.length}</b>\n\n`;
+
+         // Cost
+         mtxtFinalMsg += `━━━━━━ 💰 𝗖𝗼𝘀𝘁 ━━━━━━\n`;
+         mtxtFinalMsg += `💸 Spent: <b>-${mtxtTotalCost}</b> credits\n`;
+         mtxtFinalMsg += `💰 Balance: <b>${mtxtNewBalance}</b> credits\n\n`;
+
+         // Charged cards section (if any)
+         const chargedResults = mtxtResults.filter(r => r.status === 'live');
+         if (chargedResults.length > 0) {
+           mtxtFinalMsg += `━━━━ 💎 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 𝗖𝗔𝗥𝗗𝗦 ━━━━\n\n`;
+           for (const card of chargedResults) {
+             const num = card.cc.split('|')[0];
+             const maskedCC = `${num.slice(0, 6)}****${num.slice(-4)}`;
+             mtxtFinalMsg += `💎 <code>${maskedCC}</code>\n`;
+             mtxtFinalMsg += `   ${card.flag} ${card.bank} ・ ${card.price}\n`;
+             mtxtFinalMsg += `   📝 ${card.response}\n\n`;
+           }
+         }
+
+         // Approved cards section (if any)
+         const approvedResults = mtxtResults.filter(r => r.status === 'approved');
+         if (approvedResults.length > 0) {
+           mtxtFinalMsg += `━━━━ ✅ 𝗔𝗣𝗣𝗥𝗢𝗩𝗘𝗗 ━━━━\n\n`;
+           for (const card of approvedResults) {
+             const num = card.cc.split('|')[0];
+             const maskedCC = `${num.slice(0, 6)}****${num.slice(-4)}`;
+             mtxtFinalMsg += `✅ <code>${maskedCC}</code> ・ ${card.flag} ${card.bank}\n`;
+           }
+           mtxtFinalMsg += `\n`;
+         }
+
+         // Error info
+         if (mtxtErrorCards.length > 0) mtxtFinalMsg += `⚠️ <b>${mtxtErrorCards.length} cards</b> had errors — use Recheck below\n`;
+         if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `🔴 <b>${mtxtFailedProxyIds.length} dead proxies</b> auto-removed\n`;
+
+         // Only keep recheck + back buttons (no status buttons)
+         const finalButtons: any[][] = [];
+         if (mtxtErrorCards.length > 0) {
+           finalButtons.push([{ text: `🔄 Recheck ${mtxtErrorCards.length} Errors`, callback_data: `mtxt_rechk_${mtxtBulkId}` }]);
+         }
+         finalButtons.push([{ text: '🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂', callback_data: 'menu_back' }]);
+
+         // Trim message if too long for Telegram (4096 limit)
+         if (mtxtFinalMsg.length > 4000) {
+           mtxtFinalMsg = mtxtFinalMsg.slice(0, 3950) + `\n\n<i>... truncated</i>`;
+         }
+
+         await editTelegramMessage(callbackChatId, messageId, mtxtFinalMsg, finalButtons.length > 0 ? { inline_keyboard: finalButtons } : undefined);
 
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
