@@ -5306,22 +5306,57 @@ Examples:
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        const maskedCard = ccParts[0].length >= 10
-          ? `${ccParts[0].substring(0, 6)}******${ccParts[0].slice(-4)}`
-          : ccParts[0];
+        // BIN lookup
+        const shBinDigits = ccParts[0].replace(/\D/g, '').slice(0, 8);
+        let shBinBrand = "Unknown"; let shBinType = "Unknown"; let shBinBank = "Unknown Bank"; let shBinCountry = "Unknown"; let shBinCountryCode = "XX"; let shBinLevel = "Standard";
+        try {
+          const binR = await fetch(`https://lookup.binlist.net/${shBinDigits}`, { headers: { 'Accept-Version': '3' } });
+          if (binR.ok) {
+            const bd = await binR.json();
+            shBinBrand = bd.scheme?.toUpperCase() || "Unknown";
+            shBinType = bd.type ? bd.type.charAt(0).toUpperCase() + bd.type.slice(1) : "Unknown";
+            shBinBank = bd.bank?.name || "Unknown Bank";
+            shBinCountry = bd.country?.name || "Unknown";
+            shBinCountryCode = bd.country?.alpha2 || "XX";
+            shBinLevel = bd.brand || "Standard";
+          }
+        } catch { /* fallback */ }
+        if (shBinBrand === "Unknown") {
+          if (/^4/.test(shBinDigits)) shBinBrand = "VISA";
+          else if (/^5[1-5]/.test(shBinDigits) || /^2[2-7]/.test(shBinDigits)) shBinBrand = "MASTERCARD";
+          else if (/^3[47]/.test(shBinDigits)) shBinBrand = "AMEX";
+          else if (/^6(?:011|5|4[4-9]|22)/.test(shBinDigits)) shBinBrand = "DISCOVER";
+        }
+        const shBrandLogos: Record<string, string> = {
+          'VISA': '💙 𝗩𝗜𝗦𝗔', 'MASTERCARD': '🟠 𝗠𝗔𝗦𝗧𝗘𝗥𝗖𝗔𝗥𝗗', 'AMEX': '💚 𝗔𝗠𝗘𝗫',
+          'DISCOVER': '🟧 𝗗𝗜𝗦𝗖𝗢𝗩𝗘𝗥', 'JCB': '🔴 𝗝𝗖𝗕', 'UNIONPAY': '🔵 𝗨𝗡𝗜𝗢𝗡𝗣𝗔𝗬',
+          'MAESTRO': '🔷 𝗠𝗔𝗘𝗦𝗧𝗥𝗢', 'DINERS CLUB': '⚪ 𝗗𝗜𝗡𝗘𝗥𝗦',
+        };
+        const shBrandLogo = shBrandLogos[shBinBrand] || `💳 ${shBinBrand}`;
+        const shGetFlag = (code: string) => {
+          if (!code || code === 'XX') return '🌍';
+          return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+        };
+        const shCountryFlag = shGetFlag(shBinCountryCode);
 
-        // Show processing message
+        // Show processing message with BIN info
         await editTelegramMessage(callbackChatId, messageId, `
-━━━━━━━━━━━━━━━━━━━━━━
-   🛒 <b>SHOPIFY CHARGE</b>
-━━━━━━━━━━━━━━━━━━━━━━
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
+🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 
-📇 <b>Card:</b> <code>${maskedCard}</code>
-💰 <b>Range:</b> $${priceMin} – $${priceMax}
-⏳ <b>Status:</b> Processing...
+┌─── 📇 <b>Card</b> ───┐
+│ ${shBrandLogo}
+│ 📟 <code>${escapeHtml(cc)}</code>
+│ 🏦 ${escapeHtml(shBinBank)}
+│ ${shCountryFlag} ${escapeHtml(shBinCountry)}
+└────────────────────────┘
 
-<i>Connecting to Shopify API...</i>
-━━━━━━━━━━━━━━━━━━━━━━
+⏳ <b>𝗣𝗿𝗼𝗰𝗲𝘀𝘀𝗶𝗻𝗴...</b>
+💰 Range: $${priceMin} – $${priceMax}
+
+<i>🔄 Connecting to Shopify API...</i>
+⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛
 `);
 
         const startTime = Date.now();
