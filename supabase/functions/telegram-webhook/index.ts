@@ -6444,8 +6444,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             flag: binInfo.flag,
           };
           mtxtResults.push(cardResult);
-          mtxtCardStatus.set(cardCC, { state: 'done', result: cardResult });
-          mtxtActiveCards.delete(cardCC);
+          mtxtLastResponse = result.response || 'N/A';
 
           mtxtChecked++;
 
@@ -6460,7 +6459,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const mtxtQueue = mtxtCards.map(c => c.trim()).filter(c => c);
         let mtxtQueueIdx = 0;
         const mtxtWorker = async () => {
-          while (mtxtQueueIdx < mtxtQueue.length) {
+          while (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
             const idx = mtxtQueueIdx++;
             await mtxtProcessCard(mtxtQueue[idx]);
           }
