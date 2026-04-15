@@ -5668,12 +5668,11 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
 ${statusBanner}
 
-📇 <b>Card Info</b>
-${shBrandLogo}
+<blockquote>📇 <b>BIN Info</b>
+${shBrandLogo} ・ ${escapeHtml(shBinType)} ・ ${escapeHtml(shBinLevel)}
+🏦 ${escapeHtml(shBinBank)}
+${shCountryFlag} ${escapeHtml(shBinCountry)}</blockquote>
 📟 <code>${escapeHtml(cc)}</code>
-🏷 <b>Type:</b> ${escapeHtml(shBinType)} ・ ${escapeHtml(shBinLevel)}
-🏦 <b>Bank:</b> ${escapeHtml(shBinBank)}
-${shCountryFlag} <b>Country:</b> ${escapeHtml(shBinCountry)}
 
 ${statusEmoji} <b>Result</b>
 📊 <b>Status:</b> ${statusLabel}
