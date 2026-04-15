@@ -6482,15 +6482,18 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         for (let t = 0; t < mtxtThreads; t++) { mtxtWorkers.push(mtxtWorker()); }
         await Promise.all(mtxtWorkers);
 
+        // Cleanup stop tracker
+        await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
+
         // Final message with buttons
         const mtxtElapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
         const { data: mtxtUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", mtxtProfile.user_id).single();
         const mtxtNewBalance = mtxtUpdatedProfile?.credits ?? (mtxtProfile.credits - mtxtTotalCost);
 
-        const finalData = buildMtxtMessageAndButtons(mtxtCards.length, mtxtCards.length, mtxtElapsed, true);
+        const finalData = buildMtxtMessageAndButtons(mtxtChecked, mtxtCards.length, mtxtElapsed, true);
         let mtxtFinalMsg = finalData.msg;
         mtxtFinalMsg += `\n━━━━━━━━━━━━━━━━━━━━━━\n`;
-        mtxtFinalMsg += `✅ <b>Process Completed</b>\n`;
+        mtxtFinalMsg += mtxtStopped ? `🛑 <b>Stopped</b> — ${mtxtChecked}/${mtxtCards.length} checked\n` : `✅ <b>Process Completed</b>\n`;
         mtxtFinalMsg += `💰 Cost: <b>-${mtxtTotalCost}</b> credits ・ Balance: <b>${mtxtNewBalance}</b>`;
         if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `\n🔴 <b>${mtxtFailedProxyIds.length} dead proxy removed</b>`;
 
