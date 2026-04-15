@@ -6318,15 +6318,27 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         let mtxtCharged = 0, mtxtApproved = 0, mtxtDeclined = 0;
         let mtxtTotalCost = 0;
 
-        // Build live update message + result buttons
+        // Build live update message + result buttons showing ALL cards
         const mtxtAnimFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
         let mtxtAnimIdx = 0;
+        const mtxtCheckingSpinners = ['🔄', '🔃', '⚡', '🔄'];
+        let mtxtSpinIdx = 0;
+
+        // Track per-card status: 'waiting' | 'checking' | done result
+        const mtxtCardStatus: Map<string, { state: 'waiting' | 'checking' | 'done'; result?: MtxtResult }> = new Map();
+        for (const c of mtxtCards) {
+          mtxtCardStatus.set(c, { state: 'waiting' });
+        }
+
+        // Set of cards currently being checked
+        const mtxtActiveCards: Set<string> = new Set();
 
         const buildMtxtMessageAndButtons = (checked: number, total: number, elapsed: string, isComplete: boolean) => {
           const progressPct = total > 0 ? Math.round((checked / total) * 100) : 0;
           const filledBlocks = Math.round(progressPct / 5);
           const progressBar = '█'.repeat(filledBlocks) + '░'.repeat(20 - filledBlocks);
           const spinner = isComplete ? '✅' : mtxtAnimFrames[mtxtAnimIdx++ % mtxtAnimFrames.length];
+          const checkSpinner = mtxtCheckingSpinners[mtxtSpinIdx++ % mtxtCheckingSpinners.length];
 
           let msg = `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>\n\n`;
           msg += `${spinner} <code>[${progressBar}]</code> <b>${progressPct}%</b>\n`;
@@ -6338,44 +6350,38 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           if (mtxtDeclined > 0) counters.push(`❌ ${mtxtDeclined} Declined`);
           if (counters.length > 0) msg += counters.join(' ┃ ') + '\n';
 
-          if (!isComplete && checked < total) {
-            msg += `\n⏳ <i>Processing card ${checked + 1}...</i>`;
-          }
-
-          // Build result buttons - each card result as a button row
+          // Build ALL card buttons
           const resultButtons: any[][] = [];
-          for (const r of mtxtResults) {
-            let statusEmoji = '⚠️';
-            let statusLabel = 'UNKNOWN';
-            if (r.status === 'live') { statusEmoji = '💎'; statusLabel = 'CHARGED'; }
-            else if (r.status === 'dead') { statusEmoji = '❌'; statusLabel = 'DECLINED'; }
-            else if (r.status === 'approved') { statusEmoji = '✅'; statusLabel = 'APPROVED'; }
-            else if (r.status === 'error') { statusEmoji = '⛔'; statusLabel = 'ERROR'; }
+          for (const cardCC of mtxtCards) {
+            const cardNum = cardCC.split('|')[0];
+            const last4 = cardNum.slice(-4);
+            const first6 = cardNum.slice(0, 6);
+            const status = mtxtCardStatus.get(cardCC);
 
-            const maskedCC = r.cc.split('|')[0];
-            const last4 = maskedCC.slice(-4);
-            const first6 = maskedCC.slice(0, 6);
+            if (status?.state === 'done' && status.result) {
+              const r = status.result;
+              let statusEmoji = '⚠️';
+              let statusLabel = 'UNKNOWN';
+              if (r.status === 'live') { statusEmoji = '💎'; statusLabel = 'CHARGED'; }
+              else if (r.status === 'dead') { statusEmoji = '❌'; statusLabel = 'DECLINED'; }
+              else if (r.status === 'approved') { statusEmoji = '✅'; statusLabel = 'APPROVED'; }
+              else if (r.status === 'error') { statusEmoji = '⛔'; statusLabel = 'ERROR'; }
 
-            resultButtons.push([{
-              text: `${statusEmoji} ${first6}****${last4} ┃ ${statusLabel} ┃ ${r.price}`,
-              callback_data: `mtxt_res_${r.status}_${last4}`
-            }]);
-          }
-
-          // Show pending cards as dimmed buttons
-          if (!isComplete) {
-            const remaining = total - checked;
-            const showPending = Math.min(remaining, 3);
-            for (let p = 0; p < showPending; p++) {
-              const pendingIdx = checked + p;
-              if (pendingIdx < total) {
-                const pendingCard = mtxtCards[pendingIdx];
-                const pLast4 = pendingCard.split('|')[0].slice(-4);
-                resultButtons.push([{
-                  text: `⏳ ****${pLast4} ┃ CHECKING...`,
-                  callback_data: `mtxt_pending`
-                }]);
-              }
+              resultButtons.push([{
+                text: `${statusEmoji} ${first6}****${last4} ┃ ${statusLabel} ┃ ${r.price}`,
+                callback_data: `mtxt_res_${r.status}_${last4}`
+              }]);
+            } else if (status?.state === 'checking') {
+              resultButtons.push([{
+                text: `${checkSpinner} ${first6}****${last4} ┃ CHECKING...`,
+                callback_data: `mtxt_pending`
+              }]);
+            } else {
+              // waiting
+              resultButtons.push([{
+                text: `⏸ ${first6}****${last4} ┃ QUEUED`,
+                callback_data: `mtxt_pending`
+              }]);
             }
           }
 
