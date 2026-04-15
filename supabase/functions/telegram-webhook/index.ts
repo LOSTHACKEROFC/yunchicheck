@@ -6327,62 +6327,68 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            return { status: 'error', response: lastResponse, price: '$0.00' };
          };
 
-        // Results array
-        interface MtxtResult { cc: string; status: string; response: string; price: string; bank: string; flag: string; }
-        const mtxtResults: MtxtResult[] = [];
-        let mtxtCharged = 0, mtxtApproved = 0, mtxtDeclined = 0;
-        let mtxtTotalCost = 0;
+         // Results array
+         interface MtxtResult { cc: string; status: string; response: string; price: string; bank: string; flag: string; }
+         const mtxtResults: MtxtResult[] = [];
+         let mtxtCharged = 0, mtxtApproved = 0, mtxtDeclined = 0, mtxtErrorCount = 0;
+         let mtxtTotalCost = 0;
+         const mtxtErrorCards: string[] = []; // Track cards that got errors for recheck
 
-        // Build live update message + result buttons showing ALL cards
-        const mtxtAnimFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-        let mtxtAnimIdx = 0;
-        const mtxtCheckingSpinners = ['🔄', '🔃', '⚡', '🔄'];
+         // Build live update message + result buttons
+         const mtxtAnimFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+         let mtxtAnimIdx = 0;
 
-        // Track per-card status: 'waiting' | 'checking' | done result
-        let mtxtCurrentCard = '—';
-        let mtxtLastResponse = '—';
-        let mtxtStopped = false;
-        const mtxtStopKey = `mtxt_stop_${mtxtBulkId}`;
+         // Track per-card status
+         let mtxtCurrentCard = '—';
+         let mtxtLastResponse = '—';
+         let mtxtStopped = false;
+         const mtxtStopKey = `mtxt_stop_${mtxtBulkId}`;
 
-        const buildMtxtMessageAndButtons = (checked: number, total: number, elapsed: string, isComplete: boolean) => {
-          const progressPct = total > 0 ? Math.round((checked / total) * 100) : 0;
-          const filledBlocks = Math.round(progressPct / 5);
-          const progressBar = '█'.repeat(filledBlocks) + '░'.repeat(20 - filledBlocks);
-          const spinner = isComplete ? '✅' : mtxtAnimFrames[mtxtAnimIdx++ % mtxtAnimFrames.length];
+         const buildMtxtMessageAndButtons = (checked: number, total: number, elapsed: string, isComplete: boolean) => {
+           const progressPct = total > 0 ? Math.round((checked / total) * 100) : 0;
+           const filledBlocks = Math.round(progressPct / 5);
+           const progressBar = '█'.repeat(filledBlocks) + '░'.repeat(20 - filledBlocks);
+           const spinner = isComplete ? '✅' : mtxtAnimFrames[mtxtAnimIdx++ % mtxtAnimFrames.length];
 
-          let msg = `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>\n\n`;
-          msg += `${spinner} <code>[${progressBar}]</code> <b>${progressPct}%</b>\n`;
-          msg += `📊 <b>${checked}/${total}</b> checked  ⏱ <b>${elapsed}s</b>\n`;
-          if (mtxtStopped) msg += `\n🛑 <b>STOPPED BY USER</b>\n`;
-          if (isComplete && !mtxtStopped) msg += `\n✅ <b>Process Completed</b>\n`;
+           let msg = `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>\n\n`;
+           msg += `${spinner} <code>[${progressBar}]</code> <b>${progressPct}%</b>\n`;
+           msg += `📊 <b>${checked}/${total}</b> checked  ⏱ <b>${elapsed}s</b>\n`;
+           if (mtxtStopped) msg += `\n🛑 <b>STOPPED BY USER</b>\n`;
+           if (isComplete && !mtxtStopped) msg += `\n✅ <b>Process Completed</b>\n`;
 
-          // 6-button layout
-          const buttons: any[][] = [];
-          // Row 1: Card Number
-          const cardDisplay = mtxtCurrentCard !== '—' ? (() => {
-            const num = mtxtCurrentCard.split('|')[0];
-            return `${num.slice(0, 6)}****${num.slice(-4)}`;
-          })() : '—';
-          buttons.push([{ text: `💳 ${cardDisplay}`, callback_data: 'mtxt_pending' }]);
-          // Row 2: Response
-          const respText = mtxtLastResponse.length > 35 ? mtxtLastResponse.slice(0, 35) + '…' : mtxtLastResponse;
-          buttons.push([{ text: `📝 ${respText}`, callback_data: 'mtxt_pending' }]);
-          // Row 3: Charged + Declined
-          buttons.push([
-            { text: `💎 Charged: ${mtxtCharged}`, callback_data: 'mtxt_pending' },
-            { text: `❌ Declined: ${mtxtDeclined}`, callback_data: 'mtxt_pending' },
-          ]);
-          // Row 4: Progress
-          buttons.push([{ text: `📊 Progress: ${checked}/${total} (${progressPct}%)`, callback_data: 'mtxt_pending' }]);
-          // Row 5: Stop or Back
-          if (isComplete || mtxtStopped) {
-            buttons.push([{ text: '🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂', callback_data: 'menu_back' }]);
-          } else {
-            buttons.push([{ text: '🛑 Stop', callback_data: mtxtStopKey }]);
-          }
+           // 6-button layout
+           const buttons: any[][] = [];
+           // Row 1: Card Number
+           const cardDisplay = mtxtCurrentCard !== '—' ? (() => {
+             const num = mtxtCurrentCard.split('|')[0];
+             return `${num.slice(0, 6)}****${num.slice(-4)}`;
+           })() : '—';
+           buttons.push([{ text: `💳 ${cardDisplay}`, callback_data: 'mtxt_pending' }]);
+           // Row 2: Response
+           const respText = mtxtLastResponse.length > 35 ? mtxtLastResponse.slice(0, 35) + '…' : mtxtLastResponse;
+           buttons.push([{ text: `📝 ${respText}`, callback_data: 'mtxt_pending' }]);
+           // Row 3: Charged + Declined
+           buttons.push([
+             { text: `💎 Charged: ${mtxtCharged}`, callback_data: 'mtxt_pending' },
+             { text: `❌ Declined: ${mtxtDeclined}`, callback_data: 'mtxt_pending' },
+           ]);
+           // Row 4: Errors + Progress
+           buttons.push([
+             { text: `⚠️ Errors: ${mtxtErrorCount}`, callback_data: 'mtxt_pending' },
+             { text: `📊 ${checked}/${total} (${progressPct}%)`, callback_data: 'mtxt_pending' },
+           ]);
+           // Row 5: Stop / Recheck Errors / Back
+           if (isComplete || mtxtStopped) {
+             if (mtxtErrorCards.length > 0) {
+               buttons.push([{ text: `🔄 Recheck ${mtxtErrorCards.length} Errors`, callback_data: `mtxt_rechk_${mtxtBulkId}` }]);
+             }
+             buttons.push([{ text: '🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂', callback_data: 'menu_back' }]);
+           } else {
+             buttons.push([{ text: '🛑 Stop', callback_data: mtxtStopKey }]);
+           }
 
-          return { msg, buttons };
-        };
+           return { msg, buttons };
+         };
 
          // 50-thread concurrency with staggered launches like web Shopify gateway
          const MTXT_CONCURRENCY = 50;
