@@ -6631,6 +6631,19 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            await editTelegramMessage(callbackChatId, messageId, mtxtFinalMsg, finalButtons.length > 0 ? { inline_keyboard: finalButtons } : undefined);
          };
 
+         const mtxtFlushUpdate = async (forceNow = false) => {
+           const now = Date.now();
+           if (!forceNow && (now - mtxtLastEditTime) < MTXT_MIN_EDIT_INTERVAL) {
+             return;
+           }
+           mtxtLastEditTime = Date.now();
+           const elapsed = ((now - mtxtStartTime) / 1000).toFixed(2);
+           try {
+             const updateData = buildMtxtMessageAndButtons(mtxtChecked, mtxtCards.length, elapsed, false);
+             await editTelegramMessage(callbackChatId, messageId, updateData.msg, { inline_keyboard: updateData.buttons });
+           } catch {}
+         };
+
          // Show initial processing message with animation
          const initData = buildMtxtMessageAndButtons(0, mtxtCards.length, '0.00', false);
          await editTelegramMessage(callbackChatId, messageId, initData.msg, { inline_keyboard: initData.buttons });
