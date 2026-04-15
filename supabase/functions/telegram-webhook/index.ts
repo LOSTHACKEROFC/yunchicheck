@@ -5913,7 +5913,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
         // Build live update message
         const buildMshMessage = (checked: number, total: number, elapsed: string) => {
-          let msg = `𝗦𝗛𝗢𝗣𝗜𝗙𝗬 • Charge | ${checked}/${total} | ${elapsed}s\n\n`;
+          let msg = `🛍 𝗠𝗨𝗟𝗧𝗜 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘 | ${checked}/${total} | ${elapsed}s\n\n`;
           const counters: string[] = [];
           if (mshCharged > 0) counters.push(`💎 ${mshCharged} Charged`);
           if (mshApproved > 0) counters.push(`✅ ${mshApproved} Approved`);
@@ -5935,7 +5935,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         };
 
         // Show initial processing message
-        await editTelegramMessage(callbackChatId, messageId, `𝗦𝗛𝗢𝗣𝗜𝗙𝗬 • Charge | 0/${mshCards.length} | 0.00s\n\n⏳ <i>Starting bulk check...</i>`);
+        await editTelegramMessage(callbackChatId, messageId, `🛍 𝗠𝗨𝗟𝗧𝗜 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘 | 0/${mshCards.length} | 0.00s\n\n⏳ <i>Starting bulk check...</i>`);
 
         // Process cards one by one
         for (let i = 0; i < mshCards.length; i++) {
