@@ -6403,9 +6403,21 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         // Process card helper
         let mtxtChecked = 0;
         const mtxtProcessCard = async (cardCC: string) => {
+          // Mark as checking and update UI
+          mtxtCardStatus.set(cardCC, { state: 'checking' });
+          mtxtActiveCards.add(cardCC);
+          const checkElapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
+          try {
+            const checkingData = buildMtxtMessageAndButtons(mtxtChecked, mtxtCards.length, checkElapsed, false);
+            await editTelegramMessage(callbackChatId, messageId, checkingData.msg, { inline_keyboard: checkingData.buttons });
+          } catch {}
+
           const cardParts = cardCC.split("|");
           if (cardParts.length < 4 || !cardParts[3] || cardParts[3].length < 3) {
-            mtxtResults.push({ cc: cardCC, status: 'error', response: 'Invalid format', price: '$0.00', bank: 'N/A', flag: '🌍' });
+            const errResult: MtxtResult = { cc: cardCC, status: 'error', response: 'Invalid format', price: '$0.00', bank: 'N/A', flag: '🌍' };
+            mtxtResults.push(errResult);
+            mtxtCardStatus.set(cardCC, { state: 'done', result: errResult });
+            mtxtActiveCards.delete(cardCC);
             mtxtDeclined++;
             mtxtChecked++;
             return;
@@ -6447,14 +6459,17 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             }).catch(() => {});
           }
 
-          mtxtResults.push({
+          const cardResult: MtxtResult = {
             cc: cardCC,
             status: statusType,
             response: result.response || 'N/A',
             price: result.price,
             bank: binInfo.bank,
             flag: binInfo.flag,
-          });
+          };
+          mtxtResults.push(cardResult);
+          mtxtCardStatus.set(cardCC, { state: 'done', result: cardResult });
+          mtxtActiveCards.delete(cardCC);
 
           mtxtChecked++;
 
