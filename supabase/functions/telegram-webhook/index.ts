@@ -5736,6 +5736,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const { data: bulkData } = await supabase.from("pending_bulk_checks").select("cards").eq("id", mshBulkId).maybeSingle();
         let mshCards: string[] = [];
         if (bulkData?.cards) { mshCards = bulkData.cards.split("\n").filter((c: string) => c.trim()); }
+        // Delete immediately to prevent duplicate processing on re-click
+        await supabase.from("pending_bulk_checks").delete().eq("id", mshBulkId);
         if (!mshCards.length) {
           await answerCallbackQuery(update.callback_query.id, "❌ Card data expired or invalid");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -6014,8 +6016,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         finalMsg += `<i>💰 Cost: -${mshTotalCost} credits ・ Balance: ${mshNewBalance}</i>`;
         if (mshFailedProxyIds.length > 0) finalMsg += `\n🔴 <b>${mshFailedProxyIds.length} dead proxy removed</b>`;
 
-        // Clean up stored cards
-        supabase.from("pending_bulk_checks").delete().eq("id", mshBulkId).then(() => {});
+        // Cards already cleaned up at start to prevent re-processing
 
         await editTelegramMessage(callbackChatId, messageId, finalMsg, {
           inline_keyboard: [[{ text: "🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂", callback_data: "menu_back" }]]
