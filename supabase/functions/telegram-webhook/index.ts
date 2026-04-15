@@ -6516,7 +6516,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (mtxtStopped) return;
               // Staggered launch delay like web (180ms + random jitter)
               if (launchOrder > 0) {
-                const launchDelay = launchOrder * MTXT_STAGGER_MS + Math.floor(Math.random() * 120);
+                const launchDelay = launchOrder * MTXT_STAGGER_MS_VAL + Math.floor(Math.random() * 120);
                 await new Promise(r => setTimeout(r, launchDelay));
               }
               if (mtxtStopped) return;
