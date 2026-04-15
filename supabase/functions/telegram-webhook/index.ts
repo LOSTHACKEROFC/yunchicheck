@@ -5635,11 +5635,10 @@ Go to yunchicheck.com/dashboard → Proxies
    🛒 <b>SHOPIFY CHARGE</b>
 ━━━━━━━━━━━━━━━━━━━━━━
 
-📇 <b>Card:</b> <code>${maskedCard}</code>
+📇 <b>Card:</b> <code>${escapeHtml(cc)}</code>
 ${statusEmoji} <b>Status:</b> ${statusLabel}
 💬 <b>Response:</b> ${escapeHtml(String(apiMessage).substring(0, 200))}
 💵 <b>Amount:</b> ${escapeHtml(sitePrice)}
-🌐 <b>Site:</b> <code>${escapeHtml(String(usedSite.url).substring(0, 50))}</code>
 
 ━━━━━ <b>Details</b> ━━━━━
 💰 <b>Cost:</b> ${creditCost > 0 ? `-${creditCost} credits` : "Free"}
