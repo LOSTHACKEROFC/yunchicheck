@@ -6545,6 +6545,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           let mtxtCurrentCard = '—';
           let mtxtLastResponse = '—';
           let mtxtStopped = false;
+          let mtxtStoppedByUser = false;
           const mtxtStopKey = `mtxt_stop_${mtxtBulkId}`;
           let mtxtLastStopPoll = 0;
           const MTXT_STOP_POLL_INTERVAL = 1500;
@@ -6566,6 +6567,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             }
             if (!stopCheck) {
               mtxtStopped = true;
+              mtxtStoppedByUser = true;
               return true;
             }
             return false;
@@ -6580,8 +6582,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             let msg = `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>\n\n`;
             msg += `${spinner} <code>[${progressBar}]</code> <b>${progressPct}%</b>\n`;
             msg += `📊 <b>${checked}/${total}</b> checked  ⏱ <b>${elapsed}s</b>\n`;
-            if (mtxtStopped) msg += `\n🛑 <b>STOPPED BY USER</b>\n`;
-            if (isComplete && !mtxtStopped) msg += `\n✅ <b>Process Completed</b>\n`;
+            if (mtxtStoppedByUser) msg += `\n🛑 <b>STOPPED BY USER</b>\n`;
+            if (isComplete && !mtxtStoppedByUser) msg += `\n✅ <b>Process Completed</b>\n`;
 
             const buttons: any[][] = [];
             const cardDisplay = mtxtCurrentCard !== '—' ? (() => {
@@ -6599,7 +6601,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               { text: `⚠️ Errors: ${mtxtErrorCount}`, callback_data: 'mtxt_pending' },
               { text: `📊 ${checked}/${total} (${progressPct}%)`, callback_data: 'mtxt_pending' },
             ]);
-            if (isComplete || mtxtStopped) {
+            if (isComplete || mtxtStoppedByUser) {
               if (mtxtErrorCards.length > 0) {
                 buttons.push([{ text: `🔄 Recheck ${mtxtErrorCards.length} Errors`, callback_data: `mtxt_rechk_${mtxtBulkId}` }]);
               }
@@ -6631,7 +6633,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             const mtxtNewBalance = mtxtUpdatedProfile?.credits ?? (mtxtProfile.credits - mtxtTotalCost);
 
             let mtxtFinalMsg = `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘 — 𝗙𝗜𝗡𝗜𝗦𝗛𝗘𝗗</b>\n\n`;
-            mtxtFinalMsg += mtxtStopped ? `🛑 <b>Stopped</b> — ${mtxtChecked}/${mtxtCards.length} checked\n` : `✅ <b>Process Completed</b>\n`;
+            mtxtFinalMsg += mtxtStoppedByUser ? `🛑 <b>Stopped</b> — ${mtxtChecked}/${mtxtCards.length} checked\n` : `✅ <b>Process Completed</b>\n`;
             mtxtFinalMsg += `⏱ Time: <b>${mtxtElapsed}s</b>\n\n`;
             mtxtFinalMsg += `━━━━━━ 📊 𝗦𝘁𝗮𝘁𝘀 ━━━━━━\n`;
             mtxtFinalMsg += `💎 Charged: <b>${mtxtCharged}</b>\n`;
@@ -6787,7 +6789,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               mtxtLastResponse = result.response || 'N/A';
               mtxtChecked++;
 
-              if (mtxtChecked >= mtxtCards.length || mtxtStopped) await mtxtSendFinalMessage();
+              if (mtxtChecked >= mtxtCards.length || mtxtStoppedByUser) await mtxtSendFinalMessage();
               else await mtxtFlushUpdate();
             } catch (cardError) {
               console.error(`mtxtProcessCard error for ${cardCC}:`, cardError);
@@ -6795,7 +6797,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               mtxtErrorCards.push(cardCC);
               mtxtResults.push({ cc: cardCC, status: 'error', response: 'Processing error', price: '$0.00', bank: 'N/A', flag: '🌍' });
               mtxtChecked++;
-              if (mtxtChecked >= mtxtCards.length || mtxtStopped) await mtxtSendFinalMessage();
+              if (mtxtChecked >= mtxtCards.length || mtxtStoppedByUser) await mtxtSendFinalMessage();
               else await mtxtFlushUpdate();
             }
           };
@@ -6803,14 +6805,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           const mtxtQueue = mtxtCards.map(c => c.trim()).filter(c => c);
           let mtxtQueueIdx = 0;
           const MIN_COMPLETE_BEFORE_NEXT = 49;
-          const MTXT_SAFETY_TIMEOUT = 145000;
-          const mtxtSafetyTimer = setTimeout(async () => {
-            mtxtStopped = true;
-            await mtxtSendFinalMessage();
-          }, MTXT_SAFETY_TIMEOUT);
 
           try {
-            while (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
+            while (mtxtQueueIdx < mtxtQueue.length && !mtxtStoppedByUser) {
               const batchEnd = Math.min(mtxtQueueIdx + MTXT_CONCURRENCY, mtxtQueue.length);
               const batchCards = mtxtQueue.slice(mtxtQueueIdx, batchEnd);
               const isLastBatch = batchEnd >= mtxtQueue.length;
@@ -6818,12 +6815,12 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               await new Promise<void>((resolve) => {
                 let batchCompleted = 0;
                 const promises = batchCards.map(async (card, launchOrder) => {
-                  if (mtxtStopped) return;
+                  if (mtxtStoppedByUser) return;
                   if (launchOrder > 0) {
                     const launchDelay = launchOrder * MTXT_STAGGER_MS_VAL + Math.floor(Math.random() * 80);
                     await new Promise(r => setTimeout(r, launchDelay));
                   }
-                  if (mtxtStopped) return;
+                  if (mtxtStoppedByUser) return;
 
                   await mtxtProcessCard(card);
                   batchCompleted++;
@@ -6835,14 +6832,16 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               });
 
               mtxtQueueIdx = batchEnd;
-              if (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
+              if (mtxtQueueIdx < mtxtQueue.length && !mtxtStoppedByUser) {
                 await new Promise(r => setTimeout(r, 250));
               }
             }
 
             await mtxtSendFinalMessage();
           } finally {
-            clearTimeout(mtxtSafetyTimer);
+            if (!mtxtStoppedByUser) {
+              console.log(`[MTXT] Finished batch ${mtxtBulkId}: ${mtxtChecked}/${mtxtCards.length} checked, errors=${mtxtErrorCount}`);
+            }
           }
         };
 
