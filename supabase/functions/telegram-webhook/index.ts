@@ -6117,60 +6117,148 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
       }
 
       // MTXT Stop handler
+      // ===== MTXT STOP HANDLER =====
       if (callbackData.startsWith("mtxt_stop_")) {
         const stopBulkId = callbackData.replace("mtxt_stop_", "");
-        // Mark the bulk check as stopped by deleting it
         await supabase.from("pending_bulk_checks").delete().eq("id", stopBulkId);
         await answerCallbackQuery(update.callback_query.id, "🛑 Stopping...");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-       }
+      }
 
-       // MTXT Recheck errors handler - redirects error cards back through the price selection flow
-       if (callbackData.startsWith("mtxt_rechk_")) {
-         const rechkBulkId = callbackData.replace("mtxt_rechk_", "");
-         const rechkKey = `rechk_${rechkBulkId}`;
-         const { data: rechkData } = await supabase.from("pending_bulk_checks").select("cards, user_id").eq("id", rechkKey).maybeSingle();
-         if (!rechkData || !rechkData.cards) {
-           await answerCallbackQuery(update.callback_query.id, "❌ No error cards found");
-           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-         }
-         const rechkCards = rechkData.cards.split("\n").filter((c: string) => c.trim());
-         // Delete old recheck record and create new bulk check record
-         await supabase.from("pending_bulk_checks").delete().eq("id", rechkKey);
-         const newBulkId = crypto.randomUUID().slice(0, 8);
-         await supabase.from("pending_bulk_checks").insert({ id: newBulkId, cards: rechkCards.join("\n"), chat_id: String(callbackChatId), user_id: rechkData.user_id });
+      // ===== MTXT RECHECK HANDLER =====
+      if (callbackData.startsWith("mtxt_rechk_")) {
+        const rechkBulkId = callbackData.replace("mtxt_rechk_", "");
+        const rechkKey = `rechk_${rechkBulkId}`;
+        const { data: rechkData } = await supabase.from("pending_bulk_checks").select("cards, user_id").eq("id", rechkKey).maybeSingle();
+        if (!rechkData || !rechkData.cards) {
+          await answerCallbackQuery(update.callback_query.id, "❌ No error cards found");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        const rechkCards = rechkData.cards.split("\n").filter((c: string) => c.trim());
+        await supabase.from("pending_bulk_checks").delete().eq("id", rechkKey);
+        const newBulkId = crypto.randomUUID().slice(0, 8);
+        await supabase.from("pending_bulk_checks").insert({ id: newBulkId, cards: rechkCards.join("\n"), chat_id: String(callbackChatId), user_id: rechkData.user_id });
 
-         // Fetch the user profile for balance display
-         const { data: rechkProfile } = await supabase.from("profiles").select("credits").eq("user_id", rechkData.user_id).single();
+        const { data: rechkProfile } = await supabase.from("profiles").select("credits").eq("user_id", rechkData.user_id).single();
 
-         // Show price group selection for the recheck
-         const rechkPriceGroups = [
-           { min: 0, max: 5, label: '$1 - $5', emoji: '💵' },
-           { min: 5, max: 20, label: '$5 - $20', emoji: '💰' },
-           { min: 20, max: 50, label: '$20 - $50', emoji: '💎' },
-           { min: 50, max: 100, label: '$50 - $100', emoji: '🏆' },
-         ];
-         const rechkGroupCounts = await Promise.all(
-           rechkPriceGroups.map(async (g) => {
-             let q = supabase.from("gateway_urls").select("id", { count: "exact", head: true }).not("url", "like", "https://razorpay.me/%").gt("price", g.min).lte("price", g.max);
-             const { count } = await q;
-             return { ...g, count: count || 0 };
-           })
-         );
-         const rechkTotalSites = rechkGroupCounts.reduce((a, g) => a + g.count, 0);
-         const rechkButtons: any[][] = [];
-         for (const g of rechkGroupCounts) {
-           if (g.count > 0) rechkButtons.push([{ text: `${g.emoji} ${g.label}  •  ${g.count} sites`, callback_data: `mtxt_${g.min}_${g.max}_${newBulkId}` }]);
-           else rechkButtons.push([{ text: `${g.emoji} ${g.label}  •  0 sites ✖️`, callback_data: `mtxt_nosite` }]);
-         }
-         rechkButtons.push([{ text: `🎲 𝗔𝘂𝘁𝗼 – Any Range  •  ${rechkTotalSites} sites`, callback_data: `mtxt_0_100_${newBulkId}` }]);
+        const rechkPriceGroups = [
+          { min: 0, max: 5, label: '$1 - $5', emoji: '💵' },
+          { min: 5, max: 20, label: '$5 - $20', emoji: '💰' },
+          { min: 20, max: 50, label: '$20 - $50', emoji: '💎' },
+          { min: 50, max: 100, label: '$50 - $100', emoji: '🏆' },
+        ];
+        const rechkGroupCounts = await Promise.all(
+          rechkPriceGroups.map(async (g) => {
+            let q = supabase.from("gateway_urls").select("id", { count: "exact", head: true }).not("url", "like", "https://razorpay.me/%").gt("price", g.min).lte("price", g.max);
+            const { count } = await q;
+            return { ...g, count: count || 0 };
+          })
+        );
+        const rechkTotalSites = rechkGroupCounts.reduce((a, g) => a + g.count, 0);
+        const rechkButtons: any[][] = [];
+        for (const g of rechkGroupCounts) {
+          if (g.count > 0) rechkButtons.push([{ text: `${g.emoji} ${g.label}  •  ${g.count} sites`, callback_data: `mtxt_${g.min}_${g.max}_${newBulkId}` }]);
+          else rechkButtons.push([{ text: `${g.emoji} ${g.label}  •  0 sites ✖️`, callback_data: `mtxt_nosite` }]);
+        }
+        rechkButtons.push([{ text: `🎲 𝗔𝘂𝘁𝗼 – Any Range  •  ${rechkTotalSites} sites`, callback_data: `mtxt_0_100_${newBulkId}` }]);
 
-         await answerCallbackQuery(update.callback_query.id, `🔄 Rechecking ${rechkCards.length} error cards...`);
-         await editTelegramMessage(callbackChatId, messageId, `🔄 <b>𝗥𝗘𝗖𝗛𝗘𝗖𝗞 𝗘𝗥𝗥𝗢𝗥 𝗖𝗔𝗥𝗗𝗦</b>\n\n📊 <b>${rechkCards.length} cards</b> to recheck\n💰 <b>Balance:</b> ${rechkProfile?.credits ?? '?'} credits\n🌐 <b>Sites:</b> ${rechkTotalSites} available\n\n<i>Select price range:</i>`, { inline_keyboard: rechkButtons });
-         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-       }
+        await answerCallbackQuery(update.callback_query.id, `🔄 Rechecking ${rechkCards.length} error cards...`);
+        await editTelegramMessage(callbackChatId, messageId, `🔄 <b>𝗥𝗘𝗖𝗛𝗘𝗖𝗞 𝗘𝗥𝗥𝗢𝗥 𝗖𝗔𝗥𝗗𝗦</b>\n\n📊 <b>${rechkCards.length} cards</b> to recheck\n💰 <b>Balance:</b> ${rechkProfile?.credits ?? '?'} credits\n🌐 <b>Sites:</b> ${rechkTotalSites} available\n\n<i>Select price range:</i>`, { inline_keyboard: rechkButtons });
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
 
-       if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite") && !callbackData.startsWith("mtxt_pending") && !callbackData.startsWith("mtxt_res_")) {
+      // ===== MTXT RESUME HANDLER =====
+      if (callbackData.startsWith("mtxt_resume_")) {
+        const resumeBulkId = callbackData.replace("mtxt_resume_", "");
+        const { data: resumeRow } = await supabase
+          .from("pending_bulk_checks")
+          .select("id, cards, chat_id, state_json, message_id")
+          .eq("id", resumeBulkId)
+          .maybeSingle();
+
+        if (!resumeRow || !resumeRow.state_json) {
+          console.log(`[MTXT-RESUME] Session ${resumeBulkId} not found or stopped`);
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        let resumeState: any;
+        try { resumeState = JSON.parse(resumeRow.state_json); } catch {
+          console.error(`[MTXT-RESUME] Invalid state JSON for ${resumeBulkId}`);
+          await supabase.from("pending_bulk_checks").delete().eq("id", resumeBulkId);
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (resumeState.status !== "running") {
+          console.log(`[MTXT-RESUME] Session ${resumeBulkId} status is ${resumeState.status}, skipping`);
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const rChatId = parseInt(resumeRow.chat_id) || 0;
+        const rMsgId = resumeRow.message_id || 0;
+
+        if (!rChatId || !rMsgId) {
+          console.error(`[MTXT-RESUME] Missing chat/message IDs for ${resumeBulkId}`);
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        console.log(`[MTXT-RESUME] Resuming ${resumeBulkId}: ${resumeState.remainingCards?.length || 0} cards left, charged=${resumeState.charged}, declined=${resumeState.declined}`);
+
+        // Mark as running (update timestamp to prevent watchdog re-trigger)
+        await supabase.from("pending_bulk_checks").update({ updated_at: new Date().toISOString() }).eq("id", resumeBulkId);
+
+        // Build fake callback parts to reuse the main handler
+        // We construct the same data format: mtxt_{min}_{max}_{bulkId}
+        // But we need to set up the cards in the DB row for the main handler to read
+        const remainingCards = resumeState.remainingCards || [];
+        if (remainingCards.length === 0) {
+          // No cards left - should have been finalized. Clean up.
+          await supabase.from("pending_bulk_checks").delete().eq("id", resumeBulkId);
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Update the row with remaining cards for the main handler to pick up
+        await supabase.from("pending_bulk_checks").update({
+          cards: remainingCards.join("\n"),
+          updated_at: new Date().toISOString(),
+        }).eq("id", resumeBulkId);
+
+        // Now trigger the main handler by re-invoking with the correct callback data
+        const triggerData = `mtxt_${resumeState.priceMin}_${resumeState.priceMax}_${resumeBulkId}`;
+        const triggerPayload = {
+          callback_query: {
+            id: `resume_${Date.now()}`,
+            from: { id: rChatId, is_bot: false, first_name: "Resume" },
+            message: {
+              message_id: rMsgId,
+              from: { id: 0, is_bot: true, first_name: "Bot" },
+              chat: { id: rChatId, type: "private" },
+              date: Math.floor(Date.now() / 1000),
+              text: "",
+            },
+            chat_instance: "resume",
+            data: triggerData,
+          },
+        };
+
+        // Fire-and-forget self-invocation
+        const edgeRuntime = (globalThis as any).EdgeRuntime;
+        const doResumeTrigger = async () => {
+          try {
+            await fetch(`${SUPABASE_URL}/functions/v1/telegram-webhook`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+              body: JSON.stringify(triggerPayload),
+            });
+          } catch (e) { console.error("[MTXT-RESUME] Self-invoke failed:", e); }
+        };
+        if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(doResumeTrigger());
+        else await doResumeTrigger();
+
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ===== MTXT MAIN HANDLER (fresh start + resume continuation) =====
+      if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite") && !callbackData.startsWith("mtxt_pending") && !callbackData.startsWith("mtxt_res_")) {
         const mtxtParts = callbackData.replace("mtxt_", "").split("_");
         const mtxtPriceMin = parseInt(mtxtParts[0]);
         const mtxtPriceMax = parseInt(mtxtParts[1]);
@@ -6179,7 +6267,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         // Fetch cards from DB
         const { data: mtxtBulkData, error: mtxtBulkFetchError } = await supabase
           .from("pending_bulk_checks")
-          .select("cards")
+          .select("cards, state_json, message_id")
           .eq("id", mtxtBulkId)
           .maybeSingle();
         if (mtxtBulkFetchError) {
@@ -6187,30 +6275,50 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           await answerCallbackQuery(update.callback_query.id, "❌ Failed to load this batch");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
-        if (mtxtBulkData?.cards === "RUNNING") {
+
+        // Check if this is a resume (has state_json with prior counters)
+        let isResumeChunk = false;
+        let priorState: any = null;
+        if (mtxtBulkData?.state_json) {
+          try {
+            priorState = JSON.parse(mtxtBulkData.state_json);
+            isResumeChunk = priorState?.status === "running";
+          } catch {}
+        }
+
+        if (mtxtBulkData?.cards === "RUNNING" && !isResumeChunk) {
           await answerCallbackQuery(update.callback_query.id, "⏳ This batch is already running");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
+
         let mtxtCards: string[] = [];
-        if (mtxtBulkData?.cards) { mtxtCards = mtxtBulkData.cards.split("\n").filter((c: string) => c.trim()); }
+        if (mtxtBulkData?.cards && mtxtBulkData.cards !== "RUNNING") {
+          mtxtCards = mtxtBulkData.cards.split("\n").filter((c: string) => c.trim());
+        }
         if (!mtxtCards.length) {
           await answerCallbackQuery(update.callback_query.id, "❌ Card data expired or invalid");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
-        const { error: deleteMtxtPendingError } = await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
-        if (deleteMtxtPendingError) {
-          console.error(`[MTXT] Failed to prepare batch ${mtxtBulkId}:`, deleteMtxtPendingError);
-          await answerCallbackQuery(update.callback_query.id, "❌ Failed to start this batch");
-          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
-        // Re-insert as stop-tracking record (use a valid dummy UUID for user_id)
-        const { error: insertMtxtRunningError } = await supabase
-          .from("pending_bulk_checks")
-          .insert({ id: mtxtBulkId, cards: "RUNNING", chat_id: String(callbackChatId), user_id: "00000000-0000-0000-0000-000000000000" });
-        if (insertMtxtRunningError) {
-          console.error(`[MTXT] Failed to create stop tracker ${mtxtBulkId}:`, insertMtxtRunningError);
-          await answerCallbackQuery(update.callback_query.id, "❌ Failed to start this batch");
-          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+        if (!isResumeChunk) {
+          // Fresh start: delete old row, re-insert as RUNNING
+          const { error: deleteMtxtPendingError } = await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
+          if (deleteMtxtPendingError) {
+            console.error(`[MTXT] Failed to prepare batch ${mtxtBulkId}:`, deleteMtxtPendingError);
+            await answerCallbackQuery(update.callback_query.id, "❌ Failed to start this batch");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+          const { error: insertMtxtRunningError } = await supabase
+            .from("pending_bulk_checks")
+            .insert({ id: mtxtBulkId, cards: "RUNNING", chat_id: String(callbackChatId), user_id: "00000000-0000-0000-0000-000000000000", message_id: messageId, updated_at: new Date().toISOString() });
+          if (insertMtxtRunningError) {
+            console.error(`[MTXT] Failed to create stop tracker ${mtxtBulkId}:`, insertMtxtRunningError);
+            await answerCallbackQuery(update.callback_query.id, "❌ Failed to start this batch");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+        } else {
+          // Resume chunk: just mark as running
+          await supabase.from("pending_bulk_checks").update({ cards: "RUNNING", updated_at: new Date().toISOString() }).eq("id", mtxtBulkId);
         }
 
         if (!callbackChatId || !messageId) {
@@ -6218,10 +6326,50 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        await answerCallbackQuery(update.callback_query.id, `⚡ Checking ${mtxtCards.length} cards on $${mtxtPriceMin}-$${mtxtPriceMax}...`);
+        if (!isResumeChunk) {
+          await answerCallbackQuery(update.callback_query.id, `⚡ Checking ${mtxtCards.length} cards on $${mtxtPriceMin}-$${mtxtPriceMax}...`);
+        }
 
         const cleanupMtxtTracker = async () => {
           await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
+        };
+
+        // ===== CHUNK CONSTANTS =====
+        const MTXT_CHUNK_SIZE = 100; // Cards per invocation
+        const MTXT_CONCURRENCY = 50;
+        const MTXT_STAGGER_MS_VAL = 120;
+        const MTXT_PROGRESS_HEARTBEAT_MS = 4000;
+
+        // Self-invoke for next chunk
+        const queueMtxtResume = (delayMs = 500) => {
+          const resumePayload = {
+            callback_query: {
+              id: `chunk_${Date.now()}`,
+              from: { id: callbackChatId, is_bot: false, first_name: "Chunk" },
+              message: {
+                message_id: messageId,
+                from: { id: 0, is_bot: true, first_name: "Bot" },
+                chat: { id: callbackChatId, type: "private" },
+                date: Math.floor(Date.now() / 1000),
+                text: "",
+              },
+              chat_instance: "chunk",
+              data: `mtxt_resume_${mtxtBulkId}`,
+            },
+          };
+          const edgeRuntime = (globalThis as any).EdgeRuntime;
+          const doInvoke = async () => {
+            if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
+            try {
+              await fetch(`${SUPABASE_URL}/functions/v1/telegram-webhook`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+                body: JSON.stringify(resumePayload),
+              });
+            } catch (e) { console.error("[MTXT] Self-invoke failed:", e); }
+          };
+          if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(doInvoke());
+          else { doInvoke().catch(() => {}); }
         };
 
         const runMtxtBulkCheck = async () => {
@@ -6241,7 +6389,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             await editTelegramMessage(callbackChatId, messageId, `🚫 <b>Account Suspended</b>`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
             return;
           }
-          if (mtxtProfile.credits < mtxtCards.length) {
+          if (!isResumeChunk && mtxtProfile.credits < mtxtCards.length) {
             await cleanupMtxtTracker();
             await editTelegramMessage(callbackChatId, messageId, `❌ <b>Insufficient Credits</b>\n\nNeed at least <b>${mtxtCards.length}</b> credits. Balance: <b>${mtxtProfile.credits}</b>`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
             return;
@@ -6262,13 +6410,20 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           const { data: mtxtProxies } = await supabase.from("user_proxies").select("*").eq("user_id", mtxtProfile.user_id);
           if (!mtxtProxies || mtxtProxies.length < 1) {
             await cleanupMtxtTracker();
-            await editTelegramMessage(callbackChatId, messageId, `❌ <b>No Proxies</b>\n\nAdd proxies at yunchicheck.com/dashboard → Proxies`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
+            await editTelegramMessage(callbackChatId, messageId, `❌ <b>No Proxies</b>\nAdd proxies at yunchicheck.com/dashboard → Proxies`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
             return;
           }
 
+          // Filter out blocked URLs
+          const { data: blockedUrls } = await supabase.from("blocked_urls").select("url");
+          const blockedSet = new Set((blockedUrls || []).map((b: any) => b.url));
+
           const SHOPIFY_API_URL_MTXT = "http://108.165.12.183:8081/";
           const MTXT_MAX_RETRIES = 2;
-          const mtxtStartTime = Date.now();
+
+          // Load prior state counters if resuming
+          const totalCardsOverall = priorState?.totalCards ?? mtxtCards.length;
+          const mtxtStartTime = priorState?.startTime ?? Date.now();
 
           const mtxtBadResponses = ["Site not supported", "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH", "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED", "Payment method not available", "ARTIFACT_DISSATISFACTION", "VALIDATION_CUSTOM", '"Gateway":"Authorize.net"'];
           const mtxtStrikeResponses = ["MERCHANDISE_EXPECTED_PRICE_MISMATCH"];
@@ -6285,7 +6440,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
           const mtxtFormatProxy = (p: any) => p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
           const mtxtFailedProxyIds: string[] = [];
-          const mtxtLiveSites = [...mtxtSites].sort(() => Math.random() - 0.5);
+          const mtxtLiveSites = [...mtxtSites].filter(s => !blockedSet.has(s.url)).sort(() => Math.random() - 0.5);
           const mtxtDeadSiteUrls = new Set<string>();
           const mtxtRemoveSite = (url: string) => {
             if (mtxtDeadSiteUrls.has(url)) return;
@@ -6465,20 +6620,13 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (siteResult.proxyDead) {
                 mtxtFailedProxyIds.push(proxy.id);
                 supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
-                if (siteAttempt + 1 < cardSites.length) {
-                  await new Promise(r => setTimeout(r, 200));
-                  continue;
-                }
-                finalResult = siteResult;
-                break;
+                if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
+                finalResult = siteResult; break;
               }
 
               if (siteResult.siteDead) {
                 mtxtRemoveSite(site.url);
-                if (siteAttempt + 1 < cardSites.length) {
-                  await new Promise(r => setTimeout(r, 200));
-                  continue;
-                }
+                if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
                 break;
               }
 
@@ -6492,12 +6640,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (isProxyError) {
                 mtxtFailedProxyIds.push(proxy.id);
                 supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
-                if (siteAttempt + 1 < cardSites.length) {
-                  await new Promise(r => setTimeout(r, 200));
-                  continue;
-                }
-                finalResult = siteResult;
-                break;
+                if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
+                finalResult = siteResult; break;
               }
 
               if (siteResult.status === 'live' || siteResult.status === 'dead') {
@@ -6522,10 +6666,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 mtxtRemoveSite(site.url);
               }
 
-              if (siteAttempt + 1 < cardSites.length) {
-                await new Promise(r => setTimeout(r, 300 + Math.random() * 300));
-                continue;
-              }
+              if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 300 + Math.random() * 300)); continue; }
               break;
             }
 
@@ -6533,15 +6674,21 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             return { status: 'error', response: finalResult.response || finalResult.message || 'Unknown', price: '$0.00' };
           };
 
+          // ===== ACCUMULATORS (loaded from prior state if resuming) =====
           interface MtxtResult { cc: string; status: string; response: string; price: string; bank: string; flag: string; }
-          const mtxtResults: MtxtResult[] = [];
-          let mtxtCharged = 0, mtxtApproved = 0, mtxtDeclined = 0, mtxtErrorCount = 0;
-          let mtxtTotalCost = 0;
-          const mtxtErrorCards: string[] = [];
+          const mtxtResults: MtxtResult[] = [...(priorState?.chargedResults || [])];
+          let mtxtCharged = priorState?.charged ?? 0;
+          let mtxtApproved = priorState?.approved ?? 0;
+          let mtxtDeclined = priorState?.declined ?? 0;
+          let mtxtErrorCount = priorState?.errorCount ?? 0;
+          let mtxtTotalCost = priorState?.totalCost ?? 0;
+          const mtxtErrorCards: string[] = [...(priorState?.errorCards || [])];
+          // mtxtChecked tracks cards processed IN THIS chunk + prior chunks
+          let mtxtCheckedTotal = (priorState?.charged ?? 0) + (priorState?.approved ?? 0) + (priorState?.declined ?? 0) + (priorState?.errorCount ?? 0);
+          let mtxtCheckedThisChunk = 0;
 
           const mtxtAnimFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
           let mtxtAnimIdx = 0;
-
           let mtxtCurrentCard = '—';
           let mtxtLastResponse = '—';
           let mtxtStopped = false;
@@ -6610,9 +6757,6 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             return { msg, buttons };
           };
 
-          const MTXT_CONCURRENCY = 50;
-          const MTXT_STAGGER_MS_VAL = 120;
-          const MTXT_PROGRESS_HEARTBEAT_MS = 4000;
           let mtxtLastEditTime = 0;
           const MTXT_MIN_EDIT_INTERVAL = 500;
           let mtxtFinalSent = false;
@@ -6620,10 +6764,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           let mtxtHeartbeat: ReturnType<typeof setInterval> | null = null;
 
           const stopMtxtHeartbeat = () => {
-            if (mtxtHeartbeat) {
-              clearInterval(mtxtHeartbeat);
-              mtxtHeartbeat = null;
-            }
+            if (mtxtHeartbeat) { clearInterval(mtxtHeartbeat); mtxtHeartbeat = null; }
           };
 
           const mtxtSendFinalMessage = async () => {
@@ -6641,14 +6782,13 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             const mtxtNewBalance = mtxtUpdatedProfile?.credits ?? (mtxtProfile.credits - mtxtTotalCost);
 
             let mtxtFinalMsg = `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘 — 𝗙𝗜𝗡𝗜𝗦𝗛𝗘𝗗</b>\n\n`;
-            mtxtFinalMsg += mtxtStoppedByUser ? `🛑 <b>Stopped</b> — ${mtxtChecked}/${mtxtCards.length} checked\n` : `✅ <b>Process Completed</b>\n`;
+            mtxtFinalMsg += mtxtStoppedByUser ? `🛑 <b>Stopped</b> — ${mtxtCheckedTotal}/${totalCardsOverall} checked\n` : `✅ <b>Process Completed</b>\n`;
             mtxtFinalMsg += `⏱ Time: <b>${mtxtElapsed}s</b>\n\n`;
             mtxtFinalMsg += `━━━━━━ 📊 𝗦𝘁𝗮𝘁𝘀 ━━━━━━\n`;
             mtxtFinalMsg += `💎 Charged: <b>${mtxtCharged}</b>\n`;
-            
             mtxtFinalMsg += `❌ Declined: <b>${mtxtDeclined}</b>\n`;
             mtxtFinalMsg += `⚠️ Errors: <b>${mtxtErrorCount}</b>\n`;
-            mtxtFinalMsg += `📊 Total: <b>${mtxtChecked}/${mtxtCards.length}</b>\n\n`;
+            mtxtFinalMsg += `📊 Total: <b>${mtxtCheckedTotal}/${totalCardsOverall}</b>\n\n`;
             mtxtFinalMsg += `━━━━━━ 💰 𝗖𝗼𝘀𝘁 ━━━━━━\n`;
             mtxtFinalMsg += `💸 Spent: <b>-${mtxtTotalCost}</b> credits\n`;
             mtxtFinalMsg += `💰 Balance: <b>${mtxtNewBalance}</b> credits\n\n`;
@@ -6662,7 +6802,6 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 mtxtFinalMsg += `   📝 ${card.response}\n\n`;
               }
             }
-
 
             if (mtxtErrorCards.length > 0) mtxtFinalMsg += `⚠️ <b>${mtxtErrorCards.length} cards</b> had errors — use Recheck below\n`;
             if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `🔴 <b>${mtxtFailedProxyIds.length} dead proxies</b> auto-removed\n`;
@@ -6688,7 +6827,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             mtxtEditInFlight = true;
             const elapsed = ((now - mtxtStartTime) / 1000).toFixed(2);
             try {
-              const updateData = buildMtxtMessageAndButtons(mtxtChecked, mtxtCards.length, elapsed, false);
+              const updateData = buildMtxtMessageAndButtons(mtxtCheckedTotal, totalCardsOverall, elapsed, false);
               await editTelegramMessage(callbackChatId, messageId, updateData.msg, { inline_keyboard: updateData.buttons });
             } catch {
             } finally {
@@ -6696,17 +6835,15 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             }
           };
 
-          const initData = buildMtxtMessageAndButtons(0, mtxtCards.length, '0.00', false);
-          await editTelegramMessage(callbackChatId, messageId, initData.msg, { inline_keyboard: initData.buttons });
+          if (!isResumeChunk) {
+            const initData = buildMtxtMessageAndButtons(0, totalCardsOverall, '0.00', false);
+            await editTelegramMessage(callbackChatId, messageId, initData.msg, { inline_keyboard: initData.buttons });
+          }
           mtxtHeartbeat = setInterval(() => {
-            if (mtxtFinalSent) {
-              stopMtxtHeartbeat();
-              return;
-            }
+            if (mtxtFinalSent) { stopMtxtHeartbeat(); return; }
             void mtxtFlushUpdate(true);
           }, MTXT_PROGRESS_HEARTBEAT_MS);
 
-          let mtxtChecked = 0;
           const mtxtProcessCard = async (cardCC: string) => {
             try {
               if (mtxtStopped) return;
@@ -6719,7 +6856,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 mtxtLastResponse = 'Invalid format';
                 mtxtErrorCount++;
                 mtxtErrorCards.push(cardCC);
-                mtxtChecked++;
+                mtxtCheckedTotal++;
+                mtxtCheckedThisChunk++;
                 await mtxtFlushUpdate();
                 return;
               }
@@ -6795,30 +6933,34 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 flag: binInfo.flag,
               });
               mtxtLastResponse = result.response || 'N/A';
-              mtxtChecked++;
+              mtxtCheckedTotal++;
+              mtxtCheckedThisChunk++;
 
-              if (mtxtChecked >= mtxtCards.length || mtxtStoppedByUser) await mtxtSendFinalMessage();
-              else await mtxtFlushUpdate();
+              await mtxtFlushUpdate();
             } catch (cardError) {
               console.error(`mtxtProcessCard error for ${cardCC}:`, cardError);
               mtxtErrorCount++;
               mtxtErrorCards.push(cardCC);
               mtxtResults.push({ cc: cardCC, status: 'error', response: 'Processing error', price: '$0.00', bank: 'N/A', flag: '🌍' });
-              mtxtChecked++;
-              if (mtxtChecked >= mtxtCards.length || mtxtStoppedByUser) await mtxtSendFinalMessage();
-              else await mtxtFlushUpdate();
+              mtxtCheckedTotal++;
+              mtxtCheckedThisChunk++;
+              await mtxtFlushUpdate();
             }
           };
 
+          // ===== CHUNKED BATCH PROCESSING =====
           const mtxtQueue = mtxtCards.map(c => c.trim()).filter(c => c);
-          let mtxtQueueIdx = 0;
+          const chunkEnd = Math.min(MTXT_CHUNK_SIZE, mtxtQueue.length);
+          const chunkCards = mtxtQueue.slice(0, chunkEnd);
+          const remainingAfterChunk = mtxtQueue.slice(chunkEnd);
           const MIN_COMPLETE_BEFORE_NEXT = 49;
 
+          let mtxtQueueIdx = 0;
           try {
-            while (mtxtQueueIdx < mtxtQueue.length && !mtxtStoppedByUser) {
-              const batchEnd = Math.min(mtxtQueueIdx + MTXT_CONCURRENCY, mtxtQueue.length);
-              const batchCards = mtxtQueue.slice(mtxtQueueIdx, batchEnd);
-              const isLastBatch = batchEnd >= mtxtQueue.length;
+            while (mtxtQueueIdx < chunkCards.length && !mtxtStoppedByUser) {
+              const batchEnd = Math.min(mtxtQueueIdx + MTXT_CONCURRENCY, chunkCards.length);
+              const batchCards = chunkCards.slice(mtxtQueueIdx, batchEnd);
+              const isLastBatch = batchEnd >= chunkCards.length;
 
               await new Promise<void>((resolve) => {
                 let batchCompleted = 0;
@@ -6840,16 +6982,51 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               });
 
               mtxtQueueIdx = batchEnd;
-              if (mtxtQueueIdx < mtxtQueue.length && !mtxtStoppedByUser) {
+              if (mtxtQueueIdx < chunkCards.length && !mtxtStoppedByUser) {
                 await new Promise(r => setTimeout(r, 250));
               }
             }
 
+            // ===== AFTER CHUNK: CHECK IF MORE CARDS REMAIN =====
+            if (remainingAfterChunk.length > 0 && !mtxtStoppedByUser) {
+              // Save state for next chunk
+              const stateToSave = {
+                status: "running",
+                charged: mtxtCharged,
+                approved: mtxtApproved,
+                declined: mtxtDeclined,
+                errorCount: mtxtErrorCount,
+                totalCost: mtxtTotalCost,
+                errorCards: mtxtErrorCards,
+                chargedResults: mtxtResults.filter(r => r.status === 'live'),
+                startTime: mtxtStartTime,
+                priceMin: mtxtPriceMin,
+                priceMax: mtxtPriceMax,
+                totalCards: totalCardsOverall,
+                remainingCards: remainingAfterChunk,
+              };
+
+              await supabase.from("pending_bulk_checks").update({
+                cards: remainingAfterChunk.join("\n"),
+                state_json: JSON.stringify(stateToSave),
+                message_id: messageId,
+                updated_at: new Date().toISOString(),
+              }).eq("id", mtxtBulkId);
+
+              console.log(`[MTXT] Chunk done for ${mtxtBulkId}: ${mtxtCheckedThisChunk} this chunk, ${mtxtCheckedTotal}/${totalCardsOverall} total, ${remainingAfterChunk.length} remaining`);
+
+              stopMtxtHeartbeat();
+              // Queue next chunk
+              queueMtxtResume(300);
+              return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+
+            // All cards processed or stopped
             await mtxtSendFinalMessage();
           } finally {
             stopMtxtHeartbeat();
-            if (!mtxtStoppedByUser) {
-              console.log(`[MTXT] Finished batch ${mtxtBulkId}: ${mtxtChecked}/${mtxtCards.length} checked, errors=${mtxtErrorCount}`);
+            if (!mtxtStoppedByUser && remainingAfterChunk.length === 0) {
+              console.log(`[MTXT] Finished batch ${mtxtBulkId}: ${mtxtCheckedTotal}/${totalCardsOverall} checked, errors=${mtxtErrorCount}`);
             }
           }
         };
@@ -6873,6 +7050,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         await mtxtRunPromise;
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
+
 
 
       if (callbackData === "user_mystatus") {
