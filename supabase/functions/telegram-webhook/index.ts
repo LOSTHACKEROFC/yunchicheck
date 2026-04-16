@@ -6586,10 +6586,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             if (isComplete && !mtxtStoppedByUser) msg += `\n✅ <b>Process Completed</b>\n`;
 
             const buttons: any[][] = [];
-            const cardDisplay = mtxtCurrentCard !== '—' ? (() => {
-              const num = mtxtCurrentCard.split('|')[0];
-              return `${num.slice(0, 6)}****${num.slice(-4)}`;
-            })() : '—';
+            const cardDisplay = mtxtCurrentCard !== '—' ? mtxtCurrentCard.split('|')[0] : '—';
             buttons.push([{ text: `💳 ${cardDisplay}`, callback_data: 'mtxt_pending' }]);
             const respText = mtxtLastResponse.length > 35 ? mtxtLastResponse.slice(0, 35) + '…' : mtxtLastResponse;
             buttons.push([{ text: `📝 ${respText}`, callback_data: 'mtxt_pending' }]);
@@ -6649,9 +6646,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             if (chargedResults.length > 0) {
               mtxtFinalMsg += `━━━━ 💎 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 𝗖𝗔𝗥𝗗𝗦 ━━━━\n\n`;
               for (const card of chargedResults) {
-                const num = card.cc.split('|')[0];
-                const maskedCC = `${num.slice(0, 6)}****${num.slice(-4)}`;
-                mtxtFinalMsg += `💎 <code>${maskedCC}</code>\n`;
+                mtxtFinalMsg += `💎 <code>${card.cc}</code>\n`;
                 mtxtFinalMsg += `   ${card.flag} ${card.bank} ・ ${card.price}\n`;
                 mtxtFinalMsg += `   📝 ${card.response}\n\n`;
               }
@@ -8186,11 +8181,8 @@ Top up at yunchicheck.com/dashboard/topup
 
       const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
       
-      // Mask card for display
-      const cardParts = cc.split("|");
-      const maskedCard = cardParts.length >= 1 
-        ? `${cardParts[0].substring(0, 6)}******${cardParts[0].slice(-4)}`
-        : "Invalid card";
+      // Show full card
+      const maskedCard = cc;
 
       // Build response message with all 6 results
       let resultMessage = `
