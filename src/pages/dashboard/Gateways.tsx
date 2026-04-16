@@ -4840,15 +4840,12 @@ const Gateways = () => {
                       >
                         Dead ({deadCount})
                       </Button>
-                      <Button
-                        variant={bulkResultFilter === "unknown" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setBulkResultFilter("unknown")}
-                        className={`h-6 px-2 text-[10px] ${bulkResultFilter === "unknown" ? "bg-yellow-600 hover:bg-yellow-700" : "text-yellow-500 border-yellow-500/50 hover:bg-yellow-500/10"}`}
-                        disabled={unknownCount === 0}
-                      >
-                        Unknown ({unknownCount})
-                      </Button>
+                      {/* Unknown count shown as badge only, no filter button */}
+                      {unknownCount > 0 && (
+                        <Badge variant="outline" className="h-6 px-2 text-[10px] text-yellow-500 border-yellow-500/50">
+                          Errors ({unknownCount})
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </div>
