@@ -324,7 +324,7 @@ const Gateways = () => {
   const [bulkStartTime, setBulkStartTime] = useState<number | null>(null);
   const [bulkEstimatedTime, setBulkEstimatedTime] = useState<string>("");
   const [workerCount, setWorkerCount] = useState(5); // UI display (3-10 range), backend runs double (6-20)
-  const [bulkResultFilter, setBulkResultFilter] = useState<"all" | "live" | "dead" | "unknown">("all"); // Filter for bulk results
+  const [bulkResultFilter, setBulkResultFilter] = useState<"all" | "live" | "dead">("all"); // Filter for bulk results
   const bulkAbortRef = useRef(false);
   const bulkPauseRef = useRef(false);
 
