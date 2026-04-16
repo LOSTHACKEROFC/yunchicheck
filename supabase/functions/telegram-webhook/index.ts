@@ -5983,7 +5983,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           let msg = `🛍 <b>𝗠𝗨𝗟𝗧𝗜 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b> | <b>${checked}/${total}</b> | <b>${elapsed}s</b>\n\n`;
           const counters: string[] = [];
           if (mshCharged > 0) counters.push(`💎 <b>${mshCharged} Charged</b>`);
-          if (mshApproved > 0) counters.push(`✅ <b>${mshApproved} Approved</b>`);
+          
           if (mshDeclined > 0) counters.push(`❌ <b>${mshDeclined} Declined</b>`);
           if (counters.length > 0) msg += counters.join('   ') + '\n';
 
@@ -6657,16 +6657,6 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               }
             }
 
-            const approvedResults = mtxtResults.filter(r => r.status === 'approved');
-            if (approvedResults.length > 0) {
-              mtxtFinalMsg += `━━━━ ✅ 𝗔𝗣𝗣𝗥𝗢𝗩𝗘𝗗 ━━━━\n\n`;
-              for (const card of approvedResults) {
-                const num = card.cc.split('|')[0];
-                const maskedCC = `${num.slice(0, 6)}****${num.slice(-4)}`;
-                mtxtFinalMsg += `✅ <code>${maskedCC}</code> ・ ${card.flag} ${card.bank}\n`;
-              }
-              mtxtFinalMsg += `\n`;
-            }
 
             if (mtxtErrorCards.length > 0) mtxtFinalMsg += `⚠️ <b>${mtxtErrorCards.length} cards</b> had errors — use Recheck below\n`;
             if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `🔴 <b>${mtxtFailedProxyIds.length} dead proxies</b> auto-removed\n`;
