@@ -324,7 +324,7 @@ const Gateways = () => {
   const [bulkStartTime, setBulkStartTime] = useState<number | null>(null);
   const [bulkEstimatedTime, setBulkEstimatedTime] = useState<string>("");
   const [workerCount, setWorkerCount] = useState(5); // UI display (3-10 range), backend runs double (6-20)
-  const [bulkResultFilter, setBulkResultFilter] = useState<"all" | "live" | "dead" | "unknown">("all"); // Filter for bulk results
+  const [bulkResultFilter, setBulkResultFilter] = useState<"all" | "live" | "dead">("all"); // Filter for bulk results
   const bulkAbortRef = useRef(false);
   const bulkPauseRef = useRef(false);
 
@@ -3700,7 +3700,11 @@ const Gateways = () => {
   const deadCount = useMemo(() => bulkResults.filter(r => r.status === "dead").length, [bulkResults]);
   const unknownCount = useMemo(() => bulkResults.filter(r => r.status === "unknown").length, [bulkResults]);
   const filteredBulkResults = useMemo(() => 
-    bulkResults.filter(r => bulkResultFilter === "all" || r.status === bulkResultFilter),
+    bulkResults.filter(r => {
+      // Never show unknown/error cards as result cards — they are only counted
+      if (r.status === "unknown") return false;
+      return bulkResultFilter === "all" || r.status === bulkResultFilter;
+    }),
     [bulkResults, bulkResultFilter]
   );
 
@@ -4836,15 +4840,12 @@ const Gateways = () => {
                       >
                         Dead ({deadCount})
                       </Button>
-                      <Button
-                        variant={bulkResultFilter === "unknown" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setBulkResultFilter("unknown")}
-                        className={`h-6 px-2 text-[10px] ${bulkResultFilter === "unknown" ? "bg-yellow-600 hover:bg-yellow-700" : "text-yellow-500 border-yellow-500/50 hover:bg-yellow-500/10"}`}
-                        disabled={unknownCount === 0}
-                      >
-                        Unknown ({unknownCount})
-                      </Button>
+                      {/* Unknown count shown as badge only, no filter button */}
+                      {unknownCount > 0 && (
+                        <Badge variant="outline" className="h-6 px-2 text-[10px] text-yellow-500 border-yellow-500/50">
+                          Errors ({unknownCount})
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </div>
