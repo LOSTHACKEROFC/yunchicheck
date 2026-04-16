@@ -3700,7 +3700,11 @@ const Gateways = () => {
   const deadCount = useMemo(() => bulkResults.filter(r => r.status === "dead").length, [bulkResults]);
   const unknownCount = useMemo(() => bulkResults.filter(r => r.status === "unknown").length, [bulkResults]);
   const filteredBulkResults = useMemo(() => 
-    bulkResults.filter(r => bulkResultFilter === "all" || r.status === bulkResultFilter),
+    bulkResults.filter(r => {
+      // Never show unknown/error cards as result cards — they are only counted
+      if (r.status === "unknown") return false;
+      return bulkResultFilter === "all" || r.status === bulkResultFilter;
+    }),
     [bulkResults, bulkResultFilter]
   );
 
