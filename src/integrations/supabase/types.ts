@@ -521,6 +521,9 @@ export type Database = {
           chat_id: string
           created_at: string
           id: string
+          message_id: number | null
+          state_json: string | null
+          updated_at: string
           user_id: string
         }
         Insert: {
@@ -528,6 +531,9 @@ export type Database = {
           chat_id: string
           created_at?: string
           id: string
+          message_id?: number | null
+          state_json?: string | null
+          updated_at?: string
           user_id: string
         }
         Update: {
@@ -535,6 +541,9 @@ export type Database = {
           chat_id?: string
           created_at?: string
           id?: string
+          message_id?: number | null
+          state_json?: string | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
