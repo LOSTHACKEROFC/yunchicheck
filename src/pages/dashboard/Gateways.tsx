@@ -52,6 +52,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useBulkCheck } from "@/contexts/BulkCheckContext";
+import { trackCurrentSession } from "@/hooks/useSessionTracker";
 import UserProxyManager from "@/components/UserProxyManager";
 import ShopifyPriceGroupSelector from "@/components/ShopifyPriceGroupSelector";
 
@@ -2154,6 +2155,22 @@ const Gateways = () => {
     return "unknown";
   };
 
+  const ensureSessionBeforeChecking = async () => {
+    const trackingResult = await trackCurrentSession();
+
+    if (trackingResult.ok) {
+      return true;
+    }
+
+    if (trackingResult.authError) {
+      toast.error("Session expired. Please sign in again.");
+      return false;
+    }
+
+    console.warn("[CHECK] Session creation before checking failed:", trackingResult.message);
+    return true;
+  };
+
   const performCheck = async () => {
     if (!selectedGateway) {
       toast.error("Please select a gateway");
@@ -2172,6 +2189,9 @@ const Gateways = () => {
       toast.error("Please login to continue");
       return;
     }
+
+    const sessionReady = await ensureSessionBeforeChecking();
+    if (!sessionReady) return;
 
     setChecking(true);
     setResult(null);
@@ -2903,6 +2923,9 @@ const Gateways = () => {
       toast.error("Please login to continue");
       return;
     }
+
+    const sessionReady = await ensureSessionBeforeChecking();
+    if (!sessionReady) return;
 
     // Store original lines for removal tracking
     const originalLines = bulkInput.trim().split('\n').filter(line => line.trim());
