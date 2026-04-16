@@ -6612,13 +6612,24 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
           const MTXT_CONCURRENCY = 50;
           const MTXT_STAGGER_MS_VAL = 120;
+          const MTXT_PROGRESS_HEARTBEAT_MS = 4000;
           let mtxtLastEditTime = 0;
           const MTXT_MIN_EDIT_INTERVAL = 500;
           let mtxtFinalSent = false;
+          let mtxtEditInFlight = false;
+          let mtxtHeartbeat: ReturnType<typeof setInterval> | null = null;
+
+          const stopMtxtHeartbeat = () => {
+            if (mtxtHeartbeat) {
+              clearInterval(mtxtHeartbeat);
+              mtxtHeartbeat = null;
+            }
+          };
 
           const mtxtSendFinalMessage = async () => {
             if (mtxtFinalSent) return;
             mtxtFinalSent = true;
+            stopMtxtHeartbeat();
 
             await cleanupMtxtTracker();
             if (mtxtErrorCards.length > 0) {
@@ -6670,18 +6681,30 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           };
 
           const mtxtFlushUpdate = async (forceNow = false) => {
+            if (mtxtFinalSent || mtxtEditInFlight) return;
             const now = Date.now();
             if (!forceNow && (now - mtxtLastEditTime) < MTXT_MIN_EDIT_INTERVAL) return;
-            mtxtLastEditTime = Date.now();
+            mtxtLastEditTime = now;
+            mtxtEditInFlight = true;
             const elapsed = ((now - mtxtStartTime) / 1000).toFixed(2);
             try {
               const updateData = buildMtxtMessageAndButtons(mtxtChecked, mtxtCards.length, elapsed, false);
               await editTelegramMessage(callbackChatId, messageId, updateData.msg, { inline_keyboard: updateData.buttons });
-            } catch {}
+            } catch {
+            } finally {
+              mtxtEditInFlight = false;
+            }
           };
 
           const initData = buildMtxtMessageAndButtons(0, mtxtCards.length, '0.00', false);
           await editTelegramMessage(callbackChatId, messageId, initData.msg, { inline_keyboard: initData.buttons });
+          mtxtHeartbeat = setInterval(() => {
+            if (mtxtFinalSent) {
+              stopMtxtHeartbeat();
+              return;
+            }
+            void mtxtFlushUpdate(true);
+          }, MTXT_PROGRESS_HEARTBEAT_MS);
 
           let mtxtChecked = 0;
           const mtxtProcessCard = async (cardCC: string) => {
@@ -6824,6 +6847,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
             await mtxtSendFinalMessage();
           } finally {
+            stopMtxtHeartbeat();
             if (!mtxtStoppedByUser) {
               console.log(`[MTXT] Finished batch ${mtxtBulkId}: ${mtxtChecked}/${mtxtCards.length} checked, errors=${mtxtErrorCount}`);
             }
