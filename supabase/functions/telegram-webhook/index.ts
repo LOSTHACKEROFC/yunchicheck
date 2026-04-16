@@ -6637,7 +6637,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             mtxtFinalMsg += `⏱ Time: <b>${mtxtElapsed}s</b>\n\n`;
             mtxtFinalMsg += `━━━━━━ 📊 𝗦𝘁𝗮𝘁𝘀 ━━━━━━\n`;
             mtxtFinalMsg += `💎 Charged: <b>${mtxtCharged}</b>\n`;
-            mtxtFinalMsg += `✅ Approved: <b>${mtxtApproved}</b>\n`;
+            
             mtxtFinalMsg += `❌ Declined: <b>${mtxtDeclined}</b>\n`;
             mtxtFinalMsg += `⚠️ Errors: <b>${mtxtErrorCount}</b>\n`;
             mtxtFinalMsg += `📊 Total: <b>${mtxtChecked}/${mtxtCards.length}</b>\n\n`;
