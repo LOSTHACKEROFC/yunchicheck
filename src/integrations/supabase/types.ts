@@ -89,6 +89,27 @@ export type Database = {
         }
         Relationships: []
       }
+      blocked_urls: {
+        Row: {
+          created_at: string
+          id: string
+          reason: string | null
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          reason?: string | null
+          url: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          reason?: string | null
+          url?: string
+        }
+        Relationships: []
+      }
       broadcasted_cards: {
         Row: {
           card_hash: string
