@@ -6857,6 +6857,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           mtxtHeartbeat = setInterval(() => {
             if (mtxtFinalSent) { stopMtxtHeartbeat(); return; }
             void mtxtFlushUpdate(true);
+            // Keep-alive: bump updated_at so watchdog doesn't think we're stuck
+            void supabase.from("pending_bulk_checks").update({ updated_at: new Date().toISOString() }).eq("id", mtxtBulkId).then(() => {});
           }, MTXT_PROGRESS_HEARTBEAT_MS);
 
           const mtxtProcessCard = async (cardCC: string) => {
