@@ -6172,7 +6172,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const resumeBulkId = callbackData.replace("mtxt_resume_", "");
         const { data: resumeRow } = await supabase
           .from("pending_bulk_checks")
-          .select("id, cards, chat_id, state_json, message_id")
+          .select("id, cards, chat_id, state_json, message_id, updated_at")
           .eq("id", resumeBulkId)
           .maybeSingle();
 
@@ -6193,6 +6193,16 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
+        // ===== ATOMIC CLAIM: prevent race condition with concurrent resumes =====
+        // Only proceed if the row is "idle" (cards != RUNNING) AND was last updated > 25s ago.
+        // This stops the watchdog from re-triggering a session that already has an active worker.
+        const lastUpdateAge = Date.now() - new Date(resumeRow.updated_at).getTime();
+        const isCurrentlyProcessing = resumeRow.cards === "RUNNING";
+        if (isCurrentlyProcessing && lastUpdateAge < 25_000) {
+          console.log(`[MTXT-RESUME] Session ${resumeBulkId} already processing (age ${lastUpdateAge}ms), skipping`);
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
         const rChatId = parseInt(resumeRow.chat_id) || 0;
         const rMsgId = resumeRow.message_id || 0;
 
@@ -6203,12 +6213,6 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
         console.log(`[MTXT-RESUME] Resuming ${resumeBulkId}: ${resumeState.remainingCards?.length || 0} cards left, charged=${resumeState.charged}, declined=${resumeState.declined}`);
 
-        // Mark as running (update timestamp to prevent watchdog re-trigger)
-        await supabase.from("pending_bulk_checks").update({ updated_at: new Date().toISOString() }).eq("id", resumeBulkId);
-
-        // Build fake callback parts to reuse the main handler
-        // We construct the same data format: mtxt_{min}_{max}_{bulkId}
-        // But we need to set up the cards in the DB row for the main handler to read
         const remainingCards = resumeState.remainingCards || [];
         if (remainingCards.length === 0) {
           // No cards left - should have been finalized. Clean up.
@@ -6216,11 +6220,22 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // Update the row with remaining cards for the main handler to pick up
-        await supabase.from("pending_bulk_checks").update({
-          cards: remainingCards.join("\n"),
-          updated_at: new Date().toISOString(),
-        }).eq("id", resumeBulkId);
+        // Atomically claim by writing the remaining cards (only if state hasn't been touched by another worker).
+        // We use the updated_at value as an optimistic concurrency token.
+        const { data: claimResult, error: claimErr } = await supabase
+          .from("pending_bulk_checks")
+          .update({
+            cards: remainingCards.join("\n"),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", resumeBulkId)
+          .eq("updated_at", resumeRow.updated_at)
+          .select("id");
+
+        if (claimErr || !claimResult || claimResult.length === 0) {
+          console.log(`[MTXT-RESUME] Lost race for ${resumeBulkId} (another worker claimed it)`);
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
 
         // Now trigger the main handler by re-invoking with the correct callback data
         const triggerData = `mtxt_${resumeState.priceMin}_${resumeState.priceMax}_${resumeBulkId}`;
