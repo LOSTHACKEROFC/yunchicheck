@@ -6335,7 +6335,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         };
 
         // ===== CHUNK CONSTANTS =====
-        const MTXT_CHUNK_SIZE = 100; // Cards per invocation
+        const MTXT_CHUNK_SIZE = 200; // Cards per invocation (200-by-200 batches)
         const MTXT_CONCURRENCY = 50;
         const MTXT_STAGGER_MS_VAL = 120;
         const MTXT_PROGRESS_HEARTBEAT_MS = 4000;
