@@ -17,8 +17,8 @@ Deno.serve(async (req) => {
 
   try {
     // Find all pending_bulk_checks rows that have state_json (active mtxt sessions)
-    // and haven't been updated in over 45 seconds (stale/stuck)
-    const staleThreshold = new Date(Date.now() - 45_000).toISOString();
+    // and haven't been updated in over 60 seconds (heartbeat should fire every 4s).
+    const staleThreshold = new Date(Date.now() - 60_000).toISOString();
 
     const { data: staleSessions, error } = await supabase
       .from("pending_bulk_checks")
