@@ -6142,14 +6142,16 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const { data: rechkProfile } = await supabase.from("profiles").select("credits").eq("user_id", rechkData.user_id).single();
 
         const rechkPriceGroups = [
-          { min: 0, max: 5, label: '$1 - $5', emoji: '💵' },
-          { min: 5, max: 20, label: '$5 - $20', emoji: '💰' },
-          { min: 20, max: 50, label: '$20 - $50', emoji: '💎' },
-          { min: 50, max: 100, label: '$50 - $100', emoji: '🏆' },
+          { label: "$0 – $10", min: 0, max: 10, emoji: "💰" },
+          { label: "$10 – $20", min: 10, max: 20, emoji: "💎" },
+          { label: "$20 – $35", min: 20, max: 35, emoji: "🔥" },
+          { label: "$35 – $100", min: 35, max: 100, emoji: "⚡" },
         ];
         const rechkGroupCounts = await Promise.all(
           rechkPriceGroups.map(async (g) => {
-            let q = supabase.from("gateway_urls").select("id", { count: "exact", head: true }).not("url", "like", "https://razorpay.me/%").gt("price", g.min).lte("price", g.max);
+            let q = supabase.from("gateway_urls").select("id", { count: "exact", head: true }).not("url", "like", "https://razorpay.me/%").lte("price", g.max === 100 ? 100 : g.max);
+            if (g.min > 0) q = q.gt("price", g.min);
+            else q = q.gt("price", 0);
             const { count } = await q;
             return { ...g, count: count || 0 };
           })
