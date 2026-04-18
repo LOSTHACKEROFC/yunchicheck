@@ -6660,26 +6660,14 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               }
 
               if (siteResult.status === 'live' || siteResult.status === 'dead') {
-                const matchedStrike = mtxtStrikeResponses.find(s => (siteResult.rawResponse || '').toLowerCase().includes(s.toLowerCase()));
-                if (matchedStrike) {
-                  mtxtSiteStrikeCounter[site.url] = (mtxtSiteStrikeCounter[site.url] || 0) + 1;
-                  if (mtxtSiteStrikeCounter[site.url] >= MTXT_STRIKE_THRESHOLD) {
-                    mtxtRemoveSite(site.url);
-                    delete mtxtSiteStrikeCounter[site.url];
-                  }
-                } else {
-                  delete mtxtSiteStrikeCounter[site.url];
-                }
-
+                // Site removal is now ONLY triggered by explicit siteDead API response (handled above).
+                // Strike-based removal disabled per user request.
                 return { status: siteResult.status, response: siteResult.response || siteResult.message || 'N/A', price: siteResult.price > 0 ? siteResult.priceStr : (site.price ? `$${Number(site.price).toFixed(2)}` : '$0.00') };
               }
 
               finalResult = siteResult;
-              const rl2 = (siteResult.rawResponse || '').toLowerCase();
-              const isBadSite = mtxtBadResponses.some(bad => rl2.includes(bad.toLowerCase()));
-              if (isBadSite || !siteResult.rawResponse || rl2 === '' || rl2.includes('empty response') || rl2.includes('timeout')) {
-                mtxtRemoveSite(site.url);
-              }
+              // Do NOT remove sites for bad responses, empty responses, or timeouts.
+              // Only siteDead (explicit API dead-site signal) triggers removal — handled above.
 
               if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 300 + Math.random() * 300)); continue; }
               break;
