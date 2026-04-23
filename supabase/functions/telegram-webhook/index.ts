@@ -6555,11 +6555,20 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
                 const responseText = (apiResponse || apiMessage || '').trim();
                 const combinedText = ((json.status || '') + ' ' + responseText).toLowerCase();
+                const chargedValue = json.Charged ?? json.charged;
+                const chargedNormalized = typeof chargedValue === 'string' ? chargedValue.trim().toLowerCase() : chargedValue;
+
                 if (mtxtIsEmptyOrErrorOnly(responseText) && price === 0) {
                   apiStatus = 'unknown';
+                } else if (chargedNormalized === false || chargedNormalized === 'false') {
+                  apiStatus = 'dead';
+                  apiMessage = json.message || json.error || json.Response || 'Declined';
                 } else if (combinedText.includes('declined') || combinedText.includes('invalid') || combinedText.includes('expired') || combinedText.includes('insufficient') || combinedText.includes('card_declined') || combinedText.includes('incorrect') || combinedText.includes('do_not_honor') || combinedText.includes('fraud') || combinedText.includes('not accepted') || combinedText.includes('ds_required') || combinedText.includes('3ds') || combinedText.includes('3d_secure') || combinedText.includes('rejected') || combinedText.includes('otp_required') || combinedText.includes('otp required') || combinedText.includes('pickup_card') || combinedText.includes('lost_card') || combinedText.includes('stolen_card') || combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline')) {
                   apiStatus = 'dead';
                   apiMessage = json.message || json.error || json.Response || 'Declined';
+                } else if (chargedNormalized === true || chargedNormalized === 'true') {
+                  apiStatus = 'live';
+                  apiMessage = json.message || json.Response || 'Charged';
                 } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
                   apiStatus = 'live';
                   apiMessage = json.message || json.Response || 'Charged';
@@ -6586,7 +6595,11 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 }
               } catch {
                 const lower = rawText.toLowerCase();
+                const rawChargedFalse = /"?charged"?\s*:\s*"?false"?/i.test(rawText);
+                const rawChargedTrue = /"?charged"?\s*:\s*"?true"?/i.test(rawText);
                 if (mtxtIsEmptyOrErrorOnly(lower)) apiStatus = 'unknown';
+                else if (rawChargedFalse) apiStatus = 'dead';
+                else if (rawChargedTrue) apiStatus = 'live';
                 else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('insufficient') || lower.includes('card_declined') || lower.includes('incorrect') || lower.includes('do_not_honor') || lower.includes('fraud') || lower.includes('not accepted') || lower.includes('otp_required') || lower.includes('otp required') || lower.includes('ds_required') || lower.includes('3ds') || lower.includes('3d_secure') || lower.includes('rejected') || lower.includes('pickup_card') || lower.includes('lost_card') || lower.includes('stolen_card') || lower.includes('restricted') || lower.includes('not_permitted') || lower.includes('generic_decline')) apiStatus = 'dead';
                 else if (lower.includes('order_placed') || lower.includes('order placed') || lower.includes('order completed') || lower.includes('order_completed') || lower.includes('thank you') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) apiStatus = 'live';
                 else if (lower.includes('failed') || lower.includes('error')) {
