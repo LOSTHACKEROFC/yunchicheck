@@ -5721,7 +5721,7 @@ ${statusEmoji} <b>Result</b>
 <i>💰 <b>Account</b>
 🔹 <b>Cost:</b> ${creditCost > 0 ? `-${creditCost} credits` : "Free (0 credits)"}
 💳 <b>Balance:</b> ${newBalance} credits
-⏱️ <b>Time:</b> ${elapsed}s</i>${deadProxiesCount > 0 ? `\n\n🔴 <b>${deadProxiesCount} dead proxy${deadProxiesCount > 1 ? 'ies' : ''} removed</b>` : ""}${allProxiesDead ? `\n⚠️ <b>All proxies dead!</b> Add new ones at yunchicheck.com` : ""}
+⏱️ <b>Time:</b> ${elapsed}s</i>${deadProxiesCount > 0 ? `\n\n🔴 <b>${deadProxiesCount} proxy${deadProxiesCount > 1 ? 'ies' : ''} skipped for this run</b>` : ""}${allProxiesDead ? `\n⚠️ <b>All proxies failed this run.</b> Check them at yunchicheck.com` : ""}
 `;
 
           const resultButtons: any[][] = [];
@@ -6821,7 +6821,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             }
 
             if (mtxtErrorCards.length > 0) mtxtFinalMsg += `⚠️ <b>${mtxtErrorCards.length} cards</b> had errors — use Recheck below\n`;
-            if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `🔴 <b>${mtxtFailedProxyIds.length} dead proxies</b> auto-removed\n`;
+            if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `🔴 <b>${mtxtFailedProxyIds.length} proxies</b> skipped for this run\n`;
 
             const finalButtons: any[][] = [];
             if (mtxtErrorCards.length > 0) {
