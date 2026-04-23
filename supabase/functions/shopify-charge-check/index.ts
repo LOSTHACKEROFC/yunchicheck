@@ -149,6 +149,16 @@ const PROXY_DEAD_INDICATORS = [
   "could not resolve proxy", "proxy auth", "407 proxy authentication",
 ];
 
+const isApiTimeoutProxyDead = (rawText: string): boolean => {
+  try {
+    const json = JSON.parse(rawText);
+    const response = json.Response ?? json.response;
+    return typeof response === 'string' && response.trim().toUpperCase() === 'TIMEOUT';
+  } catch {
+    return /"?response"?\s*:\s*"TIMEOUT"/i.test(rawText);
+  }
+};
+
 const PROXY_TRANSIENT_INDICATORS = [
   "proxy error", "connection refused", "proxy connect", "tunneling socket",
   "cannot connect to host", "socks", "econnrefused", "econnreset",
@@ -206,7 +216,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
     }
 
     // Check for proxy dead indicators FIRST
-    const isProxyDead = PROXY_DEAD_INDICATORS.some(ind => rawLower.includes(ind));
+    const isProxyDead = PROXY_DEAD_INDICATORS.some(ind => rawLower.includes(ind)) || isApiTimeoutProxyDead(rawText);
     if (isProxyDead) {
       return { status: 'dead', message: 'Proxy Dead', apiResponse: 'Proxy Dead', rawResponse: rawText, price: 0, priceStr: '$0.00', proxyDead: true };
     }
@@ -272,6 +282,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
 
       const chargedValue = json.Charged ?? json.charged;
       const chargedNormalized = typeof chargedValue === 'string' ? chargedValue.trim().toLowerCase() : chargedValue;
+      const combinedText = ((json.status || '') + ' ' + responseText).toLowerCase();
 
       if (isEmptyOrErrorOnly(responseText) && price === 0) {
         apiStatus = 'unknown';
