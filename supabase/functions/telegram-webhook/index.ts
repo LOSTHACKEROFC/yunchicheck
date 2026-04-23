@@ -5484,6 +5484,7 @@ Go to yunchicheck.com/dashboard → Proxies
 
           const MAX_SITE_ATTEMPTS = Math.min(3, shuffledSites.length);
           const failedProxyIds: string[] = [];
+          const failedProxyDebugs: string[] = [];
           let finalResult: any = null;
           let usedSite = shuffledSites[0];
 
@@ -5613,7 +5614,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
             const availableProxies = shuffledProxies.filter((p: any) => !failedProxyIds.includes(p.id));
             if (availableProxies.length === 0) {
-              finalResult = { status: 'unknown', message: 'All proxies failed', rawResponse: '', price: 0, priceStr: '$0.00', apiResponse: '' };
+              finalResult = { status: 'unknown', message: 'All proxies failed', rawResponse: failedProxyDebugs.join('\n\n'), price: 0, priceStr: '$0.00', apiResponse: '' };
               break;
             }
 
@@ -5626,6 +5627,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
               if (siteResult.proxyDead) {
                 failedProxyIds.push(currentProxy.id);
+                failedProxyDebugs.push(`Proxy ${currentProxy.ip}:${currentProxy.port}\nSite: ${currentSite.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
                 supabase.from('user_proxies').delete().eq('id', currentProxy.id).eq('user_id', shProfile.user_id).then(() => {});
                 continue;
               }
