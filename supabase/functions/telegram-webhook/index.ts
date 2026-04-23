@@ -8329,6 +8329,82 @@ ${profile.is_banned && profile.ban_reason ? `• Reason: ${profile.ban_reason}` 
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // /setpx - Add live user proxies from Telegram after liveness verification
+    if (text?.startsWith("/setpx")) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("user_id, username, is_banned")
+        .eq("telegram_chat_id", chatId)
+        .maybeSingle();
+
+      if (!profile) {
+        await sendTelegramMessage(chatId, `❌ <b>Account Not Connected</b>\n\nLink your Telegram first.\n\n<b>Your Chat ID:</b> <code>${chatId}</code>`, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (profile.is_banned) {
+        await sendTelegramMessage(chatId, "🚫 <b>Account Suspended</b>\n\nYou cannot add proxies while banned.", undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const parsedProxies = extractProxiesFromText(text).slice(0, 10);
+      if (parsedProxies.length === 0) {
+        await sendTelegramMessage(chatId, "❌ <b>Usage:</b>\n\n<code>/setpx ip:port</code>\nor\n<code>/setpx ip:port:user:pass</code>\n\nYou can send multiple proxies separated by spaces or new lines.", undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const loadingMessageId = await sendTelegramMessageWithId(chatId, `⏳ <b>Checking ${parsedProxies.length} proxy${parsedProxies.length === 1 ? "" : "ies"}...</b>\n\nOnly LIVE proxies will be saved.`, undefined, messageId);
+
+      const { data: existingRows } = await supabase
+        .from("user_proxies")
+        .select("ip, port, username, password")
+        .eq("user_id", profile.user_id);
+
+      const existing = Array.isArray(existingRows) ? existingRows : [];
+      const availableSlots = Math.max(0, 10 - existing.length);
+      if (availableSlots === 0) {
+        const msg = "⚠️ <b>Proxy Limit Reached</b>\n\nYou already have 10 saved proxies. Delete one before adding more.";
+        if (loadingMessageId) await editTelegramMessage(chatId, loadingMessageId, msg); else await sendTelegramMessage(chatId, msg, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const existingKeys = new Set(existing.map((p: any) => `${p.ip}:${p.port}:${p.username || ""}:${p.password || ""}`));
+      const candidates = parsedProxies
+        .filter((proxy) => !existingKeys.has(`${proxy.ip}:${proxy.port}:${proxy.username || ""}:${proxy.password || ""}`))
+        .slice(0, availableSlots);
+
+      if (candidates.length === 0) {
+        const msg = "⚠️ <b>No New Proxies</b>\n\nAll submitted proxies are already saved.";
+        if (loadingMessageId) await editTelegramMessage(chatId, loadingMessageId, msg); else await sendTelegramMessage(chatId, msg, undefined, messageId);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const checked = await checkProxyBatch(candidates);
+      const liveProxies = checked.filter((proxy) => proxy.status === "live");
+      const deadProxies = checked.filter((proxy) => proxy.status === "dead");
+
+      if (liveProxies.length > 0) {
+        await supabase.from("user_proxies").insert(liveProxies.map((proxy) => ({
+          user_id: profile.user_id,
+          ip: proxy.ip,
+          port: proxy.port,
+          username: proxy.username || null,
+          password: proxy.password || null,
+        })));
+      }
+
+      let resultMessage = `━━━━━━━━━━━━━━━━━━━━━━\n   🌐 <b>SETPX PROXY CHECK</b>\n━━━━━━━━━━━━━━━━━━━━━━\n\n✅ Saved Live: <b>${liveProxies.length}</b>\n❌ Dead Skipped: <b>${deadProxies.length}</b>\n`;
+      if (liveProxies.length > 0) {
+        resultMessage += `\n<b>LIVE</b>\n${liveProxies.map((p) => `✅ <code>${p.ip}:${p.port}</code>`).join("\n")}\n`;
+      }
+      if (deadProxies.length > 0) {
+        resultMessage += `\n<b>DEAD</b>\n${deadProxies.slice(0, 8).map((p) => `❌ <code>${p.ip}:${p.port}</code>`).join("\n")}${deadProxies.length > 8 ? "\n<i>...more skipped</i>" : ""}\n`;
+      }
+
+      if (loadingMessageId) await editTelegramMessage(chatId, loadingMessageId, resultMessage); else await sendTelegramMessage(chatId, resultMessage, undefined, messageId);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // /kill {cc} - Kill a card using Killer Auth gateway (6 sequential requests)
     if (text.startsWith("/kill")) {
       const cc = text.replace("/kill", "").trim();
