@@ -48,3 +48,10 @@ Deno.test("Shopify Charge treats API Response TIMEOUT as dead proxy and removes 
   assertMatch(source, /isApiTimeoutProxyDead\(rawText\)/);
   assertMatch(source, /\.from\('user_proxies'\)\.delete\(\)\.eq\('id', currentProxy\.id\)\.eq\('user_id', user\.id\)/);
 });
+
+Deno.test("Shopify Charge sends all-proxies-dead debug with raw API responses", () => {
+  assertMatch(source, /const failedProxyDebugs: string\[\] = \[\];/);
+  assertMatch(source, /Raw API: \$\{siteResult\.rawResponse \|\| siteResult\.message \|\| 'N\/A'\}/);
+  assertMatch(source, /allProxiesDead && failedProxyDebugs\.length > 0/);
+  assertMatch(source, /ALL PROXIES DEAD|all proxies dead/);
+});
