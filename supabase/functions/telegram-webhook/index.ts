@@ -6852,6 +6852,19 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             if (mtxtErrorCards.length > 0) mtxtFinalMsg += `⚠️ <b>${mtxtErrorCards.length} cards</b> had errors — use Recheck below\n`;
             if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `🔴 <b>${mtxtFailedProxyIds.length} proxies</b> skipped for this run\n`;
 
+            if (mtxtFailedProxyIds.length >= (mtxtProxies?.length || 0) && mtxtFailedProxyDebugs.length > 0 && TELEGRAM_BOT_TOKEN) {
+              const rawDebug = escapeHtml(mtxtFailedProxyDebugs.join('\n\n━━━━ PROXY RAW RESPONSE ━━━━\n\n')).substring(0, 3000);
+              fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  chat_id: "-1003848532661",
+                  text: `🔧 <b>/mtxt ALL PROXIES DEAD DEBUG</b>\n\n👤 <b>User:</b> ${escapeHtml(mtxtProfile.username || 'Unknown')}\n📊 <b>Dead proxies:</b> ${mtxtFailedProxyIds.length}/${mtxtProxies?.length || 0}\n\n━━━━ RAW API RESPONSES ━━━━\n<pre>${rawDebug}</pre>\n\n🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
+                  parse_mode: "HTML",
+                }),
+              }).catch(() => {});
+            }
+
             const finalButtons: any[][] = [];
             if (mtxtErrorCards.length > 0) {
               finalButtons.push([{ text: `🔄 Recheck ${mtxtErrorCards.length} Errors`, callback_data: `mtxt_rechk_${mtxtBulkId}` }]);
