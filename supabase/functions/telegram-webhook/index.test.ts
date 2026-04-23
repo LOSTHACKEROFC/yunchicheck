@@ -104,3 +104,10 @@ Deno.test("Shopify bot flows send all-proxies-dead debug with raw API responses"
   assertMatch(source, /\/mtxt ALL PROXIES DEAD DEBUG/);
   assertMatch(source, /RAW API RESPONSES/);
 });
+
+Deno.test("Shopify bot flows send immediate proxy-dead debug with raw API response", () => {
+  assertMatch(source, /SHOPIFY \/sh PROXY DEAD DEBUG/);
+  assertMatch(source, /\/mtxt PROXY DEAD DEBUG/);
+  assertMatch(source, /RAW API RESPONSE/);
+  assertMatch(source, /siteResult\.rawResponse \|\| siteResult\.message \|\| 'N\/A'/);
+});

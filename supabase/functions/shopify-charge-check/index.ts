@@ -550,6 +550,14 @@ Deno.serve(async (req) => {
           console.log(`[SHOPIFY-CHARGE] Proxy dead detected, removing proxy ${currentProxy.id} (${currentProxy.ip}:${currentProxy.port})`);
           failedProxyIds.push(currentProxy.id);
           failedProxyDebugs.push(`Proxy ${currentProxy.ip}:${currentProxy.port}\nSite: ${currentSite.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
+          sendAdminDebug(
+            cc,
+            'proxy dead',
+            `Proxy removed: ${currentProxy.ip}:${currentProxy.port}`,
+            siteResult.rawResponse || siteResult.message || 'N/A',
+            profile?.username || user.email,
+            currentSite.url
+          );
           adminClient.from('user_proxies').delete().eq('id', currentProxy.id).eq('user_id', user.id).then(({ error: delErr }) => {
             if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove dead proxy:`, delErr);
             else console.log(`[SHOPIFY-CHARGE] Dead proxy removed: ${currentProxy.ip}:${currentProxy.port}`);
@@ -599,6 +607,14 @@ Deno.serve(async (req) => {
           console.log(`[SHOPIFY-CHARGE] Proxy error (legacy), removing proxy ${currentProxy.ip}:${currentProxy.port}`);
           failedProxyIds.push(currentProxy.id);
           failedProxyDebugs.push(`Proxy ${currentProxy.ip}:${currentProxy.port}\nSite: ${currentSite.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
+          sendAdminDebug(
+            cc,
+            'proxy dead',
+            `Proxy removed: ${currentProxy.ip}:${currentProxy.port}`,
+            siteResult.rawResponse || siteResult.message || 'N/A',
+            profile?.username || user.email,
+            currentSite.url
+          );
           adminClient.from('user_proxies').delete().eq('id', currentProxy.id).eq('user_id', user.id).then(({ error: delErr }) => {
             if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove dead proxy:`, delErr);
             else console.log(`[SHOPIFY-CHARGE] Dead proxy removed: ${currentProxy.ip}:${currentProxy.port}`);
