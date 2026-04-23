@@ -5626,6 +5626,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
               if (siteResult.proxyDead) {
                 failedProxyIds.push(currentProxy.id);
+                supabase.from('user_proxies').delete().eq('id', currentProxy.id).eq('user_id', shProfile.user_id).then(() => {});
                 continue;
               }
               if (siteResult.siteDead) {
@@ -6454,6 +6455,15 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           const mtxtProxyDeadIndicators = ["proxy dead", "proxy authentication", "proxy_error", "bad proxy", "could not resolve proxy", "proxy auth", "407 proxy authentication"];
           const mtxtProxyTransientIndicators = ["proxy error", "connection refused", "proxy connect", "tunneling socket", "cannot connect to host", "socks", "econnrefused", "econnreset", "failed to perform", "getaddrinfo", "tokenize_fail", "no_session_token"];
           const mtxtSiteDeadIndicators = ["site dead"];
+          const mtxtIsApiTimeoutProxyDead = (rawText: string): boolean => {
+            try {
+              const json = JSON.parse(rawText);
+              const response = json.Response ?? json.response;
+              return typeof response === 'string' && response.trim().toUpperCase() === 'TIMEOUT';
+            } catch {
+              return /"?response"?\s*:\s*"TIMEOUT"/i.test(rawText);
+            }
+          };
           const mtxtUserAgents = [
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -6519,7 +6529,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (mtxtProxyTransientIndicators.some(ind => rawLower.includes(ind))) {
                 return { status: 'unknown', message: 'Transient error', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '', rawResponse: rawText };
               }
-              if (mtxtProxyDeadIndicators.some(ind => rawLower.includes(ind))) {
+              if (mtxtProxyDeadIndicators.some(ind => rawLower.includes(ind)) || mtxtIsApiTimeoutProxyDead(rawText)) {
                 return { status: 'dead', message: 'Proxy Dead', price: 0, priceStr: '$0.00', proxyDead: true, siteDead: false, response: 'Proxy Dead', rawResponse: rawText };
               }
               if (mtxtSiteDeadIndicators.some(ind => rawLower.includes(ind))) {
