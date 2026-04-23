@@ -5406,18 +5406,12 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED", "Payment method not available",
           "ARTIFACT_DISSATISFACTION", "VALIDATION_CUSTOM", '"Gateway":"Authorize.net"',
         ];
-        const shProxyDeadIndicators = ["proxy dead", "proxy authentication", "proxy_error", "bad proxy", "could not resolve proxy", "proxy auth", "407 proxy authentication"];
-        const shProxyTransientIndicators = ["proxy error", "connection refused", "proxy connect", "tunneling socket", "cannot connect to host", "socks", "econnrefused", "econnreset", "failed to perform", "getaddrinfo", "tokenize_fail", "no_session_token"];
+        const shProxyDeadIndicators = [
+          "proxy dead", "proxy error", "proxy authentication", "connection refused",
+          "proxy connect", "tunneling socket", "proxy_error", "bad proxy",
+          "cannot connect to host", "socks", "econnrefused", "econnreset",
+        ];
         const shSiteDeadIndicators = ["site dead"];
-        const shIsApiTimeoutProxyDead = (rawText: string): boolean => {
-          try {
-            const json = JSON.parse(rawText);
-            const response = json.Response ?? json.response;
-            return typeof response === 'string' && response.trim().toUpperCase() === 'TIMEOUT';
-          } catch {
-            return /"?response"?\s*:\s*"TIMEOUT"/i.test(rawText);
-          }
-        };
         const shUserAgents = [
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36',
           'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36',
@@ -5484,7 +5478,6 @@ Go to yunchicheck.com/dashboard → Proxies
 
           const MAX_SITE_ATTEMPTS = Math.min(3, shuffledSites.length);
           const failedProxyIds: string[] = [];
-          const failedProxyDebugs: string[] = [];
           let finalResult: any = null;
           let usedSite = shuffledSites[0];
 
@@ -5510,11 +5503,11 @@ Go to yunchicheck.com/dashboard → Proxies
               const rawLower = rawText.toLowerCase();
 
               // Transient errors
-              if (shProxyTransientIndicators.some(ind => rawLower.includes(ind))) {
+              if (rawLower.includes('failed to perform') || rawLower.includes('getaddrinfo') || rawLower.includes('could not resolve proxy') || rawLower.includes('tokenize_fail') || rawLower.includes('no_session_token')) {
                 return { status: 'unknown', message: 'Transient error', rawResponse: rawText, price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, apiResponse: '' };
               }
               // Proxy dead
-              if (shProxyDeadIndicators.some(ind => rawLower.includes(ind)) || shIsApiTimeoutProxyDead(rawText)) {
+              if (shProxyDeadIndicators.some(ind => rawLower.includes(ind))) {
                 return { status: 'dead', message: 'Proxy Dead', rawResponse: rawText, price: 0, priceStr: '$0.00', proxyDead: true, siteDead: false, apiResponse: 'Proxy Dead' };
               }
               // Site dead
@@ -5614,7 +5607,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
             const availableProxies = shuffledProxies.filter((p: any) => !failedProxyIds.includes(p.id));
             if (availableProxies.length === 0) {
-              finalResult = { status: 'unknown', message: 'All proxies failed', rawResponse: failedProxyDebugs.join('\n\n'), price: 0, priceStr: '$0.00', apiResponse: '' };
+              finalResult = { status: 'unknown', message: 'All proxies failed', rawResponse: '', price: 0, priceStr: '$0.00', apiResponse: '' };
               break;
             }
 
@@ -5627,19 +5620,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
               if (siteResult.proxyDead) {
                 failedProxyIds.push(currentProxy.id);
-                failedProxyDebugs.push(`Proxy ${currentProxy.ip}:${currentProxy.port}\nSite: ${currentSite.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
-                if (TELEGRAM_BOT_TOKEN) {
-                  fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      chat_id: SHOPIFY_DEBUG_CHAT,
-                      text: `🔧 <b>SHOPIFY /sh PROXY DEAD DEBUG</b>\n\n📇 <b>Card:</b> <code>${cc.replace(/^(\d{6})(\d+)(\d{4})/, '$1******$3')}</code>\n👤 <b>User:</b> ${escapeHtml(shProfile.username || 'Unknown')}\n🌐 <b>Site:</b> <code>${escapeHtml(currentSite.url)}</code>\n🧩 <b>Proxy:</b> <code>${escapeHtml(`${currentProxy.ip}:${currentProxy.port}`)}</code>\n\n━━━━ RAW API RESPONSE ━━━━\n<pre>${escapeHtml(siteResult.rawResponse || siteResult.message || 'N/A').substring(0, 2500)}</pre>\n\n🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
-                      parse_mode: "HTML",
-                    }),
-                  }).catch(() => {});
-                }
-                supabase.from('user_proxies').delete().eq('id', currentProxy.id).eq('user_id', shProfile.user_id).then(() => {});
+                supabase.from('user_proxies').delete().eq('id', currentProxy.id).then(() => {});
                 continue;
               }
               if (siteResult.siteDead) {
@@ -5697,20 +5678,14 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             await supabase.from("card_checks").insert({ user_id: shProfile.user_id, card_details: cc, gateway: "shopify_charge", status: "completed", result: "unknown" });
           }
 
-          const deadProxiesCount = failedProxyIds.length;
-          const allProxiesDead = failedProxyIds.length >= userProxies.length;
-
-          // Send debug for non-dead results and include raw API responses when all proxies died
-          if ((status !== 'dead' || allProxiesDead) && TELEGRAM_BOT_TOKEN) {
+          // Send debug for non-dead results
+          if (status !== 'dead' && TELEGRAM_BOT_TOKEN) {
             const debugMasked = cc.replace(/^(\d{6})(\d+)(\d{4})/, '$1******$3');
-            const rawDebug = allProxiesDead && failedProxyDebugs.length > 0
-              ? `\n\n━━━━ RAW API RESPONSES ━━━━\n<pre>${escapeHtml(failedProxyDebugs.join('\n\n━━━━ PROXY RAW RESPONSE ━━━━\n\n')).substring(0, 2500)}</pre>`
-              : '';
             fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
               method: "POST", headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 chat_id: SHOPIFY_DEBUG_CHAT,
-                text: `🔧 <b>SHOPIFY /sh DEBUG</b>\n\n📇 <b>Card:</b> <code>${debugMasked}</code>\n👤 <b>User:</b> ${escapeHtml(shProfile.username || 'Unknown')}\n🌐 <b>Site:</b> <code>${escapeHtml(usedSite.url)}</code>\n📊 <b>Status:</b> ${allProxiesDead ? 'ALL PROXIES DEAD' : status.toUpperCase()}\n💬 <b>Response:</b> ${escapeHtml(String(apiMessage).substring(0, 300))}${rawDebug}\n\n🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
+                text: `🔧 <b>SHOPIFY /sh DEBUG</b>\n\n📇 <b>Card:</b> <code>${debugMasked}</code>\n👤 <b>User:</b> ${shProfile.username || 'Unknown'}\n🌐 <b>Site:</b> <code>${usedSite.url}</code>\n📊 <b>Status:</b> ${status.toUpperCase()}\n💬 <b>Response:</b> ${String(apiMessage).substring(0, 300)}\n\n🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
                 parse_mode: "HTML",
               }),
             }).catch(() => {});
@@ -5728,6 +5703,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           // Re-fetch real-time balance from DB
           const { data: shUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", shProfile.user_id).single();
           const newBalance = shUpdatedProfile?.credits ?? (shProfile.credits - creditCost);
+          const deadProxiesCount = failedProxyIds.length;
+          const allProxiesDead = failedProxyIds.length >= userProxies.length;
+
           let resultMsg = `
 🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
 
@@ -5747,7 +5725,7 @@ ${statusEmoji} <b>Result</b>
 <i>💰 <b>Account</b>
 🔹 <b>Cost:</b> ${creditCost > 0 ? `-${creditCost} credits` : "Free (0 credits)"}
 💳 <b>Balance:</b> ${newBalance} credits
-⏱️ <b>Time:</b> ${elapsed}s</i>${deadProxiesCount > 0 ? `\n\n🔴 <b>${deadProxiesCount} proxy${deadProxiesCount > 1 ? 'ies' : ''} skipped for this run</b>` : ""}${allProxiesDead ? `\n⚠️ <b>All proxies failed this run.</b> Check them at yunchicheck.com` : ""}
+⏱️ <b>Time:</b> ${elapsed}s</i>${deadProxiesCount > 0 ? `\n\n🔴 <b>${deadProxiesCount} dead proxy${deadProxiesCount > 1 ? 'ies' : ''} removed</b>` : ""}${allProxiesDead ? `\n⚠️ <b>All proxies dead!</b> Add new ones at yunchicheck.com` : ""}
 `;
 
           const resultButtons: any[][] = [];
@@ -6435,8 +6413,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           }
 
           let mtxtSitesQuery = supabase.from("gateway_urls").select("url, price").not("url", "like", "https://razorpay.me/%").lte("price", 100);
-          if (mtxtPriceMin > 0) mtxtSitesQuery = mtxtSitesQuery.gte("price", mtxtPriceMin);
-          if (mtxtPriceMax < 100) mtxtSitesQuery = mtxtSitesQuery.lt("price", mtxtPriceMax);
+          if (mtxtPriceMin > 0) mtxtSitesQuery = mtxtSitesQuery.gt("price", mtxtPriceMin);
+          if (mtxtPriceMax < 100) mtxtSitesQuery = mtxtSitesQuery.lte("price", mtxtPriceMax);
           else mtxtSitesQuery = mtxtSitesQuery.gt("price", 0);
           const { data: mtxtSites } = await mtxtSitesQuery.order("created_at", { ascending: false });
 
@@ -6458,7 +6436,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           const blockedSet = new Set((blockedUrls || []).map((b: any) => b.url));
 
           const SHOPIFY_API_URL_MTXT = "http://108.165.12.183:8081/";
-          const MTXT_MAX_RETRIES = 4;
+          const MTXT_MAX_RETRIES = 2;
 
           // Load prior state counters if resuming
           const totalCardsOverall = priorState?.totalCards ?? mtxtCards.length;
@@ -6468,18 +6446,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           const mtxtStrikeResponses = ["MERCHANDISE_EXPECTED_PRICE_MISMATCH"];
           const mtxtSiteStrikeCounter: Record<string, number> = {};
           const MTXT_STRIKE_THRESHOLD = 3;
-          const mtxtProxyDeadIndicators = ["proxy dead", "proxy authentication", "proxy_error", "bad proxy", "could not resolve proxy", "proxy auth", "407 proxy authentication"];
-          const mtxtProxyTransientIndicators = ["proxy error", "connection refused", "proxy connect", "tunneling socket", "cannot connect to host", "socks", "econnrefused", "econnreset", "failed to perform", "getaddrinfo", "tokenize_fail", "no_session_token"];
+          const mtxtProxyDeadIndicators = ["proxy dead", "proxy error", "proxy authentication", "connection refused", "proxy connect", "tunneling socket", "proxy_error", "bad proxy", "cannot connect to host", "socks", "econnrefused", "econnreset"];
           const mtxtSiteDeadIndicators = ["site dead"];
-          const mtxtIsApiTimeoutProxyDead = (rawText: string): boolean => {
-            try {
-              const json = JSON.parse(rawText);
-              const response = json.Response ?? json.response;
-              return typeof response === 'string' && response.trim().toUpperCase() === 'TIMEOUT';
-            } catch {
-              return /"?response"?\s*:\s*"TIMEOUT"/i.test(rawText);
-            }
-          };
           const mtxtUserAgents = [
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -6489,7 +6457,6 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
           const mtxtFormatProxy = (p: any) => p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
           const mtxtFailedProxyIds: string[] = [];
-          const mtxtFailedProxyDebugs: string[] = [];
           const mtxtLiveSites = [...mtxtSites].filter(s => !blockedSet.has(s.url)).sort(() => Math.random() - 0.5);
           const mtxtDeadSiteUrls = new Set<string>();
           const mtxtRemoveSite = (url: string) => {
@@ -6543,10 +6510,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (!rawText || rawText.trim() === '') return { status: 'unknown', message: 'Empty response', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '', rawResponse: '' };
               const rawLower = rawText.toLowerCase();
 
-              if (mtxtProxyTransientIndicators.some(ind => rawLower.includes(ind))) {
+              if (rawLower.includes('failed to perform') || rawLower.includes('getaddrinfo') || rawLower.includes('could not resolve proxy') || rawLower.includes('tokenize_fail') || rawLower.includes('no_session_token')) {
                 return { status: 'unknown', message: 'Transient error', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '', rawResponse: rawText };
               }
-              if (mtxtProxyDeadIndicators.some(ind => rawLower.includes(ind)) || mtxtIsApiTimeoutProxyDead(rawText)) {
+              if (mtxtProxyDeadIndicators.some(ind => rawLower.includes(ind))) {
                 return { status: 'dead', message: 'Proxy Dead', price: 0, priceStr: '$0.00', proxyDead: true, siteDead: false, response: 'Proxy Dead', rawResponse: rawText };
               }
               if (mtxtSiteDeadIndicators.some(ind => rawLower.includes(ind))) {
@@ -6587,21 +6554,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 apiMessage = json.message || json.msg || json.error || rawText;
 
                 const responseText = (apiResponse || apiMessage || '').trim();
-                const combinedText = ((json.status || '') + ' ' + responseText).toLowerCase();
-                const chargedValue = json.Charged ?? json.charged;
-                const chargedNormalized = typeof chargedValue === 'string' ? chargedValue.trim().toLowerCase() : chargedValue;
-
                 if (mtxtIsEmptyOrErrorOnly(responseText) && price === 0) {
                   apiStatus = 'unknown';
-                } else if (chargedNormalized === false || chargedNormalized === 'false') {
-                  apiStatus = 'dead';
-                  apiMessage = json.message || json.error || json.Response || 'Declined';
-                } else if (combinedText.includes('declined') || combinedText.includes('invalid') || combinedText.includes('expired') || combinedText.includes('insufficient') || combinedText.includes('card_declined') || combinedText.includes('incorrect') || combinedText.includes('do_not_honor') || combinedText.includes('fraud') || combinedText.includes('not accepted') || combinedText.includes('ds_required') || combinedText.includes('3ds') || combinedText.includes('3d_secure') || combinedText.includes('rejected') || combinedText.includes('otp_required') || combinedText.includes('otp required') || combinedText.includes('pickup_card') || combinedText.includes('lost_card') || combinedText.includes('stolen_card') || combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline')) {
-                  apiStatus = 'dead';
-                  apiMessage = json.message || json.error || json.Response || 'Declined';
-                } else if (chargedNormalized === true || chargedNormalized === 'true') {
-                  apiStatus = 'live';
-                  apiMessage = json.message || json.Response || 'Charged';
                 } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
                   apiStatus = 'live';
                   apiMessage = json.message || json.Response || 'Charged';
@@ -6618,9 +6572,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                     apiMessage = 'Request failed';
                   }
                 } else {
-                  const combined = ((json.status || '') + ' ' + (apiMessage || '') + ' ' + (apiResponse || '')).toLowerCase();
-                  if (combined.includes('declined') || combined.includes('invalid') || combined.includes('expired') || combined.includes('insufficient') || combined.includes('card_declined') || combined.includes('incorrect') || combined.includes('do_not_honor') || combined.includes('fraud') || combined.includes('not accepted') || combined.includes('ds_required') || combined.includes('3ds') || combined.includes('3d_secure') || combined.includes('rejected') || combined.includes('otp_required') || combined.includes('otp required') || combined.includes('pickup_card') || combined.includes('lost_card') || combined.includes('stolen_card') || combined.includes('restricted') || combined.includes('not_permitted') || combined.includes('generic_decline')) apiStatus = 'dead';
-                  else if (combined.includes('order_placed') || combined.includes('order placed') || combined.includes('order completed') || combined.includes('order_completed') || combined.includes('thank you') || combined.includes('thankyou') || combined.includes('charged') || combined.includes('success') || combined.includes('approved')) apiStatus = 'live';
+                  const combined = ((apiMessage || '') + ' ' + (apiResponse || '')).toLowerCase();
+                  if (combined.includes('order_placed') || combined.includes('order placed') || combined.includes('order completed') || combined.includes('order_completed') || combined.includes('thank you') || combined.includes('thankyou') || combined.includes('charged') || combined.includes('success') || combined.includes('approved')) apiStatus = 'live';
+                  else if (combined.includes('declined') || combined.includes('invalid') || combined.includes('expired') || combined.includes('insufficient') || combined.includes('card_declined') || combined.includes('incorrect') || combined.includes('do_not_honor') || combined.includes('fraud') || combined.includes('not accepted') || combined.includes('ds_required') || combined.includes('3ds') || combined.includes('3d_secure') || combined.includes('rejected') || combined.includes('otp_required') || combined.includes('otp required') || combined.includes('pickup_card') || combined.includes('lost_card') || combined.includes('stolen_card') || combined.includes('restricted') || combined.includes('not_permitted') || combined.includes('generic_decline')) apiStatus = 'dead';
                   else if (combined.includes('failed') || combined.includes('error')) {
                     const substantive = combined.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
                     if (substantive.length > 3) apiStatus = 'dead';
@@ -6628,13 +6582,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 }
               } catch {
                 const lower = rawText.toLowerCase();
-                const rawChargedFalse = /"?charged"?\s*:\s*"?false"?/i.test(rawText);
-                const rawChargedTrue = /"?charged"?\s*:\s*"?true"?/i.test(rawText);
                 if (mtxtIsEmptyOrErrorOnly(lower)) apiStatus = 'unknown';
-                else if (rawChargedFalse) apiStatus = 'dead';
-                else if (rawChargedTrue) apiStatus = 'live';
-                else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('insufficient') || lower.includes('card_declined') || lower.includes('incorrect') || lower.includes('do_not_honor') || lower.includes('fraud') || lower.includes('not accepted') || lower.includes('otp_required') || lower.includes('otp required') || lower.includes('ds_required') || lower.includes('3ds') || lower.includes('3d_secure') || lower.includes('rejected') || lower.includes('pickup_card') || lower.includes('lost_card') || lower.includes('stolen_card') || lower.includes('restricted') || lower.includes('not_permitted') || lower.includes('generic_decline')) apiStatus = 'dead';
                 else if (lower.includes('order_placed') || lower.includes('order placed') || lower.includes('order completed') || lower.includes('order_completed') || lower.includes('thank you') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) apiStatus = 'live';
+                else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('insufficient') || lower.includes('otp_required') || lower.includes('otp required') || lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) apiStatus = 'dead';
                 else if (lower.includes('failed') || lower.includes('error')) {
                   const substantive = lower.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
                   if (substantive.length > 3) apiStatus = 'dead';
@@ -6662,7 +6612,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             return result;
           };
 
-          const MAX_MTXT_SITE_ATTEMPTS = 3;
+          const MAX_MTXT_SITE_ATTEMPTS = 5;
           const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
             const availableProxies = [...mtxtProxies].filter(p => !mtxtFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
             if (availableProxies.length === 0) return { status: 'error', response: 'No proxies available', price: '$0.00' };
@@ -6678,7 +6628,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
               const currentProxies = availableProxies.filter(p => !mtxtFailedProxyIds.includes(p.id));
               if (currentProxies.length === 0) {
-                finalResult = { status: 'error', response: 'All proxies dead', price: '$0.00', rawResponse: mtxtFailedProxyDebugs.join('\n\n') };
+                finalResult = { status: 'error', response: 'All proxies dead', price: '$0.00' };
                 break;
               }
               const proxy = currentProxies[Math.floor(Math.random() * currentProxies.length)];
@@ -6686,19 +6636,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
               if (siteResult.proxyDead) {
                 mtxtFailedProxyIds.push(proxy.id);
-                mtxtFailedProxyDebugs.push(`Proxy ${proxy.ip}:${proxy.port}\nSite: ${site.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
-                if (TELEGRAM_BOT_TOKEN) {
-                  fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      chat_id: "-1003848532661",
-                      text: `🔧 <b>/mtxt PROXY DEAD DEBUG</b>\n\n📇 <b>Card:</b> <code>${cardCC.replace(/^(\d{6})(\d+)(\d{4})/, '$1******$3')}</code>\n👤 <b>User:</b> ${escapeHtml(mtxtProfile.username || 'Unknown')}\n🌐 <b>Site:</b> <code>${escapeHtml(site.url)}</code>\n🧩 <b>Proxy:</b> <code>${escapeHtml(`${proxy.ip}:${proxy.port}`)}</code>\n\n━━━━ RAW API RESPONSE ━━━━\n<pre>${escapeHtml(siteResult.rawResponse || siteResult.message || 'N/A').substring(0, 2500)}</pre>\n\n🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
-                      parse_mode: "HTML",
-                    }),
-                  }).catch(() => {});
-                }
-                supabase.from('user_proxies').delete().eq('id', proxy.id).eq('user_id', mtxtProfile.user_id).then(() => {});
+                supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
                 if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
                 finalResult = siteResult; break;
               }
@@ -6715,22 +6653,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 if (parsed && (parsed.Gateway || parsed.Response || parsed.Price !== undefined || parsed.status || parsed.message)) isValidApiResponse = true;
               } catch {}
               const rl = (siteResult.rawResponse || '').toLowerCase();
-              const isProxyError = !isValidApiResponse && (rl.includes('407') || rl.includes('proxy authentication') || rl.includes('bad proxy'));
+              const isProxyError = !isValidApiResponse && (rl.includes('407') || rl.includes('proxy error') || rl.includes('proxy authentication') || rl.includes('connection refused') || rl.includes('proxy connect') || rl.includes('tunneling socket'));
               if (isProxyError) {
                 mtxtFailedProxyIds.push(proxy.id);
-                mtxtFailedProxyDebugs.push(`Proxy ${proxy.ip}:${proxy.port}\nSite: ${site.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
-                if (TELEGRAM_BOT_TOKEN) {
-                  fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      chat_id: "-1003848532661",
-                      text: `🔧 <b>/mtxt PROXY DEAD DEBUG</b>\n\n📇 <b>Card:</b> <code>${cardCC.replace(/^(\d{6})(\d+)(\d{4})/, '$1******$3')}</code>\n👤 <b>User:</b> ${escapeHtml(mtxtProfile.username || 'Unknown')}\n🌐 <b>Site:</b> <code>${escapeHtml(site.url)}</code>\n🧩 <b>Proxy:</b> <code>${escapeHtml(`${proxy.ip}:${proxy.port}`)}</code>\n\n━━━━ RAW API RESPONSE ━━━━\n<pre>${escapeHtml(siteResult.rawResponse || siteResult.message || 'N/A').substring(0, 2500)}</pre>\n\n🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
-                      parse_mode: "HTML",
-                    }),
-                  }).catch(() => {});
-                }
-                supabase.from('user_proxies').delete().eq('id', proxy.id).eq('user_id', mtxtProfile.user_id).then(() => {});
+                supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
                 if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
                 finalResult = siteResult; break;
               }
@@ -6883,20 +6809,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             }
 
             if (mtxtErrorCards.length > 0) mtxtFinalMsg += `⚠️ <b>${mtxtErrorCards.length} cards</b> had errors — use Recheck below\n`;
-            if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `🔴 <b>${mtxtFailedProxyIds.length} proxies</b> skipped for this run\n`;
-
-            if (mtxtFailedProxyIds.length >= (mtxtProxies?.length || 0) && mtxtFailedProxyDebugs.length > 0 && TELEGRAM_BOT_TOKEN) {
-              const rawDebug = escapeHtml(mtxtFailedProxyDebugs.join('\n\n━━━━ PROXY RAW RESPONSE ━━━━\n\n')).substring(0, 3000);
-              fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  chat_id: "-1003848532661",
-                  text: `🔧 <b>/mtxt ALL PROXIES DEAD DEBUG</b>\n\n👤 <b>User:</b> ${escapeHtml(mtxtProfile.username || 'Unknown')}\n📊 <b>Dead proxies:</b> ${mtxtFailedProxyIds.length}/${mtxtProxies?.length || 0}\n\n━━━━ RAW API RESPONSES ━━━━\n<pre>${rawDebug}</pre>\n\n🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
-                  parse_mode: "HTML",
-                }),
-              }).catch(() => {});
-            }
+            if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `🔴 <b>${mtxtFailedProxyIds.length} dead proxies</b> auto-removed\n`;
 
             const finalButtons: any[][] = [];
             if (mtxtErrorCards.length > 0) {

