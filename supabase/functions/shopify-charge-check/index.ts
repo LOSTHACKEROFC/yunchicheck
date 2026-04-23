@@ -519,6 +519,7 @@ Deno.serve(async (req) => {
     let result: ApiCheckResult | null = null;
     let usedSite = shuffledSites[0];
     const failedProxyIds: string[] = [];
+    const failedProxyDebugs: string[] = [];
     const deadSiteUrls: string[] = [];
     let allProxiesDeadFlag = false;
 
@@ -532,7 +533,7 @@ Deno.serve(async (req) => {
       const availableProxies = shuffledProxies.filter(p => !failedProxyIds.includes(p.id));
       if (availableProxies.length === 0) {
         allProxiesDeadFlag = true;
-        result = { status: 'unknown', message: 'All proxies failed (407)', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
+        result = { status: 'unknown', message: 'All proxies failed', apiResponse: '', rawResponse: failedProxyDebugs.join('\n\n'), price: 0, priceStr: '$0.00' };
         break;
       }
 
@@ -548,6 +549,7 @@ Deno.serve(async (req) => {
         if (siteResult.proxyDead) {
           console.log(`[SHOPIFY-CHARGE] Proxy dead detected, removing proxy ${currentProxy.id} (${currentProxy.ip}:${currentProxy.port})`);
           failedProxyIds.push(currentProxy.id);
+          failedProxyDebugs.push(`Proxy ${currentProxy.ip}:${currentProxy.port}\nSite: ${currentSite.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
           adminClient.from('user_proxies').delete().eq('id', currentProxy.id).eq('user_id', user.id).then(({ error: delErr }) => {
             if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove dead proxy:`, delErr);
             else console.log(`[SHOPIFY-CHARGE] Dead proxy removed: ${currentProxy.ip}:${currentProxy.port}`);
@@ -596,6 +598,7 @@ Deno.serve(async (req) => {
         if (isProxyError) {
           console.log(`[SHOPIFY-CHARGE] Proxy error (legacy), removing proxy ${currentProxy.ip}:${currentProxy.port}`);
           failedProxyIds.push(currentProxy.id);
+          failedProxyDebugs.push(`Proxy ${currentProxy.ip}:${currentProxy.port}\nSite: ${currentSite.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
           adminClient.from('user_proxies').delete().eq('id', currentProxy.id).eq('user_id', user.id).then(({ error: delErr }) => {
             if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove dead proxy:`, delErr);
             else console.log(`[SHOPIFY-CHARGE] Dead proxy removed: ${currentProxy.ip}:${currentProxy.port}`);
