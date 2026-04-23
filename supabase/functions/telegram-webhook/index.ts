@@ -5406,11 +5406,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED", "Payment method not available",
           "ARTIFACT_DISSATISFACTION", "VALIDATION_CUSTOM", '"Gateway":"Authorize.net"',
         ];
-        const shProxyDeadIndicators = [
-          "proxy dead", "proxy error", "proxy authentication", "connection refused",
-          "proxy connect", "tunneling socket", "proxy_error", "bad proxy",
-          "cannot connect to host", "socks", "econnrefused", "econnreset",
-        ];
+        const shProxyDeadIndicators = ["proxy dead", "proxy authentication", "proxy_error", "bad proxy", "could not resolve proxy", "proxy auth", "407 proxy authentication"];
+        const shProxyTransientIndicators = ["proxy error", "connection refused", "proxy connect", "tunneling socket", "cannot connect to host", "socks", "econnrefused", "econnreset", "failed to perform", "getaddrinfo", "tokenize_fail", "no_session_token"];
         const shSiteDeadIndicators = ["site dead"];
         const shUserAgents = [
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36',
@@ -5503,7 +5500,7 @@ Go to yunchicheck.com/dashboard → Proxies
               const rawLower = rawText.toLowerCase();
 
               // Transient errors
-              if (rawLower.includes('failed to perform') || rawLower.includes('getaddrinfo') || rawLower.includes('could not resolve proxy') || rawLower.includes('tokenize_fail') || rawLower.includes('no_session_token')) {
+              if (shProxyTransientIndicators.some(ind => rawLower.includes(ind))) {
                 return { status: 'unknown', message: 'Transient error', rawResponse: rawText, price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, apiResponse: '' };
               }
               // Proxy dead
@@ -5620,7 +5617,6 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
               if (siteResult.proxyDead) {
                 failedProxyIds.push(currentProxy.id);
-                supabase.from('user_proxies').delete().eq('id', currentProxy.id).then(() => {});
                 continue;
               }
               if (siteResult.siteDead) {
@@ -5725,7 +5721,7 @@ ${statusEmoji} <b>Result</b>
 <i>💰 <b>Account</b>
 🔹 <b>Cost:</b> ${creditCost > 0 ? `-${creditCost} credits` : "Free (0 credits)"}
 💳 <b>Balance:</b> ${newBalance} credits
-⏱️ <b>Time:</b> ${elapsed}s</i>${deadProxiesCount > 0 ? `\n\n🔴 <b>${deadProxiesCount} dead proxy${deadProxiesCount > 1 ? 'ies' : ''} removed</b>` : ""}${allProxiesDead ? `\n⚠️ <b>All proxies dead!</b> Add new ones at yunchicheck.com` : ""}
+⏱️ <b>Time:</b> ${elapsed}s</i>${deadProxiesCount > 0 ? `\n\n🔴 <b>${deadProxiesCount} proxy${deadProxiesCount > 1 ? 'ies' : ''} skipped for this run</b>` : ""}${allProxiesDead ? `\n⚠️ <b>All proxies failed this run.</b> Check them at yunchicheck.com` : ""}
 `;
 
           const resultButtons: any[][] = [];
@@ -6446,7 +6442,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           const mtxtStrikeResponses = ["MERCHANDISE_EXPECTED_PRICE_MISMATCH"];
           const mtxtSiteStrikeCounter: Record<string, number> = {};
           const MTXT_STRIKE_THRESHOLD = 3;
-          const mtxtProxyDeadIndicators = ["proxy dead", "proxy error", "proxy authentication", "connection refused", "proxy connect", "tunneling socket", "proxy_error", "bad proxy", "cannot connect to host", "socks", "econnrefused", "econnreset"];
+          const mtxtProxyDeadIndicators = ["proxy dead", "proxy authentication", "proxy_error", "bad proxy", "could not resolve proxy", "proxy auth", "407 proxy authentication"];
+          const mtxtProxyTransientIndicators = ["proxy error", "connection refused", "proxy connect", "tunneling socket", "cannot connect to host", "socks", "econnrefused", "econnreset", "failed to perform", "getaddrinfo", "tokenize_fail", "no_session_token"];
           const mtxtSiteDeadIndicators = ["site dead"];
           const mtxtUserAgents = [
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -6510,7 +6507,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (!rawText || rawText.trim() === '') return { status: 'unknown', message: 'Empty response', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '', rawResponse: '' };
               const rawLower = rawText.toLowerCase();
 
-              if (rawLower.includes('failed to perform') || rawLower.includes('getaddrinfo') || rawLower.includes('could not resolve proxy') || rawLower.includes('tokenize_fail') || rawLower.includes('no_session_token')) {
+              if (mtxtProxyTransientIndicators.some(ind => rawLower.includes(ind))) {
                 return { status: 'unknown', message: 'Transient error', price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '', rawResponse: rawText };
               }
               if (mtxtProxyDeadIndicators.some(ind => rawLower.includes(ind))) {
@@ -6653,7 +6650,6 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
               if (siteResult.proxyDead) {
                 mtxtFailedProxyIds.push(proxy.id);
-                supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
                 if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
                 finalResult = siteResult; break;
               }
@@ -6670,10 +6666,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 if (parsed && (parsed.Gateway || parsed.Response || parsed.Price !== undefined || parsed.status || parsed.message)) isValidApiResponse = true;
               } catch {}
               const rl = (siteResult.rawResponse || '').toLowerCase();
-              const isProxyError = !isValidApiResponse && (rl.includes('407') || rl.includes('proxy error') || rl.includes('proxy authentication') || rl.includes('connection refused') || rl.includes('proxy connect') || rl.includes('tunneling socket'));
+              const isProxyError = !isValidApiResponse && (rl.includes('407') || rl.includes('proxy authentication') || rl.includes('bad proxy'));
               if (isProxyError) {
                 mtxtFailedProxyIds.push(proxy.id);
-                supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
                 if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
                 finalResult = siteResult; break;
               }
@@ -6826,7 +6821,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             }
 
             if (mtxtErrorCards.length > 0) mtxtFinalMsg += `⚠️ <b>${mtxtErrorCards.length} cards</b> had errors — use Recheck below\n`;
-            if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `🔴 <b>${mtxtFailedProxyIds.length} dead proxies</b> auto-removed\n`;
+            if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `🔴 <b>${mtxtFailedProxyIds.length} proxies</b> skipped for this run\n`;
 
             const finalButtons: any[][] = [];
             if (mtxtErrorCards.length > 0) {

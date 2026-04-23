@@ -145,9 +145,14 @@ const userAgents = [
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
 const PROXY_DEAD_INDICATORS = [
-  "proxy dead", "proxy error", "proxy authentication", "connection refused",
-  "proxy connect", "tunneling socket", "proxy_error", "bad proxy",
+  "proxy dead", "proxy authentication", "proxy_error", "bad proxy",
+  "could not resolve proxy", "proxy auth", "407 proxy authentication",
+];
+
+const PROXY_TRANSIENT_INDICATORS = [
+  "proxy error", "connection refused", "proxy connect", "tunneling socket",
   "cannot connect to host", "socks", "econnrefused", "econnreset",
+  "failed to perform", "getaddrinfo", "tokenize_fail", "no_session_token",
 ];
 
 const SITE_DEAD_INDICATORS = [
@@ -195,7 +200,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
     const rawLower = rawText.toLowerCase();
 
     // Check for curl/DNS/transient API errors — treat as UNKNOWN (retryable)
-    const isCurlTransient = rawLower.includes('failed to perform') || rawLower.includes('getaddrinfo') || rawLower.includes('could not resolve proxy') || rawLower.includes('tokenize_fail') || rawLower.includes('no_session_token');
+    const isCurlTransient = PROXY_TRANSIENT_INDICATORS.some(ind => rawLower.includes(ind));
     if (isCurlTransient) {
       return { status: 'unknown', message: 'Transient error (retryable)', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
     }
@@ -528,15 +533,10 @@ Deno.serve(async (req) => {
         
         siteResult = await callApi(cc, currentSite.url, proxyStr);
         
-        // If proxy dead flag is set, remove proxy and try next
+        // If proxy dead flag is set, skip this proxy for this run only and try next
         if (siteResult.proxyDead) {
-          console.log(`[SHOPIFY-CHARGE] Proxy dead detected, removing proxy ${currentProxy.id} (${currentProxy.ip}:${currentProxy.port})`);
+          console.log(`[SHOPIFY-CHARGE] Proxy dead detected, skipping proxy ${currentProxy.id} (${currentProxy.ip}:${currentProxy.port})`);
           failedProxyIds.push(currentProxy.id);
-          // Immediately delete from DB
-          adminClient.from('user_proxies').delete().eq('id', currentProxy.id).then(({ error: delErr }) => {
-            if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove dead proxy ${currentProxy.id}:`, delErr);
-            else console.log(`[SHOPIFY-CHARGE] Dead proxy removed from DB: ${currentProxy.id}`);
-          });
           continue; // try next proxy
         }
 
@@ -563,7 +563,7 @@ Deno.serve(async (req) => {
           break;
         }
 
-        // Legacy proxy error check (407, connection refused without proxyDead flag)
+        // Legacy proxy error check (407/auth only without proxyDead flag)
         const rawLower = (siteResult.rawResponse || '').toLowerCase();
         let isValidApiResponse = false;
         try {
@@ -574,18 +574,13 @@ Deno.serve(async (req) => {
         } catch { /* not valid JSON */ }
         
         const isProxyError = !isValidApiResponse && (
-          rawLower.includes('407') || rawLower.includes('proxy error') || 
-          rawLower.includes('proxy authentication') || rawLower.includes('connection refused') ||
-          rawLower.includes('proxy connect') || rawLower.includes('tunneling socket')
+          rawLower.includes('407') || rawLower.includes('proxy authentication') ||
+          rawLower.includes('bad proxy')
         );
         
         if (isProxyError) {
-          console.log(`[SHOPIFY-CHARGE] Proxy error (legacy), removing proxy ${currentProxy.ip}:${currentProxy.port}`);
+          console.log(`[SHOPIFY-CHARGE] Proxy error (legacy), skipping proxy ${currentProxy.ip}:${currentProxy.port}`);
           failedProxyIds.push(currentProxy.id);
-          adminClient.from('user_proxies').delete().eq('id', currentProxy.id).then(({ error: delErr }) => {
-            if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove proxy ${currentProxy.id}:`, delErr);
-            else console.log(`[SHOPIFY-CHARGE] Removed dead proxy: ${currentProxy.id}`);
-          });
           continue; // try next proxy
         }
         
