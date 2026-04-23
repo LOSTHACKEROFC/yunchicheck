@@ -41,3 +41,10 @@ Deno.test("Shopify Charge maps API Charged boolean/string values explicitly", ()
   assertMatch(source, /rawChargedFalse/);
   assertMatch(source, /rawChargedTrue/);
 });
+
+Deno.test("Shopify Charge treats API Response TIMEOUT as dead proxy and removes it", () => {
+  assertMatch(source, /const isApiTimeoutProxyDead = \(rawText: string\): boolean =>/);
+  assertMatch(source, /response\.trim\(\)\.toUpperCase\(\) === 'TIMEOUT'/);
+  assertMatch(source, /isApiTimeoutProxyDead\(rawText\)/);
+  assertMatch(source, /\.from\('user_proxies'\)\.delete\(\)\.eq\('id', currentProxy\.id\)\.eq\('user_id', user\.id\)/);
+});

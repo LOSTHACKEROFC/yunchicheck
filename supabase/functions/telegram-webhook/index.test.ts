@@ -86,3 +86,13 @@ Deno.test("/mtxt maps API Charged boolean/string values explicitly", () => {
   assertMatch(source, /rawChargedFalse/);
   assertMatch(source, /rawChargedTrue/);
 });
+
+Deno.test("Shopify bot flows treat API Response TIMEOUT as dead proxy and remove it", () => {
+  assertMatch(source, /const shIsApiTimeoutProxyDead = \(rawText: string\): boolean =>/);
+  assertMatch(source, /const mtxtIsApiTimeoutProxyDead = \(rawText: string\): boolean =>/);
+  assertMatch(source, /response\.trim\(\)\.toUpperCase\(\) === 'TIMEOUT'/);
+  assertMatch(source, /shIsApiTimeoutProxyDead\(rawText\)/);
+  assertMatch(source, /mtxtIsApiTimeoutProxyDead\(rawText\)/);
+  assertMatch(source, /\.from\('user_proxies'\)\.delete\(\)\.eq\('id', currentProxy\.id\)\.eq\('user_id', shProfile\.user_id\)/);
+  assertMatch(source, /\.from\('user_proxies'\)\.delete\(\)\.eq\('id', proxy\.id\)\.eq\('user_id', mtxtProfile\.user_id\)/);
+});
