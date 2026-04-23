@@ -6669,6 +6669,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
               if (siteResult.proxyDead) {
                 mtxtFailedProxyIds.push(proxy.id);
+                supabase.from('user_proxies').delete().eq('id', proxy.id).eq('user_id', mtxtProfile.user_id).then(() => {});
                 if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
                 finalResult = siteResult; break;
               }
@@ -6688,6 +6689,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               const isProxyError = !isValidApiResponse && (rl.includes('407') || rl.includes('proxy authentication') || rl.includes('bad proxy'));
               if (isProxyError) {
                 mtxtFailedProxyIds.push(proxy.id);
+                supabase.from('user_proxies').delete().eq('id', proxy.id).eq('user_id', mtxtProfile.user_id).then(() => {});
                 if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
                 finalResult = siteResult; break;
               }
