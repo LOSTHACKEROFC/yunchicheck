@@ -5615,19 +5615,19 @@ Go to yunchicheck.com/dashboard → Proxies
                 if (json.Response) apiResponse = String(json.Response).replace(/<[^>]*>/g, '');
                 apiMessage = json.message || json.msg || json.error || rawText;
 
-                if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎' || String(json.Response || '').toLowerCase().includes('order complete')) {
+                if (json.Charged === true || String(json.Charged).toLowerCase() === 'true' || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎' || String(json.Response || '').toLowerCase().includes('order complete')) {
                   apiStatus = 'live'; apiMessage = json.message || json.Response || 'Charged';
-                } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED') {
+                } else if (json.Charged === false || String(json.Charged).toLowerCase() === 'false' || json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED') {
                   apiStatus = 'dead'; apiMessage = json.message || json.error || json.Response || 'Declined';
                 } else {
                   const combined = ((apiMessage || '') + ' ' + (apiResponse || '')).toLowerCase();
-                  if (combined.includes('order_completed') || combined.includes('order complete') || combined.includes('charged') || combined.includes('success') || combined.includes('approved')) apiStatus = 'live';
-                  else if (combined.includes('declined') || combined.includes('invalid') || combined.includes('expired') || combined.includes('insufficient') || combined.includes('card_declined') || combined.includes('do_not_honor') || combined.includes('fraud') || combined.includes('otp_required') || combined.includes('3ds') || combined.includes('rejected') || combined.includes('restricted') || combined.includes('generic_decline')) apiStatus = 'dead';
+                  if (combined.includes('order_completed') || combined.includes('order complete') || combined.includes('charged:true') || combined.includes('charged":"true') || combined.includes('charged') || combined.includes('success') || combined.includes('approved')) apiStatus = 'live';
+                  else if (combined.includes('invalid_purchase_type') || combined.includes('charged:false') || combined.includes('charged":"false') || combined.includes('declined') || combined.includes('invalid') || combined.includes('expired') || combined.includes('insufficient') || combined.includes('card_declined') || combined.includes('do_not_honor') || combined.includes('fraud') || combined.includes('otp_required') || combined.includes('3ds') || combined.includes('rejected') || combined.includes('restricted') || combined.includes('generic_decline')) apiStatus = 'dead';
                 }
               } catch {
                 const lower = rawText.toLowerCase();
-                if (lower.includes('order complete') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) apiStatus = 'live';
-                else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('otp_required') || lower.includes('rejected')) apiStatus = 'dead';
+                if (lower.includes('order complete') || lower.includes('charged:true') || lower.includes('charged":"true') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) apiStatus = 'live';
+                else if (lower.includes('invalid_purchase_type') || lower.includes('charged:false') || lower.includes('charged":"false') || lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('otp_required') || lower.includes('rejected')) apiStatus = 'dead';
               }
 
               return { status: apiStatus, message: apiMessage, rawResponse: rawText, price, priceStr, proxyDead: false, siteDead: false, apiResponse };
@@ -5986,19 +5986,19 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (json.Price > 0) { price = json.Price; priceStr = `$${Number(json.Price).toFixed(2)}`; }
               if (json.Response) apiResponse = String(json.Response).replace(/<[^>]*>/g, '');
               apiMessage = json.message || json.msg || json.error || rawText;
-              if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎' || String(json.Response || '').toLowerCase().includes('order complete'))
+              if (json.Charged === true || String(json.Charged).toLowerCase() === 'true' || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎' || String(json.Response || '').toLowerCase().includes('order complete'))
                 { apiStatus = 'live'; apiMessage = json.message || json.Response || 'Charged'; }
-              else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED')
+              else if (json.Charged === false || String(json.Charged).toLowerCase() === 'false' || json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED')
                 { apiStatus = 'dead'; apiMessage = json.message || json.error || json.Response || 'Declined'; }
               else {
                 const combined = ((apiMessage || '') + ' ' + (apiResponse || '')).toLowerCase();
-                if (combined.includes('order_completed') || combined.includes('order complete') || combined.includes('charged') || combined.includes('success') || combined.includes('approved')) apiStatus = 'live';
-                else if (combined.includes('declined') || combined.includes('invalid') || combined.includes('expired') || combined.includes('insufficient') || combined.includes('card_declined') || combined.includes('do_not_honor') || combined.includes('fraud') || combined.includes('otp_required') || combined.includes('3ds') || combined.includes('rejected') || combined.includes('restricted') || combined.includes('generic_decline')) apiStatus = 'dead';
+                if (combined.includes('order_completed') || combined.includes('order complete') || combined.includes('charged:true') || combined.includes('charged":"true') || combined.includes('charged') || combined.includes('success') || combined.includes('approved')) apiStatus = 'live';
+                else if (combined.includes('invalid_purchase_type') || combined.includes('charged:false') || combined.includes('charged":"false') || combined.includes('declined') || combined.includes('invalid') || combined.includes('expired') || combined.includes('insufficient') || combined.includes('card_declined') || combined.includes('do_not_honor') || combined.includes('fraud') || combined.includes('otp_required') || combined.includes('3ds') || combined.includes('rejected') || combined.includes('restricted') || combined.includes('generic_decline')) apiStatus = 'dead';
               }
             } catch {
               const lower = rawText.toLowerCase();
-              if (lower.includes('order complete') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) apiStatus = 'live';
-              else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('otp_required') || lower.includes('rejected')) apiStatus = 'dead';
+              if (lower.includes('order complete') || lower.includes('charged:true') || lower.includes('charged":"true') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) apiStatus = 'live';
+              else if (lower.includes('invalid_purchase_type') || lower.includes('charged:false') || lower.includes('charged":"false') || lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('otp_required') || lower.includes('rejected')) apiStatus = 'dead';
             }
             return { status: apiStatus, message: apiMessage, price, priceStr, proxyDead: false, siteDead: false, response: apiResponse };
           } catch (e) { clearTimeout(timeout); const msg = e instanceof Error ? e.message : 'Error'; return { status: 'unknown', message: msg.includes('abort') ? 'Timeout' : msg, price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, response: '' }; }
@@ -6100,7 +6100,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           let statusType: string;
           const respLower = (result.response || '').toLowerCase();
           if (result.status === 'live') {
-            if (respLower.includes('order_completed') || respLower.includes('order complete')) { mshCharged++; statusType = 'live'; }
+            if (respLower.includes('order_completed') || respLower.includes('order complete') || respLower.includes('charged:true') || respLower.includes('charged":"true')) { mshCharged++; statusType = 'live'; }
             else { mshApproved++; statusType = 'approved'; }
           } else if (result.status === 'dead') {
             mshDeclined++; statusType = 'dead';
@@ -6628,10 +6628,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 const responseText = (apiResponse || apiMessage || '').trim();
                 if (mtxtIsEmptyOrErrorOnly(responseText) && price === 0) {
                   apiStatus = 'unknown';
-                } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
+                } else if (json.Charged === true || String(json.Charged).toLowerCase() === 'true' || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
                   apiStatus = 'live';
                   apiMessage = json.message || json.Response || 'Charged';
-                } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED') {
+                } else if (json.Charged === false || String(json.Charged).toLowerCase() === 'false' || json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED') {
                   apiStatus = 'dead';
                   apiMessage = json.message || json.error || json.Response || 'Declined';
                 } else if (json.status === 'error') {
@@ -6646,7 +6646,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 } else {
                   const combined = ((apiMessage || '') + ' ' + (apiResponse || '')).toLowerCase();
                   if (combined.includes('order_placed') || combined.includes('order placed') || combined.includes('order completed') || combined.includes('order_completed') || combined.includes('thank you') || combined.includes('thankyou') || combined.includes('charged') || combined.includes('success') || combined.includes('approved')) apiStatus = 'live';
-                  else if (combined.includes('declined') || combined.includes('invalid') || combined.includes('expired') || combined.includes('insufficient') || combined.includes('card_declined') || combined.includes('incorrect') || combined.includes('do_not_honor') || combined.includes('fraud') || combined.includes('not accepted') || combined.includes('ds_required') || combined.includes('3ds') || combined.includes('3d_secure') || combined.includes('rejected') || combined.includes('otp_required') || combined.includes('otp required') || combined.includes('pickup_card') || combined.includes('lost_card') || combined.includes('stolen_card') || combined.includes('restricted') || combined.includes('not_permitted') || combined.includes('generic_decline')) apiStatus = 'dead';
+                  else if (combined.includes('invalid_purchase_type') || combined.includes('charged:false') || combined.includes('charged":"false') || combined.includes('declined') || combined.includes('invalid') || combined.includes('expired') || combined.includes('insufficient') || combined.includes('card_declined') || combined.includes('incorrect') || combined.includes('do_not_honor') || combined.includes('fraud') || combined.includes('not accepted') || combined.includes('ds_required') || combined.includes('3ds') || combined.includes('3d_secure') || combined.includes('rejected') || combined.includes('otp_required') || combined.includes('otp required') || combined.includes('pickup_card') || combined.includes('lost_card') || combined.includes('stolen_card') || combined.includes('restricted') || combined.includes('not_permitted') || combined.includes('generic_decline')) apiStatus = 'dead';
                   else if (combined.includes('failed') || combined.includes('error')) {
                     const substantive = combined.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
                     if (substantive.length > 3) apiStatus = 'dead';
@@ -6656,7 +6656,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 const lower = rawText.toLowerCase();
                 if (mtxtIsEmptyOrErrorOnly(lower)) apiStatus = 'unknown';
                 else if (lower.includes('order_placed') || lower.includes('order placed') || lower.includes('order completed') || lower.includes('order_completed') || lower.includes('thank you') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) apiStatus = 'live';
-                else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('insufficient') || lower.includes('otp_required') || lower.includes('otp required') || lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) apiStatus = 'dead';
+                else if (lower.includes('invalid_purchase_type') || lower.includes('charged:false') || lower.includes('charged":"false') || lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('insufficient') || lower.includes('otp_required') || lower.includes('otp required') || lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) apiStatus = 'dead';
                 else if (lower.includes('failed') || lower.includes('error')) {
                   const substantive = lower.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
                   if (substantive.length > 3) apiStatus = 'dead';
