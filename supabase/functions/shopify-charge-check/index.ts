@@ -265,11 +265,20 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
         'stolen_card', 'restricted', 'not_permitted', 'generic_decline', 'failed',
       ];
 
+      const chargedValue = json.Charged ?? json.charged;
+      const chargedNormalized = typeof chargedValue === 'string' ? chargedValue.trim().toLowerCase() : chargedValue;
+
       if (isEmptyOrErrorOnly(responseText) && price === 0) {
         apiStatus = 'unknown';
+      } else if (chargedNormalized === false || chargedNormalized === 'false') {
+        apiStatus = 'dead';
+        apiMessage = json.message || json.error || json.Response || 'Declined';
       } else if (declineSignals.some(signal => combinedText.includes(signal))) {
         apiStatus = 'dead';
         apiMessage = json.message || json.error || json.Response || 'Declined';
+      } else if (chargedNormalized === true || chargedNormalized === 'true') {
+        apiStatus = 'live';
+        apiMessage = json.message || json.Response || 'Charged';
       } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
         apiStatus = 'live';
         apiMessage = json.message || json.Response || 'Charged';
@@ -308,8 +317,14 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
       }
     } catch {
       const lower = rawText.toLowerCase();
+      const rawChargedFalse = /"?charged"?\s*:\s*"?false"?/i.test(rawText);
+      const rawChargedTrue = /"?charged"?\s*:\s*"?true"?/i.test(rawText);
       if (isEmptyOrErrorOnly(lower)) {
         apiStatus = 'unknown';
+      } else if (rawChargedFalse) {
+        apiStatus = 'dead';
+      } else if (rawChargedTrue) {
+        apiStatus = 'live';
       } else if (lower.includes('declined') || lower.includes('card_declined') || lower.includes('invalid') || lower.includes('expired') || 
           lower.includes('insufficient') || lower.includes('incorrect') || lower.includes('do_not_honor') || lower.includes('fraud') ||
           lower.includes('not accepted') || lower.includes('ds_required') || lower.includes('3ds') || lower.includes('3d_secure') ||

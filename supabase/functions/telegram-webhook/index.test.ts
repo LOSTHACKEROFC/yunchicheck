@@ -78,3 +78,11 @@ Deno.test("/mtxt mirrors Shopify Charge price filtering, retry count, and site a
   assertMatch(source, /const MTXT_CHUNK_SIZE = 200;/);
   assertMatch(source, /const MTXT_CONCURRENCY = 50;/);
 });
+
+Deno.test("/mtxt maps API Charged boolean/string values explicitly", () => {
+  assertMatch(source, /const chargedValue = json\.Charged \?\? json\.charged;/);
+  assertMatch(source, /chargedNormalized === false \|\| chargedNormalized === 'false'/);
+  assertMatch(source, /chargedNormalized === true \|\| chargedNormalized === 'true'/);
+  assertMatch(source, /rawChargedFalse/);
+  assertMatch(source, /rawChargedTrue/);
+});
