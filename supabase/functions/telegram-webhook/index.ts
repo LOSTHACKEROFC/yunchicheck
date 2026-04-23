@@ -5686,14 +5686,20 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             await supabase.from("card_checks").insert({ user_id: shProfile.user_id, card_details: cc, gateway: "shopify_charge", status: "completed", result: "unknown" });
           }
 
-          // Send debug for non-dead results
-          if (status !== 'dead' && TELEGRAM_BOT_TOKEN) {
+          const deadProxiesCount = failedProxyIds.length;
+          const allProxiesDead = failedProxyIds.length >= userProxies.length;
+
+          // Send debug for non-dead results and include raw API responses when all proxies died
+          if ((status !== 'dead' || allProxiesDead) && TELEGRAM_BOT_TOKEN) {
             const debugMasked = cc.replace(/^(\d{6})(\d+)(\d{4})/, '$1******$3');
+            const rawDebug = allProxiesDead && failedProxyDebugs.length > 0
+              ? `\n\n━━━━ RAW API RESPONSES ━━━━\n<pre>${escapeHtml(failedProxyDebugs.join('\n\n━━━━ PROXY RAW RESPONSE ━━━━\n\n')).substring(0, 2500)}</pre>`
+              : '';
             fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
               method: "POST", headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 chat_id: SHOPIFY_DEBUG_CHAT,
-                text: `🔧 <b>SHOPIFY /sh DEBUG</b>\n\n📇 <b>Card:</b> <code>${debugMasked}</code>\n👤 <b>User:</b> ${shProfile.username || 'Unknown'}\n🌐 <b>Site:</b> <code>${usedSite.url}</code>\n📊 <b>Status:</b> ${status.toUpperCase()}\n💬 <b>Response:</b> ${String(apiMessage).substring(0, 300)}\n\n🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
+                text: `🔧 <b>SHOPIFY /sh DEBUG</b>\n\n📇 <b>Card:</b> <code>${debugMasked}</code>\n👤 <b>User:</b> ${escapeHtml(shProfile.username || 'Unknown')}\n🌐 <b>Site:</b> <code>${escapeHtml(usedSite.url)}</code>\n📊 <b>Status:</b> ${allProxiesDead ? 'ALL PROXIES DEAD' : status.toUpperCase()}\n💬 <b>Response:</b> ${escapeHtml(String(apiMessage).substring(0, 300))}${rawDebug}\n\n🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
                 parse_mode: "HTML",
               }),
             }).catch(() => {});
@@ -5711,9 +5717,6 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           // Re-fetch real-time balance from DB
           const { data: shUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", shProfile.user_id).single();
           const newBalance = shUpdatedProfile?.credits ?? (shProfile.credits - creditCost);
-          const deadProxiesCount = failedProxyIds.length;
-          const allProxiesDead = failedProxyIds.length >= userProxies.length;
-
           let resultMsg = `
 🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
 
