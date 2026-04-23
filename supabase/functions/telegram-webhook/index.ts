@@ -6478,6 +6478,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
           const mtxtFormatProxy = (p: any) => p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
           const mtxtFailedProxyIds: string[] = [];
+          const mtxtFailedProxyDebugs: string[] = [];
           const mtxtLiveSites = [...mtxtSites].filter(s => !blockedSet.has(s.url)).sort(() => Math.random() - 0.5);
           const mtxtDeadSiteUrls = new Set<string>();
           const mtxtRemoveSite = (url: string) => {
@@ -6666,7 +6667,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
               const currentProxies = availableProxies.filter(p => !mtxtFailedProxyIds.includes(p.id));
               if (currentProxies.length === 0) {
-                finalResult = { status: 'error', response: 'All proxies dead', price: '$0.00' };
+                finalResult = { status: 'error', response: 'All proxies dead', price: '$0.00', rawResponse: mtxtFailedProxyDebugs.join('\n\n') };
                 break;
               }
               const proxy = currentProxies[Math.floor(Math.random() * currentProxies.length)];
@@ -6674,6 +6675,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
               if (siteResult.proxyDead) {
                 mtxtFailedProxyIds.push(proxy.id);
+                mtxtFailedProxyDebugs.push(`Proxy ${proxy.ip}:${proxy.port}\nSite: ${site.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
                 supabase.from('user_proxies').delete().eq('id', proxy.id).eq('user_id', mtxtProfile.user_id).then(() => {});
                 if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
                 finalResult = siteResult; break;
@@ -6694,6 +6696,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               const isProxyError = !isValidApiResponse && (rl.includes('407') || rl.includes('proxy authentication') || rl.includes('bad proxy'));
               if (isProxyError) {
                 mtxtFailedProxyIds.push(proxy.id);
+                mtxtFailedProxyDebugs.push(`Proxy ${proxy.ip}:${proxy.port}\nSite: ${site.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
                 supabase.from('user_proxies').delete().eq('id', proxy.id).eq('user_id', mtxtProfile.user_id).then(() => {});
                 if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
                 finalResult = siteResult; break;
