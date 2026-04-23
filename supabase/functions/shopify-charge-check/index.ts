@@ -546,8 +546,12 @@ Deno.serve(async (req) => {
         
         // If proxy dead flag is set, skip this proxy for this run only and try next
         if (siteResult.proxyDead) {
-          console.log(`[SHOPIFY-CHARGE] Proxy dead detected, skipping proxy ${currentProxy.id} (${currentProxy.ip}:${currentProxy.port})`);
+          console.log(`[SHOPIFY-CHARGE] Proxy dead detected, removing proxy ${currentProxy.id} (${currentProxy.ip}:${currentProxy.port})`);
           failedProxyIds.push(currentProxy.id);
+          adminClient.from('user_proxies').delete().eq('id', currentProxy.id).eq('user_id', user.id).then(({ error: delErr }) => {
+            if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove dead proxy:`, delErr);
+            else console.log(`[SHOPIFY-CHARGE] Dead proxy removed: ${currentProxy.ip}:${currentProxy.port}`);
+          });
           continue; // try next proxy
         }
 
@@ -590,8 +594,12 @@ Deno.serve(async (req) => {
         );
         
         if (isProxyError) {
-          console.log(`[SHOPIFY-CHARGE] Proxy error (legacy), skipping proxy ${currentProxy.ip}:${currentProxy.port}`);
+          console.log(`[SHOPIFY-CHARGE] Proxy error (legacy), removing proxy ${currentProxy.ip}:${currentProxy.port}`);
           failedProxyIds.push(currentProxy.id);
+          adminClient.from('user_proxies').delete().eq('id', currentProxy.id).eq('user_id', user.id).then(({ error: delErr }) => {
+            if (delErr) console.error(`[SHOPIFY-CHARGE] Failed to remove dead proxy:`, delErr);
+            else console.log(`[SHOPIFY-CHARGE] Dead proxy removed: ${currentProxy.ip}:${currentProxy.port}`);
+          });
           continue; // try next proxy
         }
         
