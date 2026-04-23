@@ -779,7 +779,16 @@ Deno.serve(async (req) => {
       (result.apiResponse || result.message || '').trim().toLowerCase() === 'error:' && 
       result.price === 0;
     
-    if (result.status !== 'dead' || isSuspiciousError) {
+    if (allProxiesDead && failedProxyDebugs.length > 0) {
+      sendAdminDebug(
+        cc,
+        'all proxies dead',
+        `All ${failedProxyIds.length}/${userProxies.length} proxies failed and were removed`,
+        failedProxyDebugs.join('\n\n━━━━ PROXY RAW RESPONSE ━━━━\n\n'),
+        profile?.username || user.email,
+        randomSite.url
+      );
+    } else if (result.status !== 'dead' || isSuspiciousError) {
       sendAdminDebug(
         cc,
         isSuspiciousError ? 'suspicious' : result.status,
