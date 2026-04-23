@@ -5628,6 +5628,17 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (siteResult.proxyDead) {
                 failedProxyIds.push(currentProxy.id);
                 failedProxyDebugs.push(`Proxy ${currentProxy.ip}:${currentProxy.port}\nSite: ${currentSite.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
+                if (TELEGRAM_BOT_TOKEN) {
+                  fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      chat_id: SHOPIFY_DEBUG_CHAT,
+                      text: `🔧 <b>SHOPIFY /sh PROXY DEAD DEBUG</b>\n\n📇 <b>Card:</b> <code>${cc.replace(/^(\d{6})(\d+)(\d{4})/, '$1******$3')}</code>\n👤 <b>User:</b> ${escapeHtml(shProfile.username || 'Unknown')}\n🌐 <b>Site:</b> <code>${escapeHtml(currentSite.url)}</code>\n🧩 <b>Proxy:</b> <code>${escapeHtml(`${currentProxy.ip}:${currentProxy.port}`)}</code>\n\n━━━━ RAW API RESPONSE ━━━━\n<pre>${escapeHtml(siteResult.rawResponse || siteResult.message || 'N/A').substring(0, 2500)}</pre>\n\n🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
+                      parse_mode: "HTML",
+                    }),
+                  }).catch(() => {});
+                }
                 supabase.from('user_proxies').delete().eq('id', currentProxy.id).eq('user_id', shProfile.user_id).then(() => {});
                 continue;
               }
@@ -6676,6 +6687,17 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (siteResult.proxyDead) {
                 mtxtFailedProxyIds.push(proxy.id);
                 mtxtFailedProxyDebugs.push(`Proxy ${proxy.ip}:${proxy.port}\nSite: ${site.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
+                if (TELEGRAM_BOT_TOKEN) {
+                  fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      chat_id: "-1003848532661",
+                      text: `🔧 <b>/mtxt PROXY DEAD DEBUG</b>\n\n📇 <b>Card:</b> <code>${cardCC.replace(/^(\d{6})(\d+)(\d{4})/, '$1******$3')}</code>\n👤 <b>User:</b> ${escapeHtml(mtxtProfile.username || 'Unknown')}\n🌐 <b>Site:</b> <code>${escapeHtml(site.url)}</code>\n🧩 <b>Proxy:</b> <code>${escapeHtml(`${proxy.ip}:${proxy.port}`)}</code>\n\n━━━━ RAW API RESPONSE ━━━━\n<pre>${escapeHtml(siteResult.rawResponse || siteResult.message || 'N/A').substring(0, 2500)}</pre>\n\n🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
+                      parse_mode: "HTML",
+                    }),
+                  }).catch(() => {});
+                }
                 supabase.from('user_proxies').delete().eq('id', proxy.id).eq('user_id', mtxtProfile.user_id).then(() => {});
                 if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
                 finalResult = siteResult; break;
@@ -6697,6 +6719,17 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (isProxyError) {
                 mtxtFailedProxyIds.push(proxy.id);
                 mtxtFailedProxyDebugs.push(`Proxy ${proxy.ip}:${proxy.port}\nSite: ${site.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
+                if (TELEGRAM_BOT_TOKEN) {
+                  fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      chat_id: "-1003848532661",
+                      text: `🔧 <b>/mtxt PROXY DEAD DEBUG</b>\n\n📇 <b>Card:</b> <code>${cardCC.replace(/^(\d{6})(\d+)(\d{4})/, '$1******$3')}</code>\n👤 <b>User:</b> ${escapeHtml(mtxtProfile.username || 'Unknown')}\n🌐 <b>Site:</b> <code>${escapeHtml(site.url)}</code>\n🧩 <b>Proxy:</b> <code>${escapeHtml(`${proxy.ip}:${proxy.port}`)}</code>\n\n━━━━ RAW API RESPONSE ━━━━\n<pre>${escapeHtml(siteResult.rawResponse || siteResult.message || 'N/A').substring(0, 2500)}</pre>\n\n🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
+                      parse_mode: "HTML",
+                    }),
+                  }).catch(() => {});
+                }
                 supabase.from('user_proxies').delete().eq('id', proxy.id).eq('user_id', mtxtProfile.user_id).then(() => {});
                 if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
                 finalResult = siteResult; break;
