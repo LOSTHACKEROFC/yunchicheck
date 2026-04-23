@@ -33,3 +33,11 @@ Deno.test("Shopify Charge classifies decline signals before charged/order-comple
   assertMatch(parserBlock, /'card_declined'/);
   assertMatch(parserBlock, /'do_not_honor'/);
 });
+
+Deno.test("Shopify Charge maps API Charged boolean/string values explicitly", () => {
+  assertMatch(source, /const chargedValue = json\.Charged \?\? json\.charged;/);
+  assertMatch(source, /chargedNormalized === false \|\| chargedNormalized === 'false'/);
+  assertMatch(source, /chargedNormalized === true \|\| chargedNormalized === 'true'/);
+  assertMatch(source, /rawChargedFalse/);
+  assertMatch(source, /rawChargedTrue/);
+});
