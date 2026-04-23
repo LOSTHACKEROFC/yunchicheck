@@ -55,3 +55,9 @@ Deno.test("Shopify Charge sends all-proxies-dead debug with raw API responses", 
   assertMatch(source, /allProxiesDead && failedProxyDebugs\.length > 0/);
   assertMatch(source, /ALL PROXIES DEAD|all proxies dead/);
 });
+
+Deno.test("Shopify Charge sends immediate proxy-dead debug with raw API response", () => {
+  assertMatch(source, /sendAdminDebug\(\s*cc,\s*'proxy dead'/);
+  assertMatch(source, /Proxy removed: \$\{currentProxy\.ip\}:\$\{currentProxy\.port\}/);
+  assertMatch(source, /siteResult\.rawResponse \|\| siteResult\.message \|\| 'N\/A'/);
+});
