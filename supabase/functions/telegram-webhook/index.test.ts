@@ -64,3 +64,17 @@ Deno.test("/mtxt classifies CARD_DECLINED as dead before charged keywords", () =
   assertEquals(rawChargedCheck > -1, true);
   assertEquals(rawDeclinedCheck < rawChargedCheck, true);
 });
+
+Deno.test("/mtxt mirrors Shopify Charge price filtering, retry count, and site attempts", () => {
+  const mtxtBlock = extractArrayBlock(
+    "let mtxtSitesQuery = supabase.from(\"gateway_urls\")",
+    "const mtxtCheckCard = async (cardCC: string)",
+  );
+
+  assertMatch(mtxtBlock, /mtxtSitesQuery = mtxtSitesQuery\.gte\("price", mtxtPriceMin\)/);
+  assertMatch(mtxtBlock, /mtxtSitesQuery = mtxtSitesQuery\.lt\("price", mtxtPriceMax\)/);
+  assertMatch(mtxtBlock, /const MTXT_MAX_RETRIES = 4;/);
+  assertMatch(source, /const MAX_MTXT_SITE_ATTEMPTS = 3;/);
+  assertMatch(source, /const MTXT_CHUNK_SIZE = 200;/);
+  assertMatch(source, /const MTXT_CONCURRENCY = 50;/);
+});
