@@ -260,7 +260,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
       const responseText = (apiResponse || apiMessage || '').trim();
       if (isEmptyOrErrorOnly(responseText) && price === 0) {
         apiStatus = 'unknown';
-      } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
+      } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎' || String(json.Response || '').toLowerCase().includes('order complete')) {
         apiStatus = 'live';
         apiMessage = json.message || json.Response || 'Charged';
       } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED') {
@@ -282,7 +282,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
         const combinedText = lower + ' ' + responseLower;
         
         if (combinedText.includes('order_placed') || combinedText.includes('order placed') || 
-            combinedText.includes('order completed') || combinedText.includes('order_completed') ||
+            combinedText.includes('order complete') || combinedText.includes('order_completed') ||
             combinedText.includes('thank you') || combinedText.includes('thankyou') ||
             combinedText.includes('charged') || combinedText.includes('success') || 
             combinedText.includes('approved')) {
@@ -306,7 +306,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
       const lower = rawText.toLowerCase();
       if (isEmptyOrErrorOnly(lower)) {
         apiStatus = 'unknown';
-      } else if (lower.includes('order_placed') || lower.includes('order placed') || lower.includes('order completed') || lower.includes('order_completed') ||
+      } else if (lower.includes('order_placed') || lower.includes('order placed') || lower.includes('order complete') || lower.includes('order_completed') ||
           lower.includes('thank you') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
         apiStatus = 'live';
       } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || 

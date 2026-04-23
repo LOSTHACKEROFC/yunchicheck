@@ -5615,18 +5615,18 @@ Go to yunchicheck.com/dashboard → Proxies
                 if (json.Response) apiResponse = String(json.Response).replace(/<[^>]*>/g, '');
                 apiMessage = json.message || json.msg || json.error || rawText;
 
-                if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
+                if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎' || String(json.Response || '').toLowerCase().includes('order complete')) {
                   apiStatus = 'live'; apiMessage = json.message || json.Response || 'Charged';
                 } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED') {
                   apiStatus = 'dead'; apiMessage = json.message || json.error || json.Response || 'Declined';
                 } else {
                   const combined = ((apiMessage || '') + ' ' + (apiResponse || '')).toLowerCase();
-                  if (combined.includes('order_completed') || combined.includes('order completed') || combined.includes('charged') || combined.includes('success') || combined.includes('approved')) apiStatus = 'live';
+                  if (combined.includes('order_completed') || combined.includes('order complete') || combined.includes('charged') || combined.includes('success') || combined.includes('approved')) apiStatus = 'live';
                   else if (combined.includes('declined') || combined.includes('invalid') || combined.includes('expired') || combined.includes('insufficient') || combined.includes('card_declined') || combined.includes('do_not_honor') || combined.includes('fraud') || combined.includes('otp_required') || combined.includes('3ds') || combined.includes('rejected') || combined.includes('restricted') || combined.includes('generic_decline')) apiStatus = 'dead';
                 }
               } catch {
                 const lower = rawText.toLowerCase();
-                if (lower.includes('order completed') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) apiStatus = 'live';
+                if (lower.includes('order complete') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) apiStatus = 'live';
                 else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('otp_required') || lower.includes('rejected')) apiStatus = 'dead';
               }
 
@@ -5986,18 +5986,18 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (json.Price > 0) { price = json.Price; priceStr = `$${Number(json.Price).toFixed(2)}`; }
               if (json.Response) apiResponse = String(json.Response).replace(/<[^>]*>/g, '');
               apiMessage = json.message || json.msg || json.error || rawText;
-              if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎')
+              if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎' || String(json.Response || '').toLowerCase().includes('order complete'))
                 { apiStatus = 'live'; apiMessage = json.message || json.Response || 'Charged'; }
               else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED')
                 { apiStatus = 'dead'; apiMessage = json.message || json.error || json.Response || 'Declined'; }
               else {
                 const combined = ((apiMessage || '') + ' ' + (apiResponse || '')).toLowerCase();
-                if (combined.includes('order_completed') || combined.includes('charged') || combined.includes('success') || combined.includes('approved')) apiStatus = 'live';
+                if (combined.includes('order_completed') || combined.includes('order complete') || combined.includes('charged') || combined.includes('success') || combined.includes('approved')) apiStatus = 'live';
                 else if (combined.includes('declined') || combined.includes('invalid') || combined.includes('expired') || combined.includes('insufficient') || combined.includes('card_declined') || combined.includes('do_not_honor') || combined.includes('fraud') || combined.includes('otp_required') || combined.includes('3ds') || combined.includes('rejected') || combined.includes('restricted') || combined.includes('generic_decline')) apiStatus = 'dead';
               }
             } catch {
               const lower = rawText.toLowerCase();
-              if (lower.includes('order completed') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) apiStatus = 'live';
+              if (lower.includes('order complete') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) apiStatus = 'live';
               else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('otp_required') || lower.includes('rejected')) apiStatus = 'dead';
             }
             return { status: apiStatus, message: apiMessage, price, priceStr, proxyDead: false, siteDead: false, response: apiResponse };
@@ -6100,7 +6100,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           let statusType: string;
           const respLower = (result.response || '').toLowerCase();
           if (result.status === 'live') {
-            if (respLower.includes('order_completed') || respLower.includes('order completed')) { mshCharged++; statusType = 'live'; }
+            if (respLower.includes('order_completed') || respLower.includes('order complete')) { mshCharged++; statusType = 'live'; }
             else { mshApproved++; statusType = 'approved'; }
           } else if (result.status === 'dead') {
             mshDeclined++; statusType = 'dead';
