@@ -6413,8 +6413,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           }
 
           let mtxtSitesQuery = supabase.from("gateway_urls").select("url, price").not("url", "like", "https://razorpay.me/%").lte("price", 100);
-          if (mtxtPriceMin > 0) mtxtSitesQuery = mtxtSitesQuery.gt("price", mtxtPriceMin);
-          if (mtxtPriceMax < 100) mtxtSitesQuery = mtxtSitesQuery.lte("price", mtxtPriceMax);
+          if (mtxtPriceMin > 0) mtxtSitesQuery = mtxtSitesQuery.gte("price", mtxtPriceMin);
+          if (mtxtPriceMax < 100) mtxtSitesQuery = mtxtSitesQuery.lt("price", mtxtPriceMax);
           else mtxtSitesQuery = mtxtSitesQuery.gt("price", 0);
           const { data: mtxtSites } = await mtxtSitesQuery.order("created_at", { ascending: false });
 
@@ -6436,7 +6436,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           const blockedSet = new Set((blockedUrls || []).map((b: any) => b.url));
 
           const SHOPIFY_API_URL_MTXT = "http://108.165.12.183:8081/";
-          const MTXT_MAX_RETRIES = 2;
+          const MTXT_MAX_RETRIES = 4;
 
           // Load prior state counters if resuming
           const totalCardsOverall = priorState?.totalCards ?? mtxtCards.length;
@@ -6616,7 +6616,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             return result;
           };
 
-          const MAX_MTXT_SITE_ATTEMPTS = 5;
+          const MAX_MTXT_SITE_ATTEMPTS = 3;
           const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
             const availableProxies = [...mtxtProxies].filter(p => !mtxtFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
             if (availableProxies.length === 0) return { status: 'error', response: 'No proxies available', price: '$0.00' };
