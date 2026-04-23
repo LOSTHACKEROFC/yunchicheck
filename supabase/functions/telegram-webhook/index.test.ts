@@ -96,3 +96,11 @@ Deno.test("Shopify bot flows treat API Response TIMEOUT as dead proxy and remove
   assertMatch(source, /\.from\('user_proxies'\)\.delete\(\)\.eq\('id', currentProxy\.id\)\.eq\('user_id', shProfile\.user_id\)/);
   assertMatch(source, /\.from\('user_proxies'\)\.delete\(\)\.eq\('id', proxy\.id\)\.eq\('user_id', mtxtProfile\.user_id\)/);
 });
+
+Deno.test("Shopify bot flows send all-proxies-dead debug with raw API responses", () => {
+  assertMatch(source, /const failedProxyDebugs: string\[\] = \[\];/);
+  assertMatch(source, /const mtxtFailedProxyDebugs: string\[\] = \[\];/);
+  assertMatch(source, /Raw API: \$\{siteResult\.rawResponse \|\| siteResult\.message \|\| 'N\/A'\}/);
+  assertMatch(source, /\/mtxt ALL PROXIES DEAD DEBUG/);
+  assertMatch(source, /RAW API RESPONSES/);
+});

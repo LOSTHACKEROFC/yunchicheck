@@ -5484,6 +5484,7 @@ Go to yunchicheck.com/dashboard → Proxies
 
           const MAX_SITE_ATTEMPTS = Math.min(3, shuffledSites.length);
           const failedProxyIds: string[] = [];
+          const failedProxyDebugs: string[] = [];
           let finalResult: any = null;
           let usedSite = shuffledSites[0];
 
@@ -5613,7 +5614,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
             const availableProxies = shuffledProxies.filter((p: any) => !failedProxyIds.includes(p.id));
             if (availableProxies.length === 0) {
-              finalResult = { status: 'unknown', message: 'All proxies failed', rawResponse: '', price: 0, priceStr: '$0.00', apiResponse: '' };
+              finalResult = { status: 'unknown', message: 'All proxies failed', rawResponse: failedProxyDebugs.join('\n\n'), price: 0, priceStr: '$0.00', apiResponse: '' };
               break;
             }
 
@@ -5626,6 +5627,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
               if (siteResult.proxyDead) {
                 failedProxyIds.push(currentProxy.id);
+                failedProxyDebugs.push(`Proxy ${currentProxy.ip}:${currentProxy.port}\nSite: ${currentSite.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
                 supabase.from('user_proxies').delete().eq('id', currentProxy.id).eq('user_id', shProfile.user_id).then(() => {});
                 continue;
               }
@@ -5684,14 +5686,20 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             await supabase.from("card_checks").insert({ user_id: shProfile.user_id, card_details: cc, gateway: "shopify_charge", status: "completed", result: "unknown" });
           }
 
-          // Send debug for non-dead results
-          if (status !== 'dead' && TELEGRAM_BOT_TOKEN) {
+          const deadProxiesCount = failedProxyIds.length;
+          const allProxiesDead = failedProxyIds.length >= userProxies.length;
+
+          // Send debug for non-dead results and include raw API responses when all proxies died
+          if ((status !== 'dead' || allProxiesDead) && TELEGRAM_BOT_TOKEN) {
             const debugMasked = cc.replace(/^(\d{6})(\d+)(\d{4})/, '$1******$3');
+            const rawDebug = allProxiesDead && failedProxyDebugs.length > 0
+              ? `\n\n━━━━ RAW API RESPONSES ━━━━\n<pre>${escapeHtml(failedProxyDebugs.join('\n\n━━━━ PROXY RAW RESPONSE ━━━━\n\n')).substring(0, 2500)}</pre>`
+              : '';
             fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
               method: "POST", headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 chat_id: SHOPIFY_DEBUG_CHAT,
-                text: `🔧 <b>SHOPIFY /sh DEBUG</b>\n\n📇 <b>Card:</b> <code>${debugMasked}</code>\n👤 <b>User:</b> ${shProfile.username || 'Unknown'}\n🌐 <b>Site:</b> <code>${usedSite.url}</code>\n📊 <b>Status:</b> ${status.toUpperCase()}\n💬 <b>Response:</b> ${String(apiMessage).substring(0, 300)}\n\n🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
+                text: `🔧 <b>SHOPIFY /sh DEBUG</b>\n\n📇 <b>Card:</b> <code>${debugMasked}</code>\n👤 <b>User:</b> ${escapeHtml(shProfile.username || 'Unknown')}\n🌐 <b>Site:</b> <code>${escapeHtml(usedSite.url)}</code>\n📊 <b>Status:</b> ${allProxiesDead ? 'ALL PROXIES DEAD' : status.toUpperCase()}\n💬 <b>Response:</b> ${escapeHtml(String(apiMessage).substring(0, 300))}${rawDebug}\n\n🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
                 parse_mode: "HTML",
               }),
             }).catch(() => {});
@@ -5709,9 +5717,6 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           // Re-fetch real-time balance from DB
           const { data: shUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", shProfile.user_id).single();
           const newBalance = shUpdatedProfile?.credits ?? (shProfile.credits - creditCost);
-          const deadProxiesCount = failedProxyIds.length;
-          const allProxiesDead = failedProxyIds.length >= userProxies.length;
-
           let resultMsg = `
 🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
 
@@ -6473,6 +6478,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
           const mtxtFormatProxy = (p: any) => p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
           const mtxtFailedProxyIds: string[] = [];
+          const mtxtFailedProxyDebugs: string[] = [];
           const mtxtLiveSites = [...mtxtSites].filter(s => !blockedSet.has(s.url)).sort(() => Math.random() - 0.5);
           const mtxtDeadSiteUrls = new Set<string>();
           const mtxtRemoveSite = (url: string) => {
@@ -6661,7 +6667,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
               const currentProxies = availableProxies.filter(p => !mtxtFailedProxyIds.includes(p.id));
               if (currentProxies.length === 0) {
-                finalResult = { status: 'error', response: 'All proxies dead', price: '$0.00' };
+                finalResult = { status: 'error', response: 'All proxies dead', price: '$0.00', rawResponse: mtxtFailedProxyDebugs.join('\n\n') };
                 break;
               }
               const proxy = currentProxies[Math.floor(Math.random() * currentProxies.length)];
@@ -6669,6 +6675,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
               if (siteResult.proxyDead) {
                 mtxtFailedProxyIds.push(proxy.id);
+                mtxtFailedProxyDebugs.push(`Proxy ${proxy.ip}:${proxy.port}\nSite: ${site.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
                 supabase.from('user_proxies').delete().eq('id', proxy.id).eq('user_id', mtxtProfile.user_id).then(() => {});
                 if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
                 finalResult = siteResult; break;
@@ -6689,6 +6696,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               const isProxyError = !isValidApiResponse && (rl.includes('407') || rl.includes('proxy authentication') || rl.includes('bad proxy'));
               if (isProxyError) {
                 mtxtFailedProxyIds.push(proxy.id);
+                mtxtFailedProxyDebugs.push(`Proxy ${proxy.ip}:${proxy.port}\nSite: ${site.url}\nRaw API: ${siteResult.rawResponse || siteResult.message || 'N/A'}`);
                 supabase.from('user_proxies').delete().eq('id', proxy.id).eq('user_id', mtxtProfile.user_id).then(() => {});
                 if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
                 finalResult = siteResult; break;
@@ -6843,6 +6851,19 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
             if (mtxtErrorCards.length > 0) mtxtFinalMsg += `⚠️ <b>${mtxtErrorCards.length} cards</b> had errors — use Recheck below\n`;
             if (mtxtFailedProxyIds.length > 0) mtxtFinalMsg += `🔴 <b>${mtxtFailedProxyIds.length} proxies</b> skipped for this run\n`;
+
+            if (mtxtFailedProxyIds.length >= (mtxtProxies?.length || 0) && mtxtFailedProxyDebugs.length > 0 && TELEGRAM_BOT_TOKEN) {
+              const rawDebug = escapeHtml(mtxtFailedProxyDebugs.join('\n\n━━━━ PROXY RAW RESPONSE ━━━━\n\n')).substring(0, 3000);
+              fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  chat_id: "-1003848532661",
+                  text: `🔧 <b>/mtxt ALL PROXIES DEAD DEBUG</b>\n\n👤 <b>User:</b> ${escapeHtml(mtxtProfile.username || 'Unknown')}\n📊 <b>Dead proxies:</b> ${mtxtFailedProxyIds.length}/${mtxtProxies?.length || 0}\n\n━━━━ RAW API RESPONSES ━━━━\n<pre>${rawDebug}</pre>\n\n🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
+                  parse_mode: "HTML",
+                }),
+              }).catch(() => {});
+            }
 
             const finalButtons: any[][] = [];
             if (mtxtErrorCards.length > 0) {
