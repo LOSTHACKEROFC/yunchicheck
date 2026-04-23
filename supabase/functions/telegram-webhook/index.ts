@@ -304,6 +304,78 @@ function extractCardsFromText(text: string): string[] {
   return cards;
 }
 
+type ParsedProxy = { ip: string; port: string; username?: string; password?: string };
+
+function parseProxyLine(raw: string): ParsedProxy | null {
+  const parts = raw.trim().split(":");
+  if (parts.length !== 2 && parts.length !== 4) return null;
+
+  const [ip, port, username, password] = parts;
+  const ipLikeHost = /^[a-zA-Z0-9.-]{3,253}$/.test(ip) && ip.includes(".");
+  if (!ipLikeHost || !/^\d{2,5}$/.test(port)) return null;
+
+  const portNumber = Number(port);
+  if (portNumber < 1 || portNumber > 65535) return null;
+
+  return {
+    ip,
+    port,
+    username: username || undefined,
+    password: password || undefined,
+  };
+}
+
+function extractProxiesFromText(text: string): ParsedProxy[] {
+  const proxyTokens = text
+    .replace(/^\/setpx(@\w+)?/i, "")
+    .split(/[\s,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const seen = new Set<string>();
+  const proxies: ParsedProxy[] = [];
+
+  for (const token of proxyTokens) {
+    const proxy = parseProxyLine(token);
+    if (!proxy) continue;
+
+    const key = `${proxy.ip}:${proxy.port}:${proxy.username || ""}:${proxy.password || ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    proxies.push(proxy);
+  }
+
+  return proxies;
+}
+
+async function checkProxyBatch(proxies: ParsedProxy[]): Promise<(ParsedProxy & { status: "live" | "dead" })[]> {
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/check-proxy`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify({ proxies }),
+    });
+
+    if (!response.ok) {
+      await response.text();
+      return proxies.map((proxy) => ({ ...proxy, status: "dead" as const }));
+    }
+
+    const data = await response.json();
+    const results = Array.isArray(data?.results) ? data.results : [];
+    return proxies.map((proxy) => {
+      const result = results.find((item: any) => item.ip === proxy.ip && item.port === proxy.port);
+      return { ...proxy, status: result?.status === "live" ? "live" : "dead" };
+    });
+  } catch (error) {
+    console.error("/setpx proxy check failed:", error);
+    return proxies.map((proxy) => ({ ...proxy, status: "dead" as const }));
+  }
+}
+
 
 
 function formatTimeAgo(date: Date): string {
