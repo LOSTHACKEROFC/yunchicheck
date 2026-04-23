@@ -266,50 +266,6 @@ function escapeHtml(text: string | null | undefined): string {
     .replace(/>/g, "&gt;");
 }
 
-const PREMIUM_EMOJI_IDS: Record<string, string> = {
-  "✅": "6023660820544623088",
-  "🔥": "5999340396432333728",
-  "❌": "6037570896766438989",
-  "⚡": "6026367225466720832",
-  "💳": "5971944878815317190",
-  "💠": "5971837723676249096",
-  "📝": "6023660820544623088",
-  "🌐": "6026367225466720832",
-  "🎯": "5974235702701853774",
-  "🤖": "6057466460886799210",
-  "🤵": "4949560993840629085",
-  "💰": "5971944878815317190",
-  "⏸️": "6001440193058444284",
-  "▶️": "6285315214673975495",
-  "🛑": "5420323339723881652",
-  "📊": "5971837723676249096",
-  "📦": "6066395745139824604",
-  "📋": "5974235702701853774",
-  "🔄": "5971837723676249096",
-  "⏳": "5971837723676249096",
-  "🚀": "6282977077427702833",
-  "⚠️": "5420323339723881652",
-  "💎": "6023660820544623088",
-};
-
-function premiumEmoji(text: string | null | undefined): string {
-  if (!text) return "";
-  const placeholders: { token: string; emoji: string; emojiId: string }[] = [];
-  let result = text;
-
-  Object.entries(PREMIUM_EMOJI_IDS).forEach(([emoji, emojiId], index) => {
-    const token = `\u0000PE${index.toString().padStart(2, "0")}\u0000`;
-    placeholders.push({ token, emoji, emojiId });
-    result = result.replaceAll(emoji, token);
-  });
-
-  for (const { token, emoji, emojiId } of placeholders) {
-    result = result.replaceAll(token, `<tg-emoji emoji-id="${emojiId}">${emoji}</tg-emoji>`);
-  }
-
-  return result;
-}
-
 // ═══════════════════════════════════════════════════════════
 // UNIVERSAL CARD PARSER - supports all common formats
 // ═══════════════════════════════════════════════════════════
@@ -380,7 +336,7 @@ async function sendTelegramMessage(
   try {
     const body: Record<string, unknown> = {
       chat_id: chatId,
-      text: premiumEmoji(message),
+      text: message,
       parse_mode: "HTML",
     };
     if (replyMarkup) body.reply_markup = replyMarkup;
@@ -418,7 +374,7 @@ async function sendTelegramMessageWithId(
   try {
     const body: Record<string, unknown> = {
       chat_id: chatId,
-      text: premiumEmoji(message),
+      text: message,
       parse_mode: "HTML",
     };
     if (replyMarkup) body.reply_markup = replyMarkup;
@@ -458,7 +414,7 @@ async function editTelegramMessage(
     const body: Record<string, unknown> = {
       chat_id: chatId,
       message_id: messageId,
-      text: premiumEmoji(message),
+      text: message,
       parse_mode: "HTML",
     };
     if (replyMarkup) body.reply_markup = replyMarkup;
@@ -517,7 +473,7 @@ async function editMessageCaption(
     const body: Record<string, unknown> = {
       chat_id: chatId,
       message_id: messageId,
-      caption: premiumEmoji(caption),
+      caption: caption,
       parse_mode: "HTML",
     };
     
@@ -601,7 +557,7 @@ async function sendTelegramDocument(
     formData.append("document", blob, filename);
     
     if (caption) {
-      formData.append("caption", premiumEmoji(caption));
+      formData.append("caption", caption);
       formData.append("parse_mode", "HTML");
     }
 
