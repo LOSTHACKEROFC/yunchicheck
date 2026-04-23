@@ -45,3 +45,22 @@ Deno.test("/mtxt recheck keeps the same price selection as the initial step", ()
   ]);
   assertMatch(source, /callback_data: `mtxt_\$\{g\.min\}_\$\{g\.max\}_\$\{newBulkId\}`/);
 });
+
+Deno.test("/mtxt classifies CARD_DECLINED as dead before charged keywords", () => {
+  const mtxtParserBlock = extractArrayBlock(
+    "const combinedText = ((json.status || '') + ' ' + responseText).toLowerCase();",
+    "return { status: apiStatus, message: apiMessage, price, priceStr, proxyDead: false, siteDead: false, response: apiResponse, rawResponse: rawText };",
+  );
+
+  const declinedCheck = mtxtParserBlock.indexOf("combinedText.includes('card_declined')");
+  const chargedCheck = mtxtParserBlock.indexOf("json.status === 'CHARGED'");
+  const rawDeclinedCheck = mtxtParserBlock.indexOf("lower.includes('card_declined')");
+  const rawChargedCheck = mtxtParserBlock.indexOf("lower.includes('charged')");
+
+  assertEquals(declinedCheck > -1, true);
+  assertEquals(chargedCheck > -1, true);
+  assertEquals(declinedCheck < chargedCheck, true);
+  assertEquals(rawDeclinedCheck > -1, true);
+  assertEquals(rawChargedCheck > -1, true);
+  assertEquals(rawDeclinedCheck < rawChargedCheck, true);
+});
