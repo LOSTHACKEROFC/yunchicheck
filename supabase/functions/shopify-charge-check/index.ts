@@ -18,6 +18,7 @@ const buildApiUrl = (cc: string, site: string, proxy: string) =>
 
 const badResponses = [
   "Site not supported",
+  "INVALID_PURCHASE_TYPE",
   "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH",
   "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED",
   "Payment method not available",
@@ -260,10 +261,10 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
       const responseText = (apiResponse || apiMessage || '').trim();
       if (isEmptyOrErrorOnly(responseText) && price === 0) {
         apiStatus = 'unknown';
-      } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎' || String(json.Response || '').toLowerCase().includes('order complete')) {
+      } else if (json.Charged === true || String(json.Charged).toLowerCase() === 'true' || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎' || String(json.Response || '').toLowerCase().includes('order complete')) {
         apiStatus = 'live';
         apiMessage = json.message || json.Response || 'Charged';
-      } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED') {
+      } else if (json.Charged === false || String(json.Charged).toLowerCase() === 'false' || json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED' || json.Response === 'INVALID_PURCHASE_TYPE') {
         apiStatus = 'dead';
         apiMessage = json.message || json.error || json.Response || 'Declined';
       } else if (json.status === 'error') {
@@ -293,7 +294,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
                    combinedText.includes('ds_required') || combinedText.includes('3ds') || combinedText.includes('3d_secure') ||
                    combinedText.includes('rejected') || combinedText.includes('otp_required') || combinedText.includes('otp required') ||
                    combinedText.includes('pickup_card') || combinedText.includes('lost_card') || combinedText.includes('stolen_card') ||
-                   combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline')) {
+                   combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline') || combinedText.includes('invalid_purchase_type') || combinedText.includes('charged":false') || combinedText.includes('charged: false')) {
           apiStatus = 'dead';
         } else if (combinedText.includes('failed') || combinedText.includes('error')) {
           const substantive = combinedText.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
@@ -311,7 +312,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
         apiStatus = 'live';
       } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || 
                  lower.includes('insufficient') || lower.includes('otp_required') || lower.includes('otp required') ||
-                 lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) {
+                 lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected') || lower.includes('invalid_purchase_type') || lower.includes('charged":false') || lower.includes('charged: false')) {
         apiStatus = 'dead';
       } else if (lower.includes('failed') || lower.includes('error')) {
         const substantive = lower.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
