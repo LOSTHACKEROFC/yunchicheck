@@ -186,7 +186,8 @@ serve(async (req) => {
                  lowerMsg.includes("expired") || lowerMsg.includes("incorrect") || lowerMsg.includes("do not honor") ||
                  lowerMsg.includes("card number") || lowerMsg.includes("security code") || lowerMsg.includes("lost") ||
                  lowerMsg.includes("stolen") || lowerMsg.includes("restricted") || lowerMsg.includes("pickup") ||
-                 lowerMsg.includes("payer_cannot_pay") || lowerMsg.includes("unprocessable")) {
+                 lowerMsg.includes("payer_cannot_pay") || lowerMsg.includes("unprocessable") ||
+                 lowerMsg.includes("invalid_purchase_type")) {
           computedStatus = "dead";
           apiMessage = fullMsg || "Payment Failed";
         }
@@ -211,7 +212,8 @@ serve(async (req) => {
           computedStatus = "live";
           apiMessage = responseText.trim() || "Charged $1.00";
         } else if (lower.includes("declined") || lower.includes("failed") || lower.includes("dead") ||
-                   lower.includes("insufficient") || lower.includes("expired") || lower.includes("do not honor")) {
+                   lower.includes("insufficient") || lower.includes("expired") || lower.includes("do not honor") ||
+                   lower.includes("invalid_purchase_type")) {
           computedStatus = "dead";
           apiMessage = responseText.trim() || "Payment Failed";
         } else if (lower.length > 0) {
