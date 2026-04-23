@@ -6554,8 +6554,12 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 apiMessage = json.message || json.msg || json.error || rawText;
 
                 const responseText = (apiResponse || apiMessage || '').trim();
+                const combinedText = ((json.status || '') + ' ' + responseText).toLowerCase();
                 if (mtxtIsEmptyOrErrorOnly(responseText) && price === 0) {
                   apiStatus = 'unknown';
+                } else if (combinedText.includes('declined') || combinedText.includes('invalid') || combinedText.includes('expired') || combinedText.includes('insufficient') || combinedText.includes('card_declined') || combinedText.includes('incorrect') || combinedText.includes('do_not_honor') || combinedText.includes('fraud') || combinedText.includes('not accepted') || combinedText.includes('ds_required') || combinedText.includes('3ds') || combinedText.includes('3d_secure') || combinedText.includes('rejected') || combinedText.includes('otp_required') || combinedText.includes('otp required') || combinedText.includes('pickup_card') || combinedText.includes('lost_card') || combinedText.includes('stolen_card') || combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline')) {
+                  apiStatus = 'dead';
+                  apiMessage = json.message || json.error || json.Response || 'Declined';
                 } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
                   apiStatus = 'live';
                   apiMessage = json.message || json.Response || 'Charged';
