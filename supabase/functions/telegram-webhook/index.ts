@@ -5406,11 +5406,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED", "Payment method not available",
           "ARTIFACT_DISSATISFACTION", "VALIDATION_CUSTOM", '"Gateway":"Authorize.net"',
         ];
-        const shProxyDeadIndicators = [
-          "proxy dead", "proxy error", "proxy authentication", "connection refused",
-          "proxy connect", "tunneling socket", "proxy_error", "bad proxy",
-          "cannot connect to host", "socks", "econnrefused", "econnreset",
-        ];
+        const shProxyDeadIndicators = ["proxy dead", "proxy authentication", "proxy_error", "bad proxy", "could not resolve proxy", "proxy auth", "407 proxy authentication"];
+        const shProxyTransientIndicators = ["proxy error", "connection refused", "proxy connect", "tunneling socket", "cannot connect to host", "socks", "econnrefused", "econnreset", "failed to perform", "getaddrinfo", "tokenize_fail", "no_session_token"];
         const shSiteDeadIndicators = ["site dead"];
         const shUserAgents = [
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36',
@@ -5503,7 +5500,7 @@ Go to yunchicheck.com/dashboard → Proxies
               const rawLower = rawText.toLowerCase();
 
               // Transient errors
-              if (rawLower.includes('failed to perform') || rawLower.includes('getaddrinfo') || rawLower.includes('could not resolve proxy') || rawLower.includes('tokenize_fail') || rawLower.includes('no_session_token')) {
+              if (shProxyTransientIndicators.some(ind => rawLower.includes(ind))) {
                 return { status: 'unknown', message: 'Transient error', rawResponse: rawText, price: 0, priceStr: '$0.00', proxyDead: false, siteDead: false, apiResponse: '' };
               }
               // Proxy dead
@@ -5620,7 +5617,6 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
               if (siteResult.proxyDead) {
                 failedProxyIds.push(currentProxy.id);
-                supabase.from('user_proxies').delete().eq('id', currentProxy.id).then(() => {});
                 continue;
               }
               if (siteResult.siteDead) {
