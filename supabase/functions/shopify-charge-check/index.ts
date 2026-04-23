@@ -258,8 +258,18 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
 
       // If the API returned an empty/meaningless response, treat as unknown
       const responseText = (apiResponse || apiMessage || '').trim();
+      const declineSignals = [
+        'declined', 'card_declined', 'invalid', 'expired', 'insufficient', 'incorrect',
+        'do_not_honor', 'fraud', 'not accepted', 'ds_required', '3ds', '3d_secure',
+        'rejected', 'otp_required', 'otp required', 'pickup_card', 'lost_card',
+        'stolen_card', 'restricted', 'not_permitted', 'generic_decline', 'failed',
+      ];
+
       if (isEmptyOrErrorOnly(responseText) && price === 0) {
         apiStatus = 'unknown';
+      } else if (declineSignals.some(signal => combinedText.includes(signal))) {
+        apiStatus = 'dead';
+        apiMessage = json.message || json.error || json.Response || 'Declined';
       } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
         apiStatus = 'live';
         apiMessage = json.message || json.Response || 'Charged';
@@ -281,20 +291,14 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
         const responseLower = (apiResponse || '').toLowerCase();
         const combinedText = lower + ' ' + responseLower;
         
-        if (combinedText.includes('order_placed') || combinedText.includes('order placed') || 
+        if (declineSignals.some(signal => combinedText.includes(signal))) {
+          apiStatus = 'dead';
+        } else if (combinedText.includes('order_placed') || combinedText.includes('order placed') || 
             combinedText.includes('order completed') || combinedText.includes('order_completed') ||
             combinedText.includes('thank you') || combinedText.includes('thankyou') ||
             combinedText.includes('charged') || combinedText.includes('success') || 
             combinedText.includes('approved')) {
           apiStatus = 'live';
-        } else if (combinedText.includes('declined') || combinedText.includes('invalid') || combinedText.includes('expired') || 
-                   combinedText.includes('insufficient') || combinedText.includes('card_declined') || combinedText.includes('incorrect') ||
-                   combinedText.includes('do_not_honor') || combinedText.includes('fraud') || combinedText.includes('not accepted') ||
-                   combinedText.includes('ds_required') || combinedText.includes('3ds') || combinedText.includes('3d_secure') ||
-                   combinedText.includes('rejected') || combinedText.includes('otp_required') || combinedText.includes('otp required') ||
-                   combinedText.includes('pickup_card') || combinedText.includes('lost_card') || combinedText.includes('stolen_card') ||
-                   combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline')) {
-          apiStatus = 'dead';
         } else if (combinedText.includes('failed') || combinedText.includes('error')) {
           const substantive = combinedText.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
           if (substantive.length > 3) {
@@ -306,13 +310,16 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
       const lower = rawText.toLowerCase();
       if (isEmptyOrErrorOnly(lower)) {
         apiStatus = 'unknown';
+      } else if (lower.includes('declined') || lower.includes('card_declined') || lower.includes('invalid') || lower.includes('expired') || 
+          lower.includes('insufficient') || lower.includes('incorrect') || lower.includes('do_not_honor') || lower.includes('fraud') ||
+          lower.includes('not accepted') || lower.includes('ds_required') || lower.includes('3ds') || lower.includes('3d_secure') ||
+          lower.includes('rejected') || lower.includes('otp_required') || lower.includes('otp required') || lower.includes('pickup_card') ||
+          lower.includes('lost_card') || lower.includes('stolen_card') || lower.includes('restricted') || lower.includes('not_permitted') ||
+          lower.includes('generic_decline') || lower.includes('failed')) {
+        apiStatus = 'dead';
       } else if (lower.includes('order_placed') || lower.includes('order placed') || lower.includes('order completed') || lower.includes('order_completed') ||
           lower.includes('thank you') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
         apiStatus = 'live';
-      } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || 
-                 lower.includes('insufficient') || lower.includes('otp_required') || lower.includes('otp required') ||
-                 lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) {
-        apiStatus = 'dead';
       } else if (lower.includes('failed') || lower.includes('error')) {
         const substantive = lower.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
         if (substantive.length > 3) {
