@@ -3245,14 +3245,17 @@ const Gateways = () => {
     let completedCount = 0;
 
     if (isShopifyBulk) {
-      // HealthCheck-style session model: 50 cards queued, roll into the next session after 49 completions
+      // Session model: 50 cards queued. Start NEXT session early after 49 complete,
+      // but track outstanding promises so the final session waits for ALL cards (incl. the 50th).
       const SHOPIFY_CONCURRENCY = 50;
       const MIN_COMPLETE_BEFORE_NEXT = 49;
       let cardIndex = 0;
+      const outstandingPromises: Promise<void>[] = [];
 
       while (cardIndex < affordableCards.length && !bulkAbortRef.current) {
         const batchEnd = Math.min(cardIndex + SHOPIFY_CONCURRENCY, affordableCards.length);
         const batchIndices = Array.from({ length: batchEnd - cardIndex }, (_, i) => cardIndex + i);
+        const isLastBatch = batchEnd >= affordableCards.length;
 
         let batchCompleted = 0;
         const batchDonePromise = new Promise<void>((resolve) => {
@@ -3285,17 +3288,29 @@ const Gateways = () => {
               }
             }
           });
+          // Track every promise so we can await stragglers (e.g., the 50th card) after the loop
+          promises.forEach(p => outstandingPromises.push(p.catch(() => {})));
           // Safety: resolve when ALL are done regardless
           Promise.all(promises).then(() => resolve());
         });
 
-        await batchDonePromise;
+        // For the last batch, wait for ALL cards to finish (no early-resolve at 49/50)
+        if (isLastBatch) {
+          await Promise.all(outstandingPromises);
+        } else {
+          await batchDonePromise;
+        }
         cardIndex = batchEnd;
 
         // Small gap between sessions so the backend can recycle workers cleanly
         if (cardIndex < affordableCards.length && !bulkAbortRef.current) {
           await new Promise(r => setTimeout(r, 600));
         }
+      }
+
+      // Final safety: ensure ALL outstanding cards from prior sessions also completed
+      if (!bulkAbortRef.current) {
+        await Promise.all(outstandingPromises);
       }
     } else {
       // Other gateways: worker-pool model
