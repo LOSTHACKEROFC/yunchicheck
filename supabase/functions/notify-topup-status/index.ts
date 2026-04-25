@@ -1,6 +1,6 @@
-import { Resend } from "npm:resend@2.0.0";
+import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { PDFDocument, rgb, StandardFonts } from "npm:pdf-lib@1.17.1";
+import { PDFDocument, rgb, StandardFonts } from "https://esm.sh/pdf-lib@1.17.1";
 
 // Declare EdgeRuntime for Supabase edge functions
 declare const EdgeRuntime: {
