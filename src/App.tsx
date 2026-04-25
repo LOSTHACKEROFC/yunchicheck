@@ -28,6 +28,7 @@ const TopupUser = lazy(() => import("./pages/dashboard/TopupUser"));
 const CreditUsage = lazy(() => import("./pages/dashboard/CreditUsage"));
 const BuyCredits = lazy(() => import("./pages/dashboard/BuyCredits"));
 const ImportUrls = lazy(() => import("./pages/dashboard/ImportUrls"));
+const ApiTester = lazy(() => import("./pages/dashboard/ApiTester"));
 const BannedAccount = lazy(() => import("./pages/BannedAccount"));
 const VerifyDeactivation = lazy(() => import("./pages/VerifyDeactivation"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -89,6 +90,7 @@ function AppContent() {
           <Route path="admin/panel" element={<AdminPanel />} />
           <Route path="topupuser" element={<TopupUser />} />
           <Route path="import-urls" element={<ImportUrls />} />
+          <Route path="admin/api-tester" element={<ApiTester />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
