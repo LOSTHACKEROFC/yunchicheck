@@ -52,7 +52,6 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useBulkCheck } from "@/contexts/BulkCheckContext";
-import { trackCurrentSession } from "@/hooks/useSessionTracker";
 import UserProxyManager from "@/components/UserProxyManager";
 import ShopifyPriceGroupSelector from "@/components/ShopifyPriceGroupSelector";
 
@@ -325,7 +324,7 @@ const Gateways = () => {
   const [bulkStartTime, setBulkStartTime] = useState<number | null>(null);
   const [bulkEstimatedTime, setBulkEstimatedTime] = useState<string>("");
   const [workerCount, setWorkerCount] = useState(5); // UI display (3-10 range), backend runs double (6-20)
-  const [bulkResultFilter, setBulkResultFilter] = useState<"all" | "live" | "dead">("all"); // Filter for bulk results
+  const [bulkResultFilter, setBulkResultFilter] = useState<"all" | "live" | "dead" | "unknown">("all"); // Filter for bulk results
   const bulkAbortRef = useRef(false);
   const bulkPauseRef = useRef(false);
 
@@ -337,7 +336,6 @@ const Gateways = () => {
   const shopifyWarmupPromiseRef = useRef<Promise<void> | null>(null);
   const shopifyInvokeActiveRef = useRef(0);
   const shopifyInvokeQueueRef = useRef<Array<() => void>>([]);
-  const shopifyProxyWarningShownRef = useRef(false);
   const SHOPIFY_WARMUP_TTL_MS = 2 * 60 * 1000;
   const SHOPIFY_MAX_PARALLEL_INVOCATIONS = 24;
 
@@ -1941,13 +1939,12 @@ const Gateways = () => {
         const bodyCode = typeof errorBody?.code === 'string' ? errorBody.code.toLowerCase() : '';
         const bodyMessage = typeof errorBody?.message === 'string' ? errorBody.message.toLowerCase() : '';
 
-        // 400 can be either invalid card data or an infrastructure issue like missing proxies/sites
+        // 400 = card format/validation error — not retryable, mark as dead
         if (statusCode === 400) {
-          const errMsg = errorBody?.error || errorBody?.message || error.message || 'Invalid request';
-          const isCardValidationError = /format|invalid\s+card|invalid\s+cvc|invalid\s+expiry|cardnumber\|mm\|yy\|cvc/i.test(String(errMsg));
+          const errMsg = errorBody?.error || errorBody?.message || error.message || 'Invalid card format';
           return {
-            status: isCardValidationError ? "dead" : "unknown",
-            apiStatus: isCardValidationError ? "DECLINED" : "ERROR",
+            status: "dead",
+            apiStatus: "DECLINED",
             apiMessage: errMsg,
             rawResponse: JSON.stringify(errorBody || error),
           };
@@ -2155,22 +2152,6 @@ const Gateways = () => {
     return "unknown";
   };
 
-  const ensureSessionBeforeChecking = async () => {
-    const trackingResult = await trackCurrentSession();
-
-    if (trackingResult.ok) {
-      return true;
-    }
-
-    if (trackingResult.authError) {
-      toast.error("Session expired. Please sign in again.");
-      return false;
-    }
-
-    console.warn("[CHECK] Session creation before checking failed:", trackingResult.message);
-    return true;
-  };
-
   const performCheck = async () => {
     if (!selectedGateway) {
       toast.error("Please select a gateway");
@@ -2189,9 +2170,6 @@ const Gateways = () => {
       toast.error("Please login to continue");
       return;
     }
-
-    const sessionReady = await ensureSessionBeforeChecking();
-    if (!sessionReady) return;
 
     setChecking(true);
     setResult(null);
@@ -2924,9 +2902,6 @@ const Gateways = () => {
       return;
     }
 
-    const sessionReady = await ensureSessionBeforeChecking();
-    if (!sessionReady) return;
-
     // Store original lines for removal tracking
     const originalLines = bulkInput.trim().split('\n').filter(line => line.trim());
 
@@ -2943,7 +2918,6 @@ const Gateways = () => {
     bulkPauseRef.current = false;
     pendingResultsRef.current = [];
     bulkStatsRef.current = { completed: 0, total: affordableCards.length, startTime: Date.now() };
-    shopifyProxyWarningShownRef.current = false;
     
     // Enable background mode to prevent browser throttling when minimized
     startBackgroundMode();
@@ -3010,26 +2984,6 @@ const Gateways = () => {
     const processCard = async (cardIndex: number): Promise<BulkResult | null> => {
       if (bulkAbortRef.current) return null;
 
-      const cardData = affordableCards[cardIndex];
-      const fullCardStr = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
-      const displayCardStr = cardData.originalCvv
-        ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
-        : `${cardData.card}|${cardData.month}|${cardData.year}`;
-      const { brand, brandColor } = detectCardBrandLocal(cardData.card);
-      const buildUnknownBulkResult = (message: string, apiResponse?: string, rawResponse?: string): BulkResult => ({
-        _id: crypto.randomUUID(),
-        status: "unknown",
-        message,
-        gateway: selectedGateway.name,
-        cardMasked: maskCard(cardData.card),
-        fullCard: fullCardStr,
-        displayCard: displayCardStr,
-        brand,
-        brandColor,
-        apiResponse,
-        rawResponse,
-      });
-
       while (bulkPauseRef.current && !bulkAbortRef.current) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
@@ -3081,16 +3035,14 @@ const Gateways = () => {
         }
         // Transient error — skip this card but continue processing others
         console.warn('[BULK] Skipping card due to credit deduction error, continuing...');
-        return buildUnknownBulkResult(
-          "Credit deduction error",
-          "ERROR: Credit deduction failed",
-          JSON.stringify({ error: 'Credit deduction failed before check started' })
-        );
+        return null;
       }
       
       remainingCredits = upfrontDeduct.newCredits;
       totalCreditsDeducted += 1;
       setUserCredits(upfrontDeduct.newCredits);
+
+      const cardData = affordableCards[cardIndex];
 
       try {
         // Use real API for auth gateways and PAYGATE, simulation for others
@@ -3136,24 +3088,23 @@ const Gateways = () => {
           gatewayResponse = await checkCardViaRazorpay(cardData.card, cardData.month, cardData.year, cardData.cvv, site);
         } else if (selectedGateway.id === "shopify_charge") {
           gatewayResponse = await checkCardViaShopify(cardData.card, cardData.month, cardData.year, cardData.cvv);
-          // Count proxy exhaustion as an unknown result instead of aborting the full batch
+          // Stop bulk if all user proxies are dead
           if ((gatewayResponse as any)?.allProxiesDead) {
-            if (!shopifyProxyWarningShownRef.current) {
-              shopifyProxyWarningShownRef.current = true;
-              toast.warning("⚠️ Proxies are failing — continuing and marking these cards as unknown.", {
-                duration: 10000,
-                description: "Add fresh working proxies in Proxy Manager to improve the remaining checks.",
-              });
-            }
-            return buildUnknownBulkResult(
-              "Proxy error",
-              `${gatewayResponse.apiStatus}: ${gatewayResponse.apiMessage}`,
-              gatewayResponse.rawResponse || JSON.stringify(gatewayResponse)
-            );
+            bulkAbortRef.current = true;
+            toast.error("⚠️ All proxies are dead! Add new valid proxies to restart checking.", {
+              duration: 10000,
+              description: "Go to Proxy Manager and add working proxies before continuing.",
+            });
+            return null;
           }
         }
         
         const checkStatus = gatewayResponse ? gatewayResponse.status : await simulateCheck();
+
+        const fullCardStr = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
+        const displayCardStr = cardData.originalCvv 
+          ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
+          : `${cardData.card}|${cardData.month}|${cardData.year}`;
         
         // Deduct 1 extra credit for LIVE/CHARGED results (1 already deducted upfront) — with retry
         if (checkStatus === "live" || checkStatus === "killed") {
@@ -3186,6 +3137,8 @@ const Gateways = () => {
             card_details: fullCardStr
           });
 
+        const { brand, brandColor } = detectCardBrandLocal(cardData.card);
+        
         // Build API response string for display
         const isOrderPlaced = gatewayResponse && (
           (gatewayResponse.apiMessage || '').toUpperCase().includes('ORDER_PLACED') ||
@@ -3269,11 +3222,21 @@ const Gateways = () => {
 
       } catch (error) {
         console.error('Bulk check error:', error);
-        return buildUnknownBulkResult(
-          "Error",
-          error instanceof Error ? error.message : 'Unknown error',
-          JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' })
-        );
+        const displayCardStr = cardData.originalCvv 
+          ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
+          : `${cardData.card}|${cardData.month}|${cardData.year}`;
+        const { brand: errorBrand, brandColor: errorBrandColor } = detectCardBrandLocal(cardData.card);
+        return {
+          _id: crypto.randomUUID(),
+          status: "unknown" as const,
+          message: "Error",
+          gateway: selectedGateway.name,
+          cardMasked: maskCard(cardData.card),
+          fullCard: `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`,
+          displayCard: displayCardStr,
+          brand: errorBrand,
+          brandColor: errorBrandColor
+        };
       }
     };
 
@@ -3723,11 +3686,7 @@ const Gateways = () => {
   const deadCount = useMemo(() => bulkResults.filter(r => r.status === "dead").length, [bulkResults]);
   const unknownCount = useMemo(() => bulkResults.filter(r => r.status === "unknown").length, [bulkResults]);
   const filteredBulkResults = useMemo(() => 
-    bulkResults.filter(r => {
-      // Never show unknown/error cards as result cards — they are only counted
-      if (r.status === "unknown") return false;
-      return bulkResultFilter === "all" || r.status === bulkResultFilter;
-    }),
+    bulkResults.filter(r => bulkResultFilter === "all" || r.status === bulkResultFilter),
     [bulkResults, bulkResultFilter]
   );
 
@@ -4863,12 +4822,15 @@ const Gateways = () => {
                       >
                         Dead ({deadCount})
                       </Button>
-                      {/* Unknown count shown as badge only, no filter button */}
-                      {unknownCount > 0 && (
-                        <Badge variant="outline" className="h-6 px-2 text-[10px] text-yellow-500 border-yellow-500/50">
-                          Errors ({unknownCount})
-                        </Badge>
-                      )}
+                      <Button
+                        variant={bulkResultFilter === "unknown" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setBulkResultFilter("unknown")}
+                        className={`h-6 px-2 text-[10px] ${bulkResultFilter === "unknown" ? "bg-yellow-600 hover:bg-yellow-700" : "text-yellow-500 border-yellow-500/50 hover:bg-yellow-500/10"}`}
+                        disabled={unknownCount === 0}
+                      >
+                        Unknown ({unknownCount})
+                      </Button>
                     </div>
                   </div>
                 </div>

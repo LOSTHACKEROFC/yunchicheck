@@ -18,8 +18,6 @@ const buildApiUrl = (cc: string, site: string, proxy: string) =>
 
 const badResponses = [
   "Site not supported",
-  "INVALID_PURCHASE_TYPE",
-  "INVALID_PURCHASE_TYPE",
   "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH",
   "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED",
   "Payment method not available",
@@ -167,14 +165,14 @@ type ApiCheckResult = {
   siteDead?: boolean;
 };
 
-const UNKNOWN_RETRY_ATTEMPTS = 1;
+const UNKNOWN_RETRY_ATTEMPTS = 4;
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const callApiOnce = async (cc: string, site: string, proxy: string): Promise<ApiCheckResult> => {
   const apiUrl = buildApiUrl(cc, site, proxy);
   
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 22000);
+  const timeoutId = setTimeout(() => controller.abort(), 55000);
   
   try {
     const response = await fetch(apiUrl, {
@@ -262,10 +260,10 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
       const responseText = (apiResponse || apiMessage || '').trim();
       if (isEmptyOrErrorOnly(responseText) && price === 0) {
         apiStatus = 'unknown';
-      } else if (json.Charged === true || String(json.Charged).toLowerCase() === 'true' || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎' || String(json.Response || '').toLowerCase().includes('order complete')) {
+      } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
         apiStatus = 'live';
         apiMessage = json.message || json.Response || 'Charged';
-      } else if (json.Charged === false || String(json.Charged).toLowerCase() === 'false' || json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED' || json.Response === 'INVALID_PURCHASE_TYPE') {
+      } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED') {
         apiStatus = 'dead';
         apiMessage = json.message || json.error || json.Response || 'Declined';
       } else if (json.status === 'error') {
@@ -284,7 +282,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
         const combinedText = lower + ' ' + responseLower;
         
         if (combinedText.includes('order_placed') || combinedText.includes('order placed') || 
-            combinedText.includes('order complete') || combinedText.includes('order_completed') ||
+            combinedText.includes('order completed') || combinedText.includes('order_completed') ||
             combinedText.includes('thank you') || combinedText.includes('thankyou') ||
             combinedText.includes('charged') || combinedText.includes('success') || 
             combinedText.includes('approved')) {
@@ -295,7 +293,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
                    combinedText.includes('ds_required') || combinedText.includes('3ds') || combinedText.includes('3d_secure') ||
                    combinedText.includes('rejected') || combinedText.includes('otp_required') || combinedText.includes('otp required') ||
                    combinedText.includes('pickup_card') || combinedText.includes('lost_card') || combinedText.includes('stolen_card') ||
-                   combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline') || combinedText.includes('invalid_purchase_type') || combinedText.includes('charged":false') || combinedText.includes('charged: false')) {
+                   combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline')) {
           apiStatus = 'dead';
         } else if (combinedText.includes('failed') || combinedText.includes('error')) {
           const substantive = combinedText.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
@@ -308,12 +306,12 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
       const lower = rawText.toLowerCase();
       if (isEmptyOrErrorOnly(lower)) {
         apiStatus = 'unknown';
-      } else if (lower.includes('order_placed') || lower.includes('order placed') || lower.includes('order complete') || lower.includes('order_completed') ||
-          lower.includes('thank you') || lower.includes('charged":"true') || lower.includes('charged:true') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
+      } else if (lower.includes('order_placed') || lower.includes('order placed') || lower.includes('order completed') || lower.includes('order_completed') ||
+          lower.includes('thank you') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
         apiStatus = 'live';
       } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || 
                  lower.includes('insufficient') || lower.includes('otp_required') || lower.includes('otp required') ||
-                 lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected') || lower.includes('invalid_purchase_type') || lower.includes('charged":false') || lower.includes('charged: false')) {
+                 lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) {
         apiStatus = 'dead';
       } else if (lower.includes('failed') || lower.includes('error')) {
         const substantive = lower.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
@@ -456,7 +454,7 @@ Deno.serve(async (req) => {
     }
 
     // Multi-site retry loop: try up to 3 different sites on site-level errors
-    const MAX_SITE_ATTEMPTS = Math.min(2, sites.length);
+    const MAX_SITE_ATTEMPTS = Math.min(3, sites.length);
     const shuffledSites = [...sites].sort(() => Math.random() - 0.5);
     const triedSiteUrls: string[] = [];
     const badSiteUrls: { url: string; reason: string }[] = [];
@@ -469,13 +467,9 @@ Deno.serve(async (req) => {
 
     if (proxyError || !userProxies || userProxies.length < 1) {
       return new Response(JSON.stringify({ 
-        error: 'You must add at least 1 proxy before using Shopify Charge.',
-        computedStatus: 'unknown',
-        apiStatus: 'UNKNOWN',
-        apiMessage: 'You must add at least 1 proxy before using Shopify Charge.',
-        rawResponse: 'No user proxies configured',
-        allProxiesDead: true
-      }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        error: 'You must add at least 1 proxy before using Shopify Charge.', 
+        computedStatus: 'unknown' 
+      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // Shuffle proxies for rotation

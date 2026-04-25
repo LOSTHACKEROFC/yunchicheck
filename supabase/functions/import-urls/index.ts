@@ -35,16 +35,8 @@ Deno.serve(async (req) => {
       .filter((url: string) => url.startsWith("http://") || url.startsWith("https://"));
 
     // Remove duplicates
-    let uniqueUrls = [...new Set(cleanedUrls)];
-
-    // Filter out blocked URLs
-    const { data: blockedData } = await supabase.from("blocked_urls").select("url");
-    if (blockedData && blockedData.length > 0) {
-      const blockedSet = new Set(blockedData.map((b: { url: string }) => b.url));
-      uniqueUrls = uniqueUrls.filter((url: string) => !blockedSet.has(url));
-    }
-
-    console.log(`Found ${uniqueUrls.length} unique valid URLs (after blocklist filter)`);
+    const uniqueUrls = [...new Set(cleanedUrls)];
+    console.log(`Found ${uniqueUrls.length} unique valid URLs`);
 
     // Process in batches to avoid timeout
     const batchSize = 500;

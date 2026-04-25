@@ -133,8 +133,6 @@ serve(async (req) => {
         const msg = jsonData.message || jsonData.error || jsonData.result || "";
         const statusField = (jsonData.status || "").toString().toLowerCase();
         const successField = jsonData.success;
-        const chargedField = jsonData.Charged ?? jsonData.charged;
-        const chargedValue = typeof chargedField === "string" ? chargedField.toLowerCase() : chargedField;
         
         // Also check nested details for PayPal-specific errors
         let detailMsg = "";
@@ -163,19 +161,14 @@ serve(async (req) => {
         const fullMsg = detailMsg || msg || "";
         const lowerMsg = fullMsg.toLowerCase();
         
-        console.log(`[PAYPAL] Parsed - success: ${successField}, charged: ${chargedField}, status: ${statusField}, message: ${fullMsg}`);
+        console.log(`[PAYPAL] Parsed - success: ${successField}, status: ${statusField}, message: ${fullMsg}`);
 
         // Priority 1: Check explicit success field
-        if (successField === true || chargedValue === true || chargedValue === "true" || statusField === "charged" || statusField === "approved" || statusField === "live" ||
+        if (successField === true || statusField === "charged" || statusField === "approved" || statusField === "live" ||
             lowerMsg.includes("charged") || lowerMsg.includes("approved") || lowerMsg.includes("payment successful")) {
           computedStatus = "live";
           apiMessage = fullMsg || "Charged $1.00";
         } 
-        // Priority 2: PayPal API explicit Charged=false means dead
-        else if (chargedValue === false || chargedValue === "false") {
-          computedStatus = "dead";
-          apiMessage = fullMsg || "Payment Failed";
-        }
         // Priority 2: Check explicit decline/fail
         else if (successField === false && (statusField === "declined" || statusField === "failed" || statusField === "error")) {
           computedStatus = "dead";
@@ -186,8 +179,7 @@ serve(async (req) => {
                  lowerMsg.includes("expired") || lowerMsg.includes("incorrect") || lowerMsg.includes("do not honor") ||
                  lowerMsg.includes("card number") || lowerMsg.includes("security code") || lowerMsg.includes("lost") ||
                  lowerMsg.includes("stolen") || lowerMsg.includes("restricted") || lowerMsg.includes("pickup") ||
-                 lowerMsg.includes("payer_cannot_pay") || lowerMsg.includes("unprocessable") ||
-                 lowerMsg.includes("invalid_purchase_type")) {
+                 lowerMsg.includes("payer_cannot_pay") || lowerMsg.includes("unprocessable")) {
           computedStatus = "dead";
           apiMessage = fullMsg || "Payment Failed";
         }
@@ -204,16 +196,11 @@ serve(async (req) => {
       } catch {
         // Not JSON, parse raw text
         const lower = responseText.toLowerCase().trim();
-        if (/"?charged"?\s*:\s*"?false"?/.test(lower) || /'?charged'?\s*:\s*'?false'?/.test(lower)) {
-          computedStatus = "dead";
-          apiMessage = responseText.trim() || "Payment Failed";
-        } else if (/"?charged"?\s*:\s*"?true"?/.test(lower) || /'?charged'?\s*:\s*'?true'?/.test(lower) ||
-                   lower.includes("charged") || lower.includes("approved") || lower.includes("success") || lower.includes("live")) {
+        if (lower.includes("charged") || lower.includes("approved") || lower.includes("success") || lower.includes("live")) {
           computedStatus = "live";
           apiMessage = responseText.trim() || "Charged $1.00";
         } else if (lower.includes("declined") || lower.includes("failed") || lower.includes("dead") ||
-                   lower.includes("insufficient") || lower.includes("expired") || lower.includes("do not honor") ||
-                   lower.includes("invalid_purchase_type")) {
+                   lower.includes("insufficient") || lower.includes("expired") || lower.includes("do not honor")) {
           computedStatus = "dead";
           apiMessage = responseText.trim() || "Payment Failed";
         } else if (lower.length > 0) {

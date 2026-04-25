@@ -89,27 +89,6 @@ export type Database = {
         }
         Relationships: []
       }
-      blocked_urls: {
-        Row: {
-          created_at: string
-          id: string
-          reason: string | null
-          url: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          reason?: string | null
-          url: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          reason?: string | null
-          url?: string
-        }
-        Relationships: []
-      }
       broadcasted_cards: {
         Row: {
           card_hash: string
@@ -521,9 +500,6 @@ export type Database = {
           chat_id: string
           created_at: string
           id: string
-          message_id: number | null
-          state_json: string | null
-          updated_at: string
           user_id: string
         }
         Insert: {
@@ -531,9 +507,6 @@ export type Database = {
           chat_id: string
           created_at?: string
           id: string
-          message_id?: number | null
-          state_json?: string | null
-          updated_at?: string
           user_id: string
         }
         Update: {
@@ -541,9 +514,6 @@ export type Database = {
           chat_id?: string
           created_at?: string
           id?: string
-          message_id?: number | null
-          state_json?: string | null
-          updated_at?: string
           user_id?: string
         }
         Relationships: []

@@ -17,7 +17,6 @@ const API_BASE_URL = "http://108.165.12.183:8081/";
 
 const badResponses = [
   "Site not supported",
-  "INVALID_PURCHASE_TYPE",
   "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH",
   "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED",
   "Payment method not available",
@@ -210,9 +209,9 @@ const checkSingleCard = async (
         const responseText = (apiResponse || apiMessage || '').trim();
         if (isEmptyOrErrorOnly(responseText) && price === 0) {
           apiStatus = 'unknown';
-        } else if (json.Charged === true || String(json.Charged).toLowerCase() === 'true' || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || String(json.Response || '').toLowerCase().includes('order complete')) {
+        } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true) {
           apiStatus = 'live'; apiMessage = json.message || 'Charged';
-        } else if (json.Charged === false || String(json.Charged).toLowerCase() === 'false' || json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED') {
+        } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED') {
           apiStatus = 'dead'; apiMessage = json.message || json.error || 'Declined';
         } else if (json.status === 'error') {
           // Only mark as dead if there's a meaningful error message (not just "error:")
@@ -226,9 +225,9 @@ const checkSingleCard = async (
           const lower = String(apiMessage).toLowerCase();
           const responseLower = (apiResponse || '').toLowerCase();
           const combinedText = lower + ' ' + responseLower;
-          if (combinedText.includes('order_placed') || combinedText.includes('order placed') || combinedText.includes('order complete') || combinedText.includes('charged:true') || combinedText.includes('charged":"true') || combinedText.includes('thank you') || combinedText.includes('charged') || combinedText.includes('success') || combinedText.includes('approved')) {
+          if (combinedText.includes('order_placed') || combinedText.includes('order placed') || combinedText.includes('thank you') || combinedText.includes('charged') || combinedText.includes('success') || combinedText.includes('approved')) {
             apiStatus = 'live';
-          } else if (combinedText.includes('invalid_purchase_type') || combinedText.includes('charged:false') || combinedText.includes('charged":"false') || combinedText.includes('declined') || combinedText.includes('invalid') || combinedText.includes('expired') || combinedText.includes('insufficient') || combinedText.includes('card_declined') || combinedText.includes('incorrect') || combinedText.includes('do_not_honor') || combinedText.includes('fraud') || combinedText.includes('not accepted') || combinedText.includes('ds_required') || combinedText.includes('3ds') || combinedText.includes('3d_secure') || combinedText.includes('rejected') || combinedText.includes('pickup_card') || combinedText.includes('lost_card') || combinedText.includes('stolen_card') || combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline')) {
+          } else if (combinedText.includes('declined') || combinedText.includes('invalid') || combinedText.includes('expired') || combinedText.includes('insufficient') || combinedText.includes('card_declined') || combinedText.includes('incorrect') || combinedText.includes('do_not_honor') || combinedText.includes('fraud') || combinedText.includes('not accepted') || combinedText.includes('ds_required') || combinedText.includes('3ds') || combinedText.includes('3d_secure') || combinedText.includes('rejected') || combinedText.includes('pickup_card') || combinedText.includes('lost_card') || combinedText.includes('stolen_card') || combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline')) {
             apiStatus = 'dead';
           } else if (combinedText.includes('failed') || combinedText.includes('error')) {
             // Only dead if there's a substantive message, not just "error:" or "failed"
@@ -244,9 +243,9 @@ const checkSingleCard = async (
         const lower = rawText.toLowerCase();
         if (isEmptyOrErrorOnly(lower)) {
           apiStatus = 'unknown';
-        } else if (lower.includes('order_placed') || lower.includes('order complete') || lower.includes('charged:true') || lower.includes('charged":"true') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
+        } else if (lower.includes('order_placed') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
           apiStatus = 'live';
-        } else if (lower.includes('invalid_purchase_type') || lower.includes('charged:false') || lower.includes('charged":"false') || lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('insufficient') || lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) {
+        } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('insufficient') || lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) {
           apiStatus = 'dead';
         } else if (lower.includes('failed') || lower.includes('error')) {
           const substantive = lower.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();

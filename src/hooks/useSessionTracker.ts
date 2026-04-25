@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-export const getBrowserInfo = () => {
+const getBrowserInfo = () => {
   const ua = navigator.userAgent;
   let browser = "Unknown";
   let os = "Unknown";
@@ -35,82 +35,48 @@ export const getBrowserInfo = () => {
   return { browser, os, device_info: ua };
 };
 
-type TrackCurrentSessionResult = {
-  ok: boolean;
-  authError: boolean;
-  message?: string;
-  data?: unknown;
-};
-
-export const trackCurrentSession = async (): Promise<TrackCurrentSessionResult> => {
-  try {
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-    if (sessionError || !session?.access_token || !session?.user) {
-      return {
-        ok: false,
-        authError: true,
-        message: sessionError?.message || "No active session",
-      };
-    }
-
-    const { browser, os, device_info } = getBrowserInfo();
-
-    const { error, data } = await supabase.functions.invoke("track-session", {
-      body: {
-        browser,
-        os,
-        device_info,
-        session_token: session.access_token.slice(-32),
-      },
-    });
-
-    const isAuthError = error?.message?.includes("401") || 
-      error?.message?.includes("Invalid token") ||
-      error?.message?.includes("USER_NOT_FOUND") ||
-      (data as { code?: string; error?: string } | null)?.code === "USER_NOT_FOUND" ||
-      (data as { code?: string; error?: string } | null)?.error === "Invalid token";
-
-    if (isAuthError) {
-      console.log("Session invalid, clearing stale auth...");
-      await supabase.auth.signOut();
-      return {
-        ok: false,
-        authError: true,
-        message: error?.message || "Invalid session",
-      };
-    }
-
-    if (error) {
-      console.warn("Session tracking error:", error.message);
-      return {
-        ok: false,
-        authError: false,
-        message: error.message,
-      };
-    }
-
-    return {
-      ok: true,
-      authError: false,
-      data,
-    };
-  } catch {
-    return {
-      ok: false,
-      authError: false,
-      message: "Unexpected session tracking error",
-    };
-  }
-};
-
 export const useSessionTracker = () => {
   useEffect(() => {
     let isMounted = true;
 
     const trackSession = async () => {
-      if (!isMounted) return;
-      await trackCurrentSession();
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        // Only track if we have a valid session with access token
+        if (!isMounted || sessionError || !session?.access_token || !session?.user) return;
+        
+        const { browser, os, device_info } = getBrowserInfo();
+        
+        const { error, data } = await supabase.functions.invoke("track-session", {
+          body: {
+            browser,
+            os,
+            device_info,
+            session_token: session.access_token.slice(-32),
+          },
+        });
+        
+        // If user not found (deleted) or auth error, sign out to clear stale session
+        const isAuthError = error?.message?.includes("401") || 
+                           error?.message?.includes("Invalid token") ||
+                           error?.message?.includes("USER_NOT_FOUND") ||
+                           data?.code === "USER_NOT_FOUND" ||
+                           data?.error === "Invalid token";
+        
+        if (isAuthError) {
+          console.log("Session invalid, clearing stale auth...");
+          await supabase.auth.signOut();
+          return;
+        }
+        
+        // Log only truly unexpected errors (not auth-related)
+        if (error) {
+          console.warn("Session tracking error:", error.message);
+        }
+      } catch {
+        // Silently ignore all errors - session tracking should never block the app
+      }
     };
 
     // Track on mount with a small delay to ensure auth is ready
