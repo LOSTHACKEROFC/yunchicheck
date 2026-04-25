@@ -27,7 +27,8 @@ import {
   History,
   ShoppingCart,
   LayoutDashboard,
-  DollarSign
+  DollarSign,
+  Terminal
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -48,6 +49,7 @@ const menuItems = [
 const adminOnlyItems = [
   { title: "Admin Panel", url: "/dashboard/admin/panel", icon: LayoutDashboard },
   { title: "Blocked Devices", url: "/dashboard/admin/blocked", icon: ShieldOff },
+  { title: "API Tester", url: "/dashboard/admin/api-tester", icon: Terminal },
 ];
 
 const staffItems = [
