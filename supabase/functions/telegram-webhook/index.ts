@@ -5460,23 +5460,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         ];
 
         try {
-          // Fetch sites from gateway_urls based on price range
-          let sitesQuery = supabase
-            .from("gateway_urls")
-            .select("url, price")
-            .not("url", "like", "https://razorpay.me/%")
-            .lte("price", 100);
+          // Fetch all matching sites from gateway_urls; default queries only return 1000 rows.
+          const sites = await fetchShopifyGatewaySites(supabase, priceMin, priceMax);
 
-          if (priceMin > 0 || priceMax < 100) {
-            if (priceMin > 0) sitesQuery = sitesQuery.gt("price", priceMin);
-            if (priceMax < 100) sitesQuery = sitesQuery.lte("price", priceMax);
-          } else {
-            sitesQuery = sitesQuery.gt("price", 0);
-          }
-
-          const { data: sites, error: sitesErr } = await sitesQuery.order("created_at", { ascending: false });
-
-          if (sitesErr || !sites || sites.length === 0) {
+          if (!sites || sites.length === 0) {
             await editTelegramMessage(callbackChatId, messageId, `
 ━━━━━━━━━━━━━━━━━━━━━━
    🛒 <b>SHOPIFY CHARGE</b>
