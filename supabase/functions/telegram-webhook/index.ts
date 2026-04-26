@@ -6284,7 +6284,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const { data: mtxtProxiesRaw } = await supabase.from("user_proxies").select("*").eq("user_id", mtxtProfile.user_id);
         const mtxtProxies = mtxtProxiesRaw || [];
 
-         const SHOPIFY_API_URL_MTXT = "https://web-production-9db0.up.railway.app";
+         const SHOPIFY_API_URL_MTXT = "https://web-production-9db0.up.railway.app/shopify";
          const MTXT_MAX_RETRIES = 1; // Keep /mtxt fast: one hard API retry, then rotate site/card thread
          const MTXT_API_TIMEOUT_MS = 30000;
          const mtxtStartTime = Date.now();
