@@ -6352,10 +6352,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          // Single API call — exact match of web callApiOnce
           const mtxtBuildApiUrl = (cardCC: string, siteUrl: string, proxy: string) => {
             // Path-based format: domain/site={site}/cc={cc}
-            const site = encodeURIComponent(siteUrl.trim());
-            const cc = encodeURIComponent(cardCC.trim());
+            const site = siteUrl.trim();
+            const cc = cardCC.trim();
             let url = `${SHOPIFY_API_URL_MTXT}/site=${site}/cc=${cc}`;
-            if (proxy?.trim()) url += `?proxy=${encodeURIComponent(proxy.trim())}`;
+            if (proxy?.trim()) url += `?proxy=${proxy.trim()}`;
             return url;
           };
 
