@@ -176,7 +176,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
   const apiUrl = buildApiUrl(cc, site, proxy);
   
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 55000);
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
   
   try {
     const response = await fetch(apiUrl, {
