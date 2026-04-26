@@ -6165,10 +6165,12 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          }
          rechkButtons.push([{ text: `🎲 𝗔𝘂𝘁𝗼 – Any Range  •  ${rechkTotalSites} sites`, callback_data: `mtxt_0_100_${newBulkId}` }]);
 
-         await answerCallbackQuery(update.callback_query.id, `🔄 Rechecking ${rechkCards.length} error cards...`);
-         await editTelegramMessage(callbackChatId, messageId, `🔄 <b>𝗥𝗘𝗖𝗛𝗘𝗖𝗞 𝗘𝗥𝗥𝗢𝗥 𝗖𝗔𝗥𝗗𝗦</b>\n\n📊 <b>${rechkCards.length} cards</b> to recheck\n💰 <b>Balance:</b> ${rechkProfile?.credits ?? '?'} credits\n🌐 <b>Sites:</b> ${rechkTotalSites} available\n\n<i>Select price range:</i>`, { inline_keyboard: rechkButtons });
-         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-       }
+          await answerCallbackQuery(update.callback_query.id, `🔄 Rechecking ${rechkCards.length} error cards...`);
+          if (callbackChatId) {
+            await editTelegramMessage(callbackChatId, messageId, `🔄 <b>𝗥𝗘𝗖𝗛𝗘𝗖𝗞 𝗘𝗥𝗥𝗢𝗥 𝗖𝗔𝗥𝗗𝗦</b>\n\n📊 <b>${rechkCards.length} cards</b> to recheck\n💰 <b>Balance:</b> ${rechkProfile?.credits ?? '?'} credits\n🌐 <b>Sites:</b> ${rechkTotalSites} available\n\n<i>Select price range:</i>`, { inline_keyboard: rechkButtons });
+          }
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
 
        if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite") && !callbackData.startsWith("mtxt_pending") && !callbackData.startsWith("mtxt_res_")) {
         const mtxtParts = callbackData.replace("mtxt_", "").split("_");
