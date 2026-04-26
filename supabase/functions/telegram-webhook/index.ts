@@ -6617,13 +6617,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            return { msg, buttons };
          };
 
-          // Dynamic threads for Telegram /mtxt: hard direct API requests should run fast,
-          // while proxy-backed checks stay lower to avoid proxy/IP rate-limits.
-          const mtxtActiveProxyCount = mtxtProxies.filter((p: any) => !mtxtFailedProxyIds.includes(p.id)).length;
-          const MTXT_CONCURRENCY = mtxtActiveProxyCount > 0
-            ? Math.max(4, Math.min(12, mtxtActiveProxyCount, mtxtCards.length))
-            : Math.max(8, Math.min(50, mtxtCards.length));
-          const MTXT_STAGGER_MS_VAL = mtxtActiveProxyCount > 0 ? 250 : 90;
+          // 50-thread concurrency with staggered launches — matches web Shopify Charge gateway.
+          // Each batch advances to the next as soon as 49/50 cards complete (MIN_COMPLETE_BEFORE_NEXT below).
+          const MTXT_CONCURRENCY = Math.min(50, Math.max(1, mtxtCards.length));
+          const MTXT_STAGGER_MS_VAL = 120;
 
          // Throttled UI update - max 1 edit per 500ms, always send on force
          let mtxtLastEditTime = 0;
