@@ -10841,7 +10841,7 @@ Top up at yunchicheck.com/dashboard/topup
 
       const groupCounts = await Promise.all(
         priceGroups.map(async (g) => {
-          const count = await countShopifySitesInRange(g.min, g.max);
+          const count = await countShopifySitesInRange(supabase, g.min, g.max);
           return { ...g, count };
         })
       );
@@ -10978,7 +10978,7 @@ cc|mm|yy|cvv</code>
 
       const mshGroupCounts = await Promise.all(
         mshPriceGroups.map(async (g) => {
-          const count = await countShopifySitesInRange(g.min, g.max);
+          const count = await countShopifySitesInRange(supabase, g.min, g.max);
           return { ...g, count };
         })
       );
