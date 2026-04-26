@@ -5450,30 +5450,15 @@ Admin needs to add sites via Health Check.
           }
 
           // Fetch user's proxies
-          const { data: userProxies, error: proxyErr } = await supabase
+          const { data: userProxies } = await supabase
             .from("user_proxies")
             .select("*")
             .eq("user_id", shProfile.user_id);
 
-          if (proxyErr || !userProxies || userProxies.length < 1) {
-            await editTelegramMessage(callbackChatId, messageId, `
-━━━━━━━━━━━━━━━━━━━━━━
-   🛒 <b>SHOPIFY CHARGE</b>
-━━━━━━━━━━━━━━━━━━━━━━
-
-❌ <b>No Proxies</b>
-
-You must add at least 1 proxy before using Shopify Charge.
-
-Go to yunchicheck.com/dashboard → Proxies
-━━━━━━━━━━━━━━━━━━━━━━
-`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
-            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-          }
-
+          // Proxy is optional — Shopify API works without it
           // Shuffle sites and proxies
           const shuffledSites = [...sites].sort(() => Math.random() - 0.5);
-          const shuffledProxies = [...userProxies].sort(() => Math.random() - 0.5);
+          const shuffledProxies = [...(userProxies || [])].sort(() => Math.random() - 0.5);
           const formatProxy = (p: any) => p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
 
           const MAX_SITE_ATTEMPTS = Math.min(3, shuffledSites.length);
