@@ -6398,7 +6398,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          const MAX_MTXT_SITE_ATTEMPTS = 5; // Try up to 5 random sites per card
          const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
            const availableProxies = [...mtxtProxies].filter(p => !mtxtFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
-           if (availableProxies.length === 0) return { status: 'error', response: 'No proxies available', price: '$0.00' };
+           // Proxies are OPTIONAL — if none configured, calls go DIRECT (fastest path, no proxy delay)
+           const hasProxies = availableProxies.length > 0;
 
            let finalResult: any = null;
 
@@ -6412,12 +6413,15 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (mtxtDeadSiteUrls.has(site.url)) continue; // Skip if removed by another card
               let siteResult: any = null;
 
-              // Pick ONE random proxy (not all proxies per site — too slow for mass check)
-              const currentProxies = availableProxies.filter(p => !mtxtFailedProxyIds.includes(p.id));
-              if (currentProxies.length === 0) { finalResult = { status: 'error', response: 'All proxies dead', price: '$0.00' }; break; }
-              const proxy = currentProxies[Math.floor(Math.random() * currentProxies.length)];
+              // Pick ONE random proxy (or none for direct call)
+              let proxy: any = null;
+              if (hasProxies) {
+                const currentProxies = availableProxies.filter(p => !mtxtFailedProxyIds.includes(p.id));
+                if (currentProxies.length === 0) { hasProxies && (finalResult = { status: 'error', response: 'All proxies dead', price: '$0.00' }); break; }
+                proxy = currentProxies[Math.floor(Math.random() * currentProxies.length)];
+              }
 
-              siteResult = await mtxtCallWithRetry(cardCC, site.url, mtxtFormatProxy(proxy));
+              siteResult = await mtxtCallWithRetry(cardCC, site.url, proxy ? mtxtFormatProxy(proxy) : '');
 
               if (siteResult.proxyDead) {
                 mtxtFailedProxyIds.push(proxy.id);
