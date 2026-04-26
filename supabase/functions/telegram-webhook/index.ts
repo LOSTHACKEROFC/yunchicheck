@@ -257,6 +257,67 @@ async function fetchAllRecords(
   return allRecords;
 }
 
+async function fetchShopifyGatewaySites(
+  supabase: any,
+  priceMin: number,
+  priceMax: number
+): Promise<{ url: string; price: number | null }[]> {
+  const PAGE_SIZE = 1000;
+  const safeMin = Number.isFinite(priceMin) ? priceMin : 0;
+  const safeMax = Number.isFinite(priceMax) ? priceMax : 100;
+  let allSites: { url: string; price: number | null; created_at?: string }[] = [];
+  let from = 0;
+
+  while (true) {
+    let query = supabase
+      .from("gateway_urls")
+      .select("url, price, created_at")
+      .not("url", "like", "https://razorpay.me/%")
+      .gt("price", 0)
+      .lte("price", 100)
+      .order("created_at", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (safeMin > 0) query = query.gt("price", safeMin);
+    if (safeMax < 100) query = query.lte("price", safeMax);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const page = data || [];
+    allSites = allSites.concat(page);
+    if (page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return allSites.map(({ url, price }) => ({ url, price }));
+}
+
+async function countShopifySitesInRange(
+  supabase: any,
+  priceMin: number,
+  priceMax: number
+): Promise<number> {
+  const safeMin = Number.isFinite(priceMin) ? priceMin : 0;
+  const safeMax = Number.isFinite(priceMax) ? priceMax : 100;
+  let query = supabase
+    .from("gateway_urls")
+    .select("id", { count: "exact", head: true })
+    .not("url", "like", "https://razorpay.me/%")
+    .gt("price", 0)
+    .lte("price", 100);
+
+  if (safeMin > 0) query = query.gt("price", safeMin);
+  if (safeMax < 100) query = query.lte("price", safeMax);
+
+  const { count, error } = await query;
+  if (error) {
+    console.error("[SHOPIFY] Failed to count gateway sites:", error);
+    return 0;
+  }
+  return count || 0;
+}
+
 // Escape HTML special characters for Telegram HTML parse mode
 function escapeHtml(text: string | null | undefined): string {
   if (!text) return "";
@@ -5424,23 +5485,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         ];
 
         try {
-          // Fetch sites from gateway_urls based on price range
-          let sitesQuery = supabase
-            .from("gateway_urls")
-            .select("url, price")
-            .not("url", "like", "https://razorpay.me/%")
-            .lte("price", 100);
+          // Fetch all matching sites from gateway_urls; default queries only return 1000 rows.
+          const sites = await fetchShopifyGatewaySites(supabase, priceMin, priceMax);
 
-          if (priceMin > 0 || priceMax < 100) {
-            if (priceMin > 0) sitesQuery = sitesQuery.gt("price", priceMin);
-            if (priceMax < 100) sitesQuery = sitesQuery.lte("price", priceMax);
-          } else {
-            sitesQuery = sitesQuery.gt("price", 0);
-          }
-
-          const { data: sites, error: sitesErr } = await sitesQuery.order("created_at", { ascending: false });
-
-          if (sitesErr || !sites || sites.length === 0) {
+          if (!sites || sites.length === 0) {
             await editTelegramMessage(callbackChatId, messageId, `
 ━━━━━━━━━━━━━━━━━━━━━━
    🛒 <b>SHOPIFY CHARGE</b>
@@ -5813,12 +5861,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // Fetch sites
-        let mshSitesQuery = supabase.from("gateway_urls").select("url, price").not("url", "like", "https://razorpay.me/%").lte("price", 100);
-        if (mshPriceMin > 0) mshSitesQuery = mshSitesQuery.gt("price", mshPriceMin);
-        if (mshPriceMax < 100) mshSitesQuery = mshSitesQuery.lte("price", mshPriceMax);
-        else mshSitesQuery = mshSitesQuery.gt("price", 0);
-        const { data: mshSites } = await mshSitesQuery.order("created_at", { ascending: false });
+        // Fetch all matching sites; default queries only return 1000 rows.
+        const mshSites = await fetchShopifyGatewaySites(supabase, mshPriceMin, mshPriceMax);
 
         if (!mshSites || mshSites.length === 0) {
           await editTelegramMessage(callbackChatId, messageId, `❌ <b>No sites available</b> in $${mshPriceMin}-$${mshPriceMax} range.`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
@@ -6228,12 +6272,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // Fetch sites
-        let mtxtSitesQuery = supabase.from("gateway_urls").select("url, price").not("url", "like", "https://razorpay.me/%").lte("price", 100);
-        if (mtxtPriceMin > 0) mtxtSitesQuery = mtxtSitesQuery.gt("price", mtxtPriceMin);
-        if (mtxtPriceMax < 100) mtxtSitesQuery = mtxtSitesQuery.lte("price", mtxtPriceMax);
-        else mtxtSitesQuery = mtxtSitesQuery.gt("price", 0);
-        const { data: mtxtSites } = await mtxtSitesQuery.order("created_at", { ascending: false });
+        // Fetch all matching sites; default queries only return 1000 rows.
+        const mtxtSites = await fetchShopifyGatewaySites(supabase, mtxtPriceMin, mtxtPriceMax);
 
         if (!mtxtSites || mtxtSites.length === 0) {
           await editTelegramMessage(callbackChatId, messageId, `❌ <b>No sites available</b> in $${mtxtPriceMin}-$${mtxtPriceMax} range.`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
@@ -10778,7 +10818,6 @@ Top up at yunchicheck.com/dashboard/topup
       };
       const countryFlag = getFlag(binCountryCode);
 
-      // Fetch price group counts
       const priceGroups = [
         { label: "$0 – $10", min: 0, max: 10, emoji: "💰" },
         { label: "$10 – $20", min: 10, max: 20, emoji: "💎" },
@@ -10788,15 +10827,8 @@ Top up at yunchicheck.com/dashboard/topup
 
       const groupCounts = await Promise.all(
         priceGroups.map(async (g) => {
-          let query = supabase
-            .from("gateway_urls")
-            .select("id", { count: "exact", head: true })
-            .not("url", "like", "https://razorpay.me/%")
-            .lte("price", g.max === 100 ? 100 : g.max);
-          if (g.min > 0) query = query.gt("price", g.min);
-          else query = query.gt("price", 0);
-          const { count } = await query;
-          return { ...g, count: count || 0 };
+          const count = await countShopifySitesInRange(supabase, g.min, g.max);
+          return { ...g, count };
         })
       );
 
@@ -10932,11 +10964,8 @@ cc|mm|yy|cvv</code>
 
       const mshGroupCounts = await Promise.all(
         mshPriceGroups.map(async (g) => {
-          let query = supabase.from("gateway_urls").select("id", { count: "exact", head: true }).not("url", "like", "https://razorpay.me/%").lte("price", g.max === 100 ? 100 : g.max);
-          if (g.min > 0) query = query.gt("price", g.min);
-          else query = query.gt("price", 0);
-          const { count } = await query;
-          return { ...g, count: count || 0 };
+          const count = await countShopifySitesInRange(supabase, g.min, g.max);
+          return { ...g, count };
         })
       );
 
@@ -11067,11 +11096,8 @@ One card per line in the TXT file:
 
       const mtxtGroupCounts = await Promise.all(
         mtxtPriceGroups.map(async (g) => {
-          let query = supabase.from("gateway_urls").select("id", { count: "exact", head: true }).not("url", "like", "https://razorpay.me/%").lte("price", g.max === 100 ? 100 : g.max);
-          if (g.min > 0) query = query.gt("price", g.min);
-          else query = query.gt("price", 0);
-          const { count } = await query;
-          return { ...g, count: count || 0 };
+          const count = await countShopifySitesInRange(supabase, g.min, g.max);
+          return { ...g, count };
         })
       );
 
