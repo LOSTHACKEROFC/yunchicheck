@@ -5689,7 +5689,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           const { data: shUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", shProfile.user_id).single();
           const newBalance = shUpdatedProfile?.credits ?? (shProfile.credits - creditCost);
           const deadProxiesCount = failedProxyIds.length;
-          const allProxiesDead = failedProxyIds.length >= userProxies.length;
+          const allProxiesDead = (userProxies?.length ?? 0) > 0 && failedProxyIds.length >= (userProxies?.length ?? 0);
 
           let resultMsg = `
 🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
