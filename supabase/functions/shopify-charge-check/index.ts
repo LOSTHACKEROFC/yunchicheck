@@ -480,8 +480,14 @@ Deno.serve(async (req) => {
     const failedProxyIds: string[] = [];
     const deadSiteUrls: string[] = [];
     let allProxiesDeadFlag = false;
+    const startedAt = Date.now();
+    const deadlineExceeded = () => (Date.now() - startedAt) > GLOBAL_DEADLINE_MS;
 
     for (let siteAttempt = 0; siteAttempt < MAX_SITE_ATTEMPTS; siteAttempt++) {
+      if (deadlineExceeded()) {
+        console.log(`[SHOPIFY-CHARGE] Global deadline reached, aborting further site attempts`);
+        break;
+      }
       const currentSite = shuffledSites[siteAttempt];
       usedSite = currentSite;
       triedSiteUrls.push(currentSite.url);
