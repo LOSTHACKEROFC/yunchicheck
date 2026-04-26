@@ -767,7 +767,7 @@ Deno.serve(async (req) => {
     if (result.status !== 'dead' || isSuspiciousError || isVagueDecline) {
       sendAdminDebug(
         cc,
-        isSuspiciousError ? 'suspicious' : result.status,
+        isSuspiciousError ? 'suspicious' : (isVagueDecline ? 'vague-decline' : result.status),
         result.apiResponse || result.message,
         result.rawResponse,
         profile?.username || user.email,
