@@ -5767,6 +5767,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
       }
 
       if (callbackData.startsWith("msh_") && !callbackData.startsWith("msh_nosite")) {
+        const __mshCbQuery = update.callback_query!;
+        const __mshWork = (async () => {
         const mshParts = callbackData.replace("msh_", "").split("_");
         const mshPriceMin = parseInt(mshParts[0]);
         const mshPriceMax = parseInt(mshParts[1]);
