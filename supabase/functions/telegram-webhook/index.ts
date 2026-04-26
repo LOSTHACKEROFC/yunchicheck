@@ -5836,12 +5836,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // Fetch sites
-        let mshSitesQuery = supabase.from("gateway_urls").select("url, price").not("url", "like", "https://razorpay.me/%").lte("price", 100);
-        if (mshPriceMin > 0) mshSitesQuery = mshSitesQuery.gt("price", mshPriceMin);
-        if (mshPriceMax < 100) mshSitesQuery = mshSitesQuery.lte("price", mshPriceMax);
-        else mshSitesQuery = mshSitesQuery.gt("price", 0);
-        const { data: mshSites } = await mshSitesQuery.order("created_at", { ascending: false });
+        // Fetch all matching sites; default queries only return 1000 rows.
+        const mshSites = await fetchShopifyGatewaySites(supabase, mshPriceMin, mshPriceMax);
 
         if (!mshSites || mshSites.length === 0) {
           await editTelegramMessage(callbackChatId, messageId, `❌ <b>No sites available</b> in $${mshPriceMin}-$${mshPriceMax} range.`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
@@ -6251,12 +6247,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // Fetch sites
-        let mtxtSitesQuery = supabase.from("gateway_urls").select("url, price").not("url", "like", "https://razorpay.me/%").lte("price", 100);
-        if (mtxtPriceMin > 0) mtxtSitesQuery = mtxtSitesQuery.gt("price", mtxtPriceMin);
-        if (mtxtPriceMax < 100) mtxtSitesQuery = mtxtSitesQuery.lte("price", mtxtPriceMax);
-        else mtxtSitesQuery = mtxtSitesQuery.gt("price", 0);
-        const { data: mtxtSites } = await mtxtSitesQuery.order("created_at", { ascending: false });
+        // Fetch all matching sites; default queries only return 1000 rows.
+        const mtxtSites = await fetchShopifyGatewaySites(supabase, mtxtPriceMin, mtxtPriceMax);
 
         if (!mtxtSites || mtxtSites.length === 0) {
           await editTelegramMessage(callbackChatId, messageId, `❌ <b>No sites available</b> in $${mtxtPriceMin}-$${mtxtPriceMax} range.`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
