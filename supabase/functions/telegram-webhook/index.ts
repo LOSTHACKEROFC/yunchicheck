@@ -293,6 +293,31 @@ async function fetchShopifyGatewaySites(
   return allSites.map(({ url, price }) => ({ url, price }));
 }
 
+async function countShopifySitesInRange(
+  supabase: any,
+  priceMin: number,
+  priceMax: number
+): Promise<number> {
+  const safeMin = Number.isFinite(priceMin) ? priceMin : 0;
+  const safeMax = Number.isFinite(priceMax) ? priceMax : 100;
+  let query = supabase
+    .from("gateway_urls")
+    .select("id", { count: "exact", head: true })
+    .not("url", "like", "https://razorpay.me/%")
+    .gt("price", 0)
+    .lte("price", 100);
+
+  if (safeMin > 0) query = query.gt("price", safeMin);
+  if (safeMax < 100) query = query.lte("price", safeMax);
+
+  const { count, error } = await query;
+  if (error) {
+    console.error("[SHOPIFY] Failed to count gateway sites:", error);
+    return 0;
+  }
+  return count || 0;
+}
+
 // Escape HTML special characters for Telegram HTML parse mode
 function escapeHtml(text: string | null | undefined): string {
   if (!text) return "";
