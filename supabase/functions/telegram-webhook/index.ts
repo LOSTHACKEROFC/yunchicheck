@@ -10953,11 +10953,8 @@ cc|mm|yy|cvv</code>
 
       const mshGroupCounts = await Promise.all(
         mshPriceGroups.map(async (g) => {
-          let query = supabase.from("gateway_urls").select("id", { count: "exact", head: true }).not("url", "like", "https://razorpay.me/%").lte("price", g.max === 100 ? 100 : g.max);
-          if (g.min > 0) query = query.gt("price", g.min);
-          else query = query.gt("price", 0);
-          const { count } = await query;
-          return { ...g, count: count || 0 };
+          const count = await countShopifySitesInRange(g.min, g.max);
+          return { ...g, count };
         })
       );
 
@@ -11088,11 +11085,8 @@ One card per line in the TXT file:
 
       const mtxtGroupCounts = await Promise.all(
         mtxtPriceGroups.map(async (g) => {
-          let query = supabase.from("gateway_urls").select("id", { count: "exact", head: true }).not("url", "like", "https://razorpay.me/%").lte("price", g.max === 100 ? 100 : g.max);
-          if (g.min > 0) query = query.gt("price", g.min);
-          else query = query.gt("price", 0);
-          const { count } = await query;
-          return { ...g, count: count || 0 };
+          const count = await countShopifySitesInRange(g.min, g.max);
+          return { ...g, count };
         })
       );
 
