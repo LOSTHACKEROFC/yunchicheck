@@ -5450,30 +5450,15 @@ Admin needs to add sites via Health Check.
           }
 
           // Fetch user's proxies
-          const { data: userProxies, error: proxyErr } = await supabase
+          const { data: userProxies } = await supabase
             .from("user_proxies")
             .select("*")
             .eq("user_id", shProfile.user_id);
 
-          if (proxyErr || !userProxies || userProxies.length < 1) {
-            await editTelegramMessage(callbackChatId, messageId, `
-━━━━━━━━━━━━━━━━━━━━━━
-   🛒 <b>SHOPIFY CHARGE</b>
-━━━━━━━━━━━━━━━━━━━━━━
-
-❌ <b>No Proxies</b>
-
-You must add at least 1 proxy before using Shopify Charge.
-
-Go to yunchicheck.com/dashboard → Proxies
-━━━━━━━━━━━━━━━━━━━━━━
-`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
-            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-          }
-
+          // Proxy is optional — Shopify API works without it
           // Shuffle sites and proxies
           const shuffledSites = [...sites].sort(() => Math.random() - 0.5);
-          const shuffledProxies = [...userProxies].sort(() => Math.random() - 0.5);
+          const shuffledProxies = [...(userProxies || [])].sort(() => Math.random() - 0.5);
           const formatProxy = (p: any) => p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
 
           const MAX_SITE_ATTEMPTS = Math.min(3, shuffledSites.length);
@@ -5483,7 +5468,9 @@ Go to yunchicheck.com/dashboard → Proxies
 
           // Helper: single API call
           const callShopifyOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
-            const apiUrl = `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${proxy}`;
+            const apiUrl = proxy
+              ? `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${proxy}`
+              : `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}`;
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 55000);
             try {
@@ -5594,7 +5581,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 ⏳ <b>${step}</b>
 [${progressBar}] Step ${progressStep}
 💰 Range: $${priceMin} – $${priceMax}
-📊 ${sites.length} sites ・ ${userProxies.length} proxies
+📊 ${sites.length} sites ・ ${userProxies?.length ?? 0} proxies
 `);
           };
 
@@ -5606,19 +5593,23 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             await updateProgress(`Trying site ${siteAttempt + 1}/${MAX_SITE_ATTEMPTS}...`);
 
             const availableProxies = shuffledProxies.filter((p: any) => !failedProxyIds.includes(p.id));
-            if (availableProxies.length === 0) {
+            const hadProxies = shuffledProxies.length > 0;
+            if (hadProxies && availableProxies.length === 0) {
               finalResult = { status: 'unknown', message: 'All proxies failed', rawResponse: '', price: 0, priceStr: '$0.00', apiResponse: '' };
               break;
             }
 
+            // If user has no proxies, do a single direct call (proxy is optional)
+            const proxyAttempts: any[] = availableProxies.length > 0 ? availableProxies : [null];
+
             let siteResult: any = null;
-            for (let proxyAttempt = 0; proxyAttempt < availableProxies.length; proxyAttempt++) {
-              const currentProxy = availableProxies[proxyAttempt];
-              const proxyStr = formatProxy(currentProxy);
+            for (let proxyAttempt = 0; proxyAttempt < proxyAttempts.length; proxyAttempt++) {
+              const currentProxy = proxyAttempts[proxyAttempt];
+              const proxyStr = currentProxy ? formatProxy(currentProxy) : '';
 
               siteResult = await callShopifyWithRetry(cc, currentSite.url, proxyStr);
 
-              if (siteResult.proxyDead) {
+              if (siteResult.proxyDead && currentProxy) {
                 failedProxyIds.push(currentProxy.id);
                 supabase.from('user_proxies').delete().eq('id', currentProxy.id).then(() => {});
                 continue;
@@ -5634,7 +5625,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 siteResult = null;
                 break;
               }
-              break; // proxy worked
+              break; // call worked
             }
 
             if (!siteResult) {
@@ -5704,7 +5695,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           const { data: shUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", shProfile.user_id).single();
           const newBalance = shUpdatedProfile?.credits ?? (shProfile.credits - creditCost);
           const deadProxiesCount = failedProxyIds.length;
-          const allProxiesDead = failedProxyIds.length >= userProxies.length;
+          const allProxiesDead = (userProxies?.length ?? 0) > 0 && failedProxyIds.length >= (userProxies?.length ?? 0);
 
           let resultMsg = `
 🛍 <b>𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘</b>
@@ -5824,12 +5815,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // Fetch proxies
-        const { data: mshProxies } = await supabase.from("user_proxies").select("*").eq("user_id", mshProfile.user_id);
-        if (!mshProxies || mshProxies.length < 1) {
-          await editTelegramMessage(callbackChatId, messageId, `❌ <b>No Proxies</b>\n\nAdd proxies at yunchicheck.com/dashboard → Proxies`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
-          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
+        // Fetch proxies (optional — Shopify API works without them)
+        const { data: mshProxiesRaw } = await supabase.from("user_proxies").select("*").eq("user_id", mshProfile.user_id);
+        const mshProxies = mshProxiesRaw || [];
 
         const SHOPIFY_API_URL_MSH = "https://web-production-9db0.up.railway.app/shopify";
         const MSH_DEBUG_CHAT = "-1003848532661";
@@ -5881,7 +5869,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
         // Single call helper
         const mshCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
-          const apiUrl = `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${proxy}`;
+          const apiUrl = proxy
+            ? `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${proxy}`
+            : `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}`;
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 45000);
           try {
@@ -6165,10 +6155,12 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          }
          rechkButtons.push([{ text: `🎲 𝗔𝘂𝘁𝗼 – Any Range  •  ${rechkTotalSites} sites`, callback_data: `mtxt_0_100_${newBulkId}` }]);
 
-         await answerCallbackQuery(update.callback_query.id, `🔄 Rechecking ${rechkCards.length} error cards...`);
-         await editTelegramMessage(callbackChatId, messageId, `🔄 <b>𝗥𝗘𝗖𝗛𝗘𝗖𝗞 𝗘𝗥𝗥𝗢𝗥 𝗖𝗔𝗥𝗗𝗦</b>\n\n📊 <b>${rechkCards.length} cards</b> to recheck\n💰 <b>Balance:</b> ${rechkProfile?.credits ?? '?'} credits\n🌐 <b>Sites:</b> ${rechkTotalSites} available\n\n<i>Select price range:</i>`, { inline_keyboard: rechkButtons });
-         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-       }
+          await answerCallbackQuery(update.callback_query.id, `🔄 Rechecking ${rechkCards.length} error cards...`);
+          if (callbackChatId && messageId) {
+            await editTelegramMessage(callbackChatId, messageId, `🔄 <b>𝗥𝗘𝗖𝗛𝗘𝗖𝗞 𝗘𝗥𝗥𝗢𝗥 𝗖𝗔𝗥𝗗𝗦</b>\n\n📊 <b>${rechkCards.length} cards</b> to recheck\n💰 <b>Balance:</b> ${rechkProfile?.credits ?? '?'} credits\n🌐 <b>Sites:</b> ${rechkTotalSites} available\n\n<i>Select price range:</i>`, { inline_keyboard: rechkButtons });
+          }
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
 
        if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite") && !callbackData.startsWith("mtxt_pending") && !callbackData.startsWith("mtxt_res_")) {
         const mtxtParts = callbackData.replace("mtxt_", "").split("_");
@@ -6226,12 +6218,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // Fetch proxies
-        const { data: mtxtProxies } = await supabase.from("user_proxies").select("*").eq("user_id", mtxtProfile.user_id);
-        if (!mtxtProxies || mtxtProxies.length < 1) {
-          await editTelegramMessage(callbackChatId, messageId, `❌ <b>No Proxies</b>\n\nAdd proxies at yunchicheck.com/dashboard → Proxies`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
-          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
+        // Fetch proxies (optional — Shopify API works without them)
+        const { data: mtxtProxiesRaw } = await supabase.from("user_proxies").select("*").eq("user_id", mtxtProfile.user_id);
+        const mtxtProxies = mtxtProxiesRaw || [];
 
          const SHOPIFY_API_URL_MTXT = "https://web-production-9db0.up.railway.app/shopify";
          const MTXT_MAX_RETRIES = 2; // Reduced for mass checking (50 concurrent cards)
@@ -6299,7 +6288,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
          // Single API call — exact match of web callApiOnce
          const mtxtCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
-           const apiUrl = `${SHOPIFY_API_URL_MTXT}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${proxy}`;
+           const apiUrl = proxy
+             ? `${SHOPIFY_API_URL_MTXT}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${proxy}`
+             : `${SHOPIFY_API_URL_MTXT}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}`;
            const controller = new AbortController();
            const timeout = setTimeout(() => controller.abort(), 55000); // 55s like web
            try {

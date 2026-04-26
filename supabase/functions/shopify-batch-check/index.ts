@@ -134,10 +134,15 @@ const checkSingleCard = async (
   let result: { status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string } | null = null;
   const failedProxyIds: string[] = [];
 
-  for (let attempt = 0; attempt < shuffledProxies.length; attempt++) {
-    const currentProxy = shuffledProxies[attempt];
-    const proxyStr = formatProxy(currentProxy);
-    const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(randomSite.url)}&proxy=${proxyStr}`;
+  // If no proxies configured, do a single direct call (no proxy)
+  const proxyAttempts: (typeof proxies[0] | null)[] = shuffledProxies.length > 0 ? [...shuffledProxies] : [null];
+
+  for (let attempt = 0; attempt < proxyAttempts.length; attempt++) {
+    const currentProxy = proxyAttempts[attempt];
+    const proxyStr = currentProxy ? formatProxy(currentProxy) : '';
+    const apiUrl = proxyStr
+      ? `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(randomSite.url)}&proxy=${proxyStr}`
+      : `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(randomSite.url)}`;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
@@ -271,9 +276,9 @@ const checkSingleCard = async (
         rawLower.includes('proxy connect') || rawLower.includes('tunneling socket')
       );
 
-      if (isProxyError) {
+      if (isProxyError && currentProxy) {
         failedProxyIds.push(currentProxy.id);
-        if (attempt + 1 >= shuffledProxies.length) {
+        if (attempt + 1 >= proxyAttempts.length) {
           result = { status: 'unknown', message: 'All proxies failed (407)', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
         }
         continue;
@@ -284,7 +289,7 @@ const checkSingleCard = async (
     } catch (error) {
       clearTimeout(timeoutId);
       const errMsg = error instanceof Error ? error.message : 'Error';
-      if (attempt + 1 >= shuffledProxies.length) {
+      if (attempt + 1 >= proxyAttempts.length) {
         result = { status: 'unknown', message: 'Timeout', apiResponse: '', rawResponse: errMsg, price: 0, priceStr: '$0.00' };
       }
     }
@@ -427,19 +432,14 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const { data: userProxies, error: proxyError } = await adminClient
+    const { data: userProxies } = await adminClient
       .from('user_proxies')
       .select('*')
       .eq('user_id', user.id);
 
-    if (proxyError || !userProxies || userProxies.length < 1) {
-      return new Response(JSON.stringify({ error: 'You must add at least 1 proxy', results: [] }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
     // Process ALL cards in parallel (up to 10 concurrent)
     const results = await Promise.all(
-      batch.map(cc => checkSingleCard(cc, sites, userProxies, adminClient, user.id, profile?.username || null))
+      batch.map(cc => checkSingleCard(cc, sites, userProxies || [], adminClient, user.id, profile?.username || null))
     );
 
     return new Response(

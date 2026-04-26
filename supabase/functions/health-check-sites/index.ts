@@ -136,7 +136,9 @@ const checkSingleSite = async (
     const controller = new AbortController();
     timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(TEST_CC)}&site=${encodeURIComponent(normalizedSiteUrl)}&proxy=${encodeURIComponent(proxyStr)}`;
+    const apiUrl = proxyStr
+      ? `${API_BASE_URL}?cc=${encodeURIComponent(TEST_CC)}&site=${encodeURIComponent(normalizedSiteUrl)}&proxy=${encodeURIComponent(proxyStr)}`
+      : `${API_BASE_URL}?cc=${encodeURIComponent(TEST_CC)}&site=${encodeURIComponent(normalizedSiteUrl)}`;
 
     console.log(`[Check] ${normalizedSiteUrl} | proxy=${proxyStr ? "yes" : "none"}`);
 
@@ -434,23 +436,12 @@ Deno.serve(async (req) => {
     let proxyStr = "";
     let proxyId: string | null = null;
 
+    // Proxy is optional — only used if explicitly provided in the request body.
+    // The Shopify health-check API works fine without a proxy and is faster direct.
     if (proxyOverride) {
       proxyStr = proxyOverride;
       if (proxyIdOverride) {
         proxyId = proxyIdOverride;
-      }
-    } else {
-      const { data: liveProxies } = await supabase
-        .from("proxies")
-        .select("*")
-        .eq("status", "live");
-
-      if (liveProxies && liveProxies.length > 0) {
-        const randomProxy = getRandomItem(liveProxies);
-        proxyId = randomProxy.id;
-        proxyStr = randomProxy.username && randomProxy.password
-          ? `${randomProxy.ip}:${randomProxy.port}:${randomProxy.username}:${randomProxy.password}`
-          : `${randomProxy.ip}:${randomProxy.port}`;
       }
     }
 
