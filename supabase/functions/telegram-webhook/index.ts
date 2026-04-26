@@ -5468,7 +5468,9 @@ Admin needs to add sites via Health Check.
 
           // Helper: single API call
           const callShopifyOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
-            const apiUrl = `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${proxy}`;
+            const apiUrl = proxy
+              ? `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${proxy}`
+              : `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}`;
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 55000);
             try {
