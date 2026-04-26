@@ -432,19 +432,14 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const { data: userProxies, error: proxyError } = await adminClient
+    const { data: userProxies } = await adminClient
       .from('user_proxies')
       .select('*')
       .eq('user_id', user.id);
 
-    if (proxyError || !userProxies || userProxies.length < 1) {
-      return new Response(JSON.stringify({ error: 'You must add at least 1 proxy', results: [] }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
     // Process ALL cards in parallel (up to 10 concurrent)
     const results = await Promise.all(
-      batch.map(cc => checkSingleCard(cc, sites, userProxies, adminClient, user.id, profile?.username || null))
+      batch.map(cc => checkSingleCard(cc, sites, userProxies || [], adminClient, user.id, profile?.username || null))
     );
 
     return new Response(
