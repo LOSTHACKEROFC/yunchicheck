@@ -615,7 +615,7 @@ Deno.serve(async (req) => {
       result = { status: 'unknown', message: 'All site attempts failed', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
     }
 
-    const allProxiesDead = allProxiesDeadFlag || failedProxyIds.length >= userProxies.length;
+    const allProxiesDead = allProxiesDeadFlag || (shuffledProxies.length > 0 && failedProxyIds.length >= shuffledProxies.length);
     const randomSite = usedSite;
 
     // Dead proxies already removed inline during the proxy loop above
