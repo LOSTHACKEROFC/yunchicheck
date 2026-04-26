@@ -5305,7 +5305,9 @@ Examples:
 
       if (callbackData.startsWith("sh_price_")) {
         const __cbQuery = update.callback_query!;
+        console.log(`[/sh bg] START callback=${callbackData} chat=${callbackChatId}`);
         const __shWork = (async () => {
+        console.log(`[/sh bg] IIFE entered`);
         const parts = callbackData.replace("sh_price_", "").split("_");
         const priceMin = parseInt(parts[0]);
         const priceMax = parseInt(parts[1]);
@@ -5752,8 +5754,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
         })();
         // @ts-ignore
-        if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) EdgeRuntime.waitUntil(__shWork.catch(e => console.error('[/sh bg]', e)));
-        else __shWork.catch(e => console.error('[/sh bg]', e));
+        if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) { console.log('[/sh bg] using EdgeRuntime.waitUntil'); EdgeRuntime.waitUntil(__shWork.then(() => console.log('[/sh bg] DONE')).catch(e => console.error('[/sh bg] ERROR', e?.message || e, e?.stack))); }
+        else { console.log('[/sh bg] no EdgeRuntime, awaiting inline'); await __shWork.catch(e => console.error('[/sh bg] ERROR', e?.message || e, e?.stack)); }
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
