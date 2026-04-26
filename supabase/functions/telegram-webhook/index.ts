@@ -5781,16 +5781,16 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         // Delete immediately to prevent duplicate processing on re-click
         await supabase.from("pending_bulk_checks").delete().eq("id", mshBulkId);
         if (!mshCards.length) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Card data expired or invalid");
+          await answerCallbackQuery(__mshCbQuery.id, "❌ Card data expired or invalid");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         if (!mshCards.length || !callbackChatId || !messageId) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Invalid request");
+          await answerCallbackQuery(__mshCbQuery.id, "❌ Invalid request");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        await answerCallbackQuery(update.callback_query.id, `⚡ Checking ${mshCards.length} cards on $${mshPriceMin}-$${mshPriceMax}...`);
+        await answerCallbackQuery(__mshCbQuery.id, `⚡ Checking ${mshCards.length} cards on $${mshPriceMin}-$${mshPriceMax}...`);
 
         const { data: mshProfile } = await supabase
           .from("profiles")
