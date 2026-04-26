@@ -6288,7 +6288,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
          // Single API call — exact match of web callApiOnce
          const mtxtCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
-           const apiUrl = `${SHOPIFY_API_URL_MTXT}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${proxy}`;
+           const apiUrl = proxy
+             ? `${SHOPIFY_API_URL_MTXT}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${proxy}`
+             : `${SHOPIFY_API_URL_MTXT}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}`;
            const controller = new AbortController();
            const timeout = setTimeout(() => controller.abort(), 55000); // 55s like web
            try {
