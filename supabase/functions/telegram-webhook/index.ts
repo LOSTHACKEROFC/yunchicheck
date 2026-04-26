@@ -6423,7 +6423,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
               siteResult = await mtxtCallWithRetry(cardCC, site.url, proxy ? mtxtFormatProxy(proxy) : '');
 
-              if (siteResult.proxyDead) {
+              if (siteResult.proxyDead && proxy) {
                 mtxtFailedProxyIds.push(proxy.id);
                 supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
                 // Try next site with different proxy
@@ -6444,7 +6444,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               try { const parsed = JSON.parse(siteResult.rawResponse || ''); if (parsed && (parsed.Gateway || parsed.Response || parsed.Price !== undefined || parsed.status || parsed.message)) isValidApiResponse = true; } catch {}
               const rl = (siteResult.rawResponse || '').toLowerCase();
               const isProxyError = !isValidApiResponse && (rl.includes('407') || rl.includes('proxy error') || rl.includes('proxy authentication') || rl.includes('connection refused') || rl.includes('proxy connect') || rl.includes('tunneling socket'));
-              if (isProxyError) {
+              if (isProxyError && proxy) {
                 mtxtFailedProxyIds.push(proxy.id);
                 supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
                 if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
