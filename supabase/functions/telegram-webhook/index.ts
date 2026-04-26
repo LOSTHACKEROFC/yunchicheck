@@ -5304,6 +5304,8 @@ Examples:
       }
 
       if (callbackData.startsWith("sh_price_")) {
+        const __cbQuery = update.callback_query!;
+        const __shWork = (async () => {
         const parts = callbackData.replace("sh_price_", "").split("_");
         const priceMin = parseInt(parts[0]);
         const priceMax = parseInt(parts[1]);
@@ -5311,16 +5313,16 @@ Examples:
         
         let cc = "";
         try { cc = atob(encodedCC); } catch {
-          await answerCallbackQuery(update.callback_query.id, "❌ Invalid card data");
+          await answerCallbackQuery(__cbQuery.id, "❌ Invalid card data");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         if (!cc || !callbackChatId || !messageId) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Invalid request");
+          await answerCallbackQuery(__cbQuery.id, "❌ Invalid request");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        await answerCallbackQuery(update.callback_query.id, `⚡ Checking on $${priceMin}-$${priceMax} sites...`);
+        await answerCallbackQuery(__cbQuery.id, `⚡ Checking on $${priceMin}-$${priceMax} sites...`);
 
         const { data: shProfile } = await supabase
           .from("profiles")
@@ -5748,6 +5750,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           });
         }
 
+        })();
+        // @ts-ignore
+        if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) EdgeRuntime.waitUntil(__shWork.catch(e => console.error('[/sh bg]', e)));
+        else __shWork.catch(e => console.error('[/sh bg]', e));
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -5761,6 +5767,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
       }
 
       if (callbackData.startsWith("msh_") && !callbackData.startsWith("msh_nosite")) {
+        const __mshCbQuery = update.callback_query!;
+        const __mshWork = (async () => {
         const mshParts = callbackData.replace("msh_", "").split("_");
         const mshPriceMin = parseInt(mshParts[0]);
         const mshPriceMax = parseInt(mshParts[1]);
@@ -5773,16 +5781,16 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         // Delete immediately to prevent duplicate processing on re-click
         await supabase.from("pending_bulk_checks").delete().eq("id", mshBulkId);
         if (!mshCards.length) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Card data expired or invalid");
+          await answerCallbackQuery(__mshCbQuery.id, "❌ Card data expired or invalid");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         if (!mshCards.length || !callbackChatId || !messageId) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Invalid request");
+          await answerCallbackQuery(__mshCbQuery.id, "❌ Invalid request");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        await answerCallbackQuery(update.callback_query.id, `⚡ Checking ${mshCards.length} cards on $${mshPriceMin}-$${mshPriceMax}...`);
+        await answerCallbackQuery(__mshCbQuery.id, `⚡ Checking ${mshCards.length} cards on $${mshPriceMin}-$${mshPriceMax}...`);
 
         const { data: mshProfile } = await supabase
           .from("profiles")
@@ -6100,6 +6108,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           inline_keyboard: [[{ text: "🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂", callback_data: "menu_back" }]]
         });
 
+        })();
+        // @ts-ignore
+        if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) EdgeRuntime.waitUntil(__mshWork.catch(e => console.error('[/msh bg]', e)));
+        else __mshWork.catch(e => console.error('[/msh bg]', e));
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -6169,6 +6181,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         }
 
        if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite") && !callbackData.startsWith("mtxt_pending") && !callbackData.startsWith("mtxt_res_")) {
+        const __mtxtCbQuery = update.callback_query!;
+        const __mtxtWork = (async () => {
         const mtxtParts = callbackData.replace("mtxt_", "").split("_");
         const mtxtPriceMin = parseInt(mtxtParts[0]);
         const mtxtPriceMax = parseInt(mtxtParts[1]);
@@ -6182,16 +6196,16 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         // Re-insert as stop-tracking record (use a valid dummy UUID for user_id)
         await supabase.from("pending_bulk_checks").insert({ id: mtxtBulkId, cards: "RUNNING", chat_id: String(callbackChatId), user_id: "00000000-0000-0000-0000-000000000000" });
         if (!mtxtCards.length) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Card data expired or invalid");
+          await answerCallbackQuery(__mtxtCbQuery.id, "❌ Card data expired or invalid");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         if (!callbackChatId || !messageId) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Invalid request");
+          await answerCallbackQuery(__mtxtCbQuery.id, "❌ Invalid request");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        await answerCallbackQuery(update.callback_query.id, `⚡ Checking ${mtxtCards.length} cards on $${mtxtPriceMin}-$${mtxtPriceMax}...`);
+        await answerCallbackQuery(__mtxtCbQuery.id, `⚡ Checking ${mtxtCards.length} cards on $${mtxtPriceMin}-$${mtxtPriceMax}...`);
 
         const { data: mtxtProfile } = await supabase
           .from("profiles")
@@ -6791,6 +6805,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           clearTimeout(mtxtSafetyTimer);
           await mtxtSendFinalMessage();
 
+        })();
+        // @ts-ignore
+        if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) EdgeRuntime.waitUntil(__mtxtWork.catch(e => console.error('[/mtxt bg]', e)));
+        else __mtxtWork.catch(e => console.error('[/mtxt bg]', e));
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
