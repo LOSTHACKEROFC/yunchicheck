@@ -6216,12 +6216,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // Fetch proxies
-        const { data: mtxtProxies } = await supabase.from("user_proxies").select("*").eq("user_id", mtxtProfile.user_id);
-        if (!mtxtProxies || mtxtProxies.length < 1) {
-          await editTelegramMessage(callbackChatId, messageId, `❌ <b>No Proxies</b>\n\nAdd proxies at yunchicheck.com/dashboard → Proxies`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
-          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
+        // Fetch proxies (optional — Shopify API works without them)
+        const { data: mtxtProxiesRaw } = await supabase.from("user_proxies").select("*").eq("user_id", mtxtProfile.user_id);
+        const mtxtProxies = mtxtProxiesRaw || [];
 
          const SHOPIFY_API_URL_MTXT = "https://web-production-9db0.up.railway.app/shopify";
          const MTXT_MAX_RETRIES = 2; // Reduced for mass checking (50 concurrent cards)
