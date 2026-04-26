@@ -6364,7 +6364,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), MTXT_API_TIMEOUT_MS);
            try {
-              console.log(`[MTXT API] card=${cardCC.split('|')[0]?.slice(0, 6)}****${cardCC.split('|')[0]?.slice(-4)} site=${siteUrl} proxy=${proxy ? 'yes' : 'direct'}`);
+              console.log(`[MTXT API] url=${apiUrl}`);
              const resp = await fetch(apiUrl, { method: "GET", headers: { 'Accept': 'application/json, text/plain, */*', 'User-Agent': mtxtUserAgents[Math.floor(Math.random() * mtxtUserAgents.length)], 'Cache-Control': 'no-cache' }, signal: controller.signal });
              clearTimeout(timeout);
              const rawText = await resp.text();
