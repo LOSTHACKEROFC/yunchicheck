@@ -5593,19 +5593,23 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             await updateProgress(`Trying site ${siteAttempt + 1}/${MAX_SITE_ATTEMPTS}...`);
 
             const availableProxies = shuffledProxies.filter((p: any) => !failedProxyIds.includes(p.id));
-            if (availableProxies.length === 0) {
+            const hadProxies = shuffledProxies.length > 0;
+            if (hadProxies && availableProxies.length === 0) {
               finalResult = { status: 'unknown', message: 'All proxies failed', rawResponse: '', price: 0, priceStr: '$0.00', apiResponse: '' };
               break;
             }
 
+            // If user has no proxies, do a single direct call (proxy is optional)
+            const proxyAttempts: any[] = availableProxies.length > 0 ? availableProxies : [null];
+
             let siteResult: any = null;
-            for (let proxyAttempt = 0; proxyAttempt < availableProxies.length; proxyAttempt++) {
-              const currentProxy = availableProxies[proxyAttempt];
-              const proxyStr = formatProxy(currentProxy);
+            for (let proxyAttempt = 0; proxyAttempt < proxyAttempts.length; proxyAttempt++) {
+              const currentProxy = proxyAttempts[proxyAttempt];
+              const proxyStr = currentProxy ? formatProxy(currentProxy) : '';
 
               siteResult = await callShopifyWithRetry(cc, currentSite.url, proxyStr);
 
-              if (siteResult.proxyDead) {
+              if (siteResult.proxyDead && currentProxy) {
                 failedProxyIds.push(currentProxy.id);
                 supabase.from('user_proxies').delete().eq('id', currentProxy.id).then(() => {});
                 continue;
@@ -5621,7 +5625,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 siteResult = null;
                 break;
               }
-              break; // proxy worked
+              break; // call worked
             }
 
             if (!siteResult) {
