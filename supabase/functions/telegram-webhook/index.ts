@@ -5749,6 +5749,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           });
         }
 
+        })();
+        // @ts-ignore
+        if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) EdgeRuntime.waitUntil(__shWork.catch(e => console.error('[/sh bg]', e)));
+        else __shWork.catch(e => console.error('[/sh bg]', e));
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
