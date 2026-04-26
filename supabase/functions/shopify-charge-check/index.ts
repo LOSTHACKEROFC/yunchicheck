@@ -247,18 +247,23 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
     };
     
     try {
-      const json = JSON.parse(rawText);
+      // The new API may wrap JSON in a "detail" envelope: {"detail": {...}}
+      let json = JSON.parse(rawText);
+      if (json.detail && typeof json.detail === 'object') {
+        json = json.detail;
+      }
       
       // Extract Price and Response directly from API JSON
-      if (json.Price !== undefined && json.Price > 0) {
-        price = json.Price;
-        priceStr = `$${Number(json.Price).toFixed(2)}`;
+      if (json.Price !== undefined && Number(json.Price) > 0) {
+        price = Number(json.Price);
+        priceStr = `$${price.toFixed(2)}`;
       }
       if (json.Response) {
         apiResponse = String(json.Response).replace(/<[^>]*>/g, '');
       }
       
-      apiMessage = json.message || json.msg || json.error || rawText;
+      // Prefer the Response field as the human-readable message
+      apiMessage = json.Response || json.message || json.msg || json.error || rawText;
 
       // If the API returned an empty/meaningless response, treat as unknown
       const responseText = (apiResponse || apiMessage || '').trim();
@@ -266,12 +271,16 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
         apiStatus = 'unknown';
       } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
         apiStatus = 'live';
-        apiMessage = json.message || json.Response || 'Charged';
+        apiMessage = json.Response || json.message || 'Charged';
       } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED') {
         apiStatus = 'dead';
-        apiMessage = json.message || json.error || json.Response || 'Declined';
+        apiMessage = json.Response || json.message || json.error || 'Declined';
+      } else if (json.Response === 'ERROR' && json.details?.error) {
+        // New API format: {"Response":"ERROR","details":{"error":"Cart add failed: 503"}}
+        apiStatus = 'dead';
+        apiMessage = json.details.error;
+        apiResponse = json.details.error;
       } else if (json.status === 'error') {
-        // Only mark as dead if there's a meaningful error message
         const errMsg = (json.message || json.error || '').trim().toLowerCase();
         if (errMsg && errMsg !== 'error:' && errMsg !== 'error' && errMsg.length > 5) {
           apiStatus = 'dead';
@@ -281,9 +290,9 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
           apiMessage = 'Request failed';
         }
       } else {
-        const lower = String(apiMessage).toLowerCase();
         const responseLower = (apiResponse || '').toLowerCase();
-        const combinedText = lower + ' ' + responseLower;
+        const msgLower = String(apiMessage).toLowerCase();
+        const combinedText = msgLower + ' ' + responseLower;
         
         if (combinedText.includes('order_placed') || combinedText.includes('order placed') || 
             combinedText.includes('order completed') || combinedText.includes('order_completed') ||
@@ -297,7 +306,8 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
                    combinedText.includes('ds_required') || combinedText.includes('3ds') || combinedText.includes('3d_secure') ||
                    combinedText.includes('rejected') || combinedText.includes('otp_required') || combinedText.includes('otp required') ||
                    combinedText.includes('pickup_card') || combinedText.includes('lost_card') || combinedText.includes('stolen_card') ||
-                   combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline')) {
+                   combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline') ||
+                   combinedText.includes('generic_error')) {
           apiStatus = 'dead';
         } else if (combinedText.includes('failed') || combinedText.includes('error')) {
           const substantive = combinedText.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
@@ -772,6 +782,14 @@ Deno.serve(async (req) => {
       );
     }
     
+    // Parse the raw response to extract gate info for display
+    let gate = 'Shopify Payments';
+    try {
+      let parsed = JSON.parse(result.rawResponse || '{}');
+      if (parsed.detail && typeof parsed.detail === 'object') parsed = parsed.detail;
+      if (parsed.Gate) gate = parsed.Gate;
+    } catch { /* ignore */ }
+
     return new Response(
       JSON.stringify({
         computedStatus,
@@ -779,6 +797,8 @@ Deno.serve(async (req) => {
         apiMessage: result.apiResponse || result.message,
         apiTotal: chargeAmount,
         apiPrice: result.priceStr,
+        apiGate: gate,
+        apiSite: randomSite.url,
         status: computedStatus,
         message: result.message,
         rawResponse: result.rawResponse,

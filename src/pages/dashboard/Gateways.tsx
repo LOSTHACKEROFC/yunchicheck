@@ -4349,29 +4349,44 @@ const Gateways = () => {
                     let apiPrice = '';
                     let apiResponseText = '';
                     let apiStatusText = getStatusDisplayLabel(result.status, selectedGateway?.id, selectedGateway?.type);
+                    let apiSite = '';
                     
                     try {
                       const raw = result.rawResponse ? JSON.parse(result.rawResponse) : null;
                       if (raw) {
-                        if (raw.apiStatus) apiStatusText = raw.apiStatus;
-                        if (raw.apiPrice) apiPrice = raw.apiPrice;
-                        else if (raw.apiTotal) apiPrice = raw.apiTotal;
+                        // Handle {"detail": {...}} envelope from new API
+                        const inner = raw.detail && typeof raw.detail === 'object' ? raw.detail : raw;
                         
-                        // Try to get Response from the nested raw API response first
-                        let inner = null;
-                        try { inner = typeof raw.rawResponse === 'string' ? JSON.parse(raw.rawResponse) : null; } catch {}
-                        if (!inner) try { inner = typeof raw.apiMessage === 'string' ? JSON.parse(raw.apiMessage) : null; } catch {}
-                        
-                        if (inner?.Response) {
+                        // Extract Response
+                        if (inner.Response) {
                           apiResponseText = String(inner.Response).replace(/<[^>]*>/g, '');
-                        } else if (raw.Response) {
-                          apiResponseText = String(raw.Response).replace(/<[^>]*>/g, '');
                         } else if (raw.apiMessage) {
                           apiResponseText = String(raw.apiMessage).replace(/<[^>]*>/g, '');
                         }
                         
-                        if (inner?.Price !== undefined) apiPrice = typeof inner.Price === 'number' ? `$${inner.Price.toFixed(2)}` : String(inner.Price);
-                        else if (raw.Price !== undefined) apiPrice = typeof raw.Price === 'number' ? `$${raw.Price.toFixed(2)}` : String(raw.Price);
+                        // Extract Price
+                        if (inner.Price !== undefined && Number(inner.Price) > 0) {
+                          apiPrice = `$${Number(inner.Price).toFixed(2)}`;
+                        } else if (raw.apiPrice) {
+                          apiPrice = raw.apiPrice;
+                        } else if (raw.apiTotal) {
+                          apiPrice = raw.apiTotal;
+                        }
+                        
+                        // Extract Gate
+                        if (inner.Gate) {
+                          apiGateway = inner.Gate;
+                        }
+                        
+                        // Extract Site
+                        if (inner.Site) {
+                          apiSite = inner.Site;
+                        }
+
+                        // Extract error details from new API format
+                        if (inner.details?.error && !apiResponseText) {
+                          apiResponseText = inner.details.error;
+                        }
                       }
                     } catch {}
                     
@@ -4405,6 +4420,13 @@ const Gateways = () => {
                           <span className="text-muted-foreground font-bold italic mr-2">:</span>
                           <span className="text-foreground font-bold italic">{apiPrice}</span>
                         </div>
+                        {apiSite && (
+                          <div className="flex">
+                            <span className="w-24 text-muted-foreground font-bold italic">SITE</span>
+                            <span className="text-muted-foreground font-bold italic mr-2">:</span>
+                            <span className="text-foreground/70 font-bold italic break-all text-[10px]">{apiSite}</span>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
