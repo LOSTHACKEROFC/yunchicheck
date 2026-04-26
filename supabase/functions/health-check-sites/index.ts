@@ -436,23 +436,12 @@ Deno.serve(async (req) => {
     let proxyStr = "";
     let proxyId: string | null = null;
 
+    // Proxy is optional — only used if explicitly provided in the request body.
+    // The Shopify health-check API works fine without a proxy and is faster direct.
     if (proxyOverride) {
       proxyStr = proxyOverride;
       if (proxyIdOverride) {
         proxyId = proxyIdOverride;
-      }
-    } else {
-      const { data: liveProxies } = await supabase
-        .from("proxies")
-        .select("*")
-        .eq("status", "live");
-
-      if (liveProxies && liveProxies.length > 0) {
-        const randomProxy = getRandomItem(liveProxies);
-        proxyId = randomProxy.id;
-        proxyStr = randomProxy.username && randomProxy.password
-          ? `${randomProxy.ip}:${randomProxy.port}:${randomProxy.username}:${randomProxy.password}`
-          : `${randomProxy.ip}:${randomProxy.port}`;
       }
     }
 
