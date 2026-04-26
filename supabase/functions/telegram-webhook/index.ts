@@ -5305,7 +5305,9 @@ Examples:
 
       if (callbackData.startsWith("sh_price_")) {
         const __cbQuery = update.callback_query!;
+        console.log(`[/sh bg] START callback=${callbackData} chat=${callbackChatId}`);
         const __shWork = (async () => {
+        console.log(`[/sh bg] IIFE entered`);
         const parts = callbackData.replace("sh_price_", "").split("_");
         const priceMin = parseInt(parts[0]);
         const priceMax = parseInt(parts[1]);
