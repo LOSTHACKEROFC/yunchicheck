@@ -6108,6 +6108,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           inline_keyboard: [[{ text: "🔙 𝗕𝗮𝗰𝗸 𝘁𝗼 𝗠𝗲𝗻𝘂", callback_data: "menu_back" }]]
         });
 
+        })();
+        // @ts-ignore
+        if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) EdgeRuntime.waitUntil(__mshWork.catch(e => console.error('[/msh bg]', e)));
+        else __mshWork.catch(e => console.error('[/msh bg]', e));
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
