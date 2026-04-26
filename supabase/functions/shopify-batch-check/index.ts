@@ -276,9 +276,9 @@ const checkSingleCard = async (
         rawLower.includes('proxy connect') || rawLower.includes('tunneling socket')
       );
 
-      if (isProxyError) {
+      if (isProxyError && currentProxy) {
         failedProxyIds.push(currentProxy.id);
-        if (attempt + 1 >= shuffledProxies.length) {
+        if (attempt + 1 >= proxyAttempts.length) {
           result = { status: 'unknown', message: 'All proxies failed (407)', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
         }
         continue;
@@ -289,7 +289,7 @@ const checkSingleCard = async (
     } catch (error) {
       clearTimeout(timeoutId);
       const errMsg = error instanceof Error ? error.message : 'Error';
-      if (attempt + 1 >= shuffledProxies.length) {
+      if (attempt + 1 >= proxyAttempts.length) {
         result = { status: 'unknown', message: 'Timeout', apiResponse: '', rawResponse: errMsg, price: 0, priceStr: '$0.00' };
       }
     }
