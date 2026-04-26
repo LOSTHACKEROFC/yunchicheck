@@ -5313,16 +5313,16 @@ Examples:
         
         let cc = "";
         try { cc = atob(encodedCC); } catch {
-          await answerCallbackQuery(update.callback_query.id, "❌ Invalid card data");
+          await answerCallbackQuery(__cbQuery.id, "❌ Invalid card data");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         if (!cc || !callbackChatId || !messageId) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Invalid request");
+          await answerCallbackQuery(__cbQuery.id, "❌ Invalid request");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        await answerCallbackQuery(update.callback_query.id, `⚡ Checking on $${priceMin}-$${priceMax} sites...`);
+        await answerCallbackQuery(__cbQuery.id, `⚡ Checking on $${priceMin}-$${priceMax} sites...`);
 
         const { data: shProfile } = await supabase
           .from("profiles")
