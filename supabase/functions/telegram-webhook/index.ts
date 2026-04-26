@@ -5935,16 +5935,18 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         };
 
         // Check a single card with site/proxy rotation
+        // Proxies are OPTIONAL — if none configured, calls go DIRECT (faster, no proxy delay)
         const mshCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
           const shuffledProxies = [...mshProxies].filter(p => !mshFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
-          if (shuffledProxies.length === 0) return { status: 'unknown', response: 'No proxies', price: '$0.00' };
+          // If no proxies, do a single direct attempt per site (fastest path)
+          const proxyAttempts: (typeof mshProxies[0] | null)[] = shuffledProxies.length > 0 ? shuffledProxies : [null];
           const maxSites = Math.min(2, mshAvailableSites.length);
           for (let si = 0; si < maxSites; si++) {
             const site = mshAvailableSites[si % mshAvailableSites.length];
-            for (const proxy of shuffledProxies) {
-              if (mshFailedProxyIds.includes(proxy.id)) continue;
-              const result = await mshCallWithRetry(cardCC, site.url, mshFormatProxy(proxy));
-              if (result.proxyDead) {
+            for (const proxy of proxyAttempts) {
+              if (proxy && mshFailedProxyIds.includes(proxy.id)) continue;
+              const result = await mshCallWithRetry(cardCC, site.url, proxy ? mshFormatProxy(proxy) : '');
+              if (result.proxyDead && proxy) {
                 mshFailedProxyIds.push(proxy.id);
                 supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
                 continue;
