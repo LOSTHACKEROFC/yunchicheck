@@ -167,7 +167,9 @@ type ApiCheckResult = {
   siteDead?: boolean;
 };
 
-const UNKNOWN_RETRY_ATTEMPTS = 4;
+const UNKNOWN_RETRY_ATTEMPTS = 2;
+// Global deadline (ms) — must stay safely under the 150s edge-runtime IDLE_TIMEOUT
+const GLOBAL_DEADLINE_MS = 120_000;
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const callApiOnce = async (cc: string, site: string, proxy: string): Promise<ApiCheckResult> => {
