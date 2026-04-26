@@ -461,23 +461,16 @@ Deno.serve(async (req) => {
     const triedSiteUrls: string[] = [];
     const badSiteUrls: { url: string; reason: string }[] = [];
 
-    // Get user's own proxies (required, 1-10)
-    const { data: userProxies, error: proxyError } = await adminClient
+    // Get user's own proxies (optional — API works without proxy)
+    const { data: userProxies } = await adminClient
       .from('user_proxies')
       .select('*')
       .eq('user_id', user.id);
 
-    if (proxyError || !userProxies || userProxies.length < 1) {
-      return new Response(JSON.stringify({ 
-        error: 'You must add at least 1 proxy before using Shopify Charge.', 
-        computedStatus: 'unknown' 
-      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
+    // Shuffle proxies for rotation (empty array if none)
+    const shuffledProxies = [...(userProxies || [])].sort(() => Math.random() - 0.5);
 
-    // Shuffle proxies for rotation
-    const shuffledProxies = [...userProxies].sort(() => Math.random() - 0.5);
-    
-    const formatProxy = (p: typeof userProxies[0]) => 
+    const formatProxy = (p: { ip: string; port: string; username: string | null; password: string | null }) =>
       p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
 
     let result: ApiCheckResult | null = null;
