@@ -15,8 +15,8 @@ const SHOPIFY_DEBUG_CHAT_ID = "-1003848532661";
 const API_URL = "https://web-production-9db0.up.railway.app/shopify";
 const buildApiUrl = (cc: string, site: string, proxy: string) =>
   proxy
-    ? `${API_URL}?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
-    : `${API_URL}?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`;
+    ? `${API_URL}?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
+    : `${API_URL}?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(site)}`;
 
 const badResponses = [
   "Site not supported",
