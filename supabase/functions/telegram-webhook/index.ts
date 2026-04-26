@@ -5579,7 +5579,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 ⏳ <b>${step}</b>
 [${progressBar}] Step ${progressStep}
 💰 Range: $${priceMin} – $${priceMax}
-📊 ${sites.length} sites ・ ${userProxies.length} proxies
+📊 ${sites.length} sites ・ ${userProxies?.length ?? 0} proxies
 `);
           };
 
