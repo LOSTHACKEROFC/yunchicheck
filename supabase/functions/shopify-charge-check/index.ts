@@ -167,14 +167,16 @@ type ApiCheckResult = {
   siteDead?: boolean;
 };
 
-const UNKNOWN_RETRY_ATTEMPTS = 4;
+const UNKNOWN_RETRY_ATTEMPTS = 2;
+// Global deadline (ms) — must stay safely under the 150s edge-runtime IDLE_TIMEOUT
+const GLOBAL_DEADLINE_MS = 120_000;
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const callApiOnce = async (cc: string, site: string, proxy: string): Promise<ApiCheckResult> => {
   const apiUrl = buildApiUrl(cc, site, proxy);
   
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 55000);
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
   
   try {
     const response = await fetch(apiUrl, {
@@ -478,8 +480,14 @@ Deno.serve(async (req) => {
     const failedProxyIds: string[] = [];
     const deadSiteUrls: string[] = [];
     let allProxiesDeadFlag = false;
+    const startedAt = Date.now();
+    const deadlineExceeded = () => (Date.now() - startedAt) > GLOBAL_DEADLINE_MS;
 
     for (let siteAttempt = 0; siteAttempt < MAX_SITE_ATTEMPTS; siteAttempt++) {
+      if (deadlineExceeded()) {
+        console.log(`[SHOPIFY-CHARGE] Global deadline reached, aborting further site attempts`);
+        break;
+      }
       const currentSite = shuffledSites[siteAttempt];
       usedSite = currentSite;
       triedSiteUrls.push(currentSite.url);
