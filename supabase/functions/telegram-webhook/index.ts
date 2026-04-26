@@ -9746,8 +9746,8 @@ ${resultsDisplay || "Waiting for results..."}
       const API_ENDPOINTS = [
         (site: string, cc: string, proxy: string) =>
           proxy
-            ? `https://web-production-9db0.up.railway.app/shopify?cc=${cc}&site=${site}&proxy=${proxy}`
-            : `https://web-production-9db0.up.railway.app/shopify?cc=${cc}&site=${site}`,
+            ? `https://web-production-9db0.up.railway.app/shopify?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
+            : `https://web-production-9db0.up.railway.app/shopify?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`,
       ];
       const TEST_CC = "4266841674104656|03|27|908";
 
