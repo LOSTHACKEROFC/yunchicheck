@@ -5815,12 +5815,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // Fetch proxies
-        const { data: mshProxies } = await supabase.from("user_proxies").select("*").eq("user_id", mshProfile.user_id);
-        if (!mshProxies || mshProxies.length < 1) {
-          await editTelegramMessage(callbackChatId, messageId, `❌ <b>No Proxies</b>\n\nAdd proxies at yunchicheck.com/dashboard → Proxies`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
-          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
+        // Fetch proxies (optional — Shopify API works without them)
+        const { data: mshProxiesRaw } = await supabase.from("user_proxies").select("*").eq("user_id", mshProfile.user_id);
+        const mshProxies = mshProxiesRaw || [];
 
         const SHOPIFY_API_URL_MSH = "https://web-production-9db0.up.railway.app/shopify";
         const MSH_DEBUG_CHAT = "-1003848532661";
