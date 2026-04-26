@@ -782,6 +782,14 @@ Deno.serve(async (req) => {
       );
     }
     
+    // Parse the raw response to extract gate info for display
+    let gate = 'Shopify Payments';
+    try {
+      let parsed = JSON.parse(result.rawResponse || '{}');
+      if (parsed.detail && typeof parsed.detail === 'object') parsed = parsed.detail;
+      if (parsed.Gate) gate = parsed.Gate;
+    } catch { /* ignore */ }
+
     return new Response(
       JSON.stringify({
         computedStatus,
@@ -789,6 +797,8 @@ Deno.serve(async (req) => {
         apiMessage: result.apiResponse || result.message,
         apiTotal: chargeAmount,
         apiPrice: result.priceStr,
+        apiGate: gate,
+        apiSite: randomSite.url,
         status: computedStatus,
         message: result.message,
         rawResponse: result.rawResponse,
