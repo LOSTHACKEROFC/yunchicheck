@@ -257,6 +257,42 @@ async function fetchAllRecords(
   return allRecords;
 }
 
+async function fetchShopifyGatewaySites(
+  supabase: any,
+  priceMin: number,
+  priceMax: number
+): Promise<{ url: string; price: number | null }[]> {
+  const PAGE_SIZE = 1000;
+  const safeMin = Number.isFinite(priceMin) ? priceMin : 0;
+  const safeMax = Number.isFinite(priceMax) ? priceMax : 100;
+  let allSites: { url: string; price: number | null; created_at?: string }[] = [];
+  let from = 0;
+
+  while (true) {
+    let query = supabase
+      .from("gateway_urls")
+      .select("url, price, created_at")
+      .not("url", "like", "https://razorpay.me/%")
+      .gt("price", 0)
+      .lte("price", 100)
+      .order("created_at", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (safeMin > 0) query = query.gt("price", safeMin);
+    if (safeMax < 100) query = query.lte("price", safeMax);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const page = data || [];
+    allSites = allSites.concat(page);
+    if (page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return allSites.map(({ url, price }) => ({ url, price }));
+}
+
 // Escape HTML special characters for Telegram HTML parse mode
 function escapeHtml(text: string | null | undefined): string {
   if (!text) return "";
