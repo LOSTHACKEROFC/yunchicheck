@@ -6617,9 +6617,13 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            return { msg, buttons };
          };
 
-         // 50-thread concurrency with staggered launches like web Shopify gateway
-         const MTXT_CONCURRENCY = 50;
-         const MTXT_STAGGER_MS_VAL = 180;
+          // Dynamic threads for Telegram /mtxt: hard direct API requests should run fast,
+          // while proxy-backed checks stay lower to avoid proxy/IP rate-limits.
+          const mtxtActiveProxyCount = mtxtProxies.filter((p: any) => !mtxtFailedProxyIds.includes(p.id)).length;
+          const MTXT_CONCURRENCY = mtxtActiveProxyCount > 0
+            ? Math.max(4, Math.min(12, mtxtActiveProxyCount, mtxtCards.length))
+            : Math.max(8, Math.min(50, mtxtCards.length));
+          const MTXT_STAGGER_MS_VAL = mtxtActiveProxyCount > 0 ? 250 : 90;
 
          // Throttled UI update - max 1 edit per 500ms, always send on force
          let mtxtLastEditTime = 0;
@@ -6710,7 +6714,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          };
 
          // Show initial processing message with animation
-         const initData = buildMtxtMessageAndButtons(0, mtxtCards.length, '0.00', false);
+          const initData = buildMtxtMessageAndButtons(0, mtxtCards.length, '0.00', false);
          await editTelegramMessage(callbackChatId, messageId, initData.msg, { inline_keyboard: initData.buttons });
 
          // Process card helper
@@ -6808,7 +6812,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            }
          };
 
-        // Staggered 50-card session model (matching web Shopify gateway)
+         await editTelegramMessage(callbackChatId, messageId, `${initData.msg}\n⚙️ <i>Threads: ${MTXT_CONCURRENCY} · API: hard site request</i>`, { inline_keyboard: initData.buttons });
+
+        // Staggered threaded session model (matching web Shopify gateway, adjusted for Telegram runtime)
          const mtxtQueue = mtxtCards.map(c => c.trim()).filter(c => c);
          let mtxtQueueIdx = 0;
          const MIN_COMPLETE_BEFORE_NEXT = 49;
