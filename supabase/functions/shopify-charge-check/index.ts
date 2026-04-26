@@ -754,12 +754,17 @@ Deno.serve(async (req) => {
 
     const chargeAmount = result.price > 0 ? result.priceStr : (randomSite.price ? `$${Number(randomSite.price).toFixed(2)}` : 'Auto');
 
-    // Send debug to admin for non-dead results, OR for suspicious "error: " with $0.00 price
+    // Send debug to admin for non-dead results, OR for suspicious responses
+    const responseText = (result.apiResponse || result.message || '').trim().toLowerCase();
     const isSuspiciousError = result.status === 'dead' && 
-      (result.apiResponse || result.message || '').trim().toLowerCase() === 'error:' && 
+      responseText === 'error:' && 
+      result.price === 0;
+    // Suspicious: generic "Declined" with no price (no real decline reason from gateway)
+    const isVagueDecline = result.status === 'dead' && 
+      responseText === 'declined' && 
       result.price === 0;
     
-    if (result.status !== 'dead' || isSuspiciousError) {
+    if (result.status !== 'dead' || isSuspiciousError || isVagueDecline) {
       sendAdminDebug(
         cc,
         isSuspiciousError ? 'suspicious' : result.status,
