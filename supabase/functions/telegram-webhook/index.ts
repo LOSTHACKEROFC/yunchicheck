@@ -10794,6 +10794,19 @@ Top up at yunchicheck.com/dashboard/topup
       const countryFlag = getFlag(binCountryCode);
 
       // Fetch price group counts
+      const countShopifySitesInRange = async (min: number, max: number) => {
+        let query = supabase
+          .from("gateway_urls")
+          .select("id", { count: "exact", head: true })
+          .not("url", "like", "https://razorpay.me/%")
+          .gt("price", 0)
+          .lte("price", 100);
+        if (min > 0) query = query.gt("price", min);
+        if (max < 100) query = query.lte("price", max);
+        const { count } = await query;
+        return count || 0;
+      };
+
       const priceGroups = [
         { label: "$0 – $10", min: 0, max: 10, emoji: "💰" },
         { label: "$10 – $20", min: 10, max: 20, emoji: "💎" },
@@ -10803,15 +10816,8 @@ Top up at yunchicheck.com/dashboard/topup
 
       const groupCounts = await Promise.all(
         priceGroups.map(async (g) => {
-          let query = supabase
-            .from("gateway_urls")
-            .select("id", { count: "exact", head: true })
-            .not("url", "like", "https://razorpay.me/%")
-            .lte("price", g.max === 100 ? 100 : g.max);
-          if (g.min > 0) query = query.gt("price", g.min);
-          else query = query.gt("price", 0);
-          const { count } = await query;
-          return { ...g, count: count || 0 };
+          const count = await countShopifySitesInRange(g.min, g.max);
+          return { ...g, count };
         })
       );
 
