@@ -337,7 +337,7 @@ const Gateways = () => {
   const shopifyInvokeActiveRef = useRef(0);
   const shopifyInvokeQueueRef = useRef<Array<() => void>>([]);
   const SHOPIFY_WARMUP_TTL_MS = 2 * 60 * 1000;
-  const SHOPIFY_MAX_PARALLEL_INVOCATIONS = 24;
+  const SHOPIFY_MAX_PARALLEL_INVOCATIONS = 8;
 
 
   // Gateway history state
@@ -1958,11 +1958,10 @@ const Gateways = () => {
         if (isRetryable && attempt < MAX_RETRIES) {
           if (isBootError) {
             shopifyWarmupAtRef.current = 0;
-            await warmupShopifyFunction();
           }
 
-          const baseDelay = isBootError ? 1600 : 900;
-          const backoffMs = Math.min(12000, baseDelay * (2 ** (attempt - 1)) + Math.floor(Math.random() * 500));
+          const baseDelay = isBootError ? 3500 : 1200;
+          const backoffMs = Math.min(18000, baseDelay * (2 ** (attempt - 1)) + Math.floor(Math.random() * 900));
           console.warn(`[SHOPIFY] Retry ${attempt}/${MAX_RETRIES} after ${statusCode ?? 'unknown'} (${isBootError ? 'BOOT_ERROR' : 'transient'}) in ${backoffMs}ms`);
           await new Promise(r => setTimeout(r, backoffMs));
           continue;
@@ -1989,10 +1988,9 @@ const Gateways = () => {
         if (isRetryableException && attempt < MAX_RETRIES) {
           if (msg.includes('503') || msg.includes('boot_error')) {
             shopifyWarmupAtRef.current = 0;
-            await warmupShopifyFunction();
           }
 
-          const backoffMs = Math.min(12000, 1000 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 500));
+          const backoffMs = Math.min(18000, 1800 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 900));
           await new Promise(r => setTimeout(r, backoffMs));
           continue;
         }
@@ -3262,7 +3260,7 @@ const Gateways = () => {
           const promises = batchIndices.map(async (idx, launchOrder) => {
             if (bulkAbortRef.current) return;
             if (launchOrder > 0) {
-              const launchDelay = launchOrder * 180 + Math.floor(Math.random() * 120);
+              const launchDelay = launchOrder * 280 + Math.floor(Math.random() * 180);
               await new Promise(r => setTimeout(r, launchDelay));
             }
             if (bulkAbortRef.current) return;
@@ -3304,7 +3302,7 @@ const Gateways = () => {
 
         // Small gap between sessions so the backend can recycle workers cleanly
         if (cardIndex < affordableCards.length && !bulkAbortRef.current) {
-          await new Promise(r => setTimeout(r, 600));
+          await new Promise(r => setTimeout(r, 1200));
         }
       }
 
