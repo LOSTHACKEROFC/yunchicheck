@@ -6805,6 +6805,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           clearTimeout(mtxtSafetyTimer);
           await mtxtSendFinalMessage();
 
+        })();
+        // @ts-ignore
+        if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) EdgeRuntime.waitUntil(__mtxtWork.catch(e => console.error('[/mtxt bg]', e)));
+        else __mtxtWork.catch(e => console.error('[/mtxt bg]', e));
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
