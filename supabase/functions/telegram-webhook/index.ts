@@ -6196,16 +6196,16 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         // Re-insert as stop-tracking record (use a valid dummy UUID for user_id)
         await supabase.from("pending_bulk_checks").insert({ id: mtxtBulkId, cards: "RUNNING", chat_id: String(callbackChatId), user_id: "00000000-0000-0000-0000-000000000000" });
         if (!mtxtCards.length) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Card data expired or invalid");
+          await answerCallbackQuery(__mtxtCbQuery.id, "❌ Card data expired or invalid");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         if (!callbackChatId || !messageId) {
-          await answerCallbackQuery(update.callback_query.id, "❌ Invalid request");
+          await answerCallbackQuery(__mtxtCbQuery.id, "❌ Invalid request");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        await answerCallbackQuery(update.callback_query.id, `⚡ Checking ${mtxtCards.length} cards on $${mtxtPriceMin}-$${mtxtPriceMax}...`);
+        await answerCallbackQuery(__mtxtCbQuery.id, `⚡ Checking ${mtxtCards.length} cards on $${mtxtPriceMin}-$${mtxtPriceMax}...`);
 
         const { data: mtxtProfile } = await supabase
           .from("profiles")
