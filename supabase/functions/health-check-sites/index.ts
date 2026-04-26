@@ -136,7 +136,9 @@ const checkSingleSite = async (
     const controller = new AbortController();
     timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(TEST_CC)}&site=${encodeURIComponent(normalizedSiteUrl)}&proxy=${encodeURIComponent(proxyStr)}`;
+    const apiUrl = proxyStr
+      ? `${API_BASE_URL}?cc=${encodeURIComponent(TEST_CC)}&site=${encodeURIComponent(normalizedSiteUrl)}&proxy=${encodeURIComponent(proxyStr)}`
+      : `${API_BASE_URL}?cc=${encodeURIComponent(TEST_CC)}&site=${encodeURIComponent(normalizedSiteUrl)}`;
 
     console.log(`[Check] ${normalizedSiteUrl} | proxy=${proxyStr ? "yes" : "none"}`);
 
