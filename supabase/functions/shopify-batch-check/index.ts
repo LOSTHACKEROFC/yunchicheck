@@ -134,10 +134,15 @@ const checkSingleCard = async (
   let result: { status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string } | null = null;
   const failedProxyIds: string[] = [];
 
-  for (let attempt = 0; attempt < shuffledProxies.length; attempt++) {
-    const currentProxy = shuffledProxies[attempt];
-    const proxyStr = formatProxy(currentProxy);
-    const apiUrl = `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(randomSite.url)}&proxy=${proxyStr}`;
+  // If no proxies configured, do a single direct call (no proxy)
+  const proxyAttempts: (typeof proxies[0] | null)[] = shuffledProxies.length > 0 ? [...shuffledProxies] : [null];
+
+  for (let attempt = 0; attempt < proxyAttempts.length; attempt++) {
+    const currentProxy = proxyAttempts[attempt];
+    const proxyStr = currentProxy ? formatProxy(currentProxy) : '';
+    const apiUrl = proxyStr
+      ? `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(randomSite.url)}&proxy=${proxyStr}`
+      : `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(randomSite.url)}`;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
