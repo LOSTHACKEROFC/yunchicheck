@@ -6181,6 +6181,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         }
 
        if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite") && !callbackData.startsWith("mtxt_pending") && !callbackData.startsWith("mtxt_res_")) {
+        const __mtxtCbQuery = update.callback_query!;
+        const __mtxtWork = (async () => {
         const mtxtParts = callbackData.replace("mtxt_", "").split("_");
         const mtxtPriceMin = parseInt(mtxtParts[0]);
         const mtxtPriceMax = parseInt(mtxtParts[1]);
