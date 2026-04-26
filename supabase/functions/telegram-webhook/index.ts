@@ -10818,20 +10818,6 @@ Top up at yunchicheck.com/dashboard/topup
       };
       const countryFlag = getFlag(binCountryCode);
 
-      // Fetch price group counts
-      const countShopifySitesInRange = async (min: number, max: number) => {
-        let query = supabase
-          .from("gateway_urls")
-          .select("id", { count: "exact", head: true })
-          .not("url", "like", "https://razorpay.me/%")
-          .gt("price", 0)
-          .lte("price", 100);
-        if (min > 0) query = query.gt("price", min);
-        if (max < 100) query = query.lte("price", max);
-        const { count } = await query;
-        return count || 0;
-      };
-
       const priceGroups = [
         { label: "$0 – $10", min: 0, max: 10, emoji: "💰" },
         { label: "$10 – $20", min: 10, max: 20, emoji: "💎" },
@@ -11110,7 +11096,7 @@ One card per line in the TXT file:
 
       const mtxtGroupCounts = await Promise.all(
         mtxtPriceGroups.map(async (g) => {
-          const count = await countShopifySitesInRange(g.min, g.max);
+          const count = await countShopifySitesInRange(supabase, g.min, g.max);
           return { ...g, count };
         })
       );
