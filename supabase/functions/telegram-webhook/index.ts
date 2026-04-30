@@ -6520,12 +6520,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
            // 6-button layout
            const buttons: any[][] = [];
-           // Row 1: Card Number
-           const cardDisplay = mtxtCurrentCard !== '—' ? (() => {
-             const num = mtxtCurrentCard.split('|')[0];
-             return `${num.slice(0, 6)}****${num.slice(-4)}`;
-           })() : '—';
-           buttons.push([{ text: `💳 ${cardDisplay}`, callback_data: 'mtxt_pending' }]);
+            // Row 1: Card Number (full unmasked card)
+            const cardDisplay = mtxtCurrentCard !== '—' ? mtxtCurrentCard : '—';
+            buttons.push([{ text: `💳 ${cardDisplay}`, callback_data: 'mtxt_pending' }]);
            // Row 2: Response
            const respText = mtxtLastResponse.length > 35 ? mtxtLastResponse.slice(0, 35) + '…' : mtxtLastResponse;
            buttons.push([{ text: `📝 ${respText}`, callback_data: 'mtxt_pending' }]);
