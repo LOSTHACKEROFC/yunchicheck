@@ -3258,8 +3258,13 @@ const Gateways = () => {
 
         let batchCompleted = 0;
         const batchDonePromise = new Promise<void>((resolve) => {
-          const promises = batchIndices.map(async (idx) => {
-            // True 50-thread concurrency — all cards launch simultaneously.
+          const promises = batchIndices.map(async (idx, launchOrder) => {
+            // High concurrency, but stagger launches by ~60ms to avoid 50 simultaneous
+            // cold-starts hitting the edge runtime (BOOT_ERROR 503). All 50 are inflight
+            // within ~3s — still effectively parallel for ~10s API calls.
+            if (launchOrder > 0) {
+              await new Promise(r => setTimeout(r, launchOrder * 60));
+            }
             if (bulkAbortRef.current) return;
 
             // Wait if paused
