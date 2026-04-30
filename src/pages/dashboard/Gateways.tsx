@@ -2958,11 +2958,9 @@ const Gateways = () => {
         setBulkEstimatedTime("Finishing...");
       }
       
-      // Update remaining lines in textarea only every 5th flush to reduce re-renders
-      if (stats.completed % 5 === 0 || stats.completed >= stats.total) {
-        const remainingLinesNow = originalLines.slice(stats.completed);
-        setBulkInput(remainingLinesNow.join('\n'));
-      }
+      // Update remaining lines in textarea on every flush so the input shrinks live
+      const remainingLinesNow = originalLines.slice(stats.completed);
+      setBulkInput(remainingLinesNow.join('\n'));
     };
 
     // Schedule a micro-flush via rAF so each result renders on the next paint frame
