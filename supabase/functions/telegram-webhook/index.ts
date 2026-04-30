@@ -6721,21 +6721,20 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                return;
              }
            }
-             // Show only the card number (PAN) in the live progress UI
-             mtxtCurrentCard = cardCC.split("|")[0] || cardCC;
-             // Force an immediate UI refresh so the user sees the card currently being checked in real time
-             await mtxtFlushUpdate(true);
+             const cardPan = cardCC.split("|")[0] || cardCC;
 
             const cardParts = cardCC.split("|");
-           if (cardParts.length < 4 || !cardParts[3] || cardParts[3].length < 3) {
-             const errResult: MtxtResult = { cc: cardCC, status: 'error', response: 'Invalid format', price: '$0.00', bank: 'N/A', flag: '🌍' };
-             mtxtResults.push(errResult);
-             mtxtLastResponse = 'Invalid format';
-             mtxtDeclined++;
-             mtxtChecked++;
-             await mtxtFlushUpdate();
-             return;
-           }
+            if (cardParts.length < 4 || !cardParts[3] || cardParts[3].length < 3) {
+              const errResult: MtxtResult = { cc: cardCC, status: 'error', response: 'Invalid format', price: '$0.00', bank: 'N/A', flag: '🌍' };
+              mtxtResults.push(errResult);
+              // Update card + response together so the UI pair always matches
+              mtxtCurrentCard = cardPan;
+              mtxtLastResponse = 'Invalid format';
+              mtxtDeclined++;
+              mtxtChecked++;
+              await mtxtFlushUpdate(true);
+              return;
+            }
 
            const [binInfo, result] = await Promise.all([
              mtxtLookupBin(cardParts[0]),
