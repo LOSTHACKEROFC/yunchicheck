@@ -6737,7 +6737,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            }
          };
 
-         await editTelegramMessage(callbackChatId, messageId, `${initData.msg}\n⚙️ <i>Threads: ${MTXT_CONCURRENCY} · API: hard site request</i>`, { inline_keyboard: initData.buttons });
+         await editTelegramMessage(callbackChatId, messageId, initData.msg, { inline_keyboard: initData.buttons });
 
         // Staggered threaded session model (matching web Shopify gateway, adjusted for Telegram runtime)
          const mtxtQueue = mtxtCards.map(c => c.trim()).filter(c => c);
