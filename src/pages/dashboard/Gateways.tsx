@@ -1977,7 +1977,7 @@ const Gateways = () => {
 
         if (isRetryable && attempt < MAX_RETRIES) {
           if (isBootError) {
-            shopifyWarmupAtRef.current = 0;
+            handleShopifyBootPressure();
           }
 
           const baseDelay = isBootError ? 3500 : 1200;
@@ -2007,7 +2007,7 @@ const Gateways = () => {
 
         if (isRetryableException && attempt < MAX_RETRIES) {
           if (msg.includes('503') || msg.includes('boot_error')) {
-            shopifyWarmupAtRef.current = 0;
+            handleShopifyBootPressure();
           }
 
           const backoffMs = Math.min(18000, 1800 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 900));
