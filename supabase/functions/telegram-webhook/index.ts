@@ -6565,8 +6565,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            if (mtxtFinalSent) return;
            mtxtFinalSent = true;
 
-           // Cleanup stop tracker and store error cards for recheck
-           await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
+           // NOTE: Do NOT delete the pending_bulk_checks row here. Other in-flight
+           // mtxtProcessCard calls poll that row to detect a user-stop; deleting it
+           // mid-run would race with them and cause the run to abort prematurely.
+           // The row is cleaned up at the very end of the run (after Promise.all).
            if (mtxtErrorCards.length > 0) {
              await supabase.from("pending_bulk_checks").insert({ id: `rechk_${mtxtBulkId}`, cards: mtxtErrorCards.join("\n"), chat_id: String(callbackChatId), user_id: mtxtProfile.user_id });
            }
@@ -6644,11 +6646,26 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
          // Process card helper
          let mtxtChecked = 0;
+         let mtxtLastStopCheckAt = 0;
+         const MTXT_STOP_CHECK_INTERVAL_MS = 5000; // poll DB stop flag at most every 5s
          const mtxtProcessCard = async (cardCC: string) => {
            if (mtxtStopped) return;
-           // Check stop flag from DB
-           const { data: stopCheck } = await supabase.from("pending_bulk_checks").select("id").eq("id", mtxtBulkId).maybeSingle();
-           if (!stopCheck) { mtxtStopped = true; return; }
+           // Throttled stop-flag poll — only one card at a time hits the DB,
+           // and only every few seconds. Prevents the 50-thread fanout from
+           // hammering Postgres and racing with the final-message cleanup.
+           const nowMs = Date.now();
+           if (nowMs - mtxtLastStopCheckAt > MTXT_STOP_CHECK_INTERVAL_MS) {
+             mtxtLastStopCheckAt = nowMs;
+             const { data: stopCheck } = await supabase
+               .from("pending_bulk_checks")
+               .select("id")
+               .eq("id", mtxtBulkId)
+               .maybeSingle();
+             if (!stopCheck) {
+               mtxtStopped = true;
+               return;
+             }
+           }
             mtxtCurrentCard = cardCC;
 
            const cardParts = cardCC.split("|");
@@ -6728,13 +6745,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
            mtxtChecked++;
 
-           // If this was the last card, send final message immediately
-           if (mtxtChecked >= mtxtCards.length || mtxtStopped) {
-             await mtxtSendFinalMessage();
-           } else {
-             // Update UI with this card's result (throttled)
-             await mtxtFlushUpdate();
-           }
+           // Always update UI; the final message is sent ONCE by the outer
+           // loop after all batches finish (avoids racing with sibling cards).
+           await mtxtFlushUpdate();
          };
 
          await editTelegramMessage(callbackChatId, messageId, initData.msg, { inline_keyboard: initData.buttons });
@@ -6744,11 +6757,13 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          let mtxtQueueIdx = 0;
          const MIN_COMPLETE_BEFORE_NEXT = 49;
 
-         // Safety timeout: send final message before edge function dies (140s limit)
-         const MTXT_SAFETY_TIMEOUT = 135000;
+         // Safety timeout: very long upper bound — only fires for truly stuck runs.
+         // The job runs in EdgeRuntime.waitUntil so it isn't bound to the request lifecycle.
+         // Each card invokes shopify-charge-check (≤120s deadline); we allow up to 10 min total.
+         const MTXT_SAFETY_TIMEOUT = 600_000;
          const mtxtSafetyTimer = setTimeout(async () => {
+           console.warn('[/mtxt] Safety timeout reached after 10min — finalizing.');
            mtxtStopped = true;
-           await mtxtSendFinalMessage();
          }, MTXT_SAFETY_TIMEOUT);
 
           while (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
@@ -6784,6 +6799,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          }
 
           clearTimeout(mtxtSafetyTimer);
+          // Now (and only now) it's safe to remove the stop-tracker row — every
+          // worker has finished, so no one else will poll it.
+          await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
           await mtxtSendFinalMessage();
 
         })();
