@@ -2929,7 +2929,6 @@ const Gateways = () => {
     const allResults: BulkResult[] = [];
 
     // Immediate flush: push results to UI as soon as they arrive
-    let rafPending = false;
     const flushPendingResults = () => {
       if (pendingResultsRef.current.length === 0) return;
       const batch = pendingResultsRef.current.splice(0);
