@@ -2963,12 +2963,16 @@ const Gateways = () => {
       setBulkInput(remainingLinesNow.join('\n'));
     };
 
-    // Schedule a micro-flush via rAF so each result renders on the next paint frame
+    // Flush immediately so every completed card appears in the UI right away.
+    // rAF is still used as a safety net for any pending items between calls.
+    let rafId: number | null = null;
     const scheduleFlush = () => {
-      if (rafPending) return;
-      rafPending = true;
-      requestAnimationFrame(() => {
-        rafPending = false;
+      // Immediate synchronous flush — the card just completed, show it now
+      flushPendingResults();
+      // Also schedule a follow-up rAF flush in case more results arrived during render
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
         flushPendingResults();
       });
     };
