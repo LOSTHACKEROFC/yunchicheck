@@ -5988,34 +5988,32 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return result;
         };
 
-        // Check a single card with site/proxy rotation
-        // Proxies are OPTIONAL — if none configured, calls go DIRECT (faster, no proxy delay)
+        // Check a single card via the shopify-charge-check edge function — same checking
+        // system as the web Shopify Charge gateway. The edge function handles site selection,
+        // proxy rotation, retries, strike counting, decline mapping, and auto-removal of bad sites.
         const mshCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
-          const shuffledProxies = [...mshProxies].filter(p => !mshFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
-          // If no proxies, do a single direct attempt per site (fastest path)
-          const proxyAttempts: (typeof mshProxies[0] | null)[] = shuffledProxies.length > 0 ? shuffledProxies : [null];
-          const maxSites = Math.min(2, mshAvailableSites.length);
-          for (let si = 0; si < maxSites; si++) {
-            const site = mshAvailableSites[si % mshAvailableSites.length];
-            for (const proxy of proxyAttempts) {
-              if (proxy && mshFailedProxyIds.includes(proxy.id)) continue;
-              const result = await mshCallWithRetry(cardCC, site.url, proxy ? mshFormatProxy(proxy) : '');
-              if (result.proxyDead && proxy) {
-                mshFailedProxyIds.push(proxy.id);
-                supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
-                continue;
-              }
-              if (result.siteDead) {
-                supabase.from('gateway_urls').delete().eq('url', site.url).then(() => {});
-                break;
-              }
-              if (result.status === 'live' || result.status === 'dead') {
-                return { status: result.status, response: result.response || result.message || 'N/A', price: result.price > 0 ? result.priceStr : (site.price ? `$${Number(site.price).toFixed(2)}` : '$0.00') };
-              }
-              return { status: 'unknown', response: result.response || result.message || 'Unknown', price: result.price > 0 ? result.priceStr : '$0.00' };
+          try {
+            const { data, error } = await supabase.functions.invoke('shopify-charge-check', {
+              body: {
+                cc: cardCC,
+                userId: mshProfile.user_id,
+                priceGroup: { min: mshPriceMin, max: mshPriceMax },
+              },
+            });
+            if (error || !data) {
+              return { status: 'unknown', response: error?.message || 'Edge invoke failed', price: '$0.00' };
             }
+            const status = data.computedStatus === 'live' ? 'live'
+              : data.computedStatus === 'dead' ? 'dead'
+              : 'unknown';
+            const response = data.apiMessage || data.message || 'N/A';
+            const price = data.apiTotal && data.apiTotal !== 'Auto'
+              ? data.apiTotal
+              : (data.apiPrice && data.apiPrice !== '$0.00' ? data.apiPrice : '$0.00');
+            return { status, response, price };
+          } catch (e) {
+            return { status: 'unknown', response: e instanceof Error ? e.message : 'Error', price: '$0.00' };
           }
-          return { status: 'unknown', response: 'All attempts failed', price: '$0.00' };
         };
 
         // Results array
