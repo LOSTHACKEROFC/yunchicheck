@@ -808,7 +808,7 @@ Deno.serve(async (req) => {
     // Broadcast CHARGED cards to channel
     if (result.status === 'live') {
       notifyChargedCard(
-        user.id,
+        user!.id,
         cc,
         'CHARGED',
         result.message,
