@@ -6797,15 +6797,17 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
              bank: binInfo.bank,
              flag: binInfo.flag,
            };
-           mtxtResults.push(cardResult);
-           mtxtLastResponse = result.response || 'N/A';
+            mtxtResults.push(cardResult);
+            // Update card + response together so the live UI pair always matches
+            mtxtCurrentCard = cardPan;
+            mtxtLastResponse = result.response || 'N/A';
 
-           mtxtChecked++;
+            mtxtChecked++;
 
-           // Always update UI; the final message is sent ONCE by the outer
-           // loop after all batches finish (avoids racing with sibling cards).
-           await mtxtFlushUpdate();
-         };
+            // Always update UI; the final message is sent ONCE by the outer
+            // loop after all batches finish (avoids racing with sibling cards).
+            await mtxtFlushUpdate(true);
+          };
 
          await editTelegramMessage(callbackChatId, messageId, initData.msg, { inline_keyboard: initData.buttons });
 
