@@ -6603,11 +6603,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            const approvedResults = mtxtResults.filter(r => r.status === 'approved');
            if (approvedResults.length > 0) {
              mtxtFinalMsg += `━━━━ ✅ 𝗔𝗣𝗣𝗥𝗢𝗩𝗘𝗗 ━━━━\n\n`;
-             for (const card of approvedResults) {
-               const num = card.cc.split('|')[0];
-               const maskedCC = `${num.slice(0, 6)}****${num.slice(-4)}`;
-               mtxtFinalMsg += `✅ <code>${maskedCC}</code> ・ ${card.flag} ${card.bank}\n`;
-             }
+              for (const card of approvedResults) {
+                mtxtFinalMsg += `✅ <code>${card.cc}</code> ・ ${card.flag} ${card.bank}\n`;
+              }
              mtxtFinalMsg += `\n`;
            }
 
