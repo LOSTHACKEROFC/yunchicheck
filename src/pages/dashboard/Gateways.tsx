@@ -327,6 +327,7 @@ const Gateways = () => {
   const [bulkResultFilter, setBulkResultFilter] = useState<"all" | "live" | "dead" | "unknown">("all"); // Filter for bulk results
   const bulkAbortRef = useRef(false);
   const bulkPauseRef = useRef(false);
+  const bulkProxyWarnedRef = useRef(false);
 
   // Performance: batch UI updates to avoid re-rendering on every card
   const pendingResultsRef = useRef<BulkResult[]>([]);
@@ -2913,6 +2914,7 @@ const Gateways = () => {
     setBulkStartTime(Date.now());
     setBulkEstimatedTime("Calculating...");
     bulkAbortRef.current = false;
+    bulkProxyWarnedRef.current = false;
     bulkPauseRef.current = false;
     pendingResultsRef.current = [];
     bulkStatsRef.current = { completed: 0, total: affordableCards.length, startTime: Date.now() };
@@ -3087,14 +3089,14 @@ const Gateways = () => {
           gatewayResponse = await checkCardViaRazorpay(cardData.card, cardData.month, cardData.year, cardData.cvv, site);
         } else if (selectedGateway.id === "shopify_charge") {
           gatewayResponse = await checkCardViaShopify(cardData.card, cardData.month, cardData.year, cardData.cvv);
-          // Stop bulk if all user proxies are dead
-          if ((gatewayResponse as any)?.allProxiesDead) {
-            bulkAbortRef.current = true;
-            toast.error("⚠️ All proxies are dead! Add new valid proxies to restart checking.", {
-              duration: 10000,
-              description: "Go to Proxy Manager and add working proxies before continuing.",
+          // Don't abort the bulk run if user proxies die — the edge function
+          // automatically falls back to direct calls. Just warn the user once.
+          if ((gatewayResponse as any)?.allProxiesDead && !bulkProxyWarnedRef.current) {
+            bulkProxyWarnedRef.current = true;
+            toast.warning("⚠️ Some proxies are failing — continuing without them.", {
+              duration: 6000,
+              description: "Add fresh proxies in Proxy Manager for better reliability.",
             });
-            return null;
           }
         }
         
