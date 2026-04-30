@@ -5992,28 +5992,53 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         // system as the web Shopify Charge gateway. The edge function handles site selection,
         // proxy rotation, retries, strike counting, decline mapping, and auto-removal of bad sites.
         const mshCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
-          try {
-            const { data, error } = await supabase.functions.invoke('shopify-charge-check', {
-              body: {
-                cc: cardCC,
-                userId: mshProfile.user_id,
-                priceGroup: { min: mshPriceMin, max: mshPriceMax },
-              },
-            });
-            if (error || !data) {
-              return { status: 'unknown', response: error?.message || 'Edge invoke failed', price: '$0.00' };
+          const url = `${SUPABASE_URL}/functions/v1/shopify-charge-check`;
+          const body = JSON.stringify({
+            cc: cardCC,
+            userId: mshProfile.user_id,
+            priceGroup: { min: mshPriceMin, max: mshPriceMax },
+          });
+          let lastErr = 'Unknown error';
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const ctrl = new AbortController();
+            const timeoutId = setTimeout(() => ctrl.abort(), 90_000);
+            try {
+              const resp = await fetch(url, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                  'apikey': SUPABASE_SERVICE_ROLE_KEY,
+                },
+                body,
+                signal: ctrl.signal,
+              });
+              clearTimeout(timeoutId);
+              if (!resp.ok) {
+                lastErr = `HTTP ${resp.status}`;
+                if (resp.status >= 500 || resp.status === 429) {
+                  await new Promise(r => setTimeout(r, 500 + attempt * 500));
+                  continue;
+                }
+                return { status: 'unknown', response: lastErr, price: '$0.00' };
+              }
+              const data = await resp.json();
+              if (!data) return { status: 'unknown', response: 'Empty response', price: '$0.00' };
+              const status = data.computedStatus === 'live' ? 'live'
+                : data.computedStatus === 'dead' ? 'dead'
+                : 'unknown';
+              const response = data.apiMessage || data.message || 'N/A';
+              const price = data.apiTotal && data.apiTotal !== 'Auto'
+                ? data.apiTotal
+                : (data.apiPrice && data.apiPrice !== '$0.00' ? data.apiPrice : '$0.00');
+              return { status, response, price };
+            } catch (e) {
+              clearTimeout(timeoutId);
+              lastErr = e instanceof Error ? e.message : 'Error';
+              await new Promise(r => setTimeout(r, 500 + attempt * 500));
             }
-            const status = data.computedStatus === 'live' ? 'live'
-              : data.computedStatus === 'dead' ? 'dead'
-              : 'unknown';
-            const response = data.apiMessage || data.message || 'N/A';
-            const price = data.apiTotal && data.apiTotal !== 'Auto'
-              ? data.apiTotal
-              : (data.apiPrice && data.apiPrice !== '$0.00' ? data.apiPrice : '$0.00');
-            return { status, response, price };
-          } catch (e) {
-            return { status: 'unknown', response: e instanceof Error ? e.message : 'Error', price: '$0.00' };
           }
+          return { status: 'unknown', response: lastErr, price: '$0.00' };
         };
 
         // Results array
@@ -6464,29 +6489,59 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           // Check a single card via the shopify-charge-check edge function — same checking
           // system as the web Shopify Charge gateway. The edge function handles site selection,
           // proxy rotation, retries, strike counting, decline mapping, and auto-removal of bad sites.
+          // Direct fetch (instead of supabase.functions.invoke) avoids the SDK's
+          // internal "Failed to send a request" errors under high concurrency.
+          // Retries up to 2 times on network/5xx failures.
           const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
-            try {
-              const { data, error } = await supabase.functions.invoke('shopify-charge-check', {
-                body: {
-                  cc: cardCC,
-                  userId: mtxtProfile.user_id,
-                  priceGroup: { min: mtxtPriceMin, max: mtxtPriceMax },
-                },
-              });
-              if (error || !data) {
-                return { status: 'error', response: error?.message || 'Edge invoke failed', price: '$0.00' };
+            const url = `${SUPABASE_URL}/functions/v1/shopify-charge-check`;
+            const body = JSON.stringify({
+              cc: cardCC,
+              userId: mtxtProfile.user_id,
+              priceGroup: { min: mtxtPriceMin, max: mtxtPriceMax },
+            });
+            let lastErr = 'Unknown error';
+            for (let attempt = 0; attempt < 3; attempt++) {
+              const ctrl = new AbortController();
+              const timeoutId = setTimeout(() => ctrl.abort(), 90_000);
+              try {
+                const resp = await fetch(url, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                    'apikey': SUPABASE_SERVICE_ROLE_KEY,
+                  },
+                  body,
+                  signal: ctrl.signal,
+                });
+                clearTimeout(timeoutId);
+                if (!resp.ok) {
+                  lastErr = `HTTP ${resp.status}`;
+                  // Retry on 5xx / 429
+                  if (resp.status >= 500 || resp.status === 429) {
+                    await new Promise(r => setTimeout(r, 500 + attempt * 500));
+                    continue;
+                  }
+                  return { status: 'error', response: lastErr, price: '$0.00' };
+                }
+                const data = await resp.json();
+                if (!data) return { status: 'error', response: 'Empty response', price: '$0.00' };
+                const status = data.computedStatus === 'live' ? 'live'
+                  : data.computedStatus === 'dead' ? 'dead'
+                  : 'unknown';
+                const response = data.apiMessage || data.message || 'N/A';
+                const price = data.apiTotal && data.apiTotal !== 'Auto'
+                  ? data.apiTotal
+                  : (data.apiPrice && data.apiPrice !== '$0.00' ? data.apiPrice : '$0.00');
+                return { status, response, price };
+              } catch (e) {
+                clearTimeout(timeoutId);
+                lastErr = e instanceof Error ? e.message : 'Error';
+                // Retry on network errors
+                await new Promise(r => setTimeout(r, 500 + attempt * 500));
               }
-              const status = data.computedStatus === 'live' ? 'live'
-                : data.computedStatus === 'dead' ? 'dead'
-                : 'unknown';
-              const response = data.apiMessage || data.message || 'N/A';
-              const price = data.apiTotal && data.apiTotal !== 'Auto'
-                ? data.apiTotal
-                : (data.apiPrice && data.apiPrice !== '$0.00' ? data.apiPrice : '$0.00');
-              return { status, response, price };
-            } catch (e) {
-              return { status: 'error', response: e instanceof Error ? e.message : 'Error', price: '$0.00' };
             }
+            return { status: 'error', response: lastErr, price: '$0.00' };
           };
 
          // Results array
