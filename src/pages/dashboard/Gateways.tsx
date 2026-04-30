@@ -2934,6 +2934,9 @@ const Gateways = () => {
     setBulkEstimatedTime("Calculating...");
     bulkAbortRef.current = false;
     bulkProxyWarnedRef.current = false;
+    shopifyBootWarnedRef.current = false;
+    shopifyBootCooldownUntilRef.current = 0;
+    shopifyParallelLimitRef.current = selectedGateway.id === "shopify_charge" ? SHOPIFY_COLD_START_PARALLEL_INVOCATIONS : SHOPIFY_TARGET_PARALLEL_INVOCATIONS;
     bulkPauseRef.current = false;
     pendingResultsRef.current = [];
     bulkStatsRef.current = { completed: 0, total: affordableCards.length, startTime: Date.now() };
@@ -3267,7 +3270,7 @@ const Gateways = () => {
     if (isShopifyBulk) {
       // Session model: 50 cards queued. Start NEXT session early after 49 complete,
       // but track outstanding promises so the final session waits for ALL cards (incl. the 50th).
-      const SHOPIFY_CONCURRENCY = 50;
+      const SHOPIFY_CONCURRENCY = SHOPIFY_TARGET_PARALLEL_INVOCATIONS;
       const MIN_COMPLETE_BEFORE_NEXT = 49;
       let cardIndex = 0;
       const outstandingPromises: Promise<void>[] = [];
