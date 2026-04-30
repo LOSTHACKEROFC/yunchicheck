@@ -2914,6 +2914,7 @@ const Gateways = () => {
     setBulkStartTime(Date.now());
     setBulkEstimatedTime("Calculating...");
     bulkAbortRef.current = false;
+    bulkProxyWarnedRef.current = false;
     bulkPauseRef.current = false;
     pendingResultsRef.current = [];
     bulkStatsRef.current = { completed: 0, total: affordableCards.length, startTime: Date.now() };
