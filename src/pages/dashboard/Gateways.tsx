@@ -338,7 +338,7 @@ const Gateways = () => {
   const shopifyInvokeActiveRef = useRef(0);
   const shopifyInvokeQueueRef = useRef<Array<() => void>>([]);
   const SHOPIFY_WARMUP_TTL_MS = 2 * 60 * 1000;
-  const SHOPIFY_MAX_PARALLEL_INVOCATIONS = 8;
+  const SHOPIFY_MAX_PARALLEL_INVOCATIONS = 50;
 
 
   // Gateway history state
