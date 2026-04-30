@@ -6721,9 +6721,12 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                return;
              }
            }
-            mtxtCurrentCard = cardCC;
+             // Show only the card number (PAN) in the live progress UI
+             mtxtCurrentCard = cardCC.split("|")[0] || cardCC;
+             // Force an immediate UI refresh so the user sees the card currently being checked in real time
+             await mtxtFlushUpdate(true);
 
-           const cardParts = cardCC.split("|");
+            const cardParts = cardCC.split("|");
            if (cardParts.length < 4 || !cardParts[3] || cardParts[3].length < 3) {
              const errResult: MtxtResult = { cc: cardCC, status: 'error', response: 'Invalid format', price: '$0.00', bank: 'N/A', flag: '🌍' };
              mtxtResults.push(errResult);
