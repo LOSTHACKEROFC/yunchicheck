@@ -6646,11 +6646,26 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
          // Process card helper
          let mtxtChecked = 0;
+         let mtxtLastStopCheckAt = 0;
+         const MTXT_STOP_CHECK_INTERVAL_MS = 5000; // poll DB stop flag at most every 5s
          const mtxtProcessCard = async (cardCC: string) => {
            if (mtxtStopped) return;
-           // Check stop flag from DB
-           const { data: stopCheck } = await supabase.from("pending_bulk_checks").select("id").eq("id", mtxtBulkId).maybeSingle();
-           if (!stopCheck) { mtxtStopped = true; return; }
+           // Throttled stop-flag poll — only one card at a time hits the DB,
+           // and only every few seconds. Prevents the 50-thread fanout from
+           // hammering Postgres and racing with the final-message cleanup.
+           const nowMs = Date.now();
+           if (nowMs - mtxtLastStopCheckAt > MTXT_STOP_CHECK_INTERVAL_MS) {
+             mtxtLastStopCheckAt = nowMs;
+             const { data: stopCheck } = await supabase
+               .from("pending_bulk_checks")
+               .select("id")
+               .eq("id", mtxtBulkId)
+               .maybeSingle();
+             if (!stopCheck) {
+               mtxtStopped = true;
+               return;
+             }
+           }
             mtxtCurrentCard = cardCC;
 
            const cardParts = cardCC.split("|");
@@ -6730,13 +6745,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
            mtxtChecked++;
 
-           // If this was the last card, send final message immediately
-           if (mtxtChecked >= mtxtCards.length || mtxtStopped) {
-             await mtxtSendFinalMessage();
-           } else {
-             // Update UI with this card's result (throttled)
-             await mtxtFlushUpdate();
-           }
+           // Always update UI; the final message is sent ONCE by the outer
+           // loop after all batches finish (avoids racing with sibling cards).
+           await mtxtFlushUpdate();
          };
 
          await editTelegramMessage(callbackChatId, messageId, initData.msg, { inline_keyboard: initData.buttons });
