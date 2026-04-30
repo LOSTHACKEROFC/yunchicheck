@@ -6565,8 +6565,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            if (mtxtFinalSent) return;
            mtxtFinalSent = true;
 
-           // Cleanup stop tracker and store error cards for recheck
-           await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
+           // NOTE: Do NOT delete the pending_bulk_checks row here. Other in-flight
+           // mtxtProcessCard calls poll that row to detect a user-stop; deleting it
+           // mid-run would race with them and cause the run to abort prematurely.
+           // The row is cleaned up at the very end of the run (after Promise.all).
            if (mtxtErrorCards.length > 0) {
              await supabase.from("pending_bulk_checks").insert({ id: `rechk_${mtxtBulkId}`, cards: mtxtErrorCards.join("\n"), chat_id: String(callbackChatId), user_id: mtxtProfile.user_id });
            }
