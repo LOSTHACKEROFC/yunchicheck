@@ -1859,6 +1859,7 @@ const Gateways = () => {
 
   const releaseShopifyInvocationSlot = () => {
     shopifyInvokeActiveRef.current = Math.max(0, shopifyInvokeActiveRef.current - 1);
+    if (shopifyInvokeActiveRef.current >= shopifyParallelLimitRef.current) return;
     const next = shopifyInvokeQueueRef.current.shift();
     if (next) next();
   };
@@ -1926,6 +1927,8 @@ const Gateways = () => {
         }
 
         if (!error) {
+          shopifyParallelLimitRef.current = SHOPIFY_TARGET_PARALLEL_INVOCATIONS;
+          shopifyBootCooldownUntilRef.current = 0;
           console.log('[SHOPIFY] Response:', data);
           const apiStatus = data?.apiStatus || 'UNKNOWN';
           const apiMessage = data?.apiMessage || data?.message || 'No response';
