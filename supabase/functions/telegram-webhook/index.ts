@@ -6461,97 +6461,33 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            return result;
          };
 
-         // Check a single card — picks random sites from the shared live pool
-         const MAX_MTXT_SITE_ATTEMPTS = 5; // Try up to 5 random sites per card
-         const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
-           const availableProxies = [...mtxtProxies].filter(p => !mtxtFailedProxyIds.includes(p.id)).sort(() => Math.random() - 0.5);
-           // Proxies are OPTIONAL — if none configured, calls go DIRECT (fastest path, no proxy delay)
-           const hasProxies = availableProxies.length > 0;
-
-           let finalResult: any = null;
-
-            // Pick random sites from the LIVE pool for this card (not sequential shared index)
-            const siteCount = Math.min(MAX_MTXT_SITE_ATTEMPTS, mtxtLiveSites.length);
-            const cardSites = [...mtxtLiveSites].sort(() => Math.random() - 0.5).slice(0, siteCount);
-            if (cardSites.length === 0) return { status: 'error', response: 'No sites available', price: '$0.00' };
-
-            for (let siteAttempt = 0; siteAttempt < cardSites.length; siteAttempt++) {
-              const site = cardSites[siteAttempt];
-              if (mtxtDeadSiteUrls.has(site.url)) continue; // Skip if removed by another card
-              let siteResult: any = null;
-
-              // Pick ONE random proxy (or none for direct call)
-              let proxy: any = null;
-              if (hasProxies) {
-                const currentProxies = availableProxies.filter(p => !mtxtFailedProxyIds.includes(p.id));
-                if (currentProxies.length === 0) { hasProxies && (finalResult = { status: 'error', response: 'All proxies dead', price: '$0.00' }); break; }
-                proxy = currentProxies[Math.floor(Math.random() * currentProxies.length)];
+          // Check a single card via the shopify-charge-check edge function — same checking
+          // system as the web Shopify Charge gateway. The edge function handles site selection,
+          // proxy rotation, retries, strike counting, decline mapping, and auto-removal of bad sites.
+          const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
+            try {
+              const { data, error } = await supabase.functions.invoke('shopify-charge-check', {
+                body: {
+                  cc: cardCC,
+                  userId: mtxtProfile.user_id,
+                  priceGroup: { min: mtxtPriceMin, max: mtxtPriceMax },
+                },
+              });
+              if (error || !data) {
+                return { status: 'error', response: error?.message || 'Edge invoke failed', price: '$0.00' };
               }
-
-              siteResult = await mtxtCallWithRetry(cardCC, site.url, proxy ? mtxtFormatProxy(proxy) : '');
-
-              if (siteResult.proxyDead && proxy) {
-                mtxtFailedProxyIds.push(proxy.id);
-                supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
-                // Try next site with different proxy
-                if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
-                finalResult = siteResult;
-                break;
-              }
-
-              if (siteResult.siteDead) {
-                mtxtRemoveSite(site.url);
-                siteResult = null;
-                if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
-                break;
-              }
-
-              // Legacy proxy error check
-              let isValidApiResponse = false;
-              try { const parsed = JSON.parse(siteResult.rawResponse || ''); if (parsed && (parsed.Gateway || parsed.Response || parsed.Price !== undefined || parsed.status || parsed.message)) isValidApiResponse = true; } catch {}
-              const rl = (siteResult.rawResponse || '').toLowerCase();
-              const isProxyError = !isValidApiResponse && (rl.includes('407') || rl.includes('proxy error') || rl.includes('proxy authentication') || rl.includes('connection refused') || rl.includes('proxy connect') || rl.includes('tunneling socket'));
-              if (isProxyError && proxy) {
-                mtxtFailedProxyIds.push(proxy.id);
-                supabase.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
-                if (siteAttempt + 1 < cardSites.length) { await new Promise(r => setTimeout(r, 200)); continue; }
-                finalResult = siteResult;
-                break;
-              }
-
-              // Definitive result → done
-              if (siteResult.status === 'live' || siteResult.status === 'dead') {
-                // Handle strike counter
-                const matchedStrike = mtxtStrikeResponses.find(s => (siteResult.rawResponse || '').toLowerCase().includes(s.toLowerCase()));
-                if (matchedStrike) {
-                  mtxtSiteStrikeCounter[site.url] = (mtxtSiteStrikeCounter[site.url] || 0) + 1;
-                  if (mtxtSiteStrikeCounter[site.url] >= MTXT_STRIKE_THRESHOLD) {
-                    mtxtRemoveSite(site.url);
-                    delete mtxtSiteStrikeCounter[site.url];
-                  }
-                } else { delete mtxtSiteStrikeCounter[site.url]; }
-
-                return { status: siteResult.status, response: siteResult.response || siteResult.message || 'N/A', price: siteResult.price > 0 ? siteResult.priceStr : (site.price ? `$${Number(site.price).toFixed(2)}` : '$0.00') };
-              }
-
-              // Unknown — keep as fallback, remove bad sites, try next
-              finalResult = siteResult;
-              const rl2 = (siteResult.rawResponse || '').toLowerCase();
-              const isBadSite = mtxtBadResponses.some(bad => rl2.includes(bad.toLowerCase()));
-              if (isBadSite || !siteResult.rawResponse || rl2 === '' || rl2.includes('empty response') || rl2.includes('timeout')) {
-                mtxtRemoveSite(site.url);
-              }
-
-              if (siteAttempt + 1 < cardSites.length) {
-                await new Promise(r => setTimeout(r, 300 + Math.random() * 300));
-                continue;
-              }
-              break;
+              const status = data.computedStatus === 'live' ? 'live'
+                : data.computedStatus === 'dead' ? 'dead'
+                : 'unknown';
+              const response = data.apiMessage || data.message || 'N/A';
+              const price = data.apiTotal && data.apiTotal !== 'Auto'
+                ? data.apiTotal
+                : (data.apiPrice && data.apiPrice !== '$0.00' ? data.apiPrice : '$0.00');
+              return { status, response, price };
+            } catch (e) {
+              return { status: 'error', response: e instanceof Error ? e.message : 'Error', price: '$0.00' };
             }
-
-           if (!finalResult) return { status: 'error', response: 'All site attempts failed', price: '$0.00' };
-           return { status: 'error', response: finalResult.response || finalResult.message || 'Unknown', price: '$0.00' };
-         };
+          };
 
          // Results array
          interface MtxtResult { cc: string; status: string; response: string; price: string; bank: string; flag: string; }
