@@ -14,7 +14,7 @@ const corsHeaders = {
 };
 
 const TEST_CC = "4266841674104656|03|27|908";
-const API_BASE_URL = "https://lavda-lasan.up.railway.app/shopify";
+const API_BASE_URL = "http://108.165.12.183:8081/";
 
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
@@ -137,8 +137,8 @@ const checkSingleSite = async (
     timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     const apiUrl = proxyStr
-      ? `${API_BASE_URL}?cc=${encodeURIComponent(TEST_CC)}&site=${encodeURIComponent(normalizedSiteUrl)}&proxy=${encodeURIComponent(proxyStr)}`
-      : `${API_BASE_URL}?cc=${encodeURIComponent(TEST_CC)}&site=${encodeURIComponent(normalizedSiteUrl)}`;
+      ? `${API_BASE_URL}?cc=${encodeURIComponent(TEST_CC)}&url=${encodeURIComponent(normalizedSiteUrl)}&proxy=${encodeURIComponent(proxyStr)}`
+      : `${API_BASE_URL}?cc=${encodeURIComponent(TEST_CC)}&url=${encodeURIComponent(normalizedSiteUrl)}`;
 
     console.log(`[Check] ${normalizedSiteUrl} | proxy=${proxyStr ? "yes" : "none"}`);
 

