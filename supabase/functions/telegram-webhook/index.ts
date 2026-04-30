@@ -6757,11 +6757,13 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          let mtxtQueueIdx = 0;
          const MIN_COMPLETE_BEFORE_NEXT = 49;
 
-         // Safety timeout: send final message before edge function dies (140s limit)
-         const MTXT_SAFETY_TIMEOUT = 135000;
+         // Safety timeout: very long upper bound — only fires for truly stuck runs.
+         // The job runs in EdgeRuntime.waitUntil so it isn't bound to the request lifecycle.
+         // Each card invokes shopify-charge-check (≤120s deadline); we allow up to 10 min total.
+         const MTXT_SAFETY_TIMEOUT = 600_000;
          const mtxtSafetyTimer = setTimeout(async () => {
+           console.warn('[/mtxt] Safety timeout reached after 10min — finalizing.');
            mtxtStopped = true;
-           await mtxtSendFinalMessage();
          }, MTXT_SAFETY_TIMEOUT);
 
           while (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
@@ -6797,6 +6799,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          }
 
           clearTimeout(mtxtSafetyTimer);
+          // Now (and only now) it's safe to remove the stop-tracker row — every
+          // worker has finished, so no one else will poll it.
+          await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
           await mtxtSendFinalMessage();
 
         })();
