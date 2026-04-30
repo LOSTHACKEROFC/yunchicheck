@@ -3259,11 +3259,10 @@ const Gateways = () => {
         let batchCompleted = 0;
         const batchDonePromise = new Promise<void>((resolve) => {
           const promises = batchIndices.map(async (idx, launchOrder) => {
-            // High concurrency, but stagger launches by ~60ms to avoid 50 simultaneous
-            // cold-starts hitting the edge runtime (BOOT_ERROR 503). All 50 are inflight
-            // within ~3s — still effectively parallel for ~10s API calls.
+            // Fast launch stagger (~25ms) — all 50 threads inflight within ~1.25s.
+            // Tight enough to feel instant, loose enough to avoid BOOT_ERROR storms.
             if (launchOrder > 0) {
-              await new Promise(r => setTimeout(r, launchOrder * 60));
+              await new Promise(r => setTimeout(r, launchOrder * 25));
             }
             if (bulkAbortRef.current) return;
 
