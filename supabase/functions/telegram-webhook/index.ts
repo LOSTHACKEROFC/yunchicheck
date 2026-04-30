@@ -6520,12 +6520,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
            // 6-button layout
            const buttons: any[][] = [];
-           // Row 1: Card Number
-           const cardDisplay = mtxtCurrentCard !== '—' ? (() => {
-             const num = mtxtCurrentCard.split('|')[0];
-             return `${num.slice(0, 6)}****${num.slice(-4)}`;
-           })() : '—';
-           buttons.push([{ text: `💳 ${cardDisplay}`, callback_data: 'mtxt_pending' }]);
+            // Row 1: Card Number (full unmasked card)
+            const cardDisplay = mtxtCurrentCard !== '—' ? mtxtCurrentCard : '—';
+            buttons.push([{ text: `💳 ${cardDisplay}`, callback_data: 'mtxt_pending' }]);
            // Row 2: Response
            const respText = mtxtLastResponse.length > 35 ? mtxtLastResponse.slice(0, 35) + '…' : mtxtLastResponse;
            buttons.push([{ text: `📝 ${respText}`, callback_data: 'mtxt_pending' }]);
@@ -6596,23 +6593,19 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            const chargedResults = mtxtResults.filter(r => r.status === 'live');
            if (chargedResults.length > 0) {
              mtxtFinalMsg += `━━━━ 💎 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 𝗖𝗔𝗥𝗗𝗦 ━━━━\n\n`;
-             for (const card of chargedResults) {
-               const num = card.cc.split('|')[0];
-               const maskedCC = `${num.slice(0, 6)}****${num.slice(-4)}`;
-               mtxtFinalMsg += `💎 <code>${maskedCC}</code>\n`;
-               mtxtFinalMsg += `   ${card.flag} ${card.bank} ・ ${card.price}\n`;
-               mtxtFinalMsg += `   📝 ${card.response}\n\n`;
-             }
+              for (const card of chargedResults) {
+                mtxtFinalMsg += `💎 <code>${card.cc}</code>\n`;
+                mtxtFinalMsg += `   ${card.flag} ${card.bank} ・ ${card.price}\n`;
+                mtxtFinalMsg += `   📝 ${card.response}\n\n`;
+              }
            }
 
            const approvedResults = mtxtResults.filter(r => r.status === 'approved');
            if (approvedResults.length > 0) {
              mtxtFinalMsg += `━━━━ ✅ 𝗔𝗣𝗣𝗥𝗢𝗩𝗘𝗗 ━━━━\n\n`;
-             for (const card of approvedResults) {
-               const num = card.cc.split('|')[0];
-               const maskedCC = `${num.slice(0, 6)}****${num.slice(-4)}`;
-               mtxtFinalMsg += `✅ <code>${maskedCC}</code> ・ ${card.flag} ${card.bank}\n`;
-             }
+              for (const card of approvedResults) {
+                mtxtFinalMsg += `✅ <code>${card.cc}</code> ・ ${card.flag} ${card.bank}\n`;
+              }
              mtxtFinalMsg += `\n`;
            }
 
