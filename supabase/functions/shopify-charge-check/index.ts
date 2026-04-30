@@ -507,7 +507,7 @@ Deno.serve(async (req) => {
     const { data: userProxies } = await adminClient
       .from('user_proxies')
       .select('*')
-      .eq('user_id', user.id);
+      .eq('user_id', user!.id);
 
     // Shuffle proxies for rotation (empty array if none)
     const shuffledProxies = [...(userProxies || [])].sort(() => Math.random() - 0.5);
