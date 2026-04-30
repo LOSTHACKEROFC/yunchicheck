@@ -800,7 +800,7 @@ Deno.serve(async (req) => {
         isSuspiciousError ? 'suspicious' : (isVagueDecline ? 'vague-decline' : result.status),
         result.apiResponse || result.message,
         result.rawResponse,
-        profile?.username || user.email,
+        profile?.username || user.email || undefined,
         randomSite.url
       );
     }
