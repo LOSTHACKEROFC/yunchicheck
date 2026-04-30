@@ -327,6 +327,7 @@ const Gateways = () => {
   const [bulkResultFilter, setBulkResultFilter] = useState<"all" | "live" | "dead" | "unknown">("all"); // Filter for bulk results
   const bulkAbortRef = useRef(false);
   const bulkPauseRef = useRef(false);
+  const bulkProxyWarnedRef = useRef(false);
 
   // Performance: batch UI updates to avoid re-rendering on every card
   const pendingResultsRef = useRef<BulkResult[]>([]);
