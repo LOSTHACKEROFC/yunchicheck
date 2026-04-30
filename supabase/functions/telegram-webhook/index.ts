@@ -5521,8 +5521,8 @@ Admin needs to add sites via Health Check.
           // Helper: single API call
           const callShopifyOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
             const apiUrl = proxy
-              ? `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
-              : `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}`;
+              ? `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
+              : `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}`;
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 55000);
             try {
@@ -5924,8 +5924,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         // Single call helper
         const mshCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
           const apiUrl = proxy
-            ? `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
-            : `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}`;
+            ? `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
+            : `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&site=${encodeURIComponent(siteUrl)}`;
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 45000);
           try {
@@ -6351,10 +6351,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
          // Single API call — exact match of web callApiOnce
           const mtxtBuildApiUrl = (cardCC: string, siteUrl: string, proxy: string) => {
-            // Query param format: domain/sh?cc={cc}&url={site}&proxy={proxy}
+            // Query param format: domain/shopify?cc={cc}&site={site}&proxy={proxy}
             const params = new URLSearchParams();
             params.set("cc", cardCC.trim());
-            params.set("url", siteUrl.trim());
+            params.set("site", siteUrl.trim());
             if (proxy?.trim()) params.set("proxy", proxy.trim());
             return `${SHOPIFY_API_URL_MTXT}?${params.toString()}`;
           };
