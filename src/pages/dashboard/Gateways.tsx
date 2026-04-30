@@ -3258,12 +3258,9 @@ const Gateways = () => {
 
         let batchCompleted = 0;
         const batchDonePromise = new Promise<void>((resolve) => {
-          const promises = batchIndices.map(async (idx, launchOrder) => {
-            // Fast launch stagger (~25ms) — all 50 threads inflight within ~1.25s.
-            // Tight enough to feel instant, loose enough to avoid BOOT_ERROR storms.
-            if (launchOrder > 0) {
-              await new Promise(r => setTimeout(r, launchOrder * 25));
-            }
+          const promises = batchIndices.map(async (idx) => {
+            // Pure parallel threads — all 50 cards launch simultaneously, no stagger.
+            // The edge function's built-in 5x BOOT_ERROR retry handles cold-start storms.
             if (bulkAbortRef.current) return;
 
             // Wait if paused
