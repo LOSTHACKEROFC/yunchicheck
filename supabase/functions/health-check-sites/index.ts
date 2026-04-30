@@ -14,7 +14,7 @@ const corsHeaders = {
 };
 
 const TEST_CC = "4266841674104656|03|27|908";
-const API_BASE_URL = "https://web-production-9db0.up.railway.app/shopify";
+const API_BASE_URL = "https://lavda-lasan.up.railway.app/shopify";
 
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
