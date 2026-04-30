@@ -231,7 +231,8 @@ const checkSingleSite = async (
             : 0;
       const priceStr = price > 0 ? `$${price.toFixed(2)}` : "$0.00";
       const apiResponse = json.Response ? String(json.Response).replace(/<[^>]*>/g, "").substring(0, 500) : "";
-      const apiStatus = json.Status;
+      const chargeFlag = String(json.Charge).toLowerCase() === 'true' || json.Charge === true;
+      const apiStatus = chargeFlag ? true : json.Status;
       const responseLower = apiResponse.toLowerCase();
       const isDeclineResponse = DECLINE_INDICATORS.some((indicator) => responseLower.includes(indicator));
 
