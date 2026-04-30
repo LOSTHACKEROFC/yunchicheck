@@ -402,7 +402,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { cc, priceGroup } = body;
+    const { cc, priceGroup, userId: bodyUserId } = body;
     
     // Allow warmup calls to pass through without validation
     if (!cc || cc === 'warmup') {
@@ -417,31 +417,61 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Auth check
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    // Detect service-role calls (used by the Telegram bot for /msh, /mtxt).
+    // When the caller presents the SERVICE_ROLE_KEY and provides a userId in the body,
+    // we trust the caller and resolve the user directly — no JWT required.
+    const bearer = authHeader.slice(7).trim();
+    const isServiceRoleCall = !!SUPABASE_SERVICE_ROLE_KEY && bearer === SUPABASE_SERVICE_ROLE_KEY && !!bodyUserId;
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), 
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Ban check and get username
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_banned, username")
-      .eq("user_id", user.id)
-      .single();
+    let user: { id: string; email?: string | null } | null = null;
+    let profile: { is_banned: boolean | null; username: string | null } | null = null;
 
-    if (profile?.is_banned) {
-      return new Response(JSON.stringify({ error: "Account suspended" }), 
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (isServiceRoleCall) {
+      const { data: prof } = await adminClient
+        .from("profiles")
+        .select("user_id, is_banned, username")
+        .eq("user_id", bodyUserId)
+        .single();
+      if (!prof) {
+        return new Response(JSON.stringify({ error: "User not found" }), 
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (prof.is_banned) {
+        return new Response(JSON.stringify({ error: "Account suspended" }), 
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      user = { id: prof.user_id, email: null };
+      profile = { is_banned: prof.is_banned, username: prof.username };
+    } else {
+      // Standard JWT auth path (web app)
+      const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: { headers: { Authorization: authHeader } },
+      });
+
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+      if (authError || !authUser) {
+        return new Response(JSON.stringify({ error: "Invalid token" }), 
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("is_banned, username")
+        .eq("user_id", authUser.id)
+        .single();
+
+      if (prof?.is_banned) {
+        return new Response(JSON.stringify({ error: "Account suspended" }), 
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      user = { id: authUser.id, email: authUser.email };
+      profile = prof ?? null;
     }
 
     // Get a random site from gateway_urls using service role (only sites <= $100)
-    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
     // Build query - filter by price group if specified
     let sitesQuery = adminClient
