@@ -1840,7 +1840,11 @@ const Gateways = () => {
 
   // Shopify Charge API check via edge function - uses user proxies + auto-rotating sites
   const acquireShopifyInvocationSlot = async () => {
-    if (shopifyInvokeActiveRef.current < SHOPIFY_MAX_PARALLEL_INVOCATIONS) {
+    while (Date.now() < shopifyBootCooldownUntilRef.current) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+
+    if (shopifyInvokeActiveRef.current < shopifyParallelLimitRef.current) {
       shopifyInvokeActiveRef.current += 1;
       return;
     }
@@ -1857,6 +1861,16 @@ const Gateways = () => {
     shopifyInvokeActiveRef.current = Math.max(0, shopifyInvokeActiveRef.current - 1);
     const next = shopifyInvokeQueueRef.current.shift();
     if (next) next();
+  };
+
+  const handleShopifyBootPressure = () => {
+    shopifyWarmupAtRef.current = 0;
+    shopifyParallelLimitRef.current = SHOPIFY_COLD_START_PARALLEL_INVOCATIONS;
+    shopifyBootCooldownUntilRef.current = Date.now() + SHOPIFY_BOOT_COOLDOWN_MS;
+    if (!shopifyBootWarnedRef.current) {
+      shopifyBootWarnedRef.current = true;
+      console.warn('[SHOPIFY] BOOT_ERROR pressure detected — cooling down parallel invocations briefly.');
+    }
   };
 
   const warmupShopifyFunction = async () => {
