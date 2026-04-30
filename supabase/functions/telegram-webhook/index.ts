@@ -6461,43 +6461,29 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            return result;
          };
 
-          // Check a single card by calling the upstream Shopify API directly (inline).
-          // We deliberately avoid `supabase.functions.invoke('shopify-charge-check')` here because
-          // 50 concurrent edge-function-to-edge-function invocations exceed Supabase's per-function
-          // concurrency budget and surface as "Failed to send a request" errors. Calling the
-          // upstream API server directly with `mtxtCallWithRetry` keeps the same checking logic
-          // (proxy rotation, site rotation, retries, strike counting) without the extra hop.
+          // Check a single card via the shopify-charge-check edge function — same checking
+          // system as the web Shopify Charge gateway. The edge function handles site selection,
+          // proxy rotation, retries, strike counting, decline mapping, and auto-removal of bad sites.
           const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
             try {
-              // Pick a random live site + proxy each attempt, rotate on failures.
-              const MAX_SITE_ATTEMPTS = 3;
-              let lastResponse = 'No site available';
-              let lastPrice = '$0.00';
-
-              for (let siteAttempt = 0; siteAttempt < MAX_SITE_ATTEMPTS; siteAttempt++) {
-                if (mtxtLiveSites.length === 0) break;
-                const site = mtxtLiveSites[Math.floor(Math.random() * mtxtLiveSites.length)];
-                const proxy = mtxtProxies.length > 0
-                  ? mtxtFormatProxy(mtxtProxies[Math.floor(Math.random() * mtxtProxies.length)])
-                  : '';
-
-                const r = await mtxtCallWithRetry(cardCC, site.url, proxy);
-
-                if (r.proxyDead) { continue; }
-                if (r.siteDead) { mtxtRemoveSite(site.url); continue; }
-                if (r.status === 'live' || r.status === 'dead') {
-                  return { status: r.status, response: r.message || 'N/A', price: r.priceStr || '$0.00' };
-                }
-                // unknown — strike the site and try another
-                mtxtSiteStrikeCounter[site.url] = (mtxtSiteStrikeCounter[site.url] || 0) + 1;
-                if (mtxtSiteStrikeCounter[site.url] >= MTXT_STRIKE_THRESHOLD) {
-                  mtxtRemoveSite(site.url);
-                }
-                lastResponse = r.message || 'Unknown';
-                lastPrice = r.priceStr || '$0.00';
+              const { data, error } = await supabase.functions.invoke('shopify-charge-check', {
+                body: {
+                  cc: cardCC,
+                  userId: mtxtProfile.user_id,
+                  priceGroup: { min: mtxtPriceMin, max: mtxtPriceMax },
+                },
+              });
+              if (error || !data) {
+                return { status: 'error', response: error?.message || 'Edge invoke failed', price: '$0.00' };
               }
-
-              return { status: 'error', response: lastResponse, price: lastPrice };
+              const status = data.computedStatus === 'live' ? 'live'
+                : data.computedStatus === 'dead' ? 'dead'
+                : 'unknown';
+              const response = data.apiMessage || data.message || 'N/A';
+              const price = data.apiTotal && data.apiTotal !== 'Auto'
+                ? data.apiTotal
+                : (data.apiPrice && data.apiPrice !== '$0.00' ? data.apiPrice : '$0.00');
+              return { status, response, price };
             } catch (e) {
               return { status: 'error', response: e instanceof Error ? e.message : 'Error', price: '$0.00' };
             }
