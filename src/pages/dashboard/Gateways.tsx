@@ -337,8 +337,13 @@ const Gateways = () => {
   const shopifyWarmupPromiseRef = useRef<Promise<void> | null>(null);
   const shopifyInvokeActiveRef = useRef(0);
   const shopifyInvokeQueueRef = useRef<Array<() => void>>([]);
+  const shopifyParallelLimitRef = useRef(30);
+  const shopifyBootCooldownUntilRef = useRef(0);
+  const shopifyBootWarnedRef = useRef(false);
   const SHOPIFY_WARMUP_TTL_MS = 2 * 60 * 1000;
-  const SHOPIFY_MAX_PARALLEL_INVOCATIONS = 50;
+  const SHOPIFY_TARGET_PARALLEL_INVOCATIONS = 50;
+  const SHOPIFY_COLD_START_PARALLEL_INVOCATIONS = 30;
+  const SHOPIFY_BOOT_COOLDOWN_MS = 25_000;
 
 
   // Gateway history state
@@ -1835,7 +1840,11 @@ const Gateways = () => {
 
   // Shopify Charge API check via edge function - uses user proxies + auto-rotating sites
   const acquireShopifyInvocationSlot = async () => {
-    if (shopifyInvokeActiveRef.current < SHOPIFY_MAX_PARALLEL_INVOCATIONS) {
+    while (Date.now() < shopifyBootCooldownUntilRef.current) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+
+    if (shopifyInvokeActiveRef.current < shopifyParallelLimitRef.current) {
       shopifyInvokeActiveRef.current += 1;
       return;
     }
@@ -1850,8 +1859,19 @@ const Gateways = () => {
 
   const releaseShopifyInvocationSlot = () => {
     shopifyInvokeActiveRef.current = Math.max(0, shopifyInvokeActiveRef.current - 1);
+    if (shopifyInvokeActiveRef.current >= shopifyParallelLimitRef.current) return;
     const next = shopifyInvokeQueueRef.current.shift();
     if (next) next();
+  };
+
+  const handleShopifyBootPressure = () => {
+    shopifyWarmupAtRef.current = 0;
+    shopifyParallelLimitRef.current = SHOPIFY_COLD_START_PARALLEL_INVOCATIONS;
+    shopifyBootCooldownUntilRef.current = Date.now() + SHOPIFY_BOOT_COOLDOWN_MS;
+    if (!shopifyBootWarnedRef.current) {
+      shopifyBootWarnedRef.current = true;
+      console.warn('[SHOPIFY] BOOT_ERROR pressure detected — cooling down parallel invocations briefly.');
+    }
   };
 
   const warmupShopifyFunction = async () => {
@@ -1907,6 +1927,8 @@ const Gateways = () => {
         }
 
         if (!error) {
+          shopifyParallelLimitRef.current = SHOPIFY_TARGET_PARALLEL_INVOCATIONS;
+          shopifyBootCooldownUntilRef.current = 0;
           console.log('[SHOPIFY] Response:', data);
           const apiStatus = data?.apiStatus || 'UNKNOWN';
           const apiMessage = data?.apiMessage || data?.message || 'No response';
@@ -1958,7 +1980,7 @@ const Gateways = () => {
 
         if (isRetryable && attempt < MAX_RETRIES) {
           if (isBootError) {
-            shopifyWarmupAtRef.current = 0;
+            handleShopifyBootPressure();
           }
 
           const baseDelay = isBootError ? 3500 : 1200;
@@ -1988,7 +2010,7 @@ const Gateways = () => {
 
         if (isRetryableException && attempt < MAX_RETRIES) {
           if (msg.includes('503') || msg.includes('boot_error')) {
-            shopifyWarmupAtRef.current = 0;
+            handleShopifyBootPressure();
           }
 
           const backoffMs = Math.min(18000, 1800 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 900));
@@ -2915,6 +2937,9 @@ const Gateways = () => {
     setBulkEstimatedTime("Calculating...");
     bulkAbortRef.current = false;
     bulkProxyWarnedRef.current = false;
+    shopifyBootWarnedRef.current = false;
+    shopifyBootCooldownUntilRef.current = 0;
+    shopifyParallelLimitRef.current = selectedGateway.id === "shopify_charge" ? SHOPIFY_COLD_START_PARALLEL_INVOCATIONS : SHOPIFY_TARGET_PARALLEL_INVOCATIONS;
     bulkPauseRef.current = false;
     pendingResultsRef.current = [];
     bulkStatsRef.current = { completed: 0, total: affordableCards.length, startTime: Date.now() };
@@ -3248,7 +3273,7 @@ const Gateways = () => {
     if (isShopifyBulk) {
       // Session model: 50 cards queued. Start NEXT session early after 49 complete,
       // but track outstanding promises so the final session waits for ALL cards (incl. the 50th).
-      const SHOPIFY_CONCURRENCY = 50;
+      const SHOPIFY_CONCURRENCY = SHOPIFY_TARGET_PARALLEL_INVOCATIONS;
       const MIN_COMPLETE_BEFORE_NEXT = 49;
       let cardIndex = 0;
       const outstandingPromises: Promise<void>[] = [];
