@@ -6593,13 +6593,11 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            const chargedResults = mtxtResults.filter(r => r.status === 'live');
            if (chargedResults.length > 0) {
              mtxtFinalMsg += `━━━━ 💎 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 𝗖𝗔𝗥𝗗𝗦 ━━━━\n\n`;
-             for (const card of chargedResults) {
-               const num = card.cc.split('|')[0];
-               const maskedCC = `${num.slice(0, 6)}****${num.slice(-4)}`;
-               mtxtFinalMsg += `💎 <code>${maskedCC}</code>\n`;
-               mtxtFinalMsg += `   ${card.flag} ${card.bank} ・ ${card.price}\n`;
-               mtxtFinalMsg += `   📝 ${card.response}\n\n`;
-             }
+              for (const card of chargedResults) {
+                mtxtFinalMsg += `💎 <code>${card.cc}</code>\n`;
+                mtxtFinalMsg += `   ${card.flag} ${card.bank} ・ ${card.price}\n`;
+                mtxtFinalMsg += `   📝 ${card.response}\n\n`;
+              }
            }
 
            const approvedResults = mtxtResults.filter(r => r.status === 'approved');
