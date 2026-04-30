@@ -3258,12 +3258,8 @@ const Gateways = () => {
 
         let batchCompleted = 0;
         const batchDonePromise = new Promise<void>((resolve) => {
-          const promises = batchIndices.map(async (idx, launchOrder) => {
-            if (bulkAbortRef.current) return;
-            if (launchOrder > 0) {
-              const launchDelay = launchOrder * 280 + Math.floor(Math.random() * 180);
-              await new Promise(r => setTimeout(r, launchDelay));
-            }
+          const promises = batchIndices.map(async (idx) => {
+            // True 50-thread concurrency — all cards launch simultaneously.
             if (bulkAbortRef.current) return;
 
             // Wait if paused
@@ -3280,11 +3276,12 @@ const Gateways = () => {
               pendingResultsRef.current.push(result);
               bulkStatsRef.current.completed = completedCount;
               scheduleFlush();
-
-              batchCompleted++;
-              if (batchCompleted >= Math.min(MIN_COMPLETE_BEFORE_NEXT, batchIndices.length)) {
-                resolve();
-              }
+            }
+            // Count every settled card (including null/skipped) toward the 49/50 threshold
+            // so the next session can't hang if a card is skipped or aborted.
+            batchCompleted++;
+            if (batchCompleted >= Math.min(MIN_COMPLETE_BEFORE_NEXT, batchIndices.length)) {
+              resolve();
             }
           });
           // Track every promise so we can await stragglers (e.g., the 50th card) after the loop
@@ -3300,11 +3297,7 @@ const Gateways = () => {
           await batchDonePromise;
         }
         cardIndex = batchEnd;
-
-        // Small gap between sessions so the backend can recycle workers cleanly
-        if (cardIndex < affordableCards.length && !bulkAbortRef.current) {
-          await new Promise(r => setTimeout(r, 1200));
-        }
+        // No inter-session gap — start the next 50 immediately so results keep streaming.
       }
 
       // Final safety: ensure ALL outstanding cards from prior sessions also completed
