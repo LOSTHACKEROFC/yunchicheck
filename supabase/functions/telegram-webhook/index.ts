@@ -6310,7 +6310,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           await editTelegramMessage(callbackChatId, messageId, `🚫 <b>Account Suspended</b>`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
-        if (mtxtProfile.credits < mtxtCards.length) {
+        if (!mtxtLoadedState && mtxtProfile.credits < mtxtCards.length) {
           await editTelegramMessage(callbackChatId, messageId, `❌ <b>Insufficient Credits</b>\n\nNeed at least <b>${mtxtCards.length}</b> credits. Balance: <b>${mtxtProfile.credits}</b>`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -6771,8 +6771,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            } catch {}
          };
 
-         // Show initial processing message with animation
-          const initData = buildMtxtMessageAndButtons(0, mtxtCards.length, '0.00', false);
+          // Show initial/resumed processing message with animation
+           const initData = buildMtxtMessageAndButtons(mtxtResults.length, mtxtCards.length, '0.00', false);
          await editTelegramMessage(callbackChatId, messageId, initData.msg, { inline_keyboard: initData.buttons });
 
           // Process card helper
