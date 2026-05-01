@@ -6586,6 +6586,11 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          let mtxtStopped = false;
          const mtxtStopKey = `mtxt_stop_${mtxtBulkId}`;
           const mtxtPersistState = async (nextIndex: number, status = "running") => {
+            const { data: stillRunning } = await supabase.from("pending_bulk_checks").select("id").eq("id", mtxtBulkId).maybeSingle();
+            if (!stillRunning && status !== "completed") {
+              mtxtStopped = true;
+              return false;
+            }
             const state = {
               kind: "mtxt_job",
               status,
@@ -6603,6 +6608,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               updatedAt: new Date().toISOString(),
             };
             await supabase.from("pending_bulk_checks").upsert({ id: mtxtBulkId, cards: JSON.stringify(state), chat_id: String(callbackChatId), user_id: mtxtProfile.user_id });
+            return true;
           };
 
          const buildMtxtMessageAndButtons = (checked: number, total: number, elapsed: string, isComplete: boolean) => {
@@ -6764,8 +6770,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           const initData = buildMtxtMessageAndButtons(0, mtxtCards.length, '0.00', false);
          await editTelegramMessage(callbackChatId, messageId, initData.msg, { inline_keyboard: initData.buttons });
 
-         // Process card helper
-         let mtxtChecked = 0;
+          // Process card helper
+          let mtxtChecked = mtxtResults.length;
          let mtxtLastStopCheckAt = 0;
          const MTXT_STOP_CHECK_INTERVAL_MS = 5000; // poll DB stop flag at most every 5s
          const mtxtProcessCard = async (cardCC: string) => {
