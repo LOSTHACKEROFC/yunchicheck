@@ -6910,13 +6910,16 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               }
               if (mtxtStopped) return;
               try {
-                await mtxtProcessCard(card);
+                await Promise.race([
+                  mtxtProcessCard(card),
+                  new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Card timeout')), MTXT_CARD_TIMEOUT_MS)),
+                ]);
               } catch (e) {
                 console.error('[/mtxt] card worker failed', e);
-                const errCard: MtxtResult = { cc: card, status: 'error', response: 'Worker error', price: '$0.00', bank: 'N/A', flag: '🌍' };
+                const errCard: MtxtResult = { cc: card, status: 'error', response: e instanceof Error && e.message === 'Card timeout' ? 'Timeout' : 'Worker error', price: '$0.00', bank: 'N/A', flag: '🌍' };
                 mtxtResults.push(errCard);
                 mtxtCurrentCard = card.split("|")[0] || card;
-                mtxtLastResponse = 'Worker error';
+                mtxtLastResponse = errCard.response;
                 mtxtErrorCount++;
                 mtxtErrorCards.push(card);
                 mtxtChecked++;
