@@ -6662,9 +6662,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
           // 50-thread concurrency with staggered launches — matches web Shopify Charge gateway.
           // Each batch advances to the next as soon as 49/50 cards complete (MIN_COMPLETE_BEFORE_NEXT below).
-          const MTXT_CONCURRENCY = Math.min(12, Math.max(1, mtxtCards.length));
-          const MTXT_STAGGER_MS_VAL = 100;
-          const MTXT_MAX_RUNTIME_MS = 105_000;
+          const MTXT_CONCURRENCY = Math.min(50, Math.max(1, mtxtCards.length));
+          const MTXT_STAGGER_MS_VAL = 30;
+          const MTXT_MAX_RUNTIME_MS = 110_000;
+          const MTXT_CARD_TIMEOUT_MS = 65_000;
           const MTXT_RESUME_DELAY_MS = 1_500;
           let mtxtNeedsResume = false;
           let mtxtNextResumeIndex = mtxtResumeIndex;
