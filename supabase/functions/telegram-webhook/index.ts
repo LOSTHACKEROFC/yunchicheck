@@ -479,6 +479,8 @@ async function editTelegramMessage(
       parse_mode: "HTML",
     };
     if (replyMarkup) body.reply_markup = replyMarkup;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
 
     const response = await fetch(
       `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`,
@@ -486,8 +488,10 @@ async function editTelegramMessage(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       }
     );
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       console.error("Telegram edit error:", await response.json());
