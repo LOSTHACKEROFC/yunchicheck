@@ -6928,8 +6928,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
           if (mtxtNeedsResume && !mtxtStopped) {
             await mtxtPersistState(mtxtNextResumeIndex, "running");
-            mtxtScheduleResume(mtxtNextResumeIndex);
             await mtxtFlushUpdate(true);
+            await mtxtScheduleResume(mtxtNextResumeIndex);
             return;
           }
 
