@@ -6606,6 +6606,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               declined: mtxtDeclined,
               errorCount: mtxtErrorCount,
               totalCost: mtxtTotalCost,
+              startingCredits: mtxtStartingCredits,
               updatedAt: new Date().toISOString(),
             };
             await supabase.from("pending_bulk_checks").upsert({ id: mtxtBulkId, cards: JSON.stringify(state), chat_id: String(callbackChatId), user_id: mtxtProfile.user_id });
