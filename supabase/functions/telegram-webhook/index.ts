@@ -6188,7 +6188,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
       // TXT FILE SHOPIFY CHARGE (/mtxt) PRICE GROUP CALLBACK
       // ─────────────────────────────────────────────────────────
 
-      if (callbackData === "mtxt_nosite" || callbackData === "mtxt_pending" || callbackData.startsWith("mtxt_res_")) {
+      if (callbackData === "mtxt_nosite" || callbackData === "mtxt_pending" || (callbackData.startsWith("mtxt_res_") && !callbackData.startsWith("mtxt_resume_"))) {
         await answerCallbackQuery(update.callback_query.id, callbackData === "mtxt_nosite" ? "❌ No sites available" : callbackData === "mtxt_pending" ? "⏳ Still checking..." : "ℹ️ Card result");
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -6249,7 +6249,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-       if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite") && !callbackData.startsWith("mtxt_pending") && !callbackData.startsWith("mtxt_res_")) {
+       if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite") && !callbackData.startsWith("mtxt_pending") && (!callbackData.startsWith("mtxt_res_") || callbackData.startsWith("mtxt_resume_"))) {
         const __mtxtCbQuery = update.callback_query!;
         const __mtxtWork = (async () => {
         const mtxtIsResume = callbackData.startsWith("mtxt_resume_");
