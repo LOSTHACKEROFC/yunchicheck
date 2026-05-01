@@ -6664,7 +6664,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           const MTXT_RESUME_DELAY_MS = 1_500;
           let mtxtNeedsResume = false;
           let mtxtNextResumeIndex = mtxtResumeIndex;
-          const mtxtScheduleResume = (nextIndex: number) => {
+          const mtxtScheduleResume = async (nextIndex: number) => {
             const resumeCallback = `mtxt_resume_${mtxtBulkId}`;
             const resumeUpdate = {
               callback_query: {
@@ -6673,13 +6673,12 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 message: { chat: { id: Number(callbackChatId) }, message_id: messageId },
               },
             };
-            setTimeout(() => {
-              fetch(`${SUPABASE_URL}/functions/v1/telegram-webhook`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
-                body: JSON.stringify(resumeUpdate),
-              }).then(() => {}).catch((e) => console.error("[/mtxt resume] failed", e));
-            }, MTXT_RESUME_DELAY_MS);
+            await new Promise(r => setTimeout(r, MTXT_RESUME_DELAY_MS));
+            await fetch(`${SUPABASE_URL}/functions/v1/telegram-webhook`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+              body: JSON.stringify(resumeUpdate),
+            }).then(() => {}).catch((e) => console.error("[/mtxt resume] failed", e));
           };
 
          // Throttled UI update - max 1 edit per 500ms, always send on force
