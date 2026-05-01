@@ -6252,18 +6252,32 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
        if (callbackData.startsWith("mtxt_") && !callbackData.startsWith("mtxt_nosite") && !callbackData.startsWith("mtxt_pending") && !callbackData.startsWith("mtxt_res_")) {
         const __mtxtCbQuery = update.callback_query!;
         const __mtxtWork = (async () => {
+        const mtxtIsResume = callbackData.startsWith("mtxt_resume_");
         const mtxtParts = callbackData.replace("mtxt_", "").split("_");
-        const mtxtPriceMin = parseInt(mtxtParts[0]);
-        const mtxtPriceMax = parseInt(mtxtParts[1]);
-        const mtxtBulkId = mtxtParts[2];
+        let mtxtPriceMin = mtxtIsResume ? 0 : parseInt(mtxtParts[0]);
+        let mtxtPriceMax = mtxtIsResume ? 100 : parseInt(mtxtParts[1]);
+        const mtxtBulkId = mtxtIsResume ? callbackData.replace("mtxt_resume_", "") : mtxtParts[2];
+        let mtxtLoadedState: any = null;
+        let mtxtResumeIndex = 0;
 
         // Fetch cards from DB
         const { data: mtxtBulkData } = await supabase.from("pending_bulk_checks").select("cards").eq("id", mtxtBulkId).maybeSingle();
         let mtxtCards: string[] = [];
-        if (mtxtBulkData?.cards) { mtxtCards = mtxtBulkData.cards.split("\n").filter((c: string) => c.trim()); }
-        await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
-        // Re-insert as stop-tracking record (use a valid dummy UUID for user_id)
-        await supabase.from("pending_bulk_checks").insert({ id: mtxtBulkId, cards: "RUNNING", chat_id: String(callbackChatId), user_id: "00000000-0000-0000-0000-000000000000" });
+        if (mtxtBulkData?.cards) {
+          try {
+            const parsedState = JSON.parse(mtxtBulkData.cards);
+            if (parsedState?.kind === "mtxt_job") {
+              mtxtLoadedState = parsedState;
+              mtxtCards = Array.isArray(parsedState.cards) ? parsedState.cards : [];
+              mtxtPriceMin = Number(parsedState.priceMin ?? mtxtPriceMin);
+              mtxtPriceMax = Number(parsedState.priceMax ?? mtxtPriceMax);
+              mtxtResumeIndex = Number(parsedState.nextIndex ?? 0);
+            }
+          } catch {}
+          if (!mtxtLoadedState) {
+            mtxtCards = mtxtBulkData.cards.split("\n").filter((c: string) => c.trim());
+          }
+        }
         if (!mtxtCards.length) {
           await answerCallbackQuery(__mtxtCbQuery.id, "❌ Card data expired or invalid");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -6274,7 +6288,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        await answerCallbackQuery(__mtxtCbQuery.id, `⚡ Checking ${mtxtCards.length} cards on $${mtxtPriceMin}-$${mtxtPriceMax}...`);
+        if (!mtxtIsResume) {
+          await answerCallbackQuery(__mtxtCbQuery.id, `⚡ Checking ${mtxtCards.length} cards on $${mtxtPriceMin}-$${mtxtPriceMax}...`);
+        }
 
         const { data: mtxtProfile } = await supabase
           .from("profiles")
