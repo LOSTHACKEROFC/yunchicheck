@@ -6662,9 +6662,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
           // 50-thread concurrency with staggered launches — matches web Shopify Charge gateway.
           // Each batch advances to the next as soon as 49/50 cards complete (MIN_COMPLETE_BEFORE_NEXT below).
-          const MTXT_CONCURRENCY = Math.min(12, Math.max(1, mtxtCards.length));
-          const MTXT_STAGGER_MS_VAL = 100;
-          const MTXT_MAX_RUNTIME_MS = 105_000;
+          const MTXT_CONCURRENCY = Math.min(50, Math.max(1, mtxtCards.length));
+          const MTXT_STAGGER_MS_VAL = 30;
+          const MTXT_MAX_RUNTIME_MS = 110_000;
+          const MTXT_CARD_TIMEOUT_MS = 65_000;
           const MTXT_RESUME_DELAY_MS = 1_500;
           let mtxtNeedsResume = false;
           let mtxtNextResumeIndex = mtxtResumeIndex;
@@ -6909,13 +6910,16 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               }
               if (mtxtStopped) return;
               try {
-                await mtxtProcessCard(card);
+                await Promise.race([
+                  mtxtProcessCard(card),
+                  new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Card timeout')), MTXT_CARD_TIMEOUT_MS)),
+                ]);
               } catch (e) {
                 console.error('[/mtxt] card worker failed', e);
-                const errCard: MtxtResult = { cc: card, status: 'error', response: 'Worker error', price: '$0.00', bank: 'N/A', flag: '🌍' };
+                const errCard: MtxtResult = { cc: card, status: 'error', response: e instanceof Error && e.message === 'Card timeout' ? 'Timeout' : 'Worker error', price: '$0.00', bank: 'N/A', flag: '🌍' };
                 mtxtResults.push(errCard);
                 mtxtCurrentCard = card.split("|")[0] || card;
-                mtxtLastResponse = 'Worker error';
+                mtxtLastResponse = errCard.response;
                 mtxtErrorCount++;
                 mtxtErrorCards.push(card);
                 mtxtChecked++;
