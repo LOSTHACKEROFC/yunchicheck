@@ -6703,7 +6703,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
            const mtxtElapsed = ((Date.now() - mtxtStartTime) / 1000).toFixed(2);
            const { data: mtxtUpdatedProfile } = await supabase.from("profiles").select("credits").eq("user_id", mtxtProfile.user_id).single();
-           const mtxtNewBalance = mtxtUpdatedProfile?.credits ?? (mtxtProfile.credits - mtxtTotalCost);
+            const mtxtNewBalance = mtxtUpdatedProfile?.credits ?? (mtxtStartingCredits - mtxtTotalCost);
 
            let mtxtFinalMsg = `📄 <b>𝗧𝗫𝗧 𝗦𝗛𝗢𝗣𝗜𝗙𝗬 𝗖𝗛𝗔𝗥𝗚𝗘 — 𝗙𝗜𝗡𝗜𝗦𝗛𝗘𝗗</b>\n\n`;
            mtxtFinalMsg += mtxtStopped ? `🛑 <b>Stopped</b> — ${mtxtChecked}/${mtxtCards.length} checked\n` : `✅ <b>Process Completed</b>\n`;
@@ -6836,7 +6836,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             mtxtTotalCost += cardCost;
 
             if (result.status === 'live' || result.status === 'dead') {
-              await supabase.from("profiles").update({ credits: mtxtProfile.credits - mtxtTotalCost, updated_at: new Date().toISOString() }).eq("user_id", mtxtProfile.user_id);
+              await supabase.from("profiles").update({ credits: mtxtStartingCredits - mtxtTotalCost, updated_at: new Date().toISOString() }).eq("user_id", mtxtProfile.user_id);
               await supabase.from("card_checks").insert({ user_id: mtxtProfile.user_id, card_details: cardCC, gateway: "shopify_charge", status: "completed", result: result.status === "live" ? "charged" : "dead" });
             }
             // Don't insert error cards into card_checks - they'll be rechecked
