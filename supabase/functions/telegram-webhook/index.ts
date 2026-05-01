@@ -6884,53 +6884,55 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
         // Staggered threaded session model (matching web Shopify gateway, adjusted for Telegram runtime)
          const mtxtQueue = mtxtCards.map(c => c.trim()).filter(c => c);
-         let mtxtQueueIdx = 0;
-         const MIN_COMPLETE_BEFORE_NEXT = 49;
-
-         // Safety timeout: very long upper bound — only fires for truly stuck runs.
-         // The job runs in EdgeRuntime.waitUntil so it isn't bound to the request lifecycle.
-         // Each card invokes shopify-charge-check (≤120s deadline); we allow up to 10 min total.
-         const MTXT_SAFETY_TIMEOUT = 600_000;
-         const mtxtSafetyTimer = setTimeout(async () => {
-           console.warn('[/mtxt] Safety timeout reached after 10min — finalizing.');
-           mtxtStopped = true;
-         }, MTXT_SAFETY_TIMEOUT);
+          let mtxtQueueIdx = Math.max(0, Math.min(mtxtResumeIndex, mtxtQueue.length));
 
           while (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
-           const batchEnd = Math.min(mtxtQueueIdx + MTXT_CONCURRENCY, mtxtQueue.length);
-           const batchCards = mtxtQueue.slice(mtxtQueueIdx, batchEnd);
-           const isLastBatch = batchEnd >= mtxtQueue.length;
+            if (Date.now() - mtxtStartTime > MTXT_MAX_RUNTIME_MS) {
+              mtxtNeedsResume = true;
+              mtxtNextResumeIndex = mtxtQueueIdx;
+              break;
+            }
 
-           await new Promise<void>((resolve) => {
-             let batchCompleted = 0;
-             const promises = batchCards.map(async (card, launchOrder) => {
-               if (mtxtStopped) return;
-               if (launchOrder > 0) {
-                 const launchDelay = launchOrder * MTXT_STAGGER_MS_VAL + Math.floor(Math.random() * 120);
-                 await new Promise(r => setTimeout(r, launchDelay));
-               }
-               if (mtxtStopped) return;
+            const batchEnd = Math.min(mtxtQueueIdx + MTXT_CONCURRENCY, mtxtQueue.length);
+            const batchCards = mtxtQueue.slice(mtxtQueueIdx, batchEnd);
 
-               await mtxtProcessCard(card);
-               batchCompleted++;
-               // For non-last batches, resolve early after 49 to start next batch
-               // For last batch, wait for ALL cards
-               if (!isLastBatch && batchCompleted >= Math.min(MIN_COMPLETE_BEFORE_NEXT, batchCards.length)) {
-                 resolve();
-               }
-             });
-             Promise.all(promises).then(() => resolve());
-           });
+            await Promise.all(batchCards.map(async (card, launchOrder) => {
+              if (mtxtStopped) return;
+              if (launchOrder > 0) {
+                const launchDelay = launchOrder * MTXT_STAGGER_MS_VAL + Math.floor(Math.random() * 120);
+                await new Promise(r => setTimeout(r, launchDelay));
+              }
+              if (mtxtStopped) return;
+              try {
+                await mtxtProcessCard(card);
+              } catch (e) {
+                console.error('[/mtxt] card worker failed', e);
+                const errCard: MtxtResult = { cc: card, status: 'error', response: 'Worker error', price: '$0.00', bank: 'N/A', flag: '🌍' };
+                mtxtResults.push(errCard);
+                mtxtCurrentCard = card.split("|")[0] || card;
+                mtxtLastResponse = 'Worker error';
+                mtxtErrorCount++;
+                mtxtErrorCards.push(card);
+                mtxtChecked++;
+                await mtxtFlushUpdate(true);
+              }
+            }));
 
-           mtxtQueueIdx = batchEnd;
-           if (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
-             await new Promise(r => setTimeout(r, 600));
-           }
-         }
+            mtxtQueueIdx = batchEnd;
+            if (!await mtxtPersistState(mtxtQueueIdx)) break;
+            if (mtxtQueueIdx < mtxtQueue.length && !mtxtStopped) {
+              await new Promise(r => setTimeout(r, 300));
+            }
+          }
 
-          clearTimeout(mtxtSafetyTimer);
-          // Now (and only now) it's safe to remove the stop-tracker row — every
-          // worker has finished, so no one else will poll it.
+          if (mtxtNeedsResume && !mtxtStopped) {
+            await mtxtPersistState(mtxtNextResumeIndex, "running");
+            mtxtScheduleResume(mtxtNextResumeIndex);
+            await mtxtFlushUpdate(true);
+            return;
+          }
+
+          if (!mtxtStopped) await mtxtPersistState(mtxtQueue.length, "completed");
           await supabase.from("pending_bulk_checks").delete().eq("id", mtxtBulkId);
           await mtxtSendFinalMessage();
 
