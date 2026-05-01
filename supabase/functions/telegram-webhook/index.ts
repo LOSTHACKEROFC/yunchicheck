@@ -6310,6 +6310,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           await editTelegramMessage(callbackChatId, messageId, `❌ <b>Insufficient Credits</b>\n\nNeed at least <b>${mtxtCards.length}</b> credits. Balance: <b>${mtxtProfile.credits}</b>`, { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_back" }]] });
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
+        const mtxtStartingCredits = Number(mtxtLoadedState?.startingCredits ?? mtxtProfile.credits);
 
         // Fetch all matching sites; default queries only return 1000 rows.
         const mtxtSites = await fetchShopifyGatewaySites(supabase, mtxtPriceMin, mtxtPriceMax);
