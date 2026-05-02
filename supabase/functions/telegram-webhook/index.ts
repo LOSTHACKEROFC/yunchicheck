@@ -3449,44 +3449,78 @@ ${banInfo}
 // MAIN HANDLER
 // ═══════════════════════════════════════════════════════════
 
+const TELEGRAM_WEBHOOK_SECRET = Deno.env.get("TELEGRAM_WEBHOOK_SECRET");
+
+const isAuthorizedSelfInvocation = (req: Request): boolean => {
+  // Service role bearer is used by our own functions (e.g. mtxt resume)
+  const authHeader = req.headers.get("Authorization") || "";
+  if (!SUPABASE_SERVICE_ROLE_KEY) return false;
+  return authHeader === `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`;
+};
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // GET request = setup webhook + register commands
+  // GET request = setup webhook + register commands.
+  // Restricted to service role bearer to prevent unauthenticated config probing.
   if (req.method === "GET") {
+    if (!isAuthorizedSelfInvocation(req)) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const webhookUrl = `${SUPABASE_URL}/functions/v1/telegram-webhook`;
-    
+
     // Delete existing webhook first
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteWebhook`);
-    
-    // Set new webhook
+
+    // Set new webhook (with secret token if configured)
+    const setBody: Record<string, unknown> = {
+      url: webhookUrl,
+      allowed_updates: ["message", "callback_query"],
+      drop_pending_updates: true,
+    };
+    if (TELEGRAM_WEBHOOK_SECRET) {
+      setBody.secret_token = TELEGRAM_WEBHOOK_SECRET;
+    }
     const setResult = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        url: webhookUrl,
-        allowed_updates: ["message", "callback_query"],
-        drop_pending_updates: true,
-      }),
+      body: JSON.stringify(setBody),
     });
     const setData = await setResult.json();
-    
+
     // Register commands (create supabase client for role-based command registration)
     const supabaseForCommands = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     await setBotCommands(supabaseForCommands);
-    
+
     // Get webhook info
     const infoResult = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo`);
     const infoData = await infoResult.json();
-    
-    return new Response(JSON.stringify({ 
-      webhook_set: setData, 
+
+    return new Response(JSON.stringify({
+      webhook_set: setData,
       webhook_info: infoData,
-      commands_registered: true 
-    }), { 
-      headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      commands_registered: true,
+      secret_configured: !!TELEGRAM_WEBHOOK_SECRET,
+    }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // POST: must come from Telegram (with secret_token) or our own self-invocation
+  // (service role bearer). Reject anything else.
+  const telegramSecret = req.headers.get("X-Telegram-Bot-Api-Secret-Token");
+  const fromTelegram = !!TELEGRAM_WEBHOOK_SECRET && telegramSecret === TELEGRAM_WEBHOOK_SECRET;
+  const fromSelf = isAuthorizedSelfInvocation(req);
+  if (!fromTelegram && !fromSelf) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
