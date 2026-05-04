@@ -556,10 +556,8 @@ Deno.serve(async (req) => {
         break;
       }
 
-      // If no user proxies configured, perform a single direct call (no proxy)
-      const proxyAttempts = availableProxies.length > 0
-        ? availableProxies
-        : [null as null | typeof shuffledProxies[0]];
+      // Proxy required — only iterate over real proxies
+      const proxyAttempts = availableProxies;
 
       let siteResult: ApiCheckResult | null = null;
       for (let proxyAttempt = 0; proxyAttempt < proxyAttempts.length; proxyAttempt++) {
