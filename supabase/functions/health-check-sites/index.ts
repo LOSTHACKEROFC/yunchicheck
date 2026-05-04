@@ -136,11 +136,12 @@ const checkSingleSite = async (
     const controller = new AbortController();
     timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const apiUrl = proxyStr
-      ? `${API_BASE_URL}?${encodeURIComponent(TEST_CC)}&url=${encodeURIComponent(normalizedSiteUrl)}&proxy=${encodeURIComponent(proxyStr)}`
-      : `${API_BASE_URL}?${encodeURIComponent(TEST_CC)}&url=${encodeURIComponent(normalizedSiteUrl)}`;
+    if (!proxyStr) {
+      return { url: siteUrl, status: "error", reason: "Proxy required by API", code: "NO_PROXY" };
+    }
+    const apiUrl = `${API_BASE_URL}?${encodeURIComponent(TEST_CC)}&url=${encodeURIComponent(normalizedSiteUrl)}&proxy=${encodeURIComponent(proxyStr)}`;
 
-    console.log(`[Check] ${normalizedSiteUrl} | proxy=${proxyStr ? "yes" : "none"}`);
+    console.log(`[Check] ${normalizedSiteUrl} | proxy=yes`);
 
     const response = await fetch(apiUrl, {
       method: "GET",
