@@ -6374,7 +6374,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          const mtxtStrikeResponses = ["MERCHANDISE_EXPECTED_PRICE_MISMATCH"];
          const mtxtSiteStrikeCounter: Record<string, number> = {};
          const MTXT_STRIKE_THRESHOLD = 3;
-         const mtxtProxyDeadIndicators = ["proxy dead", "proxy error", "proxy authentication", "connection refused", "proxy connect", "tunneling socket", "proxy_error", "bad proxy", "cannot connect to host", "socks", "econnrefused", "econnreset"];
+         const mtxtProxyDeadIndicators = ["proxy dead", "proxy error", "proxy authentication", "connection refused", "proxy connect", "tunneling socket", "proxy_error", "bad proxy", "cannot connect to host", "socks", "econnrefused", "econnreset", "missing proxy param", '"error_code":"proxy dead"'];
          const mtxtSiteDeadIndicators = ["site dead"];
          const mtxtUserAgents = [
            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
