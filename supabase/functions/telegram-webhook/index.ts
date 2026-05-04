@@ -5919,7 +5919,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const mshStartTime = Date.now();
 
         const mshBadResponses = ["Site not supported", "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH", "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED", "Payment method not available", "ARTIFACT_DISSATISFACTION", "VALIDATION_CUSTOM", '"Gateway":"Authorize.net"'];
-        const mshProxyDeadIndicators = ["proxy dead", "proxy error", "proxy authentication", "connection refused", "proxy connect", "tunneling socket", "proxy_error", "bad proxy", "cannot connect to host", "socks", "econnrefused", "econnreset"];
+        const mshProxyDeadIndicators = ["proxy dead", "proxy error", "proxy authentication", "connection refused", "proxy connect", "tunneling socket", "proxy_error", "bad proxy", "cannot connect to host", "socks", "econnrefused", "econnreset", "missing proxy param", '"error_code":"proxy dead"'];
         const mshSiteDeadIndicators = ["site dead"];
         const mshUserAgents = [
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36',
