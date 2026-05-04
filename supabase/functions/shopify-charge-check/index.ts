@@ -204,8 +204,10 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
       return { status: 'unknown', message: 'Transient error (retryable)', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
     }
 
-    // Check for proxy dead indicators FIRST
-    const isProxyDead = PROXY_DEAD_INDICATORS.some(ind => rawLower.includes(ind));
+    // Check for proxy dead indicators FIRST (includes API "Missing proxy param" / "PROXY DEAD")
+    const isProxyDead = PROXY_DEAD_INDICATORS.some(ind => rawLower.includes(ind))
+      || rawLower.includes('missing proxy param')
+      || rawLower.includes('"error_code":"proxy dead"');
     if (isProxyDead) {
       return { status: 'dead', message: 'Proxy Dead', apiResponse: 'Proxy Dead', rawResponse: rawText, price: 0, priceStr: '$0.00', proxyDead: true };
     }
@@ -509,8 +511,20 @@ Deno.serve(async (req) => {
       .select('*')
       .eq('user_id', user!.id);
 
-    // Shuffle proxies for rotation (empty array if none)
+    // Shuffle proxies for rotation
     const shuffledProxies = [...(userProxies || [])].sort(() => Math.random() - 0.5);
+
+    // API now REQUIRES a proxy parameter — bail out early with a clear error if none configured
+    if (shuffledProxies.length === 0) {
+      return new Response(
+        JSON.stringify({
+          error: 'No proxy configured. Add at least one proxy in your dashboard before running Shopify Charge.',
+          status: 'unknown',
+          message: 'Proxy required',
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     const formatProxy = (p: { ip: string; port: string; username: string | null; password: string | null }) =>
       p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
@@ -542,10 +556,8 @@ Deno.serve(async (req) => {
         break;
       }
 
-      // If no user proxies configured, perform a single direct call (no proxy)
-      const proxyAttempts = availableProxies.length > 0
-        ? availableProxies
-        : [null as null | typeof shuffledProxies[0]];
+      // Proxy required — only iterate over real proxies
+      const proxyAttempts = availableProxies;
 
       let siteResult: ApiCheckResult | null = null;
       for (let proxyAttempt = 0; proxyAttempt < proxyAttempts.length; proxyAttempt++) {

