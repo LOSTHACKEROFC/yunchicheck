@@ -12,7 +12,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const SHOPIFY_DEBUG_CHAT_ID = "-1003848532661";
 
-const API_URL = "http://108.165.12.183:8081/";
+const API_URL = "http://148.230.102.178:8081/";
 const buildApiUrl = (cc: string, site: string, proxy: string) =>
   proxy
     ? `${API_URL}?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
