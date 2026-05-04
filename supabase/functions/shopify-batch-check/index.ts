@@ -134,15 +134,20 @@ const checkSingleCard = async (
   let result: { status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string } | null = null;
   const failedProxyIds: string[] = [];
 
-  // If no proxies configured, do a single direct call (no proxy)
-  const proxyAttempts: (typeof proxies[0] | null)[] = shuffledProxies.length > 0 ? [...shuffledProxies] : [null];
+  // API REQUIRES a proxy — bail out with clear unknown if user has none
+  if (shuffledProxies.length === 0) {
+    return {
+      cc, computedStatus: 'unknown', apiStatus: 'UNKNOWN',
+      apiMessage: 'Proxy required — add at least one proxy to use Shopify Charge',
+      apiTotal: 'N/A', rawResponse: '', usedSite: randomSite.url, allProxiesDead: true,
+    };
+  }
+  const proxyAttempts: typeof proxies = [...shuffledProxies];
 
   for (let attempt = 0; attempt < proxyAttempts.length; attempt++) {
     const currentProxy = proxyAttempts[attempt];
-    const proxyStr = currentProxy ? formatProxy(currentProxy) : '';
-    const apiUrl = proxyStr
-      ? `${API_BASE_URL}?${encodeURIComponent(cc)}&url=${encodeURIComponent(randomSite.url)}&proxy=${proxyStr}`
-      : `${API_BASE_URL}?${encodeURIComponent(cc)}&url=${encodeURIComponent(randomSite.url)}`;
+    const proxyStr = formatProxy(currentProxy);
+    const apiUrl = `${API_BASE_URL}?${encodeURIComponent(cc)}&url=${encodeURIComponent(randomSite.url)}&proxy=${encodeURIComponent(proxyStr)}`;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
