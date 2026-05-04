@@ -137,7 +137,7 @@ const checkSingleSite = async (
     timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     if (!proxyStr) {
-      return { url: siteUrl, status: "error", reason: "Proxy required by API", code: "NO_PROXY" };
+      return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: "Proxy required by API" };
     }
     const apiUrl = `${API_BASE_URL}?${encodeURIComponent(TEST_CC)}&url=${encodeURIComponent(normalizedSiteUrl)}&proxy=${encodeURIComponent(proxyStr)}`;
 
