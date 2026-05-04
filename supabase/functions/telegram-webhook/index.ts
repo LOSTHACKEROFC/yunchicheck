@@ -5513,6 +5513,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           "proxy dead", "proxy error", "proxy authentication", "connection refused",
           "proxy connect", "tunneling socket", "proxy_error", "bad proxy",
           "cannot connect to host", "socks", "econnrefused", "econnreset",
+          "missing proxy param", '"error_code":"proxy dead"',
         ];
         const shSiteDeadIndicators = ["site dead"];
         const shUserAgents = [
