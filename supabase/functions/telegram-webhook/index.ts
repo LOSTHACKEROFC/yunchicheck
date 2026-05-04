@@ -5559,7 +5559,7 @@ Admin needs to add sites via Health Check.
           // Helper: single API call
           const callShopifyOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
             if (!proxy) {
-              return { rawText: '{"status":"Error","message":"Missing proxy param","error_code":"PROXY DEAD"}', ok: false };
+              return { status: 'dead', message: 'Proxy Dead', rawResponse: 'Missing proxy param', price: 0, priceStr: '$0.00', proxyDead: true, siteDead: false, apiResponse: 'Proxy Dead' };
             }
             const apiUrl = `${SHOPIFY_API_URL}?${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`;
             const controller = new AbortController();
