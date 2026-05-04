@@ -6430,12 +6430,12 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            return result;
          };
 
-          // Single API call — raw format: domain/?{cc}&url={site}&proxy={proxy}
+          // Single API call — raw format: domain/?{cc}&url={site}&proxy={proxy} (proxy REQUIRED)
            const mtxtBuildApiUrl = (cardCC: string, siteUrl: string, proxy: string) => {
              const cc = encodeURIComponent(cardCC.trim());
              const site = encodeURIComponent(siteUrl.trim());
-             const proxyPart = proxy?.trim() ? `&proxy=${encodeURIComponent(proxy.trim())}` : "";
-             return `${SHOPIFY_API_URL_MTXT}?${cc}&url=${site}${proxyPart}`;
+             const proxyEnc = encodeURIComponent((proxy || '').trim());
+             return `${SHOPIFY_API_URL_MTXT}?${cc}&url=${site}&proxy=${proxyEnc}`;
            };
 
           const mtxtCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
