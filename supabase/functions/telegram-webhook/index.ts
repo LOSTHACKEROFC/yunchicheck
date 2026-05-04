@@ -9916,8 +9916,8 @@ ${resultsDisplay || "Waiting for results..."}
       const API_ENDPOINTS = [
         (site: string, cc: string, proxy: string) =>
           proxy
-            ? `http://148.230.102.178:8081/?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
-            : `http://148.230.102.178:8081/?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`,
+            ? `http://148.230.102.178:8081/?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
+            : `http://148.230.102.178:8081/?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`,
       ];
       const TEST_CC = "4266841674104656|03|27|908";
 
