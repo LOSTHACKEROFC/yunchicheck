@@ -141,8 +141,8 @@ const checkSingleCard = async (
     const currentProxy = proxyAttempts[attempt];
     const proxyStr = currentProxy ? formatProxy(currentProxy) : '';
     const apiUrl = proxyStr
-      ? `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(randomSite.url)}&proxy=${proxyStr}`
-      : `${API_BASE_URL}?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(randomSite.url)}`;
+      ? `${API_BASE_URL}?${encodeURIComponent(cc)}&url=${encodeURIComponent(randomSite.url)}&proxy=${proxyStr}`
+      : `${API_BASE_URL}?${encodeURIComponent(cc)}&url=${encodeURIComponent(randomSite.url)}`;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);

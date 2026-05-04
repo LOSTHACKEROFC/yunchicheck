@@ -15,8 +15,8 @@ const SHOPIFY_DEBUG_CHAT_ID = "-1003848532661";
 const API_URL = "http://148.230.102.178:8081/";
 const buildApiUrl = (cc: string, site: string, proxy: string) =>
   proxy
-    ? `${API_URL}?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
-    : `${API_URL}?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`;
+    ? `${API_URL}?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
+    : `${API_URL}?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`;
 
 const badResponses = [
   "Site not supported",
