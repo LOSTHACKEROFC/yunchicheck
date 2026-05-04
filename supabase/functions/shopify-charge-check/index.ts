@@ -511,8 +511,20 @@ Deno.serve(async (req) => {
       .select('*')
       .eq('user_id', user!.id);
 
-    // Shuffle proxies for rotation (empty array if none)
+    // Shuffle proxies for rotation
     const shuffledProxies = [...(userProxies || [])].sort(() => Math.random() - 0.5);
+
+    // API now REQUIRES a proxy parameter — bail out early with a clear error if none configured
+    if (shuffledProxies.length === 0) {
+      return new Response(
+        JSON.stringify({
+          error: 'No proxy configured. Add at least one proxy in your dashboard before running Shopify Charge.',
+          status: 'unknown',
+          message: 'Proxy required',
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     const formatProxy = (p: { ip: string; port: string; username: string | null; password: string | null }) =>
       p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
