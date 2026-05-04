@@ -278,7 +278,8 @@ const checkSingleCard = async (
       const isProxyError = !isValidApiResponse && (
         rawLower.includes('407') || rawLower.includes('proxy error') ||
         rawLower.includes('proxy authentication') || rawLower.includes('connection refused') ||
-        rawLower.includes('proxy connect') || rawLower.includes('tunneling socket')
+        rawLower.includes('proxy connect') || rawLower.includes('tunneling socket') ||
+        rawLower.includes('missing proxy param') || rawLower.includes('"error_code":"proxy dead"')
       );
 
       if (isProxyError && currentProxy) {
