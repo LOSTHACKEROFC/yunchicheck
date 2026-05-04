@@ -204,8 +204,10 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
       return { status: 'unknown', message: 'Transient error (retryable)', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
     }
 
-    // Check for proxy dead indicators FIRST
-    const isProxyDead = PROXY_DEAD_INDICATORS.some(ind => rawLower.includes(ind));
+    // Check for proxy dead indicators FIRST (includes API "Missing proxy param" / "PROXY DEAD")
+    const isProxyDead = PROXY_DEAD_INDICATORS.some(ind => rawLower.includes(ind))
+      || rawLower.includes('missing proxy param')
+      || rawLower.includes('"error_code":"proxy dead"');
     if (isProxyDead) {
       return { status: 'dead', message: 'Proxy Dead', apiResponse: 'Proxy Dead', rawResponse: rawText, price: 0, priceStr: '$0.00', proxyDead: true };
     }
