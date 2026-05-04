@@ -5963,9 +5963,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
         // Single call helper
         const mshCallOnce = async (cardCC: string, siteUrl: string, proxy: string) => {
-          const apiUrl = proxy
-            ? `${SHOPIFY_API_URL_MSH}?${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`
-            : `${SHOPIFY_API_URL_MSH}?${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}`;
+          if (!proxy) {
+            return { status: 'dead', message: 'Proxy Dead', price: 0, priceStr: '$0.00', proxyDead: true, siteDead: false, response: 'Proxy Dead' };
+          }
+          const apiUrl = `${SHOPIFY_API_URL_MSH}?${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`;
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 45000);
           try {
