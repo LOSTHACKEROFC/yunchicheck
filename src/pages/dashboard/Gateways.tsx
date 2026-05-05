@@ -3316,10 +3316,11 @@ const Gateways = () => {
     let completedCount = 0;
 
     if (isShopifyBulk) {
-      // Per-card model: every card fires its OWN request to shopify-charge-check
-      // and renders its response the moment it arrives. 50 in flight concurrently.
-      const SHOPIFY_PARALLEL = 50;
-      let nextIdx = 0;
+      // Wave-based 49/50 model: launch 50 cards in parallel, wait until 49
+      // complete, then fire the next wave. Each card renders its result
+      // immediately as it arrives.
+      const WAVE_SIZE = 50;
+      const WAVE_THRESHOLD = 49; // proceed to next wave when this many finish
 
       const processOneCard = async (cardData: typeof affordableCards[number]) => {
         const fullCardStr = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
@@ -3376,7 +3377,6 @@ const Gateways = () => {
           };
         }
 
-        // Render this card's result immediately on response arrival
         allResults.push(bulkResult);
         completedCount++;
         processedCount++;
@@ -3394,20 +3394,43 @@ const Gateways = () => {
         scheduleFlush();
       };
 
-      const worker = async () => {
-        while (!bulkAbortRef.current) {
-          while (bulkPauseRef.current && !bulkAbortRef.current) {
-            await new Promise(r => setTimeout(r, 100));
-          }
-          if (bulkAbortRef.current) break;
-          const idx = nextIdx++;
-          if (idx >= affordableCards.length) break;
-          await processOneCard(affordableCards[idx]);
+      // Process cards in waves of 50
+      let cardIndex = 0;
+      while (cardIndex < affordableCards.length && !bulkAbortRef.current) {
+        while (bulkPauseRef.current && !bulkAbortRef.current) {
+          await new Promise(r => setTimeout(r, 100));
         }
-      };
+        if (bulkAbortRef.current) break;
 
-      const workers = Array.from({ length: Math.min(SHOPIFY_PARALLEL, affordableCards.length) }, () => worker());
-      await Promise.allSettled(workers);
+        const waveEnd = Math.min(cardIndex + WAVE_SIZE, affordableCards.length);
+        const waveCards = affordableCards.slice(cardIndex, waveEnd);
+        const waveSize = waveCards.length;
+        const threshold = Math.max(1, Math.min(waveSize - 1, WAVE_THRESHOLD)); // 49 of 50, or N-1 for smaller waves
+        let waveCompleted = 0;
+        let thresholdResolve: (() => void) | null = null;
+        const thresholdPromise = new Promise<void>(resolve => { thresholdResolve = resolve; });
+
+        console.log(`[SHOPIFY-WAVE] Starting wave: cards ${cardIndex + 1}-${waveEnd} (${waveSize} cards, threshold: ${threshold})`);
+
+        const wavePromises = waveCards.map(async (cardData) => {
+          await processOneCard(cardData);
+          waveCompleted++;
+          // When threshold (49) cards complete, unblock so next wave can start
+          if (waveCompleted >= threshold && thresholdResolve) {
+            thresholdResolve();
+            thresholdResolve = null;
+          }
+        });
+
+        // Wait for 49 of 50 to finish before starting next wave
+        await thresholdPromise;
+        console.log(`[SHOPIFY-WAVE] Threshold ${threshold}/${waveSize} reached, moving to next wave`);
+
+        // Let remaining stragglers finish in background (don't block)
+        Promise.allSettled(wavePromises).catch(() => {});
+
+        cardIndex = waveEnd;
+      }
     } else {
       // Other gateways: worker-pool model
       const workerMultiplier = 4;
