@@ -3316,20 +3316,22 @@ const Gateways = () => {
     let completedCount = 0;
 
     if (isShopifyBulk) {
-      // Backend batch model: one invocation runs 50 Shopify threads internally.
-      // This keeps 50-thread speed without spawning 50 edge-function cold starts from the browser.
-      const SHOPIFY_CONCURRENCY = 50;
-      let cardIndex = 0;
+      // Streaming sub-batch model: dispatch many small batches in parallel so
+      // results appear as soon as each batch completes (instead of waiting for
+      // a single 50-card batch to fully finish before any UI update).
+      const SUB_BATCH_SIZE = 10;       // cards per backend invocation
+      const PARALLEL_BATCHES = 5;      // concurrent invocations -> 50 effective threads
 
-      while (cardIndex < affordableCards.length && !bulkAbortRef.current) {
-        const batchEnd = Math.min(cardIndex + SHOPIFY_CONCURRENCY, affordableCards.length);
-        const batchCards = affordableCards.slice(cardIndex, batchEnd).map(c => `${c.card}|${c.month}|${c.year}|${c.cvv}`);
+      // Build queue of sub-batches preserving order
+      const subBatches: Array<{ start: number; end: number }> = [];
+      for (let i = 0; i < affordableCards.length; i += SUB_BATCH_SIZE) {
+        subBatches.push({ start: i, end: Math.min(i + SUB_BATCH_SIZE, affordableCards.length) });
+      }
 
-        while (bulkPauseRef.current && !bulkAbortRef.current) {
-          await new Promise(r => setTimeout(r, 100));
-        }
-        if (bulkAbortRef.current) break;
+      let nextBatch = 0;
 
+      const processSubBatch = async (start: number, end: number) => {
+        const batchCards = affordableCards.slice(start, end).map(c => `${c.card}|${c.month}|${c.year}|${c.cvv}`);
         try {
           const batchData = await invokeShopifyBatch(batchCards);
           const batchResults = Array.isArray(batchData?.results) ? batchData.results : [];
@@ -3339,7 +3341,7 @@ const Gateways = () => {
           }
 
           batchResults.forEach((gatewayResponse: any, offset: number) => {
-            const cardData = affordableCards[cardIndex + offset];
+            const cardData = affordableCards[start + offset];
             if (!cardData) return;
             if (gatewayResponse?.allProxiesDead && !bulkProxyWarnedRef.current) {
               bulkProxyWarnedRef.current = true;
@@ -3390,9 +3392,8 @@ const Gateways = () => {
           });
           scheduleFlush();
         } catch (error) {
-          console.error('[SHOPIFY-BATCH] Batch failed, continuing:', error);
-          toast.warning('A Shopify batch failed — marking it unknown and continuing.');
-          affordableCards.slice(cardIndex, batchEnd).forEach((cardData) => {
+          console.error('[SHOPIFY-BATCH] Sub-batch failed, continuing:', error);
+          affordableCards.slice(start, end).forEach((cardData) => {
             const { brand, brandColor } = detectCardBrandLocal(cardData.card);
             const bulkResult: BulkResult = {
               _id: crypto.randomUUID(),
@@ -3415,9 +3416,23 @@ const Gateways = () => {
           });
           scheduleFlush();
         }
+      };
 
-        cardIndex = batchEnd;
-      }
+      const worker = async () => {
+        while (!bulkAbortRef.current) {
+          while (bulkPauseRef.current && !bulkAbortRef.current) {
+            await new Promise(r => setTimeout(r, 100));
+          }
+          if (bulkAbortRef.current) break;
+          const idx = nextBatch++;
+          if (idx >= subBatches.length) break;
+          const { start, end } = subBatches[idx];
+          await processSubBatch(start, end);
+        }
+      };
+
+      const workers = Array.from({ length: Math.min(PARALLEL_BATCHES, subBatches.length) }, () => worker());
+      await Promise.allSettled(workers);
     } else {
       // Other gateways: worker-pool model
       const workerMultiplier = 4;
