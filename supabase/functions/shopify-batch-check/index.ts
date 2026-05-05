@@ -453,6 +453,9 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const configErrorResponse = getConfigErrorResponse();
+  if (configErrorResponse) return configErrorResponse;
+
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
