@@ -107,9 +107,10 @@ const DECLINE_INDICATORS = [
   "ds_required",
 ];
 
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 2;
+const TOTAL_BUDGET_MS = 130000; // Stay safely under 150s edge timeout
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const getRetryDelay = (retryCount: number) => 2000 * (retryCount + 1) + Math.random() * 1000;
+const getRetryDelay = (retryCount: number) => 1500 * (retryCount + 1) + Math.random() * 500;
 
 type HealthCheckResult = {
   url: string;
