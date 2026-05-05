@@ -316,6 +316,7 @@ const checkSingleCard = async (
   adminClient: ReturnType<typeof createClient>,
   userId: string,
   username: string | null,
+  shouldNotify = true,
 ): Promise<CardResult> => {
   if (proxies.length === 0) {
     const fallbackSite = getRandomItem(sites);
@@ -430,7 +431,7 @@ const checkSingleCard = async (
   }
 
   // Broadcast CHARGED cards
-  if (result.status === 'live') {
+  if (shouldNotify && result.status === 'live') {
     notifyChargedCard(userId, cc, 'CHARGED', result.message, chargeAmount, 'Shopify Charge');
   }
 
@@ -464,29 +465,44 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { cards, priceGroup } = body;
+    const { cards, priceGroup, userId: bodyUserId, skipAccounting } = body;
 
     if (!cards || !Array.isArray(cards) || cards.length === 0) {
       return new Response(JSON.stringify({ error: 'Cards array required', results: [] }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    if (cards.length === 1 && String(cards[0]).startsWith('warmup')) {
+      return new Response(JSON.stringify({ status: 'ok', warmup: true, results: [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // Accept up to 50 cards per batch (50-thread concurrency model)
     const requestedBatch = cards.slice(0, 50);
 
-    // Auth - done ONCE for the entire batch
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
     // Admin client is used for credit enforcement, logging, proxy cleanup and site rotation.
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    const bearer = authHeader.slice(7).trim();
+    const isServiceRoleCall = !!SUPABASE_SERVICE_ROLE_KEY && bearer === SUPABASE_SERVICE_ROLE_KEY && typeof bodyUserId === 'string' && bodyUserId.length > 0;
+    const bypassAccounting = isServiceRoleCall && skipAccounting === true;
+
+    let user: { id: string } | null = null;
+    if (isServiceRoleCall) {
+      user = { id: bodyUserId };
+    } else {
+      // Auth - done ONCE for the entire batch
+      const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: { headers: { Authorization: authHeader } },
+      });
+
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+      if (authError || !authUser) {
+        return new Response(JSON.stringify({ error: "Invalid token" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      user = { id: authUser.id };
+    }
 
     const { data: profile } = await adminClient
       .from("profiles")
@@ -522,27 +538,29 @@ Deno.serve(async (req) => {
     }
 
     const availableCredits = Math.max(0, Number(profile?.credits || 0));
-    if (availableCredits < 1) {
+    if (!bypassAccounting && availableCredits < 1) {
       return new Response(JSON.stringify({ error: 'Insufficient credits', results: [], newCredits: availableCredits }),
         { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const batch = requestedBatch.slice(0, Math.min(requestedBatch.length, availableCredits));
-    let runningCredits = availableCredits - batch.length;
-    const { data: debitProfile, error: debitError } = await adminClient
-      .from('profiles')
-      .update({ credits: runningCredits })
-      .eq('user_id', user.id)
-      .gte('credits', batch.length)
-      .select('credits')
-      .single();
+    const batch = bypassAccounting ? requestedBatch : requestedBatch.slice(0, Math.min(requestedBatch.length, availableCredits));
+    let runningCredits = bypassAccounting ? availableCredits : availableCredits - batch.length;
+    if (!bypassAccounting) {
+      const { data: debitProfile, error: debitError } = await adminClient
+        .from('profiles')
+        .update({ credits: runningCredits })
+        .eq('user_id', user.id)
+        .gte('credits', batch.length)
+        .select('credits')
+        .single();
 
-    if (debitError || !debitProfile) {
-      return new Response(JSON.stringify({ error: 'Insufficient credits', results: [], newCredits: availableCredits }),
-        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (debitError || !debitProfile) {
+        return new Response(JSON.stringify({ error: 'Insufficient credits', results: [], newCredits: availableCredits }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      runningCredits = Number(debitProfile.credits || runningCredits);
     }
-
-    runningCredits = Number(debitProfile.credits || runningCredits);
 
     const { data: userProxies } = await adminClient
       .from('user_proxies')
@@ -554,7 +572,7 @@ Deno.serve(async (req) => {
     const COMPLETION_THRESHOLD = Math.max(1, batch.length - 1); // 49 of 50, or N-1 of N
 
     const tasks = batch.map((cc, idx) =>
-      checkSingleCard(cc, sites, userProxies || [], adminClient, user.id, profile?.username || null)
+      checkSingleCard(cc, sites, userProxies || [], adminClient, user.id, profile?.username || null, !bypassAccounting)
         .then((r) => ({ idx, r }))
         .catch((err) => ({
           idx,
@@ -588,7 +606,7 @@ Deno.serve(async (req) => {
 
     const completedResults = results.filter(Boolean);
     const liveCount = completedResults.filter((r) => r.computedStatus === 'live').length;
-    if (liveCount > 0) {
+    if (!bypassAccounting && liveCount > 0) {
       const { data: liveDebitProfile } = await adminClient
         .from('profiles')
         .update({ credits: Math.max(0, runningCredits - liveCount) })
@@ -598,7 +616,7 @@ Deno.serve(async (req) => {
       runningCredits = Number(liveDebitProfile?.credits ?? Math.max(0, runningCredits - liveCount));
     }
 
-    if (completedResults.length > 0) {
+    if (!bypassAccounting && completedResults.length > 0) {
       const checkRows = completedResults.map((r) => ({
         user_id: user.id,
         gateway: 'shopify_charge',

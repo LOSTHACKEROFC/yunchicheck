@@ -1,12 +1,11 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { sendEmail } from "../_shared/email-helper.ts";
 
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID");
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 // Use environment variable with fallback for admin chat ID
 const ADMIN_CHAT_ID = ADMIN_TELEGRAM_CHAT_ID || "8496943061";
@@ -3482,6 +3481,19 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const missingConfig = [
+    ["SUPABASE_URL", SUPABASE_URL],
+    ["SUPABASE_SERVICE_ROLE_KEY", SUPABASE_SERVICE_ROLE_KEY],
+    ["TELEGRAM_BOT_TOKEN", TELEGRAM_BOT_TOKEN],
+  ].filter(([, value]) => !value).map(([name]) => name);
+  if (missingConfig.length > 0) {
+    console.error(`[TELEGRAM-WEBHOOK] Missing required environment variables: ${missingConfig.join(", ")}`);
+    return new Response(JSON.stringify({ error: "Server configuration error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   // GET request = setup webhook + register commands.
   // Restricted to service role bearer to prevent unauthenticated config probing.
   if (req.method === "GET") {
@@ -6563,23 +6575,21 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            return result;
          };
 
-          // Check a single card via the shopify-charge-check edge function — same checking
-          // system as the web Shopify Charge gateway. The edge function handles site selection,
-          // proxy rotation, retries, strike counting, decline mapping, and auto-removal of bad sites.
-          // Direct fetch (instead of supabase.functions.invoke) avoids the SDK's
-          // internal "Failed to send a request" errors under high concurrency.
-          // Retries up to 2 times on network/5xx failures.
-          const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
-            const url = `${SUPABASE_URL}/functions/v1/shopify-charge-check`;
+          // Check one 50-card wave via the batch edge function. This avoids booting
+          // 50 separate shopify-charge-check functions from /mtxt, which was causing
+          // BOOT_ERROR / timeout under Telegram bulk load.
+          const mtxtCheckBatch = async (cardCCs: string[]): Promise<Record<string, { status: string; response: string; price: string }>> => {
+            const url = `${SUPABASE_URL}/functions/v1/shopify-batch-check`;
             const body = JSON.stringify({
-              cc: cardCC,
+              cards: cardCCs,
               userId: mtxtProfile.user_id,
               priceGroup: { min: mtxtPriceMin, max: mtxtPriceMax },
+              skipAccounting: true,
             });
             let lastErr = 'Unknown error';
             for (let attempt = 0; attempt < 3; attempt++) {
               const ctrl = new AbortController();
-              const timeoutId = setTimeout(() => ctrl.abort(), 90_000);
+              const timeoutId = setTimeout(() => ctrl.abort(), 135_000);
               try {
                 const resp = await fetch(url, {
                   method: 'POST',
@@ -6599,18 +6609,24 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                     await new Promise(r => setTimeout(r, 500 + attempt * 500));
                     continue;
                   }
-                  return { status: 'error', response: lastErr, price: '$0.00' };
+                  break;
                 }
                 const data = await resp.json();
-                if (!data) return { status: 'error', response: 'Empty response', price: '$0.00' };
-                const status = data.computedStatus === 'live' ? 'live'
-                  : data.computedStatus === 'dead' ? 'dead'
-                  : 'unknown';
-                const response = data.apiMessage || data.message || 'N/A';
-                const price = data.apiTotal && data.apiTotal !== 'Auto'
-                  ? data.apiTotal
-                  : (data.apiPrice && data.apiPrice !== '$0.00' ? data.apiPrice : '$0.00');
-                return { status, response, price };
+                const output: Record<string, { status: string; response: string; price: string }> = {};
+                const results = Array.isArray(data?.results) ? data.results : [];
+                cardCCs.forEach((card, i) => {
+                  const item = results[i];
+                  const status = item?.computedStatus === 'live' ? 'live'
+                    : item?.computedStatus === 'dead' ? 'dead'
+                    : item?.apiMessage === 'Pending — still processing' ? 'error'
+                    : 'unknown';
+                  output[card] = {
+                    status,
+                    response: item?.apiMessage || item?.message || (item ? 'N/A' : 'No result'),
+                    price: item?.apiTotal && item.apiTotal !== 'Auto' ? item.apiTotal : '$0.00',
+                  };
+                });
+                return output;
               } catch (e) {
                 clearTimeout(timeoutId);
                 lastErr = e instanceof Error ? e.message : 'Error';
@@ -6618,7 +6634,11 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 await new Promise(r => setTimeout(r, 500 + attempt * 500));
               }
             }
-            return { status: 'error', response: lastErr, price: '$0.00' };
+            return Object.fromEntries(cardCCs.map(card => [card, { status: 'error', response: lastErr, price: '$0.00' }]));
+          };
+          const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
+            const resultMap = await mtxtCheckBatch([cardCC]);
+            return resultMap[cardCC] || { status: 'error', response: 'No result', price: '$0.00' };
           };
 
          // Results array
@@ -6719,7 +6739,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           // 50-thread concurrency with staggered launches — matches web Shopify Charge gateway.
           // Each batch advances to the next as soon as 49/50 cards complete (MIN_COMPLETE_BEFORE_NEXT below).
           const MTXT_CONCURRENCY = Math.min(50, Math.max(1, mtxtCards.length));
-          const MTXT_STAGGER_MS_VAL = 30;
+          const MTXT_STAGGER_MS_VAL = 10;
           const MTXT_MAX_RUNTIME_MS = 110_000;
           const MTXT_CARD_TIMEOUT_MS = 65_000;
           const MTXT_RESUME_DELAY_MS = 1_500;
@@ -6744,7 +6764,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
          // Throttled UI update - max 1 edit per 500ms, always send on force
          let mtxtLastEditTime = 0;
-         const MTXT_MIN_EDIT_INTERVAL = 500;
+           const MTXT_MIN_EDIT_INTERVAL = 4000;
 
          // Flag to ensure final message is sent exactly once
          let mtxtFinalSent = false;
@@ -6836,7 +6856,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           let mtxtChecked = mtxtResults.length;
          let mtxtLastStopCheckAt = 0;
          const MTXT_STOP_CHECK_INTERVAL_MS = 5000; // poll DB stop flag at most every 5s
-         const mtxtProcessCard = async (cardCC: string) => {
+          const mtxtProcessCard = async (cardCC: string, precheckedResult?: { status: string; response: string; price: string }) => {
            if (mtxtStopped) return;
            // Throttled stop-flag poll — only one card at a time hits the DB,
            // and only every few seconds. Prevents the 50-thread fanout from
@@ -6871,7 +6891,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
            const [binInfo, result] = await Promise.all([
              mtxtLookupBin(cardParts[0]),
-             mtxtCheckCard(cardCC)
+             precheckedResult ? Promise.resolve(precheckedResult) : mtxtCheckCard(cardCC)
            ]);
 
             let statusType: string;
@@ -6958,6 +6978,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             const batchEnd = Math.min(mtxtQueueIdx + MTXT_CONCURRENCY, mtxtQueue.length);
             const batchCards = mtxtQueue.slice(mtxtQueueIdx, batchEnd);
 
+            const batchResultMap = await mtxtCheckBatch(batchCards);
+
             await Promise.all(batchCards.map(async (card, launchOrder) => {
               if (mtxtStopped) return;
               if (launchOrder > 0) {
@@ -6967,8 +6989,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (mtxtStopped) return;
               try {
                 await Promise.race([
-                  mtxtProcessCard(card),
-                  new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Card timeout')), MTXT_CARD_TIMEOUT_MS)),
+                  mtxtProcessCard(card, batchResultMap[card]),
+                  new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Card timeout')), 20_000)),
                 ]);
               } catch (e) {
                 console.error('[/mtxt] card worker failed', e);
@@ -11379,4 +11401,4 @@ account isn't connected yet.
   }
 };
 
-serve(handler);
+Deno.serve(handler);
