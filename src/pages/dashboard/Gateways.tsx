@@ -3314,8 +3314,8 @@ const Gateways = () => {
           });
           // Track every promise so we can await stragglers (e.g., the 50th card) after the loop
           promises.forEach(p => outstandingPromises.push(p.catch(() => {})));
-          // Safety: resolve when ALL are done regardless
-          Promise.all(promises).then(() => resolve());
+          // Safety: resolve when ALL are done regardless (use allSettled so rejections don't bubble)
+          Promise.allSettled(promises).then(() => resolve());
         });
 
         // For the last batch, wait for ALL cards to finish (no early-resolve at 49/50)
