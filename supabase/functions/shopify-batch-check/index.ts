@@ -472,6 +472,11 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    if (cards.length === 1 && String(cards[0]).startsWith('warmup')) {
+      return new Response(JSON.stringify({ status: 'ok', warmup: true, results: [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // Accept up to 50 cards per batch (50-thread concurrency model)
     const requestedBatch = cards.slice(0, 50);
 
