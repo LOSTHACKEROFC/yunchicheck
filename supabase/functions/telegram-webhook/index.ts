@@ -5622,9 +5622,9 @@ Admin needs to add sites via Health Check.
                 if (json.Response) apiResponse = String(json.Response).replace(/<[^>]*>/g, '');
                 apiMessage = json.message || json.msg || json.error || rawText;
 
-                if (String(json.Charge).toLowerCase() === 'true' || json.Charge === true || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
+                if (String(json.Charged ?? json.Charge ?? '').toLowerCase() === 'true' || json.Charged === true || json.Charge === true || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
                   apiStatus = 'live'; apiMessage = json.message || json.Response || 'Charged';
-                } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED') {
+                } else if (String(json.Charged ?? json.Charge ?? '').toLowerCase() === 'false' || json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED') {
                   apiStatus = 'dead'; apiMessage = json.message || json.error || json.Response || 'Declined';
                 } else {
                   const combined = ((apiMessage || '') + ' ' + (apiResponse || '')).toLowerCase();
@@ -5999,7 +5999,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (json.Price > 0) { price = json.Price; priceStr = `$${Number(json.Price).toFixed(2)}`; }
               if (json.Response) apiResponse = String(json.Response).replace(/<[^>]*>/g, '');
               apiMessage = json.message || json.msg || json.error || rawText;
-              if (String(json.Charge).toLowerCase() === 'true' || json.Charge === true || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎')
+              if (String(json.Charged ?? json.Charge ?? '').toLowerCase() === 'true' || json.Charged === true || json.Charge === true || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎')
                 { apiStatus = 'live'; apiMessage = json.message || json.Response || 'Charged'; }
               else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED')
                 { apiStatus = 'dead'; apiMessage = json.message || json.error || json.Response || 'Declined'; }
@@ -6491,9 +6491,9 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                const responseText = (apiResponse || apiMessage || '').trim();
                if (mtxtIsEmptyOrErrorOnly(responseText) && price === 0) {
                  apiStatus = 'unknown';
-               } else if (String(json.Charge).toLowerCase() === 'true' || json.Charge === true || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
+               } else if (String(json.Charged ?? json.Charge ?? '').toLowerCase() === 'true' || json.Charged === true || json.Charge === true || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
                  apiStatus = 'live'; apiMessage = json.message || json.Response || 'Charged';
-               } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED') {
+               } else if (String(json.Charged ?? json.Charge ?? '').toLowerCase() === 'false' || json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED') {
                  apiStatus = 'dead'; apiMessage = json.message || json.error || json.Response || 'Declined';
                } else if (json.status === 'error') {
                  // Only dead if meaningful error message
