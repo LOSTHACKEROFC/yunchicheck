@@ -6978,6 +6978,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             const batchEnd = Math.min(mtxtQueueIdx + MTXT_CONCURRENCY, mtxtQueue.length);
             const batchCards = mtxtQueue.slice(mtxtQueueIdx, batchEnd);
 
+            const batchResultMap = await mtxtCheckBatch(batchCards);
+
             await Promise.all(batchCards.map(async (card, launchOrder) => {
               if (mtxtStopped) return;
               if (launchOrder > 0) {
@@ -6987,8 +6989,8 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               if (mtxtStopped) return;
               try {
                 await Promise.race([
-                  mtxtProcessCard(card),
-                  new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Card timeout')), MTXT_CARD_TIMEOUT_MS)),
+                  mtxtProcessCard(card, batchResultMap[card]),
+                  new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Card timeout')), 20_000)),
                 ]);
               } catch (e) {
                 console.error('[/mtxt] card worker failed', e);
