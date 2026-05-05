@@ -6575,23 +6575,21 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
            return result;
          };
 
-          // Check a single card via the shopify-charge-check edge function — same checking
-          // system as the web Shopify Charge gateway. The edge function handles site selection,
-          // proxy rotation, retries, strike counting, decline mapping, and auto-removal of bad sites.
-          // Direct fetch (instead of supabase.functions.invoke) avoids the SDK's
-          // internal "Failed to send a request" errors under high concurrency.
-          // Retries up to 2 times on network/5xx failures.
-          const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
-            const url = `${SUPABASE_URL}/functions/v1/shopify-charge-check`;
+          // Check one 50-card wave via the batch edge function. This avoids booting
+          // 50 separate shopify-charge-check functions from /mtxt, which was causing
+          // BOOT_ERROR / timeout under Telegram bulk load.
+          const mtxtCheckBatch = async (cardCCs: string[]): Promise<Record<string, { status: string; response: string; price: string }>> => {
+            const url = `${SUPABASE_URL}/functions/v1/shopify-batch-check`;
             const body = JSON.stringify({
-              cc: cardCC,
+              cards: cardCCs,
               userId: mtxtProfile.user_id,
               priceGroup: { min: mtxtPriceMin, max: mtxtPriceMax },
+              skipAccounting: true,
             });
             let lastErr = 'Unknown error';
             for (let attempt = 0; attempt < 3; attempt++) {
               const ctrl = new AbortController();
-              const timeoutId = setTimeout(() => ctrl.abort(), 90_000);
+              const timeoutId = setTimeout(() => ctrl.abort(), 135_000);
               try {
                 const resp = await fetch(url, {
                   method: 'POST',
@@ -6611,18 +6609,24 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                     await new Promise(r => setTimeout(r, 500 + attempt * 500));
                     continue;
                   }
-                  return { status: 'error', response: lastErr, price: '$0.00' };
+                  break;
                 }
                 const data = await resp.json();
-                if (!data) return { status: 'error', response: 'Empty response', price: '$0.00' };
-                const status = data.computedStatus === 'live' ? 'live'
-                  : data.computedStatus === 'dead' ? 'dead'
-                  : 'unknown';
-                const response = data.apiMessage || data.message || 'N/A';
-                const price = data.apiTotal && data.apiTotal !== 'Auto'
-                  ? data.apiTotal
-                  : (data.apiPrice && data.apiPrice !== '$0.00' ? data.apiPrice : '$0.00');
-                return { status, response, price };
+                const output: Record<string, { status: string; response: string; price: string }> = {};
+                const results = Array.isArray(data?.results) ? data.results : [];
+                cardCCs.forEach((card, i) => {
+                  const item = results[i];
+                  const status = item?.computedStatus === 'live' ? 'live'
+                    : item?.computedStatus === 'dead' ? 'dead'
+                    : item?.apiMessage === 'Pending — still processing' ? 'error'
+                    : 'unknown';
+                  output[card] = {
+                    status,
+                    response: item?.apiMessage || item?.message || (item ? 'N/A' : 'No result'),
+                    price: item?.apiTotal && item.apiTotal !== 'Auto' ? item.apiTotal : '$0.00',
+                  };
+                });
+                return output;
               } catch (e) {
                 clearTimeout(timeoutId);
                 lastErr = e instanceof Error ? e.message : 'Error';
@@ -6630,7 +6634,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
                 await new Promise(r => setTimeout(r, 500 + attempt * 500));
               }
             }
-            return { status: 'error', response: lastErr, price: '$0.00' };
+            return Object.fromEntries(cardCCs.map(card => [card, { status: 'error', response: lastErr, price: '$0.00' }]));
           };
 
          // Results array
