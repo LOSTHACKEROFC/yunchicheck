@@ -107,9 +107,10 @@ const DECLINE_INDICATORS = [
   "ds_required",
 ];
 
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 2;
+const TOTAL_BUDGET_MS = 130000; // Stay safely under 150s edge timeout
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const getRetryDelay = (retryCount: number) => 2000 * (retryCount + 1) + Math.random() * 1000;
+const getRetryDelay = (retryCount: number) => 1500 * (retryCount + 1) + Math.random() * 500;
 
 type HealthCheckResult = {
   url: string;
@@ -127,8 +128,14 @@ const checkSingleSite = async (
   proxyId: string | null,
   supabase: ReturnType<typeof createClient>,
   retryCount = 0,
+  deadline: number = Date.now() + TOTAL_BUDGET_MS,
 ): Promise<HealthCheckResult> => {
-  const timeoutMs = 55000;
+  const remaining = deadline - Date.now();
+  if (remaining <= 2000) {
+    return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: "Timeout budget exceeded" };
+  }
+  // Per-attempt timeout: cap at 40s, but never more than what's left in the budget
+  const timeoutMs = Math.min(40000, remaining - 1000);
   const normalizedSiteUrl = siteUrl.trim().replace(/\/+$/, "");
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
@@ -158,7 +165,7 @@ const checkSingleSite = async (
       if (retryCount < MAX_RETRIES) {
         console.log(`[Retry] ${normalizedSiteUrl} → empty response, retry ${retryCount + 1}/${MAX_RETRIES}`);
         await wait(getRetryDelay(retryCount));
-        return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1);
+        return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1, deadline);
       }
 
       console.log(`[Result] ${normalizedSiteUrl} → ERROR (empty response after ${MAX_RETRIES} retries)`);
@@ -173,7 +180,7 @@ const checkSingleSite = async (
       if (retryCount < MAX_RETRIES) {
         console.log(`[Retry] ${normalizedSiteUrl} → curl/DNS error, retry ${retryCount + 1}/${MAX_RETRIES}`);
         await wait(getRetryDelay(retryCount));
-        return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1);
+        return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1, deadline);
       }
 
       console.log(`[Result] ${normalizedSiteUrl} → ERROR (curl/DNS failed after ${MAX_RETRIES} retries)`);
@@ -374,7 +381,7 @@ const checkSingleSite = async (
     if ((msgLower.includes("abort") || msgLower.includes("timeout") || msgLower.includes("fetch failed")) && retryCount < MAX_RETRIES) {
       console.log(`[Retry] ${normalizedSiteUrl} → transient fetch error, retry ${retryCount + 1}/${MAX_RETRIES}`);
       await wait(getRetryDelay(retryCount));
-      return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1);
+      return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1, deadline);
     }
 
     console.log(`[Error] ${normalizedSiteUrl}: ${msg}`);
