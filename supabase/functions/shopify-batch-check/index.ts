@@ -211,18 +211,26 @@ const checkSingleCard = async (
 
       try {
         const json = JSON.parse(rawText);
-        if (json.Price !== undefined && json.Price > 0) { price = json.Price; priceStr = `$${Number(json.Price).toFixed(2)}`; }
+        // New API: Price may be "8.00 USD" string or number
+        if (json.Price !== undefined && json.Price !== null && json.Price !== '?' ) {
+          const parsedPrice = typeof json.Price === 'number' ? json.Price : parseFloat(String(json.Price).replace(/[^0-9.]/g, ''));
+          if (!isNaN(parsedPrice) && parsedPrice > 0) { price = parsedPrice; priceStr = `$${parsedPrice.toFixed(2)}`; }
+        }
         if (json.Response) { apiResponse = String(json.Response).replace(/<[^>]*>/g, ''); }
-        apiMessage = json.message || json.msg || json.error || rawText;
+        // IMPORTANT: do NOT fall back to rawText for apiMessage — it contains substrings like "Charged" that confuse keyword classification below
+        apiMessage = json.Response || json.message || json.msg || json.error || '';
 
         // If the API returned an empty/meaningless response, treat as unknown
         const responseText = (apiResponse || apiMessage || '').trim();
-        if (isEmptyOrErrorOnly(responseText) && price === 0) {
+        const chargedFlag = String(json.Charged ?? json.Charge ?? '').toLowerCase() === 'true' || json.Charged === true || json.Charge === true;
+        const approvedFlag = String(json.Approved ?? '').toLowerCase() === 'true' || json.Approved === true;
+
+        if (isEmptyOrErrorOnly(responseText) && price === 0 && !chargedFlag && !approvedFlag) {
           apiStatus = 'unknown';
-        } else if (String(json.Charge).toLowerCase() === 'true' || json.Charge === true || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true) {
+        } else if (chargedFlag || approvedFlag || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true) {
           apiStatus = 'live'; apiMessage = json.Response || json.message || 'Charged';
-        } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED') {
-          apiStatus = 'dead'; apiMessage = json.message || json.error || 'Declined';
+        } else if (String(json.Charged ?? '').toLowerCase() === 'false' || String(json.Approved ?? '').toLowerCase() === 'false' || json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED') {
+          apiStatus = 'dead'; apiMessage = json.Response || json.message || json.error || 'Declined';
         } else if (json.status === 'error') {
           // Only mark as dead if there's a meaningful error message (not just "error:")
           const errMsg = (json.message || json.error || '').trim().toLowerCase();
