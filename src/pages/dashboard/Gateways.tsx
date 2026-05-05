@@ -2035,6 +2035,51 @@ const Gateways = () => {
     };
   };
 
+  const invokeShopifyBatch = async (cards: string[]): Promise<any> => {
+    const MAX_RETRIES = 5;
+    await warmupShopifyFunction();
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        await acquireShopifyInvocationSlot();
+        try {
+          const { data, error } = await supabase.functions.invoke('shopify-batch-check', {
+            body: { cards, priceGroup: shopifyPriceGroup }
+          });
+          if (!error) {
+            shopifyParallelLimitRef.current = SHOPIFY_TARGET_PARALLEL_INVOCATIONS;
+            shopifyBootCooldownUntilRef.current = 0;
+            return data;
+          }
+
+          const context = (error as { context?: Response })?.context;
+          const statusCode = context instanceof Response ? context.status : undefined;
+          const message = String(error.message || '').toLowerCase();
+          const isBootError = statusCode === 503 || message.includes('boot_error') || message.includes('failed to start');
+          const isRetryable = isBootError || statusCode === 502 || statusCode === 504 || message.includes('network') || message.includes('failed to send');
+          if (isRetryable && attempt < MAX_RETRIES) {
+            if (isBootError) handleShopifyBootPressure();
+            const baseDelay = isBootError ? 3500 : 1200;
+            await new Promise(r => setTimeout(r, Math.min(18_000, baseDelay * (2 ** (attempt - 1)) + Math.floor(Math.random() * 900))));
+            continue;
+          }
+          throw error;
+        } finally {
+          releaseShopifyInvocationSlot();
+        }
+      } catch (e: any) {
+        const message = String(e?.message || '').toLowerCase();
+        const isRetryable = message.includes('network') || message.includes('failed to fetch') || message.includes('503') || message.includes('boot_error');
+        if (isRetryable && attempt < MAX_RETRIES) {
+          if (message.includes('503') || message.includes('boot_error')) handleShopifyBootPressure();
+          await new Promise(r => setTimeout(r, Math.min(18_000, 1800 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 900))));
+          continue;
+        }
+        throw e;
+      }
+    }
+  };
+
   // AuthNet Charge API check via edge function - $1 charge
   const checkCardViaAuthNetCharge = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
@@ -3271,66 +3316,107 @@ const Gateways = () => {
     let completedCount = 0;
 
     if (isShopifyBulk) {
-      // Session model: 50 cards queued. Start NEXT session early after 49 complete,
-      // but track outstanding promises so the final session waits for ALL cards (incl. the 50th).
-      const SHOPIFY_CONCURRENCY = SHOPIFY_TARGET_PARALLEL_INVOCATIONS;
-      const MIN_COMPLETE_BEFORE_NEXT = 49;
+      // Backend batch model: one invocation runs 50 Shopify threads internally.
+      // This keeps 50-thread speed without spawning 50 edge-function cold starts from the browser.
+      const SHOPIFY_CONCURRENCY = 50;
       let cardIndex = 0;
-      const outstandingPromises: Promise<void>[] = [];
 
       while (cardIndex < affordableCards.length && !bulkAbortRef.current) {
         const batchEnd = Math.min(cardIndex + SHOPIFY_CONCURRENCY, affordableCards.length);
-        const batchIndices = Array.from({ length: batchEnd - cardIndex }, (_, i) => cardIndex + i);
-        const isLastBatch = batchEnd >= affordableCards.length;
+        const batchCards = affordableCards.slice(cardIndex, batchEnd).map(c => `${c.card}|${c.month}|${c.year}|${c.cvv}`);
 
-        let batchCompleted = 0;
-        const batchDonePromise = new Promise<void>((resolve) => {
-          const promises = batchIndices.map(async (idx) => {
-            // Pure parallel threads — all 50 cards launch simultaneously, no stagger.
-            // The edge function's built-in 5x BOOT_ERROR retry handles cold-start storms.
-            if (bulkAbortRef.current) return;
-
-            // Wait if paused
-            while (bulkPauseRef.current && !bulkAbortRef.current) {
-              await new Promise(r => setTimeout(r, 100));
-            }
-            if (bulkAbortRef.current) return;
-
-            const result = await processCard(idx);
-            if (result && !bulkAbortRef.current) {
-              allResults.push(result);
-              completedCount++;
-              processedCount++;
-              pendingResultsRef.current.push(result);
-              bulkStatsRef.current.completed = completedCount;
-              scheduleFlush();
-            }
-            // Count every settled card (including null/skipped) toward the 49/50 threshold
-            // so the next session can't hang if a card is skipped or aborted.
-            batchCompleted++;
-            if (batchCompleted >= Math.min(MIN_COMPLETE_BEFORE_NEXT, batchIndices.length)) {
-              resolve();
-            }
-          });
-          // Track every promise so we can await stragglers (e.g., the 50th card) after the loop
-          promises.forEach(p => outstandingPromises.push(p.catch(() => {})));
-          // Safety: resolve when ALL are done regardless (use allSettled so rejections don't bubble)
-          Promise.allSettled(promises).then(() => resolve());
-        });
-
-        // For the last batch, wait for ALL cards to finish (no early-resolve at 49/50)
-        if (isLastBatch) {
-          await Promise.all(outstandingPromises);
-        } else {
-          await batchDonePromise;
+        while (bulkPauseRef.current && !bulkAbortRef.current) {
+          await new Promise(r => setTimeout(r, 100));
         }
-        cardIndex = batchEnd;
-        // No inter-session gap — start the next 50 immediately so results keep streaming.
-      }
+        if (bulkAbortRef.current) break;
 
-      // Final safety: ensure ALL outstanding cards from prior sessions also completed
-      if (!bulkAbortRef.current) {
-        await Promise.all(outstandingPromises);
+        try {
+          const batchData = await invokeShopifyBatch(batchCards);
+          const batchResults = Array.isArray(batchData?.results) ? batchData.results : [];
+          if (typeof batchData?.newCredits === 'number') {
+            remainingCredits = batchData.newCredits;
+            setUserCredits(batchData.newCredits);
+          }
+
+          batchResults.forEach((gatewayResponse: any, offset: number) => {
+            const cardData = affordableCards[cardIndex + offset];
+            if (!cardData) return;
+            if (gatewayResponse?.allProxiesDead && !bulkProxyWarnedRef.current) {
+              bulkProxyWarnedRef.current = true;
+              toast.warning("⚠️ Some proxies are failing — continuing without them.", {
+                duration: 6000,
+                description: "Add fresh proxies in Proxy Manager for better reliability.",
+              });
+            }
+
+            const checkStatus = gatewayResponse?.computedStatus === "live" ? "live" : gatewayResponse?.computedStatus === "dead" ? "dead" : "unknown";
+            const fullCardStr = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
+            const displayCardStr = cardData.originalCvv
+              ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}`
+              : `${cardData.card}|${cardData.month}|${cardData.year}`;
+            const { brand, brandColor } = detectCardBrandLocal(cardData.card);
+            const apiMessage = gatewayResponse?.apiMessage || 'No response';
+            const rawResponse = gatewayResponse?.rawResponse || JSON.stringify(gatewayResponse || {});
+            const isOrderPlaced = apiMessage.toUpperCase().includes('ORDER_PLACED') || rawResponse.toUpperCase().includes('ORDER_PLACED');
+            const bulkResult: BulkResult = {
+              _id: crypto.randomUUID(),
+              status: checkStatus,
+              message: checkStatus === "live" ? "Valid" : checkStatus === "dead" ? "Declined" : "Unknown",
+              gateway: selectedGateway.name,
+              cardMasked: maskCard(cardData.card),
+              fullCard: fullCardStr,
+              displayCard: displayCardStr,
+              brand,
+              brandColor,
+              apiResponse: isOrderPlaced ? '💎 ORDER PLACED' : `${gatewayResponse?.apiStatus || 'UNKNOWN'}: ${apiMessage}${gatewayResponse?.apiTotal ? ` (${gatewayResponse.apiTotal})` : ''}`,
+              usedApi: gatewayResponse?.usedSite,
+              rawResponse,
+            };
+
+            allResults.push(bulkResult);
+            completedCount++;
+            processedCount++;
+            pendingResultsRef.current.push(bulkResult);
+            bulkStatsRef.current.completed = completedCount;
+            setGatewayHistory(prev => [{
+              id: crypto.randomUUID(),
+              created_at: new Date().toISOString(),
+              gateway: selectedGateway.id,
+              status: 'completed',
+              result: checkStatus,
+              fullCard: fullCardStr,
+              displayCard: displayCardStr,
+            }, ...prev].slice(0, 50));
+          });
+          scheduleFlush();
+        } catch (error) {
+          console.error('[SHOPIFY-BATCH] Batch failed, continuing:', error);
+          toast.warning('A Shopify batch failed — marking it unknown and continuing.');
+          affordableCards.slice(cardIndex, batchEnd).forEach((cardData) => {
+            const { brand, brandColor } = detectCardBrandLocal(cardData.card);
+            const bulkResult: BulkResult = {
+              _id: crypto.randomUUID(),
+              status: "unknown",
+              message: "Error",
+              gateway: selectedGateway.name,
+              cardMasked: maskCard(cardData.card),
+              fullCard: `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`,
+              displayCard: cardData.originalCvv ? `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.originalCvv}` : `${cardData.card}|${cardData.month}|${cardData.year}`,
+              brand,
+              brandColor,
+              apiResponse: "ERROR: Batch request failed",
+              rawResponse: error instanceof Error ? error.message : String(error),
+            };
+            allResults.push(bulkResult);
+            completedCount++;
+            processedCount++;
+            pendingResultsRef.current.push(bulkResult);
+            bulkStatsRef.current.completed = completedCount;
+          });
+          scheduleFlush();
+        }
+
+        cardIndex = batchEnd;
       }
     } else {
       // Other gateways: worker-pool model
