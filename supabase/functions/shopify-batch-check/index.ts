@@ -480,29 +480,6 @@ Deno.serve(async (req) => {
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const availableCredits = Math.max(0, Number(profile?.credits || 0));
-    if (availableCredits < 1) {
-      return new Response(JSON.stringify({ error: 'Insufficient credits', results: [], newCredits: availableCredits }),
-        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    const batch = requestedBatch.slice(0, Math.min(requestedBatch.length, availableCredits));
-    let runningCredits = availableCredits - batch.length;
-    const { data: debitProfile, error: debitError } = await adminClient
-      .from('profiles')
-      .update({ credits: runningCredits })
-      .eq('user_id', user.id)
-      .gte('credits', batch.length)
-      .select('credits')
-      .single();
-
-    if (debitError || !debitProfile) {
-      return new Response(JSON.stringify({ error: 'Insufficient credits', results: [], newCredits: availableCredits }),
-        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    runningCredits = Number(debitProfile.credits || runningCredits);
-
     // Fetch sites and proxies ONCE for the entire batch
 
     let sitesQuery = adminClient
