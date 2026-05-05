@@ -6636,6 +6636,10 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             }
             return Object.fromEntries(cardCCs.map(card => [card, { status: 'error', response: lastErr, price: '$0.00' }]));
           };
+          const mtxtCheckCard = async (cardCC: string): Promise<{ status: string; response: string; price: string }> => {
+            const resultMap = await mtxtCheckBatch([cardCC]);
+            return resultMap[cardCC] || { status: 'error', response: 'No result', price: '$0.00' };
+          };
 
          // Results array
          interface MtxtResult { cc: string; status: string; response: string; price: string; bank: string; flag: string; }
