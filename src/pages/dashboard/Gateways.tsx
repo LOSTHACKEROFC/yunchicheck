@@ -2035,6 +2035,51 @@ const Gateways = () => {
     };
   };
 
+  const invokeShopifyBatch = async (cards: string[]): Promise<any> => {
+    const MAX_RETRIES = 5;
+    await warmupShopifyFunction();
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        await acquireShopifyInvocationSlot();
+        try {
+          const { data, error } = await supabase.functions.invoke('shopify-batch-check', {
+            body: { cards, priceGroup: shopifyPriceGroup }
+          });
+          if (!error) {
+            shopifyParallelLimitRef.current = SHOPIFY_TARGET_PARALLEL_INVOCATIONS;
+            shopifyBootCooldownUntilRef.current = 0;
+            return data;
+          }
+
+          const context = (error as { context?: Response })?.context;
+          const statusCode = context instanceof Response ? context.status : undefined;
+          const message = String(error.message || '').toLowerCase();
+          const isBootError = statusCode === 503 || message.includes('boot_error') || message.includes('failed to start');
+          const isRetryable = isBootError || statusCode === 502 || statusCode === 504 || message.includes('network') || message.includes('failed to send');
+          if (isRetryable && attempt < MAX_RETRIES) {
+            if (isBootError) handleShopifyBootPressure();
+            const baseDelay = isBootError ? 3500 : 1200;
+            await new Promise(r => setTimeout(r, Math.min(18_000, baseDelay * (2 ** (attempt - 1)) + Math.floor(Math.random() * 900))));
+            continue;
+          }
+          throw error;
+        } finally {
+          releaseShopifyInvocationSlot();
+        }
+      } catch (e: any) {
+        const message = String(e?.message || '').toLowerCase();
+        const isRetryable = message.includes('network') || message.includes('failed to fetch') || message.includes('503') || message.includes('boot_error');
+        if (isRetryable && attempt < MAX_RETRIES) {
+          if (message.includes('503') || message.includes('boot_error')) handleShopifyBootPressure();
+          await new Promise(r => setTimeout(r, Math.min(18_000, 1800 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 900))));
+          continue;
+        }
+        throw e;
+      }
+    }
+  };
+
   // AuthNet Charge API check via edge function - $1 charge
   const checkCardViaAuthNetCharge = async (cardNumber: string, month: string, year: string, cvv: string): Promise<GatewayApiResponse> => {
     const cc = `${cardNumber}|${month}|${year}|${cvv}`;
