@@ -403,17 +403,25 @@ async function sendTelegramMessage(
     if (replyMarkup) body.reply_markup = replyMarkup;
     if (replyToMessageId) body.reply_to_message_id = replyToMessageId;
 
-    const response = await fetch(
+    const send = (payload: Record<string, unknown>) => fetch(
       `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
     );
 
+    let response = await send(body);
+
     if (!response.ok) {
-      console.error("Telegram API error:", await response.json());
+      const errorData = await response.json();
+      const shouldRetryWithoutReply = replyToMessageId && String(errorData?.description || "").toLowerCase().includes("replied");
+      if (shouldRetryWithoutReply) {
+        console.error("Telegram API reply error, retrying without reply_to_message_id:", errorData);
+        delete body.reply_to_message_id;
+        response = await send(body);
+        if (response.ok) return true;
+        console.error("Telegram API retry error:", await response.json());
+        return false;
+      }
+      console.error("Telegram API error:", errorData);
       return false;
     }
     return true;
@@ -441,17 +449,28 @@ async function sendTelegramMessageWithId(
     if (replyMarkup) body.reply_markup = replyMarkup;
     if (replyToMessageId) body.reply_to_message_id = replyToMessageId;
 
-    const response = await fetch(
+    const send = (payload: Record<string, unknown>) => fetch(
       `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
     );
 
+    let response = await send(body);
+
     if (!response.ok) {
-      console.error("Telegram API error:", await response.json());
+      const errorData = await response.json();
+      const shouldRetryWithoutReply = replyToMessageId && String(errorData?.description || "").toLowerCase().includes("replied");
+      if (shouldRetryWithoutReply) {
+        console.error("Telegram API reply error, retrying without reply_to_message_id:", errorData);
+        delete body.reply_to_message_id;
+        response = await send(body);
+        if (response.ok) {
+          const retryData = await response.json();
+          return retryData.result?.message_id || null;
+        }
+        console.error("Telegram API retry error:", await response.json());
+        return null;
+      }
+      console.error("Telegram API error:", errorData);
       return null;
     }
     
