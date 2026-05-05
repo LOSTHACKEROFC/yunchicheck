@@ -453,8 +453,8 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Limit batch size to 10
-    const batch = cards.slice(0, 10);
+    // Accept up to 50 cards per batch (50-thread concurrency model)
+    const batch = cards.slice(0, 50);
 
     // Auth - done ONCE for the entire batch
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
