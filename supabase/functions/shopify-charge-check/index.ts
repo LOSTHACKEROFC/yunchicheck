@@ -167,16 +167,17 @@ type ApiCheckResult = {
   siteDead?: boolean;
 };
 
-const UNKNOWN_RETRY_ATTEMPTS = 2;
+const UNKNOWN_RETRY_ATTEMPTS = 1;
 // Global deadline (ms) — must stay safely under the 150s edge-runtime IDLE_TIMEOUT
 const GLOBAL_DEADLINE_MS = 120_000;
+const FETCH_TIMEOUT_MS = 12_000;
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const callApiOnce = async (cc: string, site: string, proxy: string): Promise<ApiCheckResult> => {
   const apiUrl = buildApiUrl(cc, site, proxy);
   
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 25000);
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   
   try {
     const response = await fetch(apiUrl, {
@@ -367,7 +368,7 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<ApiChec
   // Retry every unknown result, not just specific message patterns
   if (result.status === 'unknown') {
     for (let retry = 1; retry <= UNKNOWN_RETRY_ATTEMPTS; retry++) {
-      const delayMs = 1000 * retry + Math.floor(Math.random() * 500);
+      const delayMs = 250 + Math.floor(Math.random() * 200);
       console.log(
         `[SHOPIFY-CHARGE] Retry ${retry}/${UNKNOWN_RETRY_ATTEMPTS} after unknown: ${result.message} (${delayMs}ms)`
       );
