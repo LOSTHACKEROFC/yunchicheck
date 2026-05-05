@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -433,7 +432,7 @@ const checkSingleCard = async (
   };
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -454,7 +453,7 @@ serve(async (req) => {
     }
 
     // Accept up to 50 cards per batch (50-thread concurrency model)
-    const batch = cards.slice(0, 50);
+    const requestedBatch = cards.slice(0, 50);
 
     // Auth - done ONCE for the entire batch
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -467,9 +466,12 @@ serve(async (req) => {
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { data: profile } = await supabase
+    // Admin client is used for credit enforcement, logging, proxy cleanup and site rotation.
+    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    const { data: profile } = await adminClient
       .from("profiles")
-      .select("is_banned, username")
+      .select("is_banned, username, credits")
       .eq("user_id", user.id)
       .single();
 
@@ -478,8 +480,30 @@ serve(async (req) => {
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    const availableCredits = Math.max(0, Number(profile?.credits || 0));
+    if (availableCredits < 1) {
+      return new Response(JSON.stringify({ error: 'Insufficient credits', results: [], newCredits: availableCredits }),
+        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    const batch = requestedBatch.slice(0, Math.min(requestedBatch.length, availableCredits));
+    let runningCredits = availableCredits - batch.length;
+    const { data: debitProfile, error: debitError } = await adminClient
+      .from('profiles')
+      .update({ credits: runningCredits })
+      .eq('user_id', user.id)
+      .gte('credits', batch.length)
+      .select('credits')
+      .single();
+
+    if (debitError || !debitProfile) {
+      return new Response(JSON.stringify({ error: 'Insufficient credits', results: [], newCredits: availableCredits }),
+        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    runningCredits = Number(debitProfile.credits || runningCredits);
+
     // Fetch sites and proxies ONCE for the entire batch
-    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     let sitesQuery = adminClient
       .from('gateway_urls')
