@@ -506,10 +506,57 @@ serve(async (req) => {
       .select('*')
       .eq('user_id', user.id);
 
-    // Process ALL cards in parallel (up to 10 concurrent)
-    const results = await Promise.all(
-      batch.map(cc => checkSingleCard(cc, sites, userProxies || [], adminClient, user.id, profile?.username || null))
+    // Process ALL cards in parallel (up to 50 concurrent threads).
+    // Settle-based: return as soon as 49/50 (or all) finish; orphan promises continue in background.
+    const COMPLETION_THRESHOLD = Math.max(1, batch.length - 1); // 49 of 50, or N-1 of N
+
+    const tasks = batch.map((cc, idx) =>
+      checkSingleCard(cc, sites, userProxies || [], adminClient, user.id, profile?.username || null)
+        .then((r) => ({ idx, r }))
+        .catch((err) => ({
+          idx,
+          r: {
+            cc,
+            computedStatus: 'unknown',
+            apiStatus: 'UNKNOWN',
+            apiMessage: err instanceof Error ? err.message : 'Error',
+            apiTotal: 'N/A',
+            rawResponse: '',
+            usedSite: '',
+          } as CardResult,
+        }))
     );
+
+    const results: CardResult[] = new Array(batch.length);
+    let done = 0;
+    await new Promise<void>((resolve) => {
+      let resolved = false;
+      const finish = () => { if (!resolved) { resolved = true; resolve(); } };
+      tasks.forEach((t) => {
+        t.then(({ idx, r }) => {
+          results[idx] = r;
+          done++;
+          if (done >= COMPLETION_THRESHOLD) finish();
+        });
+      });
+      // Hard ceiling so we never hold the response open beyond edge runtime
+      setTimeout(finish, 130_000);
+    });
+
+    // Fill any still-pending slots with a placeholder so client sees stable length
+    for (let i = 0; i < batch.length; i++) {
+      if (!results[i]) {
+        results[i] = {
+          cc: batch[i],
+          computedStatus: 'unknown',
+          apiStatus: 'UNKNOWN',
+          apiMessage: 'Pending — still processing',
+          apiTotal: 'N/A',
+          rawResponse: '',
+          usedSite: '',
+        } as CardResult;
+      }
+    }
 
     return new Response(
       JSON.stringify({ results }),
