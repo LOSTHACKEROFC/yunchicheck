@@ -6,11 +6,27 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 const SHOPIFY_DEBUG_CHAT_ID = "-1003848532661";
+
+const getConfigErrorResponse = () => {
+  const missing = [
+    ["SUPABASE_URL", SUPABASE_URL],
+    ["SUPABASE_ANON_KEY", SUPABASE_ANON_KEY],
+    ["SUPABASE_SERVICE_ROLE_KEY", SUPABASE_SERVICE_ROLE_KEY],
+  ].filter(([, value]) => !value).map(([name]) => name);
+
+  if (missing.length === 0) return null;
+
+  console.error(`[SHOPIFY-CHARGE] Missing required environment variables: ${missing.join(", ")}`);
+  return new Response(
+    JSON.stringify({ error: "Server configuration error", computedStatus: "unknown" }),
+    { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+};
 
 const API_URL = "http://148.230.102.178:8081/";
 const buildApiUrl = (cc: string, site: string, proxy: string) =>
