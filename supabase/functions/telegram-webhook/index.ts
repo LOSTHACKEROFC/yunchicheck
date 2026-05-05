@@ -11391,4 +11391,4 @@ account isn't connected yet.
   }
 };
 
-serve(handler);
+Deno.serve(handler);
