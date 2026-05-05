@@ -316,6 +316,7 @@ const checkSingleCard = async (
   adminClient: ReturnType<typeof createClient>,
   userId: string,
   username: string | null,
+  shouldNotify = true,
 ): Promise<CardResult> => {
   if (proxies.length === 0) {
     const fallbackSite = getRandomItem(sites);
@@ -430,7 +431,7 @@ const checkSingleCard = async (
   }
 
   // Broadcast CHARGED cards
-  if (result.status === 'live') {
+  if (shouldNotify && result.status === 'live') {
     notifyChargedCard(userId, cc, 'CHARGED', result.message, chargeAmount, 'Shopify Charge');
   }
 
@@ -464,7 +465,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { cards, priceGroup } = body;
+    const { cards, priceGroup, userId: bodyUserId, skipAccounting } = body;
 
     if (!cards || !Array.isArray(cards) || cards.length === 0) {
       return new Response(JSON.stringify({ error: 'Cards array required', results: [] }),
@@ -474,19 +475,29 @@ Deno.serve(async (req) => {
     // Accept up to 50 cards per batch (50-thread concurrency model)
     const requestedBatch = cards.slice(0, 50);
 
-    // Auth - done ONCE for the entire batch
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
     // Admin client is used for credit enforcement, logging, proxy cleanup and site rotation.
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    const bearer = authHeader.slice(7).trim();
+    const isServiceRoleCall = !!SUPABASE_SERVICE_ROLE_KEY && bearer === SUPABASE_SERVICE_ROLE_KEY && typeof bodyUserId === 'string' && bodyUserId.length > 0;
+    const bypassAccounting = isServiceRoleCall && skipAccounting === true;
+
+    let user: { id: string } | null = null;
+    if (isServiceRoleCall) {
+      user = { id: bodyUserId };
+    } else {
+      // Auth - done ONCE for the entire batch
+      const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: { headers: { Authorization: authHeader } },
+      });
+
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+      if (authError || !authUser) {
+        return new Response(JSON.stringify({ error: "Invalid token" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      user = { id: authUser.id };
+    }
 
     const { data: profile } = await adminClient
       .from("profiles")
