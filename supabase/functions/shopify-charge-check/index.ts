@@ -271,7 +271,7 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
       const responseText = (apiResponse || apiMessage || '').trim();
       if (isEmptyOrErrorOnly(responseText) && price === 0) {
         apiStatus = 'unknown';
-      } else if (String(json.Charge).toLowerCase() === 'true' || json.Charge === true || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
+      } else if (String(json.Charged ?? json.Charge ?? '').toLowerCase() === 'true' || json.Charged === true || json.Charge === true || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true || json.status === 'ORDER_COMPLETED' || json.Response === 'ORDER_COMPLETED' || json.Response === 'Order completed 💎') {
         apiStatus = 'live';
         apiMessage = json.Response || json.message || 'Charged';
       } else if (json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED' || json.status === 'OTP_REQUIRED' || json.Response === 'OTP_REQUIRED') {
