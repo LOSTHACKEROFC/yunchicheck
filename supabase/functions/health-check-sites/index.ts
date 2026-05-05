@@ -165,7 +165,7 @@ const checkSingleSite = async (
       if (retryCount < MAX_RETRIES) {
         console.log(`[Retry] ${normalizedSiteUrl} → empty response, retry ${retryCount + 1}/${MAX_RETRIES}`);
         await wait(getRetryDelay(retryCount));
-        return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1);
+        return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1, deadline);
       }
 
       console.log(`[Result] ${normalizedSiteUrl} → ERROR (empty response after ${MAX_RETRIES} retries)`);
@@ -180,7 +180,7 @@ const checkSingleSite = async (
       if (retryCount < MAX_RETRIES) {
         console.log(`[Retry] ${normalizedSiteUrl} → curl/DNS error, retry ${retryCount + 1}/${MAX_RETRIES}`);
         await wait(getRetryDelay(retryCount));
-        return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1);
+        return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1, deadline);
       }
 
       console.log(`[Result] ${normalizedSiteUrl} → ERROR (curl/DNS failed after ${MAX_RETRIES} retries)`);
@@ -381,7 +381,7 @@ const checkSingleSite = async (
     if ((msgLower.includes("abort") || msgLower.includes("timeout") || msgLower.includes("fetch failed")) && retryCount < MAX_RETRIES) {
       console.log(`[Retry] ${normalizedSiteUrl} → transient fetch error, retry ${retryCount + 1}/${MAX_RETRIES}`);
       await wait(getRetryDelay(retryCount));
-      return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1);
+      return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1, deadline);
     }
 
     console.log(`[Error] ${normalizedSiteUrl}: ${msg}`);
