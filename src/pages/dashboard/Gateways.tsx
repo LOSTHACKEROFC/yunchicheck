@@ -342,7 +342,7 @@ const Gateways = () => {
   const shopifyBootWarnedRef = useRef(false);
   const SHOPIFY_WARMUP_TTL_MS = 2 * 60 * 1000;
   const SHOPIFY_TARGET_PARALLEL_INVOCATIONS = 50;
-  const SHOPIFY_COLD_START_PARALLEL_INVOCATIONS = 30;
+  const SHOPIFY_COLD_START_PARALLEL_INVOCATIONS = 15;
   const SHOPIFY_BOOT_COOLDOWN_MS = 25_000;
 
 
