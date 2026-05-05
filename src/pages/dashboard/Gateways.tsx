@@ -337,12 +337,12 @@ const Gateways = () => {
   const shopifyWarmupPromiseRef = useRef<Promise<void> | null>(null);
   const shopifyInvokeActiveRef = useRef(0);
   const shopifyInvokeQueueRef = useRef<Array<() => void>>([]);
-  const shopifyParallelLimitRef = useRef(30);
+  const shopifyParallelLimitRef = useRef(50);
   const shopifyBootCooldownUntilRef = useRef(0);
   const shopifyBootWarnedRef = useRef(false);
   const SHOPIFY_WARMUP_TTL_MS = 2 * 60 * 1000;
   const SHOPIFY_TARGET_PARALLEL_INVOCATIONS = 50;
-  const SHOPIFY_COLD_START_PARALLEL_INVOCATIONS = 15;
+  const SHOPIFY_COLD_START_PARALLEL_INVOCATIONS = 50;
   const SHOPIFY_BOOT_COOLDOWN_MS = 25_000;
 
 
