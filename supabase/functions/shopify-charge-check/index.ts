@@ -368,7 +368,7 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<ApiChec
   // Retry every unknown result, not just specific message patterns
   if (result.status === 'unknown') {
     for (let retry = 1; retry <= UNKNOWN_RETRY_ATTEMPTS; retry++) {
-      const delayMs = 1000 * retry + Math.floor(Math.random() * 500);
+      const delayMs = 250 + Math.floor(Math.random() * 200);
       console.log(
         `[SHOPIFY-CHARGE] Retry ${retry}/${UNKNOWN_RETRY_ATTEMPTS} after unknown: ${result.message} (${delayMs}ms)`
       );
