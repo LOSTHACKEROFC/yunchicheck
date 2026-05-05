@@ -6856,7 +6856,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           let mtxtChecked = mtxtResults.length;
          let mtxtLastStopCheckAt = 0;
          const MTXT_STOP_CHECK_INTERVAL_MS = 5000; // poll DB stop flag at most every 5s
-         const mtxtProcessCard = async (cardCC: string) => {
+          const mtxtProcessCard = async (cardCC: string, precheckedResult?: { status: string; response: string; price: string }) => {
            if (mtxtStopped) return;
            // Throttled stop-flag poll — only one card at a time hits the DB,
            // and only every few seconds. Prevents the 50-thread fanout from
@@ -6891,7 +6891,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
 
            const [binInfo, result] = await Promise.all([
              mtxtLookupBin(cardParts[0]),
-             mtxtCheckCard(cardCC)
+             precheckedResult ? Promise.resolve(precheckedResult) : mtxtCheckCard(cardCC)
            ]);
 
             let statusType: string;
