@@ -533,27 +533,29 @@ Deno.serve(async (req) => {
     }
 
     const availableCredits = Math.max(0, Number(profile?.credits || 0));
-    if (availableCredits < 1) {
+    if (!bypassAccounting && availableCredits < 1) {
       return new Response(JSON.stringify({ error: 'Insufficient credits', results: [], newCredits: availableCredits }),
         { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const batch = requestedBatch.slice(0, Math.min(requestedBatch.length, availableCredits));
-    let runningCredits = availableCredits - batch.length;
-    const { data: debitProfile, error: debitError } = await adminClient
-      .from('profiles')
-      .update({ credits: runningCredits })
-      .eq('user_id', user.id)
-      .gte('credits', batch.length)
-      .select('credits')
-      .single();
+    const batch = bypassAccounting ? requestedBatch : requestedBatch.slice(0, Math.min(requestedBatch.length, availableCredits));
+    let runningCredits = bypassAccounting ? availableCredits : availableCredits - batch.length;
+    if (!bypassAccounting) {
+      const { data: debitProfile, error: debitError } = await adminClient
+        .from('profiles')
+        .update({ credits: runningCredits })
+        .eq('user_id', user.id)
+        .gte('credits', batch.length)
+        .select('credits')
+        .single();
 
-    if (debitError || !debitProfile) {
-      return new Response(JSON.stringify({ error: 'Insufficient credits', results: [], newCredits: availableCredits }),
-        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (debitError || !debitProfile) {
+        return new Response(JSON.stringify({ error: 'Insufficient credits', results: [], newCredits: availableCredits }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      runningCredits = Number(debitProfile.credits || runningCredits);
     }
-
-    runningCredits = Number(debitProfile.credits || runningCredits);
 
     const { data: userProxies } = await adminClient
       .from('user_proxies')
@@ -565,7 +567,7 @@ Deno.serve(async (req) => {
     const COMPLETION_THRESHOLD = Math.max(1, batch.length - 1); // 49 of 50, or N-1 of N
 
     const tasks = batch.map((cc, idx) =>
-      checkSingleCard(cc, sites, userProxies || [], adminClient, user.id, profile?.username || null)
+      checkSingleCard(cc, sites, userProxies || [], adminClient, user.id, profile?.username || null, !bypassAccounting)
         .then((r) => ({ idx, r }))
         .catch((err) => ({
           idx,
