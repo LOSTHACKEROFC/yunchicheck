@@ -3481,6 +3481,19 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const missingConfig = [
+    ["SUPABASE_URL", SUPABASE_URL],
+    ["SUPABASE_SERVICE_ROLE_KEY", SUPABASE_SERVICE_ROLE_KEY],
+    ["TELEGRAM_BOT_TOKEN", TELEGRAM_BOT_TOKEN],
+  ].filter(([, value]) => !value).map(([name]) => name);
+  if (missingConfig.length > 0) {
+    console.error(`[TELEGRAM-WEBHOOK] Missing required environment variables: ${missingConfig.join(", ")}`);
+    return new Response(JSON.stringify({ error: "Server configuration error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   // GET request = setup webhook + register commands.
   // Restricted to service role bearer to prevent unauthenticated config probing.
   if (req.method === "GET") {
