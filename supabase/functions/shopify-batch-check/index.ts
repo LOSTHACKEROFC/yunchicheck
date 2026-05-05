@@ -601,7 +601,7 @@ Deno.serve(async (req) => {
 
     const completedResults = results.filter(Boolean);
     const liveCount = completedResults.filter((r) => r.computedStatus === 'live').length;
-    if (liveCount > 0) {
+    if (!bypassAccounting && liveCount > 0) {
       const { data: liveDebitProfile } = await adminClient
         .from('profiles')
         .update({ credits: Math.max(0, runningCredits - liveCount) })
@@ -611,7 +611,7 @@ Deno.serve(async (req) => {
       runningCredits = Number(liveDebitProfile?.credits ?? Math.max(0, runningCredits - liveCount));
     }
 
-    if (completedResults.length > 0) {
+    if (!bypassAccounting && completedResults.length > 0) {
       const checkRows = completedResults.map((r) => ({
         user_id: user.id,
         gateway: 'shopify_charge',
