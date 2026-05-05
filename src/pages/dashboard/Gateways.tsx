@@ -3385,28 +3385,26 @@ const Gateways = () => {
         const waveCards = affordableCards.slice(cardIndex, waveEnd);
         const waveSize = waveCards.length;
         const threshold = Math.max(1, Math.min(waveSize - 1, WAVE_THRESHOLD)); // 49 of 50, or N-1 for smaller waves
-        let waveCompleted = 0;
-        let thresholdResolve: (() => void) | null = null;
-        const thresholdPromise = new Promise<void>(resolve => { thresholdResolve = resolve; });
+        console.log(`[SHOPIFY-WAVE] Starting batch wave: cards ${cardIndex + 1}-${waveEnd} (${waveSize} cards, threshold: ${threshold})`);
 
-        console.log(`[SHOPIFY-WAVE] Starting wave: cards ${cardIndex + 1}-${waveEnd} (${waveSize} cards, threshold: ${threshold})`);
-
-        const wavePromises = waveCards.map(async (cardData) => {
-          await processOneCard(cardData);
-          waveCompleted++;
-          // When threshold (49) cards complete, unblock so next wave can start
-          if (waveCompleted >= threshold && thresholdResolve) {
-            thresholdResolve();
-            thresholdResolve = null;
-          }
+        const response = await invokeShopifyBatch(
+          waveCards.map(cardData => `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`)
+        );
+        const results = Array.isArray(response?.results) ? response.results : [];
+        results.slice(0, threshold).forEach((result: any, index: number) => {
+          addShopifyResult(waveCards[index], result);
         });
 
-        // Wait for 49 of 50 to finish before starting next wave
-        await thresholdPromise;
+        if (typeof response?.newCredits === 'number') {
+          remainingCredits = response.newCredits;
+          setUserCredits(response.newCredits);
+        }
+
         console.log(`[SHOPIFY-WAVE] Threshold ${threshold}/${waveSize} reached, moving to next wave`);
 
-        // Let remaining stragglers finish in background (don't block)
-        Promise.allSettled(wavePromises).catch(() => {});
+        results.slice(threshold).forEach((result: any, offset: number) => {
+          addShopifyResult(waveCards[threshold + offset], result);
+        });
 
         cardIndex = waveEnd;
       }
