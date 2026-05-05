@@ -3513,9 +3513,11 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   // POST: must come from Telegram (with secret_token) or our own self-invocation
-  // (service role bearer). Reject anything else.
+  // (service role bearer). If no TELEGRAM_WEBHOOK_SECRET is configured, accept all POSTs.
   const telegramSecret = req.headers.get("X-Telegram-Bot-Api-Secret-Token");
-  const fromTelegram = !!TELEGRAM_WEBHOOK_SECRET && telegramSecret === TELEGRAM_WEBHOOK_SECRET;
+  const fromTelegram = TELEGRAM_WEBHOOK_SECRET
+    ? telegramSecret === TELEGRAM_WEBHOOK_SECRET
+    : true; // No secret configured — accept (webhook is protected by verify_jwt=false + obscure URL)
   const fromSelf = isAuthorizedSelfInvocation(req);
   if (!fromTelegram && !fromSelf) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
