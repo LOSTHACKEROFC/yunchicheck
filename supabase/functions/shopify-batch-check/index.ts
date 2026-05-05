@@ -567,6 +567,29 @@ Deno.serve(async (req) => {
       setTimeout(finish, 130_000);
     });
 
+    const completedResults = results.filter(Boolean);
+    const liveCount = completedResults.filter((r) => r.computedStatus === 'live').length;
+    if (liveCount > 0) {
+      const { data: liveDebitProfile } = await adminClient
+        .from('profiles')
+        .update({ credits: Math.max(0, runningCredits - liveCount) })
+        .eq('user_id', user.id)
+        .select('credits')
+        .single();
+      runningCredits = Number(liveDebitProfile?.credits ?? Math.max(0, runningCredits - liveCount));
+    }
+
+    if (completedResults.length > 0) {
+      const checkRows = completedResults.map((r) => ({
+        user_id: user.id,
+        gateway: 'shopify_charge',
+        status: 'completed',
+        result: r.computedStatus,
+        card_details: r.cc,
+      }));
+      adminClient.from('card_checks').insert(checkRows).then(() => {});
+    }
+
     // Fill any still-pending slots with a placeholder so client sees stable length
     for (let i = 0; i < batch.length; i++) {
       if (!results[i]) {
@@ -583,7 +606,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ results }),
+      JSON.stringify({ results, newCredits: runningCredits, chargedExtra: liveCount }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
