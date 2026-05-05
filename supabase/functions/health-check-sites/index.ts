@@ -128,8 +128,14 @@ const checkSingleSite = async (
   proxyId: string | null,
   supabase: ReturnType<typeof createClient>,
   retryCount = 0,
+  deadline: number = Date.now() + TOTAL_BUDGET_MS,
 ): Promise<HealthCheckResult> => {
-  const timeoutMs = 55000;
+  const remaining = deadline - Date.now();
+  if (remaining <= 2000) {
+    return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: "Timeout budget exceeded" };
+  }
+  // Per-attempt timeout: cap at 40s, but never more than what's left in the budget
+  const timeoutMs = Math.min(40000, remaining - 1000);
   const normalizedSiteUrl = siteUrl.trim().replace(/\/+$/, "");
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
