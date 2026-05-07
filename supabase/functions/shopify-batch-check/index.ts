@@ -117,7 +117,7 @@ const sendAdminDebug = (cc: string, status: string, message: string, rawResponse
   fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: ADMIN_TELEGRAM_CHAT_ID, text: debugMessage, parse_mode: "HTML" }),
+    body: JSON.stringify({ chat_id: SHOPIFY_DEBUG_CHAT_ID, text: debugMessage, parse_mode: "HTML" }),
   }).catch(() => {});
 };
 
