@@ -10,7 +10,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
-const ADMIN_TELEGRAM_CHAT_ID = Deno.env.get("ADMIN_TELEGRAM_CHAT_ID") || "8496943061";
+const SHOPIFY_DEBUG_CHAT_ID = "-1003848532661";
 
 const getConfigErrorResponse = () => {
   const missing = [
@@ -117,7 +117,7 @@ const sendAdminDebug = (cc: string, status: string, message: string, rawResponse
   fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: ADMIN_TELEGRAM_CHAT_ID, text: debugMessage, parse_mode: "HTML" }),
+    body: JSON.stringify({ chat_id: SHOPIFY_DEBUG_CHAT_ID, text: debugMessage, parse_mode: "HTML" }),
   }).catch(() => {});
 };
 
