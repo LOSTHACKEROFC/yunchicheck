@@ -185,8 +185,8 @@ type ApiCheckResult = {
 
 const UNKNOWN_RETRY_ATTEMPTS = 0;
 // Global deadline (ms) — must stay safely under the 150s edge-runtime IDLE_TIMEOUT
-const GLOBAL_DEADLINE_MS = 120_000;
-const FETCH_TIMEOUT_MS = 25_000;
+const GLOBAL_DEADLINE_MS = 100_000;
+const FETCH_TIMEOUT_MS = 15_000;
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const callApiOnce = async (cc: string, site: string, proxy: string): Promise<ApiCheckResult> => {
@@ -581,6 +581,10 @@ Deno.serve(async (req) => {
 
       let siteResult: ApiCheckResult | null = null;
       for (let proxyAttempt = 0; proxyAttempt < proxyAttempts.length; proxyAttempt++) {
+        if (deadlineExceeded()) {
+          console.log(`[SHOPIFY-CHARGE] Global deadline reached inside proxy loop, aborting`);
+          break;
+        }
         const currentProxy = proxyAttempts[proxyAttempt];
         const proxyStr = currentProxy ? formatProxy(currentProxy) : '';
         console.log(`[SHOPIFY-CHARGE] Proxy ${proxyAttempt + 1}/${proxyAttempts.length}: ${currentProxy ? `${currentProxy.ip}:${currentProxy.port}` : 'none (direct)'}`);
