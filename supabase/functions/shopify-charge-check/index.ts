@@ -581,6 +581,10 @@ Deno.serve(async (req) => {
 
       let siteResult: ApiCheckResult | null = null;
       for (let proxyAttempt = 0; proxyAttempt < proxyAttempts.length; proxyAttempt++) {
+        if (deadlineExceeded()) {
+          console.log(`[SHOPIFY-CHARGE] Global deadline reached inside proxy loop, aborting`);
+          break;
+        }
         const currentProxy = proxyAttempts[proxyAttempt];
         const proxyStr = currentProxy ? formatProxy(currentProxy) : '';
         console.log(`[SHOPIFY-CHARGE] Proxy ${proxyAttempt + 1}/${proxyAttempts.length}: ${currentProxy ? `${currentProxy.ip}:${currentProxy.port}` : 'none (direct)'}`);
