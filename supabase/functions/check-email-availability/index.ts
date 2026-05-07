@@ -11,6 +11,17 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Constant-time response to prevent timing-based email enumeration
+  const startTime = Date.now();
+  const minResponseTime = 400 + Math.floor(Math.random() * 200); // 400-600ms
+  const padResponse = async (response: Response) => {
+    const elapsed = Date.now() - startTime;
+    if (elapsed < minResponseTime) {
+      await new Promise((r) => setTimeout(r, minResponseTime - elapsed));
+    }
+    return response;
+  };
+
   try {
     const { email } = await req.json();
 
