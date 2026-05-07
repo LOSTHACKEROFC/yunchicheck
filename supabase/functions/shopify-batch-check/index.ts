@@ -601,7 +601,7 @@ Deno.serve(async (req) => {
         });
       });
       // Hard ceiling so we never hold the response open beyond edge runtime
-      setTimeout(finish, 130_000);
+      setTimeout(finish, 120_000);
     });
 
     const completedResults = results.filter(Boolean);
