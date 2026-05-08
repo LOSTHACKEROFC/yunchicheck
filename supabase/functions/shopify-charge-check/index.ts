@@ -510,7 +510,19 @@ Deno.serve(async (req) => {
       console.log(`[SHOPIFY-CHARGE] Filtering sites by price range: $${priceGroup.min}-$${priceGroup.max}`);
     }
     
-    const { data: sites, error: sitesError } = await sitesQuery.order('created_at', { ascending: false });
+    let { data: sites, error: sitesError } = await sitesQuery.order('created_at', { ascending: false });
+
+    if ((!sites || sites.length === 0) && priceGroup) {
+      console.log('[SHOPIFY-CHARGE] Price-group filter returned 0 sites, falling back to all sites <= $100');
+      const fallback = await adminClient
+        .from('gateway_urls')
+        .select('url, price')
+        .not('url', 'like', 'https://razorpay.me/%')
+        .lte('price', 100)
+        .order('created_at', { ascending: false });
+      sites = fallback.data;
+      sitesError = fallback.error;
+    }
 
     if (sitesError || !sites || sites.length === 0) {
       return new Response(JSON.stringify({ 
