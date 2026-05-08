@@ -1862,21 +1862,28 @@ const Gateways = () => {
     }
   };
 
-  const releaseShopifyInvocationSlot = () => {
-    shopifyInvokeActiveRef.current = Math.max(0, shopifyInvokeActiveRef.current - 1);
+  const drainShopifyInvocationQueue = () => {
     if (shopifyInvokeActiveRef.current >= shopifyParallelLimitRef.current) return;
     const cooldownRemaining = shopifyBootCooldownUntilRef.current - Date.now();
     if (cooldownRemaining > 0) {
       if (!shopifyQueueDrainTimerRef.current) {
         shopifyQueueDrainTimerRef.current = setTimeout(() => {
           shopifyQueueDrainTimerRef.current = null;
-          releaseShopifyInvocationSlot();
+          drainShopifyInvocationQueue();
         }, cooldownRemaining + 50);
       }
       return;
     }
-    const next = shopifyInvokeQueueRef.current.shift();
-    if (next) next();
+    while (shopifyInvokeActiveRef.current < shopifyParallelLimitRef.current) {
+      const next = shopifyInvokeQueueRef.current.shift();
+      if (!next) break;
+      next();
+    }
+  };
+
+  const releaseShopifyInvocationSlot = () => {
+    shopifyInvokeActiveRef.current = Math.max(0, shopifyInvokeActiveRef.current - 1);
+    drainShopifyInvocationQueue();
   };
 
   const handleShopifyBootPressure = () => {
