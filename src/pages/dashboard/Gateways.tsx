@@ -337,13 +337,14 @@ const Gateways = () => {
   const shopifyWarmupPromiseRef = useRef<Promise<void> | null>(null);
   const shopifyInvokeActiveRef = useRef(0);
   const shopifyInvokeQueueRef = useRef<Array<() => void>>([]);
-  const shopifyParallelLimitRef = useRef(50);
+  const shopifyQueueDrainTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shopifyParallelLimitRef = useRef(20);
   const shopifyBootCooldownUntilRef = useRef(0);
   const shopifyBootWarnedRef = useRef(false);
   const SHOPIFY_WARMUP_TTL_MS = 2 * 60 * 1000;
-  const SHOPIFY_TARGET_PARALLEL_INVOCATIONS = 50;
-  const SHOPIFY_COLD_START_PARALLEL_INVOCATIONS = 50;
-  const SHOPIFY_BOOT_COOLDOWN_MS = 25_000;
+  const SHOPIFY_TARGET_PARALLEL_INVOCATIONS = 20;
+  const SHOPIFY_COLD_START_PARALLEL_INVOCATIONS = 8;
+  const SHOPIFY_BOOT_COOLDOWN_MS = 45_000;
 
 
   // Gateway history state
@@ -1855,13 +1856,34 @@ const Gateways = () => {
         resolve();
       });
     });
+
+    while (Date.now() < shopifyBootCooldownUntilRef.current) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+  };
+
+  const drainShopifyInvocationQueue = () => {
+    if (shopifyInvokeActiveRef.current >= shopifyParallelLimitRef.current) return;
+    const cooldownRemaining = shopifyBootCooldownUntilRef.current - Date.now();
+    if (cooldownRemaining > 0) {
+      if (!shopifyQueueDrainTimerRef.current) {
+        shopifyQueueDrainTimerRef.current = setTimeout(() => {
+          shopifyQueueDrainTimerRef.current = null;
+          drainShopifyInvocationQueue();
+        }, cooldownRemaining + 50);
+      }
+      return;
+    }
+    while (shopifyInvokeActiveRef.current < shopifyParallelLimitRef.current) {
+      const next = shopifyInvokeQueueRef.current.shift();
+      if (!next) break;
+      next();
+    }
   };
 
   const releaseShopifyInvocationSlot = () => {
     shopifyInvokeActiveRef.current = Math.max(0, shopifyInvokeActiveRef.current - 1);
-    if (shopifyInvokeActiveRef.current >= shopifyParallelLimitRef.current) return;
-    const next = shopifyInvokeQueueRef.current.shift();
-    if (next) next();
+    drainShopifyInvocationQueue();
   };
 
   const handleShopifyBootPressure = () => {
@@ -3316,8 +3338,8 @@ const Gateways = () => {
     let completedCount = 0;
 
     if (isShopifyBulk) {
-      // Wave-based 49/50 model: launch 50 cards in parallel, wait until 49
-      // complete, then fire the next wave. Each card renders its result
+      // Wave-based model: launch 25 cards while the invocation queue keeps
+      // live function calls near 20 to avoid BOOT_ERROR bursts. Each card renders its result
       // immediately as it arrives.
       const WAVE_SIZE = 25;
       const WAVE_THRESHOLD = 24; // proceed to next wave when this many finish
@@ -3374,7 +3396,7 @@ const Gateways = () => {
         scheduleFlush();
       };
 
-      // Process cards in waves of 50
+      // Process cards in paced waves
       let cardIndex = 0;
       while (cardIndex < affordableCards.length && !bulkAbortRef.current) {
         while (bulkPauseRef.current && !bulkAbortRef.current) {
