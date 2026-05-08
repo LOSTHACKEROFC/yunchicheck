@@ -530,7 +530,20 @@ Deno.serve(async (req) => {
       }
     }
 
-    const { data: sites, error: sitesError } = await sitesQuery.order('created_at', { ascending: false });
+    let { data: sites, error: sitesError } = await sitesQuery.order('created_at', { ascending: false });
+
+    // Fallback: if price-group filter yielded no sites, retry without the price-group filter
+    if ((!sites || sites.length === 0) && priceGroup) {
+      console.log('[SHOPIFY-BATCH] Price-group filter returned 0 sites, falling back to all sites <= $100');
+      const fallback = await adminClient
+        .from('gateway_urls')
+        .select('url, price')
+        .not('url', 'like', 'https://razorpay.me/%')
+        .lte('price', 100)
+        .order('created_at', { ascending: false });
+      sites = fallback.data;
+      sitesError = fallback.error;
+    }
 
     if (sitesError || !sites || sites.length === 0) {
       return new Response(JSON.stringify({ error: 'No Shopify sites available', results: [] }),
