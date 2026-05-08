@@ -1855,11 +1855,16 @@ const Gateways = () => {
         resolve();
       });
     });
+
+    while (Date.now() < shopifyBootCooldownUntilRef.current) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
   };
 
   const releaseShopifyInvocationSlot = () => {
     shopifyInvokeActiveRef.current = Math.max(0, shopifyInvokeActiveRef.current - 1);
     if (shopifyInvokeActiveRef.current >= shopifyParallelLimitRef.current) return;
+    if (Date.now() < shopifyBootCooldownUntilRef.current) return;
     const next = shopifyInvokeQueueRef.current.shift();
     if (next) next();
   };
