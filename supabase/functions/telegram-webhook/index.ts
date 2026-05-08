@@ -6075,7 +6075,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           let lastErr = 'Unknown error';
           for (let attempt = 0; attempt < 3; attempt++) {
             const ctrl = new AbortController();
-            const timeoutId = setTimeout(() => ctrl.abort(), 90_000);
+            const timeoutId = setTimeout(() => ctrl.abort(), 120_000);
             try {
               const resp = await fetch(url, {
                 method: 'POST',
