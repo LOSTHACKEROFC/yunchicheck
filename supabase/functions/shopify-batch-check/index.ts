@@ -314,7 +314,8 @@ const checkSingleCard = async (
   cc: string,
   sites: SiteEntry[],
   proxies: ProxyEntry[],
-  adminClient: ReturnType<typeof createClient>,
+  // deno-lint-ignore no-explicit-any
+  adminClient: any,
   userId: string,
   username: string | null,
   shouldNotify = true,
