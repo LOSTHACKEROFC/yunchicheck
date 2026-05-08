@@ -142,8 +142,8 @@ const checkSingleSite = async (
   if (remaining <= 2000) {
     return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: "Timeout budget exceeded" };
   }
-  // Per-attempt timeout: cap at 40s, but never more than what's left in the budget
-  const timeoutMs = Math.min(40000, remaining - 1000);
+  // Per-attempt timeout: cap tightly so slow API calls fail gracefully instead of hitting edge 504.
+  const timeoutMs = Math.min(FETCH_TIMEOUT_MS, remaining - 1000);
   const normalizedSiteUrl = siteUrl.trim().replace(/\/+$/, "");
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
@@ -151,12 +151,9 @@ const checkSingleSite = async (
     const controller = new AbortController();
     timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (!proxyStr) {
-      return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: "Proxy required by API" };
-    }
-    const apiUrl = `${API_BASE_URL}?${encodeURIComponent(TEST_CC)}&url=${encodeURIComponent(normalizedSiteUrl)}&proxy=${encodeURIComponent(proxyStr)}`;
+    const apiUrl = buildApiUrl(TEST_CC, normalizedSiteUrl, proxyStr);
 
-    console.log(`[Check] ${normalizedSiteUrl} | proxy=yes`);
+    console.log(`[Check] ${normalizedSiteUrl} | proxy=${proxyStr ? "yes" : "no"}`);
 
     const response = await fetch(apiUrl, {
       method: "GET",
@@ -171,6 +168,9 @@ const checkSingleSite = async (
 
     if (!rawText || rawText.trim() === "") {
       if (retryCount < MAX_RETRIES) {
+        if (deadline - Date.now() <= FETCH_TIMEOUT_MS + 3000) {
+          return { url: normalizedSiteUrl, status: "error", price: 0, priceStr: "$0.00", error: "Timeout budget exceeded" };
+        }
         console.log(`[Retry] ${normalizedSiteUrl} → empty response, retry ${retryCount + 1}/${MAX_RETRIES}`);
         await wait(getRetryDelay(retryCount));
         return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1, deadline);
@@ -186,6 +186,9 @@ const checkSingleSite = async (
     const isCurlError = CURL_RETRY_INDICATORS.some((indicator) => rawLower.includes(indicator));
     if (isCurlError) {
       if (retryCount < MAX_RETRIES) {
+        if (deadline - Date.now() <= FETCH_TIMEOUT_MS + 3000) {
+          return { url: normalizedSiteUrl, status: "error", price: 0, priceStr: "$0.00", error: "Timeout budget exceeded" };
+        }
         console.log(`[Retry] ${normalizedSiteUrl} → curl/DNS error, retry ${retryCount + 1}/${MAX_RETRIES}`);
         await wait(getRetryDelay(retryCount));
         return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1, deadline);
