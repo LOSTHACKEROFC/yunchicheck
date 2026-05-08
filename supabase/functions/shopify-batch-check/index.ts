@@ -133,7 +133,8 @@ interface CardResult {
 }
 
 // Per-fetch timeout & retry tuning (aligned with /sh shopify-charge-check)
-const FETCH_TIMEOUT_MS = 12_000;
+// Real upstream p99 ≈ 58s; allow up to 90s per fetch so each card actually waits for its response
+const FETCH_TIMEOUT_MS = 90_000;
 const UNKNOWN_RETRY_ATTEMPTS = 1;
 const MAX_SITE_ATTEMPTS = 3;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
