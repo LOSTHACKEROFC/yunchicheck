@@ -6001,7 +6001,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           }
           const apiUrl = `${SHOPIFY_API_URL_MSH}?${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`;
           const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 45000);
+          const timeout = setTimeout(() => controller.abort(), 60000);
           try {
             const resp = await fetch(apiUrl, { method: "GET", headers: { 'Accept': 'application/json, text/plain, */*', 'User-Agent': mshUserAgents[Math.floor(Math.random() * mshUserAgents.length)], 'Cache-Control': 'no-cache' }, signal: controller.signal });
             clearTimeout(timeout);
@@ -6075,7 +6075,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           let lastErr = 'Unknown error';
           for (let attempt = 0; attempt < 3; attempt++) {
             const ctrl = new AbortController();
-            const timeoutId = setTimeout(() => ctrl.abort(), 90_000);
+            const timeoutId = setTimeout(() => ctrl.abort(), 120_000);
             try {
               const resp = await fetch(url, {
                 method: 'POST',
@@ -6978,7 +6978,21 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
             const batchEnd = Math.min(mtxtQueueIdx + MTXT_CONCURRENCY, mtxtQueue.length);
             const batchCards = mtxtQueue.slice(mtxtQueueIdx, batchEnd);
 
-            const batchResultMap = await mtxtCheckBatch(batchCards);
+            let batchResultMap = await mtxtCheckBatch(batchCards);
+
+            // RETRY: any card that came back as 'error' (timeout / batch failure)
+            // gets a second chance with a fresh batch call before being marked as error.
+            const errorCards = batchCards.filter(c => batchResultMap[c]?.status === 'error');
+            if (errorCards.length > 0 && !mtxtStopped) {
+              console.log(`[/mtxt] Retrying ${errorCards.length} error cards from batch`);
+              await new Promise(r => setTimeout(r, 1500));
+              const retryMap = await mtxtCheckBatch(errorCards);
+              for (const c of errorCards) {
+                if (retryMap[c] && retryMap[c].status !== 'error') {
+                  batchResultMap[c] = retryMap[c];
+                }
+              }
+            }
 
             await Promise.all(batchCards.map(async (card, launchOrder) => {
               if (mtxtStopped) return;
@@ -6990,7 +7004,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
               try {
                 await Promise.race([
                   mtxtProcessCard(card, batchResultMap[card]),
-                  new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Card timeout')), 20_000)),
+                  new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Card timeout')), 30_000)),
                 ]);
               } catch (e) {
                 console.error('[/mtxt] card worker failed', e);

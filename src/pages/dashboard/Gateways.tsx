@@ -3391,6 +3391,36 @@ const Gateways = () => {
           waveCards.map(cardData => `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`)
         );
         const results = Array.isArray(response?.results) ? response.results : [];
+
+        // RETRY: any card whose batch result came back unknown/error gets a fresh
+        // single-card check so we always wait for a definitive live/dead before
+        // showing it in the result list.
+        const retryIndexes: number[] = [];
+        results.forEach((result: any, idx: number) => {
+          const cs = result?.computedStatus;
+          if (cs !== 'live' && cs !== 'dead') retryIndexes.push(idx);
+        });
+        if (retryIndexes.length > 0) {
+          console.log(`[SHOPIFY-WAVE] Retrying ${retryIndexes.length} unknown/error cards individually`);
+          await Promise.all(retryIndexes.map(async (idx) => {
+            const c = waveCards[idx];
+            try {
+              const r = await checkCardViaShopify(c.card, c.month, c.year, c.cvv);
+              if (r.status === 'live' || r.status === 'dead') {
+                results[idx] = {
+                  computedStatus: r.status,
+                  apiStatus: r.apiStatus,
+                  apiMessage: r.apiMessage,
+                  apiTotal: r.apiTotal,
+                  rawResponse: r.rawResponse,
+                };
+              }
+            } catch (e) {
+              console.warn('[SHOPIFY-WAVE] retry failed', e);
+            }
+          }));
+        }
+
         results.slice(0, threshold).forEach((result: any, index: number) => {
           addShopifyResult(waveCards[index], result);
         });
