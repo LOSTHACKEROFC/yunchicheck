@@ -50,11 +50,11 @@ interface SiteResult {
   proxyDead?: boolean;
 }
 
-const CONCURRENCY = 40;
-const SINGLE_PROXY_CONCURRENCY = 8;
-const WORKER_STAGGER_MS = 40;
+const CONCURRENCY = 12;
+const SINGLE_PROXY_CONCURRENCY = 4;
+const WORKER_STAGGER_MS = 120;
 const WARMUP_DELAY_MS = 400;
-const BOOT_RETRY_LIMIT = 4;
+const BOOT_RETRY_LIMIT = 2;
 const BOOT_RETRY_BASE_DELAY_MS = 1200;
 const RETRYABLE_RESULT_ERRORS = [
   "empty response",
@@ -429,7 +429,8 @@ const AdminHealthCheck = () => {
       }
     }
 
-    const workerCount = Math.min(CONCURRENCY, Math.max(uniqueUrls.length - nextUrlIndex, 0));
+    const effectiveConcurrency = getEffectiveConcurrency(proxyMode);
+    const workerCount = Math.min(effectiveConcurrency, Math.max(uniqueUrls.length - nextUrlIndex, 0));
     console.log(`[Workers] Starting ${workerCount} workers for ${Math.max(uniqueUrls.length - nextUrlIndex, 0)} remaining URLs`);
 
     const workers = Array.from({ length: workerCount }, (_, workerIndex) =>
@@ -594,7 +595,7 @@ const AdminHealthCheck = () => {
             Site Health Checker
           </CardTitle>
           <CardDescription>
-            Upload a .txt file, paste URLs, or load saved sites. Runs {CONCURRENCY} concurrent checks — live sites are saved to DB.
+            Upload a .txt file, paste URLs, or load saved sites. Runs up to {getEffectiveConcurrency(proxyMode)} concurrent checks — live sites are saved to DB.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -675,7 +676,7 @@ const AdminHealthCheck = () => {
               </Badge>
               <Badge variant="outline" className="gap-1 text-xs">
                 <Zap className="h-3 w-3" />
-                {CONCURRENCY} threads
+                {getEffectiveConcurrency(proxyMode)} threads
               </Badge>
             </div>
             <div className="flex gap-2">
