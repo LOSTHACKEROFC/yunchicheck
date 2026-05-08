@@ -390,13 +390,16 @@ const checkSingleSite = async (
     const msgLower = msg.toLowerCase();
 
     if ((msgLower.includes("abort") || msgLower.includes("timeout") || msgLower.includes("fetch failed")) && retryCount < MAX_RETRIES) {
+      if (deadline - Date.now() <= FETCH_TIMEOUT_MS + 3000) {
+        return { url: normalizedSiteUrl, status: "error", price: 0, priceStr: "$0.00", error: "Timeout budget exceeded" };
+      }
       console.log(`[Retry] ${normalizedSiteUrl} → transient fetch error, retry ${retryCount + 1}/${MAX_RETRIES}`);
       await wait(getRetryDelay(retryCount));
       return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1, deadline);
     }
 
     console.log(`[Error] ${normalizedSiteUrl}: ${msg}`);
-    await sendHealthCheckDebug(normalizedSiteUrl, `Fetch error: ${msg}`, "", proxyStr, retryCount);
+    sendHealthCheckDebug(normalizedSiteUrl, `Fetch error: ${msg}`, "", proxyStr, retryCount);
     return {
       url: normalizedSiteUrl,
       status: "error",
