@@ -373,6 +373,17 @@ const callApi = async (cc: string, site: string, proxy: string): Promise<ApiChec
   // If proxy dead or site dead, return immediately — no retry needed
   if (result.proxyDead || result.siteDead) {
     console.log(`[SHOPIFY-CHARGE] Result: ${result.proxyDead ? 'PROXY DEAD' : 'SITE DEAD'}`);
+    if (result.proxyDead) {
+      // Fire-and-forget admin debug alert for PROXY DEAD events
+      sendAdminDebug(
+        cc,
+        'PROXY_DEAD',
+        `Proxy returned dead response (${proxy || 'no-proxy'})`,
+        result.rawResponse || '',
+        undefined,
+        site,
+      ).catch((e) => console.error('[SHOPIFY-CHARGE] proxy-dead debug failed:', e));
+    }
     return result;
   }
   
