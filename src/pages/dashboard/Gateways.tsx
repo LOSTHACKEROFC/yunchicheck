@@ -3331,8 +3331,8 @@ const Gateways = () => {
     let completedCount = 0;
 
     if (isShopifyBulk) {
-      // Wave-based 49/50 model: launch 50 cards in parallel, wait until 49
-      // complete, then fire the next wave. Each card renders its result
+      // Wave-based model: launch 25 cards while the invocation queue keeps
+      // live function calls near 20 to avoid BOOT_ERROR bursts. Each card renders its result
       // immediately as it arrives.
       const WAVE_SIZE = 25;
       const WAVE_THRESHOLD = 24; // proceed to next wave when this many finish
@@ -3389,7 +3389,7 @@ const Gateways = () => {
         scheduleFlush();
       };
 
-      // Process cards in waves of 50
+      // Process cards in paced waves
       let cardIndex = 0;
       while (cardIndex < affordableCards.length && !bulkAbortRef.current) {
         while (bulkPauseRef.current && !bulkAbortRef.current) {
