@@ -323,6 +323,10 @@ const checkSingleCard = async (
   userId: string,
   username: string | null,
   shouldNotify = true,
+  // Shared across all parallel cards in the batch — once a proxy is dead,
+  // no other card in this batch will reuse it.
+  deadProxyIds?: Set<string>,
+  rotationCounter?: { value: number },
 ): Promise<CardResult> => {
   if (proxies.length === 0) {
     const fallbackSite = getRandomItem(sites);
@@ -333,11 +337,23 @@ const checkSingleCard = async (
     };
   }
 
-  // Shuffle sites + proxies for fairness
+  const sharedDeadProxies = deadProxyIds ?? new Set<string>();
+  const counter = rotationCounter ?? { value: Math.floor(Math.random() * proxies.length) };
+
+  // Shuffle sites for fairness
   const shuffledSites = [...sites].sort(() => Math.random() - 0.5);
-  const shuffledProxies = [...proxies].sort(() => Math.random() - 0.5);
-  const failedProxyIds: string[] = [];
   const deadSiteUrls: string[] = [];
+
+  // Round-robin proxy rotation: each request picks the next proxy in order,
+  // skipping any that have already been marked dead by the shared set.
+  const pickRotatedProxies = (): ProxyEntry[] => {
+    const live = proxies.filter(p => !sharedDeadProxies.has(p.id));
+    if (live.length === 0) return [];
+    const start = counter.value % live.length;
+    counter.value = (counter.value + 1) % Math.max(1, live.length);
+    // Rotate the array so we start at `start` and continue round-robin
+    return [...live.slice(start), ...live.slice(0, start)];
+  };
 
   let result: ApiCheckResult | null = null;
   let usedSite: SiteEntry = shuffledSites[0];
@@ -347,7 +363,7 @@ const checkSingleCard = async (
     const currentSite = shuffledSites[siteAttempt];
     usedSite = currentSite;
 
-    const availableProxies = shuffledProxies.filter(p => !failedProxyIds.includes(p.id));
+    const availableProxies = pickRotatedProxies();
     if (availableProxies.length === 0) {
       result = { status: 'unknown', message: 'All proxies failed', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00', proxyDead: true };
       break;
@@ -355,9 +371,17 @@ const checkSingleCard = async (
 
     let siteResult: ApiCheckResult | null = null;
     for (const proxy of availableProxies) {
+      // Re-check shared set in case another parallel card just killed this one
+      if (sharedDeadProxies.has(proxy.id)) continue;
       const r = await tryWithRetry(cc, currentSite.url, formatProxy(proxy));
       if (r.proxyDead) {
-        failedProxyIds.push(proxy.id);
+        // Mark dead immediately and remove from DB so other parallel cards
+        // (and the next request) skip this proxy.
+        if (!sharedDeadProxies.has(proxy.id)) {
+          sharedDeadProxies.add(proxy.id);
+          adminClient.from('user_proxies').delete().eq('id', proxy.id).then(() => {});
+          adminClient.from('proxies').delete().eq('id', proxy.id).then(() => {});
+        }
         continue;
       }
       siteResult = r;
@@ -386,15 +410,11 @@ const checkSingleCard = async (
     result = { status: 'unknown', message: 'No usable site/proxy', apiResponse: '', rawResponse: '', price: 0, priceStr: '$0.00' };
   }
 
-  // Cleanup proxies + dead sites in background
-  if (failedProxyIds.length > 0) {
-    for (const proxyId of failedProxyIds) {
-      adminClient.from('user_proxies').delete().eq('id', proxyId).then(() => {});
-    }
-  }
+  // Cleanup dead sites in background (dead proxies already removed inline)
   for (const deadUrl of deadSiteUrls) {
     adminClient.from('gateway_urls').delete().eq('url', deadUrl).then(() => {});
   }
+
 
   // Strike counter management for matched strike on the final used site
   const rawLower = (result.rawResponse || '').toLowerCase();
