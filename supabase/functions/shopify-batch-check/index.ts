@@ -196,6 +196,10 @@ const callApiOnce = async (cc: string, site: string, proxy: string): Promise<Api
       rawLower.includes('missing proxy param') || rawLower.includes('"error_code":"proxy dead"')
     );
     if (isProxyError) {
+      // Fire-and-forget admin debug alert for PROXY DEAD events
+      try {
+        sendAdminDebug(cc, 'PROXY_DEAD', 'Proxy returned dead response', rawText, undefined, site);
+      } catch (_) { /* ignore */ }
       return { status: 'unknown', message: 'Proxy dead', apiResponse: '', rawResponse: rawText, price: 0, priceStr: '$0.00', proxyDead: true };
     }
 
