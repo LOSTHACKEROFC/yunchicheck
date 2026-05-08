@@ -461,7 +461,7 @@ const checkSingleCard = async (
     notifyChargedCard(userId, cc, 'CHARGED', result.message, chargeAmount, 'Shopify Charge');
   }
 
-  const allProxiesDead = failedProxyIds.length >= proxies.length;
+  const allProxiesDead = sharedDeadProxies.size >= proxies.length;
 
   return {
     cc,
