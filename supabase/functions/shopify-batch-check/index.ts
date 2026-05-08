@@ -588,7 +588,7 @@ Deno.serve(async (req) => {
         .from('proxies')
         .select('id, ip, port, username, password')
         .eq('status', 'live');
-      effectiveProxies = sharedProxies || [];
+      effectiveProxies = (sharedProxies || []) as ProxyEntry[];
     }
 
     // Process ALL cards in parallel (up to 50 concurrent threads).
