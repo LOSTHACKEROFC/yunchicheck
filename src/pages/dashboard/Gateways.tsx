@@ -1865,7 +1865,16 @@ const Gateways = () => {
   const releaseShopifyInvocationSlot = () => {
     shopifyInvokeActiveRef.current = Math.max(0, shopifyInvokeActiveRef.current - 1);
     if (shopifyInvokeActiveRef.current >= shopifyParallelLimitRef.current) return;
-    if (Date.now() < shopifyBootCooldownUntilRef.current) return;
+    const cooldownRemaining = shopifyBootCooldownUntilRef.current - Date.now();
+    if (cooldownRemaining > 0) {
+      if (!shopifyQueueDrainTimerRef.current) {
+        shopifyQueueDrainTimerRef.current = setTimeout(() => {
+          shopifyQueueDrainTimerRef.current = null;
+          releaseShopifyInvocationSlot();
+        }, cooldownRemaining + 50);
+      }
+      return;
+    }
     const next = shopifyInvokeQueueRef.current.shift();
     if (next) next();
   };
