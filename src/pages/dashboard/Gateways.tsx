@@ -3319,8 +3319,9 @@ const Gateways = () => {
       // Wave-based 49/50 model: launch 50 cards in parallel, wait until 49
       // complete, then fire the next wave. Each card renders its result
       // immediately as it arrives.
-      const WAVE_SIZE = 50;
-      const WAVE_THRESHOLD = 49; // proceed to next wave when this many finish
+      const WAVE_SIZE = 30;
+      const WAVE_THRESHOLD = 29; // proceed to next wave when this many finish
+      const WAVE_COOLDOWN_MS = 5000; // cooldown between waves
 
       const addShopifyResult = (cardData: typeof affordableCards[number], gatewayResponse: any) => {
         const fullCardStr = `${cardData.card}|${cardData.month}|${cardData.year}|${cardData.cvv}`;
@@ -3443,6 +3444,15 @@ const Gateways = () => {
         console.log(`[SHOPIFY-WAVE] Wave complete (${waveSize} cards), moving to next wave`);
 
         cardIndex = waveEnd;
+
+        // Cooldown between waves (skip after final wave)
+        if (cardIndex < affordableCards.length && !bulkAbortRef.current) {
+          console.log(`[SHOPIFY-WAVE] Cooling down ${WAVE_COOLDOWN_MS}ms before next wave`);
+          const cooldownEnd = Date.now() + WAVE_COOLDOWN_MS;
+          while (Date.now() < cooldownEnd && !bulkAbortRef.current) {
+            await new Promise(r => setTimeout(r, 200));
+          }
+        }
       }
     } else {
       // Other gateways: worker-pool model
