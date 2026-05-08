@@ -3421,20 +3421,26 @@ const Gateways = () => {
           }));
         }
 
-        results.slice(0, threshold).forEach((result: any, index: number) => {
-          addShopifyResult(waveCards[index], result);
-        });
+        // Ensure EVERY card in the wave gets a result row, even if the batch
+        // response is missing entries (network/edge errors). Missing entries
+        // fall back to an "unknown" placeholder so the user can see all
+        // checked cards in the result list.
+        for (let i = 0; i < waveCards.length; i++) {
+          const result = results[i] ?? {
+            computedStatus: 'unknown',
+            apiStatus: 'ERROR',
+            apiMessage: 'No response from gateway',
+            rawResponse: '',
+          };
+          addShopifyResult(waveCards[i], result);
+        }
 
         if (typeof response?.newCredits === 'number') {
           remainingCredits = response.newCredits;
           setUserCredits(response.newCredits);
         }
 
-        console.log(`[SHOPIFY-WAVE] Threshold ${threshold}/${waveSize} reached, moving to next wave`);
-
-        results.slice(threshold).forEach((result: any, offset: number) => {
-          addShopifyResult(waveCards[threshold + offset], result);
-        });
+        console.log(`[SHOPIFY-WAVE] Wave complete (${waveSize} cards), moving to next wave`);
 
         cardIndex = waveEnd;
       }
