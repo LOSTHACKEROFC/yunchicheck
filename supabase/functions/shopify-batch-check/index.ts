@@ -580,12 +580,23 @@ Deno.serve(async (req) => {
       .select('*')
       .eq('user_id', user.id);
 
+    // Fallback: if user has no proxies, use shared admin proxy pool (status='live')
+    let effectiveProxies: any[] = userProxies || [];
+    if (effectiveProxies.length === 0) {
+      console.log('[SHOPIFY-BATCH] No user proxies, falling back to shared proxy pool');
+      const { data: sharedProxies } = await adminClient
+        .from('proxies')
+        .select('id, ip, port, username, password')
+        .eq('status', 'live');
+      effectiveProxies = sharedProxies || [];
+    }
+
     // Process ALL cards in parallel (up to 50 concurrent threads).
     // Settle-based: return as soon as 49/50 (or all) finish; orphan promises continue in background.
     const COMPLETION_THRESHOLD = Math.max(1, batch.length - 1); // 49 of 50, or N-1 of N
 
     const tasks = batch.map((cc, idx) =>
-      checkSingleCard(cc, sites, userProxies || [], adminClient, user.id, profile?.username || null, !bypassAccounting)
+      checkSingleCard(cc, sites, effectiveProxies, adminClient, user.id, profile?.username || null, !bypassAccounting)
         .then((r) => ({ idx, r }))
         .catch((err) => ({
           idx,
