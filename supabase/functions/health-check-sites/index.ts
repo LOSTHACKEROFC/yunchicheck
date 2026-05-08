@@ -15,6 +15,10 @@ const corsHeaders = {
 
 const TEST_CC = "4266841674104656|03|27|908";
 const API_BASE_URL = "http://148.230.102.178:8081/";
+const buildApiUrl = (cc: string, site: string, proxy: string) =>
+  proxy
+    ? `${API_BASE_URL}?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
+    : `${API_BASE_URL}?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`;
 
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
@@ -44,15 +48,18 @@ ${httpStatus !== undefined ? `📡 <b>HTTP Status:</b> ${httpStatus}\n` : ""}
 
 🕐 ${timestamp}`;
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
       body: JSON.stringify({
         chat_id: ADMIN_TELEGRAM_CHAT_ID,
         text: msg,
         parse_mode: "HTML",
       }),
-    });
+    }).finally(() => clearTimeout(timeoutId));
   } catch (e) {
     console.error("[HealthCheck] Failed to send debug:", e);
   }
@@ -107,8 +114,9 @@ const DECLINE_INDICATORS = [
   "ds_required",
 ];
 
-const MAX_RETRIES = 2;
-const TOTAL_BUDGET_MS = 130000; // Stay safely under 150s edge timeout
+const MAX_RETRIES = 1;
+const TOTAL_BUDGET_MS = 55000; // Return well before the 150s edge timeout
+const FETCH_TIMEOUT_MS = 15000;
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const getRetryDelay = (retryCount: number) => 1500 * (retryCount + 1) + Math.random() * 500;
 
@@ -134,8 +142,8 @@ const checkSingleSite = async (
   if (remaining <= 2000) {
     return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: "Timeout budget exceeded" };
   }
-  // Per-attempt timeout: cap at 40s, but never more than what's left in the budget
-  const timeoutMs = Math.min(40000, remaining - 1000);
+  // Per-attempt timeout: cap tightly so slow API calls fail gracefully instead of hitting edge 504.
+  const timeoutMs = Math.min(FETCH_TIMEOUT_MS, remaining - 1000);
   const normalizedSiteUrl = siteUrl.trim().replace(/\/+$/, "");
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
@@ -143,12 +151,9 @@ const checkSingleSite = async (
     const controller = new AbortController();
     timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (!proxyStr) {
-      return { url: siteUrl, status: "error", price: 0, priceStr: "$0.00", error: "Proxy required by API" };
-    }
-    const apiUrl = `${API_BASE_URL}?${encodeURIComponent(TEST_CC)}&url=${encodeURIComponent(normalizedSiteUrl)}&proxy=${encodeURIComponent(proxyStr)}`;
+    const apiUrl = buildApiUrl(TEST_CC, normalizedSiteUrl, proxyStr);
 
-    console.log(`[Check] ${normalizedSiteUrl} | proxy=yes`);
+    console.log(`[Check] ${normalizedSiteUrl} | proxy=${proxyStr ? "yes" : "no"}`);
 
     const response = await fetch(apiUrl, {
       method: "GET",
@@ -163,6 +168,9 @@ const checkSingleSite = async (
 
     if (!rawText || rawText.trim() === "") {
       if (retryCount < MAX_RETRIES) {
+        if (deadline - Date.now() <= FETCH_TIMEOUT_MS + 3000) {
+          return { url: normalizedSiteUrl, status: "error", price: 0, priceStr: "$0.00", error: "Timeout budget exceeded" };
+        }
         console.log(`[Retry] ${normalizedSiteUrl} → empty response, retry ${retryCount + 1}/${MAX_RETRIES}`);
         await wait(getRetryDelay(retryCount));
         return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1, deadline);
@@ -178,6 +186,9 @@ const checkSingleSite = async (
     const isCurlError = CURL_RETRY_INDICATORS.some((indicator) => rawLower.includes(indicator));
     if (isCurlError) {
       if (retryCount < MAX_RETRIES) {
+        if (deadline - Date.now() <= FETCH_TIMEOUT_MS + 3000) {
+          return { url: normalizedSiteUrl, status: "error", price: 0, priceStr: "$0.00", error: "Timeout budget exceeded" };
+        }
         console.log(`[Retry] ${normalizedSiteUrl} → curl/DNS error, retry ${retryCount + 1}/${MAX_RETRIES}`);
         await wait(getRetryDelay(retryCount));
         return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1, deadline);
@@ -379,13 +390,16 @@ const checkSingleSite = async (
     const msgLower = msg.toLowerCase();
 
     if ((msgLower.includes("abort") || msgLower.includes("timeout") || msgLower.includes("fetch failed")) && retryCount < MAX_RETRIES) {
+      if (deadline - Date.now() <= FETCH_TIMEOUT_MS + 3000) {
+        return { url: normalizedSiteUrl, status: "error", price: 0, priceStr: "$0.00", error: "Timeout budget exceeded" };
+      }
       console.log(`[Retry] ${normalizedSiteUrl} → transient fetch error, retry ${retryCount + 1}/${MAX_RETRIES}`);
       await wait(getRetryDelay(retryCount));
       return checkSingleSite(normalizedSiteUrl, proxyStr, proxyId, supabase, retryCount + 1, deadline);
     }
 
     console.log(`[Error] ${normalizedSiteUrl}: ${msg}`);
-    await sendHealthCheckDebug(normalizedSiteUrl, `Fetch error: ${msg}`, "", proxyStr, retryCount);
+    sendHealthCheckDebug(normalizedSiteUrl, `Fetch error: ${msg}`, "", proxyStr, retryCount);
     return {
       url: normalizedSiteUrl,
       status: "error",
