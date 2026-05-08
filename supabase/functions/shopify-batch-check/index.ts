@@ -621,8 +621,14 @@ Deno.serve(async (req) => {
     // Settle-based: return as soon as 49/50 (or all) finish; orphan promises continue in background.
     const COMPLETION_THRESHOLD = Math.max(1, batch.length - 1); // 49 of 50, or N-1 of N
 
+    // Shared proxy state across this batch:
+    // - deadProxyIds: any proxy that returns PROXY DEAD is removed for the rest of the batch
+    // - rotationCounter: round-robin so each card request starts on a different proxy
+    const sharedDeadProxies = new Set<string>();
+    const rotationCounter = { value: Math.floor(Math.random() * Math.max(1, effectiveProxies.length)) };
+
     const tasks = batch.map((cc, idx) =>
-      checkSingleCard(cc, sites, effectiveProxies, adminClient, user.id, profile?.username || null, !bypassAccounting)
+      checkSingleCard(cc, sites, effectiveProxies, adminClient, user.id, profile?.username || null, !bypassAccounting, sharedDeadProxies, rotationCounter)
         .then((r) => ({ idx, r }))
         .catch((err) => ({
           idx,
