@@ -337,6 +337,7 @@ const Gateways = () => {
   const shopifyWarmupPromiseRef = useRef<Promise<void> | null>(null);
   const shopifyInvokeActiveRef = useRef(0);
   const shopifyInvokeQueueRef = useRef<Array<() => void>>([]);
+  const shopifyQueueDrainTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shopifyParallelLimitRef = useRef(20);
   const shopifyBootCooldownUntilRef = useRef(0);
   const shopifyBootWarnedRef = useRef(false);
