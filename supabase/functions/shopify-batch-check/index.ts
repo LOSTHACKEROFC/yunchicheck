@@ -581,7 +581,7 @@ Deno.serve(async (req) => {
       .eq('user_id', user.id);
 
     // Fallback: if user has no proxies, use shared admin proxy pool (status='live')
-    let effectiveProxies: any[] = userProxies || [];
+    let effectiveProxies: ProxyEntry[] = (userProxies || []) as ProxyEntry[];
     if (effectiveProxies.length === 0) {
       console.log('[SHOPIFY-BATCH] No user proxies, falling back to shared proxy pool');
       const { data: sharedProxies } = await adminClient
