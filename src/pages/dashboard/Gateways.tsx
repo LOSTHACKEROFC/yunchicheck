@@ -3319,8 +3319,8 @@ const Gateways = () => {
       // Wave-based 49/50 model: launch 50 cards in parallel, wait until 49
       // complete, then fire the next wave. Each card renders its result
       // immediately as it arrives.
-      const WAVE_SIZE = 50;
-      const WAVE_THRESHOLD = 49; // proceed to next wave when this many finish
+      const WAVE_SIZE = 20;
+      const WAVE_THRESHOLD = 19; // proceed to next wave when this many finish
       const WAVE_COOLDOWN_MS = 3000; // cooldown between waves
 
       const addShopifyResult = (cardData: typeof affordableCards[number], gatewayResponse: any) => {
