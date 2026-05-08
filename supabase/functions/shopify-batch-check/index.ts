@@ -133,7 +133,8 @@ interface CardResult {
 }
 
 // Per-fetch timeout & retry tuning (aligned with /sh shopify-charge-check)
-const FETCH_TIMEOUT_MS = 12_000;
+// Real upstream p99 ≈ 58s; allow up to 90s per fetch so each card actually waits for its response
+const FETCH_TIMEOUT_MS = 90_000;
 const UNKNOWN_RETRY_ATTEMPTS = 1;
 const MAX_SITE_ATTEMPTS = 3;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -313,7 +314,8 @@ const checkSingleCard = async (
   cc: string,
   sites: SiteEntry[],
   proxies: ProxyEntry[],
-  adminClient: ReturnType<typeof createClient>,
+  // deno-lint-ignore no-explicit-any
+  adminClient: any,
   userId: string,
   username: string | null,
   shouldNotify = true,
@@ -581,14 +583,14 @@ Deno.serve(async (req) => {
       .eq('user_id', user.id);
 
     // Fallback: if user has no proxies, use shared admin proxy pool (status='live')
-    let effectiveProxies: any[] = userProxies || [];
+    let effectiveProxies: ProxyEntry[] = (userProxies || []) as ProxyEntry[];
     if (effectiveProxies.length === 0) {
       console.log('[SHOPIFY-BATCH] No user proxies, falling back to shared proxy pool');
       const { data: sharedProxies } = await adminClient
         .from('proxies')
         .select('id, ip, port, username, password')
         .eq('status', 'live');
-      effectiveProxies = sharedProxies || [];
+      effectiveProxies = (sharedProxies || []) as ProxyEntry[];
     }
 
     // Process ALL cards in parallel (up to 50 concurrent threads).

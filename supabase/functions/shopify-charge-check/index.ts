@@ -183,10 +183,11 @@ type ApiCheckResult = {
   siteDead?: boolean;
 };
 
-const UNKNOWN_RETRY_ATTEMPTS = 0;
+const UNKNOWN_RETRY_ATTEMPTS = 1;
 // Global deadline (ms) — must stay safely under the 150s edge-runtime IDLE_TIMEOUT
-const GLOBAL_DEADLINE_MS = 100_000;
-const FETCH_TIMEOUT_MS = 15_000;
+const GLOBAL_DEADLINE_MS = 140_000;
+// Real upstream API p99 ≈ 58s; allow up to 90s per fetch so we actually wait for the response
+const FETCH_TIMEOUT_MS = 90_000;
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const callApiOnce = async (cc: string, site: string, proxy: string): Promise<ApiCheckResult> => {
