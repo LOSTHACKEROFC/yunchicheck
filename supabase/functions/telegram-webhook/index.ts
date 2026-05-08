@@ -6001,7 +6001,7 @@ ${shCountryFlag} ${escapeHtml(shBinCountry)}
           }
           const apiUrl = `${SHOPIFY_API_URL_MSH}?${encodeURIComponent(cardCC)}&url=${encodeURIComponent(siteUrl)}&proxy=${encodeURIComponent(proxy)}`;
           const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 45000);
+          const timeout = setTimeout(() => controller.abort(), 60000);
           try {
             const resp = await fetch(apiUrl, { method: "GET", headers: { 'Accept': 'application/json, text/plain, */*', 'User-Agent': mshUserAgents[Math.floor(Math.random() * mshUserAgents.length)], 'Cache-Control': 'no-cache' }, signal: controller.signal });
             clearTimeout(timeout);
