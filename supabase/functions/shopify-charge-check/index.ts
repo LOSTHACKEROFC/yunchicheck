@@ -537,16 +537,24 @@ Deno.serve(async (req) => {
     const triedSiteUrls: string[] = [];
     const badSiteUrls: { url: string; reason: string }[] = [];
 
-    // Get user's own proxies (optional — API works without proxy)
+    // Get user's own proxies first
     const { data: userProxies } = await adminClient
       .from('user_proxies')
       .select('*')
       .eq('user_id', user!.id);
 
-    // Shuffle proxies for rotation
-    const shuffledProxies = [...(userProxies || [])].sort(() => Math.random() - 0.5);
+    let shuffledProxies = [...(userProxies || [])].sort(() => Math.random() - 0.5);
 
-    // API now REQUIRES a proxy parameter — bail out early with a clear error if none configured
+    // Fallback: if user has no proxies, use shared admin proxy pool (status='live')
+    if (shuffledProxies.length === 0) {
+      console.log('[SHOPIFY-CHARGE] No user proxies, falling back to shared proxy pool');
+      const { data: sharedProxies } = await adminClient
+        .from('proxies')
+        .select('id, ip, port, username, password')
+        .eq('status', 'live');
+      shuffledProxies = [...(sharedProxies || [])].sort(() => Math.random() - 0.5);
+    }
+
     if (shuffledProxies.length === 0) {
       return new Response(
         JSON.stringify({
