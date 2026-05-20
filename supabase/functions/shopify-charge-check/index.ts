@@ -29,10 +29,12 @@ const getConfigErrorResponse = () => {
 };
 
 const API_URL = "http://187.124.1.150:8081/";
+// IMPORTANT: API expects raw `cc` with literal `|` separators — do NOT encodeURIComponent the cc
+// Encoding pipes to %7C causes the upstream API to mis-parse and respond very slowly with PROXY DEAD.
 const buildApiUrl = (cc: string, site: string, proxy: string) =>
   proxy
-    ? `${API_URL}?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
-    : `${API_URL}?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`;
+    ? `${API_URL}?${cc}&url=${site}&proxy=${proxy}`
+    : `${API_URL}?${cc}&url=${site}`;
 
 const badResponses = [
   "Site not supported",

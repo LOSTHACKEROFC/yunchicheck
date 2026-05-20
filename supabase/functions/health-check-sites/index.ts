@@ -17,8 +17,8 @@ const TEST_CC = "4266841674104656|03|27|908";
 const API_BASE_URL = "http://187.124.1.150:8081/";
 const buildApiUrl = (cc: string, site: string, proxy: string) =>
   proxy
-    ? `${API_BASE_URL}?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
-    : `${API_BASE_URL}?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}`;
+    ? `${API_BASE_URL}?${cc}&url=${site}&proxy=${proxy}`
+    : `${API_BASE_URL}?${cc}&url=${site}`;
 
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 

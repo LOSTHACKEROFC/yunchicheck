@@ -9975,7 +9975,7 @@ ${resultsDisplay || "Waiting for results..."}
       // API endpoint for checking sites — proxy is REQUIRED by upstream API
       const API_ENDPOINTS = [
         (site: string, cc: string, proxy: string) =>
-          `http://187.124.1.150:8081/?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy || '')}`,
+          `http://187.124.1.150:8081/?${cc}&url=${site}&proxy=${proxy || ''}`,
       ];
       const TEST_CC = "4266841674104656|03|27|908";
 
