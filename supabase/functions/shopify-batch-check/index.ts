@@ -156,7 +156,7 @@ const formatProxy = (p: ProxyEntry) =>
   p.username && p.password ? `${p.ip}:${p.port}:${p.username}:${p.password}` : `${p.ip}:${p.port}`;
 
 const callApiOnce = async (cc: string, site: string, proxy: string): Promise<ApiCheckResult> => {
-  const apiUrl = `${API_BASE_URL}?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`;
+  const apiUrl = `${API_BASE_URL}?${cc}&url=${site}&proxy=${proxy}`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
