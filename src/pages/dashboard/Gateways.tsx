@@ -1849,6 +1849,10 @@ const Gateways = () => {
 
     if (shopifyInvokeActiveRef.current < shopifyParallelLimitRef.current) {
       shopifyInvokeActiveRef.current += 1;
+      const now = Date.now();
+      const waitMs = Math.max(0, shopifyNextInvokeAtRef.current - now);
+      shopifyNextInvokeAtRef.current = Math.max(now, shopifyNextInvokeAtRef.current) + SHOPIFY_INVOKE_START_GAP_MS;
+      if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
       return;
     }
 
@@ -1877,6 +1881,17 @@ const Gateways = () => {
       return;
     }
     while (shopifyInvokeActiveRef.current < shopifyParallelLimitRef.current) {
+      const now = Date.now();
+      const startGapRemaining = shopifyNextInvokeAtRef.current - now;
+      if (startGapRemaining > 0) {
+        if (!shopifyQueueDrainTimerRef.current) {
+          shopifyQueueDrainTimerRef.current = setTimeout(() => {
+            shopifyQueueDrainTimerRef.current = null;
+            drainShopifyInvocationQueue();
+          }, startGapRemaining + 10);
+        }
+        return;
+      }
       const next = shopifyInvokeQueueRef.current.shift();
       if (!next) break;
       next();
@@ -1892,6 +1907,7 @@ const Gateways = () => {
     shopifyWarmupAtRef.current = 0;
     shopifyParallelLimitRef.current = SHOPIFY_COLD_START_PARALLEL_INVOCATIONS;
     shopifyBootCooldownUntilRef.current = Date.now() + SHOPIFY_BOOT_COOLDOWN_MS;
+    shopifyNextInvokeAtRef.current = shopifyBootCooldownUntilRef.current;
     if (!shopifyBootWarnedRef.current) {
       shopifyBootWarnedRef.current = true;
       console.warn('[SHOPIFY] BOOT_ERROR pressure detected — cooling down parallel invocations briefly.');
