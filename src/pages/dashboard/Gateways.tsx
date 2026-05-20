@@ -340,11 +340,13 @@ const Gateways = () => {
   const shopifyQueueDrainTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shopifyParallelLimitRef = useRef(20);
   const shopifyBootCooldownUntilRef = useRef(0);
+  const shopifyNextInvokeAtRef = useRef(0);
   const shopifyBootWarnedRef = useRef(false);
   const SHOPIFY_WARMUP_TTL_MS = 2 * 60 * 1000;
   const SHOPIFY_TARGET_PARALLEL_INVOCATIONS = 20;
-  const SHOPIFY_COLD_START_PARALLEL_INVOCATIONS = 8;
-  const SHOPIFY_BOOT_COOLDOWN_MS = 45_000;
+  const SHOPIFY_COLD_START_PARALLEL_INVOCATIONS = 4;
+  const SHOPIFY_BOOT_COOLDOWN_MS = 60_000;
+  const SHOPIFY_INVOKE_START_GAP_MS = 175;
 
 
   // Gateway history state
