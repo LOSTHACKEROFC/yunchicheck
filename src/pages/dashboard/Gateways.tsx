@@ -1894,6 +1894,7 @@ const Gateways = () => {
       }
       const next = shopifyInvokeQueueRef.current.shift();
       if (!next) break;
+      shopifyNextInvokeAtRef.current = Date.now() + SHOPIFY_INVOKE_START_GAP_MS;
       next();
     }
   };
@@ -3024,6 +3025,7 @@ const Gateways = () => {
     bulkProxyWarnedRef.current = false;
     shopifyBootWarnedRef.current = false;
     shopifyBootCooldownUntilRef.current = 0;
+    shopifyNextInvokeAtRef.current = 0;
     shopifyParallelLimitRef.current = selectedGateway.id === "shopify_charge" ? SHOPIFY_COLD_START_PARALLEL_INVOCATIONS : SHOPIFY_TARGET_PARALLEL_INVOCATIONS;
     bulkPauseRef.current = false;
     pendingResultsRef.current = [];
