@@ -343,10 +343,10 @@ const Gateways = () => {
   const shopifyNextInvokeAtRef = useRef(0);
   const shopifyBootWarnedRef = useRef(false);
   const SHOPIFY_WARMUP_TTL_MS = 2 * 60 * 1000;
-  const SHOPIFY_TARGET_PARALLEL_INVOCATIONS = 8;
-  const SHOPIFY_COLD_START_PARALLEL_INVOCATIONS = 3;
+  const SHOPIFY_TARGET_PARALLEL_INVOCATIONS = 15;
+  const SHOPIFY_COLD_START_PARALLEL_INVOCATIONS = 5;
   const SHOPIFY_BOOT_COOLDOWN_MS = 60_000;
-  const SHOPIFY_INVOKE_START_GAP_MS = 250;
+  const SHOPIFY_INVOKE_START_GAP_MS = 150;
 
 
   // Gateway history state
