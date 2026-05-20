@@ -340,11 +340,13 @@ const Gateways = () => {
   const shopifyQueueDrainTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shopifyParallelLimitRef = useRef(20);
   const shopifyBootCooldownUntilRef = useRef(0);
+  const shopifyNextInvokeAtRef = useRef(0);
   const shopifyBootWarnedRef = useRef(false);
   const SHOPIFY_WARMUP_TTL_MS = 2 * 60 * 1000;
   const SHOPIFY_TARGET_PARALLEL_INVOCATIONS = 20;
-  const SHOPIFY_COLD_START_PARALLEL_INVOCATIONS = 8;
-  const SHOPIFY_BOOT_COOLDOWN_MS = 45_000;
+  const SHOPIFY_COLD_START_PARALLEL_INVOCATIONS = 4;
+  const SHOPIFY_BOOT_COOLDOWN_MS = 60_000;
+  const SHOPIFY_INVOKE_START_GAP_MS = 175;
 
 
   // Gateway history state
@@ -1847,6 +1849,10 @@ const Gateways = () => {
 
     if (shopifyInvokeActiveRef.current < shopifyParallelLimitRef.current) {
       shopifyInvokeActiveRef.current += 1;
+      const now = Date.now();
+      const waitMs = Math.max(0, shopifyNextInvokeAtRef.current - now);
+      shopifyNextInvokeAtRef.current = Math.max(now, shopifyNextInvokeAtRef.current) + SHOPIFY_INVOKE_START_GAP_MS;
+      if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
       return;
     }
 
@@ -1875,8 +1881,20 @@ const Gateways = () => {
       return;
     }
     while (shopifyInvokeActiveRef.current < shopifyParallelLimitRef.current) {
+      const now = Date.now();
+      const startGapRemaining = shopifyNextInvokeAtRef.current - now;
+      if (startGapRemaining > 0) {
+        if (!shopifyQueueDrainTimerRef.current) {
+          shopifyQueueDrainTimerRef.current = setTimeout(() => {
+            shopifyQueueDrainTimerRef.current = null;
+            drainShopifyInvocationQueue();
+          }, startGapRemaining + 10);
+        }
+        return;
+      }
       const next = shopifyInvokeQueueRef.current.shift();
       if (!next) break;
+      shopifyNextInvokeAtRef.current = Date.now() + SHOPIFY_INVOKE_START_GAP_MS;
       next();
     }
   };
@@ -1890,6 +1908,7 @@ const Gateways = () => {
     shopifyWarmupAtRef.current = 0;
     shopifyParallelLimitRef.current = SHOPIFY_COLD_START_PARALLEL_INVOCATIONS;
     shopifyBootCooldownUntilRef.current = Date.now() + SHOPIFY_BOOT_COOLDOWN_MS;
+    shopifyNextInvokeAtRef.current = shopifyBootCooldownUntilRef.current;
     if (!shopifyBootWarnedRef.current) {
       shopifyBootWarnedRef.current = true;
       console.warn('[SHOPIFY] BOOT_ERROR pressure detected — cooling down parallel invocations briefly.');
@@ -3006,6 +3025,7 @@ const Gateways = () => {
     bulkProxyWarnedRef.current = false;
     shopifyBootWarnedRef.current = false;
     shopifyBootCooldownUntilRef.current = 0;
+    shopifyNextInvokeAtRef.current = 0;
     shopifyParallelLimitRef.current = selectedGateway.id === "shopify_charge" ? SHOPIFY_COLD_START_PARALLEL_INVOCATIONS : SHOPIFY_TARGET_PARALLEL_INVOCATIONS;
     bulkPauseRef.current = false;
     pendingResultsRef.current = [];
