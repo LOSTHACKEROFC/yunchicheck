@@ -28,7 +28,7 @@ const getConfigErrorResponse = () => {
   );
 };
 
-const API_URL = "http://148.230.102.178:8081/";
+const API_URL = "http://187.124.1.150:8081/";
 const buildApiUrl = (cc: string, site: string, proxy: string) =>
   proxy
     ? `${API_URL}?${encodeURIComponent(cc)}&url=${encodeURIComponent(site)}&proxy=${encodeURIComponent(proxy)}`
